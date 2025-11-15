@@ -193,6 +193,99 @@ python main.py "Concert tomorrow evening, sunny weather"
 
 ---
 
+## 🎬 Démo Rapide
+
+### Tester l'API
+
+L'API FastAPI est accessible et prête à recevoir des requêtes de prédiction.
+
+#### 1. Lancer l'API
+
+```bash
+# Activer l'environnement virtuel
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Lancer l'API
+python start_api.py
+```
+
+L'API sera accessible sur : **http://127.0.0.1:8000**
+
+#### 2. Accéder à la documentation interactive
+
+Ouvrez votre navigateur : **http://127.0.0.1:8000/docs**
+
+Vous verrez l'interface Swagger avec l'endpoint `/predict` prêt à être testé.
+
+#### 3. Tester avec un script Python
+
+```bash
+# Test complet du pipeline
+python test_full_pipeline.py
+
+# Test de 3 scénarios différents
+python test_scenarios.py
+```
+
+#### 4. Exemple de requête cURL
+
+```bash
+curl -X POST "http://127.0.0.1:8000/predict" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "date": "2024-11-20",
+    "events": "Concert Coldplay au Stade de France, soirée ensoleillée",
+    "weather": "Ciel dégagé, 22°C"
+  }'
+```
+
+#### 5. Exemple de réponse
+
+```json
+{
+  "date": "2024-11-20",
+  "events": "Concert Coldplay au Stade de France, soirée ensoleillée",
+  "weather": "Ciel dégagé, 22°C",
+  "expected_covers": 98,
+  "recommended_staff": 7,
+  "confidence": 88,
+  "key_factors": [
+    "Large-scale Coldplay concert at Stade de France (historically +53-58% variance)",
+    "Favorable weather (22°C, clear skies) likely to extend pre/post-event foot traffic",
+    "Wednesday event (vs. weekend in past patterns) may slightly dampen but not negate surge"
+  ]
+}
+```
+
+### Les 3 Outils Utilisés
+
+#### 🔍 **Qdrant** - Recherche Vectorielle
+- **Rôle** : Trouve les 3 scénarios historiques les plus similaires
+- **Où** : `agents/pattern_search.py`
+- **Fonction** : `search_similar_patterns()`
+- **Input** : Embedding vectoriel (1024 dimensions)
+- **Output** : 3 patterns avec scores de similarité
+
+#### 🤖 **Mistral AI** - Embeddings + Reasoning
+- **Rôle** : Génère des embeddings ET des prédictions intelligentes
+- **Où** : 
+  - `agents/analyzer.py` → Embeddings + extraction de features
+  - `agents/predictor.py` → Génération de prédictions
+- **Modèles** : 
+  - `mistral-embed` pour les embeddings
+  - `mistral-large-latest` pour le reasoning
+- **Performance** : ~2.5s par requête complète
+
+#### 🔊 **ElevenLabs** - Synthèse Vocale
+- **Rôle** : Convertit les prédictions en audio naturel
+- **Où** : `agents/predictor.py`
+- **Fonction** : `generate_voice_output()`
+- **Modèle** : `eleven_multilingual_v2`
+- **Voix** : Sarah (voix professionnelle féminine)
+- **Format** : MP3 (`prediction_voice.mp3`)
+
+---
+
 ## 📊 Example Output
 
 **Input:**
