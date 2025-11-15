@@ -4,7 +4,7 @@ Analyzes patterns and generates prediction with voice output
 """
 
 from mistralai import Mistral
-from elevenlabs import generate, save
+from elevenlabs.client import ElevenLabs
 import os
 from dotenv import load_dotenv
 import json
@@ -14,7 +14,7 @@ load_dotenv()
 class PredictorAgent:
     def __init__(self):
         self.mistral = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
-        os.environ["ELEVEN_LABS_API_KEY"] = os.getenv("ELEVEN_LABS_API_KEY")
+        self.elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
     
     def predict(self, event_description: str, features: dict, 
                 similar_patterns: list) -> dict:
@@ -74,7 +74,7 @@ Output ONLY valid JSON, no markdown:
     def generate_voice_output(self, event_description: str, 
                              prediction: dict) -> str:
         """
-        Generate voice announcement of prediction
+        Generate voice announcement of prediction (NEW API)
         """
         print(f"🔊 Generating voice output...")
         
@@ -86,16 +86,19 @@ Output ONLY valid JSON, no markdown:
             f"Key factors are: {', '.join(prediction['key_factors'])}."
         )
         
-        # Generate voice
-        audio = generate(
+        # Generate voice with NEW API
+        audio = self.elevenlabs.text_to_speech.convert(
+            voice_id="EXAVITQu4vr4xnSDxMaL",  # Sarah voice (professional female voice)
             text=summary,
-            voice="Adam",
-            model="eleven_monolingual_v1"
+            model_id="eleven_multilingual_v2"
         )
         
         # Save audio file
         filename = "prediction_voice.mp3"
-        save(audio, filename)
+        with open(filename, "wb") as f:
+            for chunk in audio:
+                if chunk:
+                    f.write(chunk)
         
         print(f"   Voice saved: {filename}")
         print(f"   Text: \"{summary}\"")
