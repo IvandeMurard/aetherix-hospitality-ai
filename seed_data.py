@@ -1,5 +1,5 @@
 from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct
+from qdrant_client.models import PointStruct, Distance, VectorParams
 from mistralai import Mistral
 import os
 from dotenv import load_dotenv
@@ -8,10 +8,21 @@ import uuid
 load_dotenv()
 
 # Initialize clients
-qdrant = QdrantClient(
-    url=os.getenv("QDRANT_URL"),
-    api_key=os.getenv("QDRANT_API_KEY")
-)
+qdrant = QdrantClient(path="./qdrant_local")
+
+# Create collection if it doesn't exist
+try:
+    qdrant.create_collection(
+        collection_name="hospitality_patterns",
+        vectors_config=VectorParams(
+            size=1024,  # Mistral embedding size
+            distance=Distance.COSINE
+        )
+    )
+    print("OK Collection created!")
+except Exception as e:
+    # Collection might already exist, that's ok
+    print(f"INFO Collection setup: {e}")
 
 mistral = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
 

@@ -10,6 +10,30 @@
 
 ---
 
+# 🚀 DÉMO RAPIDE (5 MIN)
+
+## Lancement
+
+1. **API** : `uvicorn api:app --reload --port 8000`
+
+2. **Interface** : `streamlit run demo_app.py`
+
+3. **Ouvrir** : http://localhost:8501
+
+## Test API direct
+
+```bash
+python test_final.py
+```
+
+## Technologies
+
+- ✅ Mistral AI (embeddings + LLM)
+- ✅ Qdrant (vector search - local)
+- ✅ ElevenLabs (voice - intégré)
+
+---
+
 ## 🎯 The Problem
 
 Saturday night, 7:30 PM. Restaurant fully booked.
