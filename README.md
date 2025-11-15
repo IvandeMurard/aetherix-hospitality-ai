@@ -563,9 +563,9 @@ Built in 6 hours for Pioneers AILab Hackathon. Not accepting contributions yet, 
 - Investors/advisors in hospitality tech
 
 **Contact:**
-- Email: ivandemurard@gmail.com
+- Email: ivandemurard@hotmail.Fr
 - LinkedIn: [linkedin.com/in/ivandemurard](https://linkedin.com/in/ivandemurard)
-- Twitter: [@yourhandle](https://twitter.com/ivanMurard)
+- Twitter: [@IvanMurard](https://twitter.com/ivanMurard)
 
 ---
 
