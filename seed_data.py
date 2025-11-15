@@ -7,8 +7,8 @@ import uuid
 
 load_dotenv()
 
-# Initialize clients
-qdrant = QdrantClient(path="./qdrant_local")
+# Initialize clients  
+qdrant = QdrantClient(":memory:")
 
 # Create collection if it doesn't exist
 try:
@@ -205,4 +205,4 @@ qdrant.upsert(
     points=points
 )
 
-print(f"✅ Successfully seeded {len(scenarios)} scenarios!")
+print(f"OK Successfully seeded {len(scenarios)} scenarios!")

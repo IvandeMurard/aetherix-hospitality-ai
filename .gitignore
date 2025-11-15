@@ -30,4 +30,5 @@ Thumbs.db
 prediction_voice.mp3
 demo_voice.mp3
 test_voice.mp3
+qdrant_local/
 EOF
