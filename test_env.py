@@ -1,30 +1,44 @@
-import os
-from dotenv import load_dotenv
+"""
+Test script to verify .env file loading
+"""
 
+from dotenv import load_dotenv
+import os
+
+# Load .env file
 load_dotenv()
 
-required_keys = [
-    "QDRANT_URL",
-    "QDRANT_API_KEY",
-    "MISTRAL_API_KEY",
-    "ELEVENLABS_API_KEY",
-    "PREDICTHQ_API_KEY",
-    "OPENWEATHER_API_KEY"
-]
+print("=" * 60)
+print("🔍 CHECKING ENVIRONMENT VARIABLES")
+print("=" * 60)
 
-print("🔍 Vérification du fichier .env\n")
+# Check all expected keys
+keys_to_check = {
+    "PREDICTHQ_API_KEY": "PredictHQ",
+    "OPENWEATHER_API_KEY": "OpenWeatherMap",
+    "MISTRAL_API_KEY": "Mistral AI",
+    "MISTRAL_API_kEY": "Mistral AI (lowercase k - typo?)",
+    "QDRANT_API_KEY": "Qdrant",
+    "ELEVENLABS_API_KEY": "ElevenLabs",
+    "QDRANT_URL": "Qdrant URL"
+}
 
-all_ok = True
-for key in required_keys:
+print("\n📋 Environment Variables Status:\n")
+
+for key, description in keys_to_check.items():
     value = os.getenv(key)
-    if value and value != "xxxxx":
-        print(f"✅ {key}: Trouvée")
+    if value:
+        # Show first 10 chars and last 4 chars for security
+        masked = f"{value[:10]}...{value[-4:]}" if len(value) > 14 else "***"
+        print(f"✅ {key:25} ({description:20}) = {masked}")
     else:
-        print(f"❌ {key}: MANQUANTE")
-        all_ok = False
+        print(f"❌ {key:25} ({description:20}) = NOT FOUND")
 
-print("\n" + "="*50)
-if all_ok:
-    print("✅ Toutes les clés sont configurées !")
-else:
-    print("❌ Certaines clés manquent. Vérifie ton .env")
+print("\n" + "=" * 60)
+print("💡 TIPS:")
+print("=" * 60)
+print("1. Make sure .env file is in the project root")
+print("2. Variable names are CASE-SENSITIVE")
+print("3. No spaces around the = sign")
+print("4. Format: KEY=\"value\" or KEY=value")
+print("=" * 60)

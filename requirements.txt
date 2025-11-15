@@ -6,3 +6,4 @@ mistralai==1.2.4
 elevenlabs==1.9.0
 pydantic==2.5.0
 requests==2.31.0
+predicthq==1.0.0

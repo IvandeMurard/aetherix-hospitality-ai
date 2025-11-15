@@ -11,10 +11,8 @@ load_dotenv()
 
 class PatternSearcher:
     def __init__(self):
-        self.qdrant = QdrantClient(
-            url=os.getenv("QDRANT_URL"),
-            api_key=os.getenv("QDRANT_API_KEY")
-        )
+        # Use local file to persist data between processes
+        self.qdrant = QdrantClient(path="./qdrant_local")
         self.collection_name = "hospitality_patterns"
     
     def search_similar_patterns(self, embedding: list, limit: int = 3) -> list:
