@@ -52,10 +52,6 @@ An **intelligence layer** for hotel managers that:
 ### Flow View
 
 <img src="docs/assets/architecture-flux.svg" width="100%" alt="Aetherix Architecture Flow Diagram showing Semantic, Intelligence, and Delivery layers" loading="lazy">
-
-### Concentric View
-
-<img src="docs/assets/architecture-concentric.svg" width="80%" alt="Aetherix Architecture Concentric Diagram showing hotel systems, semantic layer, intelligence layer, and delivery channels" loading="lazy">
 ---
 
 ## ✨ Key Features
