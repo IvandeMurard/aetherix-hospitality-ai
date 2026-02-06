@@ -1,50 +1,59 @@
----
-title: F&B Operations Agent
-emoji: 🍽️
-colorFrom: blue
-colorTo: purple
-sdk: docker
-sdk_version: "4.0.0"
-python_version: "3.11"
-pinned: false
----
+# Aetherix – F&B Ambient Agent  
+**PMS-agnostic intelligence layer to anticipate staffing & F&B needs in hotels**
 
-# F&B Operations Agent
+> (AI) Insights come to and learn from you (WhatsApp, Slack, Teams) instead of yet another dashboard to onboard.  
+> Contextual predictions + feedback loop + explainability, no vendor lock-in.
 
-[![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.109%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)](https://www.python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green?logo=fastapi)](https://fastapi.tiangolo.com)
+[![Streamlit](https://img.shields.io/badge/Streamlit-Live-orange?logo=streamlit)](https://aetherix.streamlit.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Status](https://img.shields.io/badge/Status-Active%20Development-green)](https://github.com/yourusername/fb-agent)
-[![Deployment](https://img.shields.io/badge/Deployed-HuggingFace-FF9D00?logo=huggingface&logoColor=white)](https://huggingface.co/spaces/IvandeMurard/fb-agent-api)
+[![HF Spaces](https://img.shields.io/badge/HuggingFace-Spaces-blueviolet)](https://huggingface.co/spaces/ivandemurard/fb-agent-api)
 
-> **An intelligence layer that lives WHERE you work, not another dashboard to check.**
->
-> AI-powered demand forecasting for hotel F&B operations. With easy connect to any PMS through a semantic abstraction, delivering insights where managers actually work: dashboard, WhatsApp, Slack, or PMS.
+**Live Dashboard (Phase 3, early prototype)** → https://aetherix.streamlit.app/
 
----
+### Real Problem (Hospitality 2026)
+Restaurant managers spend **5–8 hours/week** on manual forecasting with ~**70%** accuracy → over/under-staffing, food waste, operational stress.
 
-## 🎯 Vision
+### Solution: A new (AI) Colleague
+An agent that:
+- **Anticipates** demand (covers, staffing, purchases) using RAG + external signals (weather, events, holidays and real-time social sentiment)
+- **Explains** its predictions (impact %, confidence score) for transparency and adoption
+- **Learns** from your corrections and PMS data (feedback loop) for continuous and autonomous improvement
+- **Delivers where you work**: WhatsApp/Slack for quick briefs, dashboard for adoption, config & deep dive
+- **PMS-agnostic**: using a semantic layer connecting Mews, Opera, Apaleo, Cloudbeds, etc. without lock-in. Smart!
 
-Most hotel tech adds another screen to check. The F&B Operations Agent takes a different approach:
+| Classic Dashboard            | Ambient Agent (Aetherix)              |
+|------------------------------|----------------------------------------|
+| You have to remember to check| Agent proactively sends you the brief |
+| Painful context switching    | Integrated into your daily tools       |
+| Feedback = separate step     | Natural correction in conversation     |
+| PMS + external data silos    | Semantic unification + contextual RAG  |
 
-| Traditional Dashboard | Ambient Agent |
-|----------------------|---------------|
-| Manager must remember to check | Agent comes to the manager |
-| Context switch required | Lives in existing workflows |
-| Passive data consumption | Active dialogue & continuous learning |
-| Feedback is an extra step | Feedback is a natural reply |
+### Architecture (3 Layers)
 
-**The goal:** An agent that feels like a knowledgeable colleague who messages you with tomorrow's forecast, learns from your corrections, and gets smarter over time, learning from your context.
+```mermaid
+flowchart TD
+    A[Aetherix] --> B[Intelligence Layer<br>RAG + Reasoning]
+    A --> C[Semantic Layer<br>PMS-Agnostic]
+    A --> D[Delivery Layer<br>Ambient]
 
----
+    subgraph Intelligence
+        B --> E[• Demand Predictor<br>Qdrant vector search + Mistral embeds]
+        B --> F[• Claude Sonnet 4<br>Explanations & confidence scoring]
+        B --> G[• Feedback loop<br>continuous pattern fine-tuning]
+    end
 
-## 🎯 Problem
+    subgraph Semantic
+        C --> H[• Unified model across all PMS]
+        C --> I[• Adapters<br>Mews, Opera, Cloudbeds…]
+        C --> J[• External signals<br>PredictHQ, OpenWeather…]
+    end
 
-Restaurant managers in hotels spend **5-8 hours/week** manually forecasting staffing needs with **~70% accuracy**, correlating data across siloed systems (PMS, event calendars, weather apps). This results in:
-- Over/under-staffing → operational stress & revenue loss
-- No integrations between the external context and the internal operations
-- Food waste from inaccurate demand predictions
-- Missed customer experience improvement opportunities
+    subgraph Delivery
+        D --> K[• Streamlit Dashboard<br>config & analytics]
+        D --> L[• WhatsApp / Slack / Teams<br>alerts & dialogue]
+    end
 
 ---
 
@@ -202,88 +211,47 @@ OPENWEATHER_API_KEY=...               # Weather data
 ELEVENLABS_API_KEY=...                # Voice interface
 ```
 
----
+### Tech Stack (2026-ready)
 
-## 📂 Project Structure
+- **Backend**: FastAPI · Python 3.11
+- **AI**: Claude Sonnet 4 (Anthropic) · Mistral Embeddings
+- **Vector DB**: Qdrant Cloud (495 patterns indexed)
+- **Storage**: Supabase (PostgreSQL) · Redis (cache & sessions)
+- **Frontend MVP**: Streamlit · (Next.js planned for v2)
+- **Deploy**: Hugging Face Spaces (Docker)
 
-```
-fb-agent/
-├── backend/
-│   ├── agents/                  # Intelligence Layer
-│   │   ├── coordinator.py       # Request routing
-│   │   ├── demand_predictor.py  # Qdrant vector search + prediction
-│   │   ├── staff_recommender.py # Staffing calculations
-│   │   └── reasoning_engine.py  # Claude explanations
-│   ├── semantic_layer/          # PMS Abstraction (Phase 4)
-│   │   ├── schemas.py           # Unified data models
-│   │   ├── base_adapter.py      # PMSAdapter ABC
-│   │   └── adapters/            # Mews, Opera, Protel
-│   ├── api/
-│   │   └── routes.py            # FastAPI endpoints
-│   ├── models/                  # Pydantic schemas
-│   ├── scripts/                 # Data processing
-│   │   ├── derive_covers.py     # Kaggle → F&B patterns
-│   │   └── seed_qdrant.py       # Patterns → Qdrant
-│   ├── data/
-│   │   ├── raw/                 # Source datasets
-│   │   └── processed/           # 495 patterns
-│   └── tests/
-├── frontend/
-│   └── app.py                   # Streamlit dashboard
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── CASE_STUDY.md
-├── requirements.txt
-├── Dockerfile
-└── README.md
-```
+### Early Results (Phase 3 – Using a Kaggle dataset)
 
----
+- Initial accuracy (naive baseline) : ~68–72%
+- After RAG + feedback loop (3–5 iterations) : **+7–12%** improvement  
+  → MAPE reduced to ~18–22% on tested scenarios
+- Simulated time saved : **~4–6 hours/week** per restaurant
+- Vector search latency : < 300 ms (Qdrant + Mistral combo)
 
-## 💼 Portfolio Context
+### Roadmap (Linear-style, public view available)
 
-With this project, I reinforce:
+- ✅ Phase 1: Backend API + core agents (Q3 2025)
+- ✅ Phase 2: RAG foundation + 495 historical patterns (Q4 2025)
+- 🚧 Phase 3: Dashboard MVP + feedback loop (ongoing - Streamlit live, test it!)
+- □ Phase 4: Semantic layer + real PMS integrations (Mews first, open to partners)
+- □ Phase 5: Full ambient experience (proactive WhatsApp/Slack, voice input, deeper NLP)
 
-**Product Thinking**
-- Problem framing from real hospitality pain points
-- MVP scoping with a clear value hypothesis
-- Roadmap driven by user value (ICE scoring)
-- Build in a public approach
+### Try It Now
 
-**Technical Execution**
-- RAG architecture with production vector database
-- Multi-agent system with explainable AI
-- PMS-agnostic design (semantic layer pattern)
-- API-first, integration-ready architecture
+- **Live interactive dashboard** → https://aetherix.streamlit.app/
+- **API + Swagger interactive docs** → https://ivandemurard-fb-agent-api.hf.space/docs
+- **Share feedback or become a beta tester** → DM me on X @ivandemurard or [Book a call](https://cal.com/ivandemurard/30min)
 
-**Industry Knowledge**
-- Hospitality operations understanding (hands-on experience, PMS landscape)
-- Competitive analysis (Mews, Apaleo, IDeaS, Duetto)
-- Market positioning (intelligence layer, not replacement)
+**Looking for**  
+- Honest feedback on project and UX / ambient delivery  
+- Beta hotels or restaurants (mock data is fine to start)  
+- Ideas or priorities for PMS connectors  
+- A product / AI role in hospitality tech SaaS
 
-**Open for Product Manager - Builder roles**
+**Say Hi!**
 
-**Full Case Study:** [ivandemurard.com](https://ivandemurard.com)
+Built with ❤️ by Ivan de Murard for hotels, restaurants, and those who love them
+[Portfolio](https://ivandemurard.com) · [X](https://x.com/ivandemurard) · [LinkedIn](https://linkedin.com/in/ivandemurard) · ivandemurard@gmail.com
 
----
+MIT License
 
-## 📄 License
-
-MIT License — see [LICENSE](LICENSE) file.
-
----
-
-## 📬 Contact
-
-**Ivan de Murard**  
-AI Zero-to-One Product Manager
-
-- 📅 Book a Call: [cal.com](https://cal.com/ivandemurard/30min)
-- 🌐 Portfolio: [ivandemurard.com](https://ivandemurard.com)
-- 💼 LinkedIn: [linkedin.com/in/ivandemurard](https://linkedin.com/in/ivandemurard)
-- 🐦 Twitter/X: [@ivandemurard](https://twitter.com/ivandemurard)
-- 📧 Email: ivandemurard@gmail.com
-
----
-
-**Built with ❤️ for the hospitality industry**
