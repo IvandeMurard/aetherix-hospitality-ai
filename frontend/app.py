@@ -10,6 +10,13 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Meta tags pour forcer le rechargement et éviter le cache JavaScript
+st.markdown("""
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+""", unsafe_allow_html=True)
+
 from config import AETHERIX_CSS
 from components.sidebar import render_sidebar
 from views.forecast_view import render_forecast_view

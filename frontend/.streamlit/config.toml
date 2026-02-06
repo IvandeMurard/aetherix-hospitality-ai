@@ -1,6 +1,15 @@
 [client]
 showSidebarNavigation = false
 
+[server]
+# Headers pour désactiver le cache des assets statiques
+enableXsrfProtection = true
+enableCORS = false
+
+[browser]
+# Forcer le rechargement après déploiement
+gatherUsageStats = false
+
 [theme]
 primaryColor = "#2D6A4F"
 backgroundColor = "#F8F9FA"
