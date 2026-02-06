@@ -32,28 +32,7 @@ An agent that:
 
 ### Architecture (3 Layers)
 
-```mermaid
-flowchart TD
-    A[Aetherix] --> B[Intelligence Layer<br>RAG + Reasoning]
-    A --> C[Semantic Layer<br>PMS-Agnostic]
-    A --> D[Delivery Layer<br>Ambient]
-
-    subgraph Intelligence
-        B --> E[• Demand Predictor<br>Qdrant vector search + Mistral embeds]
-        B --> F[• Claude Sonnet 4<br>Explanations & confidence scoring]
-        B --> G[• Feedback loop<br>continuous pattern fine-tuning]
-    end
-
-    subgraph Semantic
-        C --> H[• Unified model across all PMS]
-        C --> I[• Adapters<br>Mews, Opera, Cloudbeds…]
-        C --> J[• External signals<br>PredictHQ, OpenWeather…]
-    end
-
-    subgraph Delivery
-        D --> K[• Streamlit Dashboard<br>config & analytics]
-        D --> L[• WhatsApp / Slack / Teams<br>alerts & dialogue]
-    end
+Voir les diagrammes SVG ci-dessous dans la section Architecture.
 
 ---
 
