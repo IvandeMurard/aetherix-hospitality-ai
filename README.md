@@ -28,8 +28,8 @@ pinned: false
 Restaurant managers spend **5–8 hours/week** on manual forecasting with ~**70%** accuracy → over/under-staffing, food waste, operational stress.
 
 ### Solution: A new (AI) Colleague
-An agent that:
-- **Anticipates** demand (covers, staffing, purchases) using RAG + external signals (weather, events, holidays and real-time social sentiment)
+or agent, that:
+- **Anticipates** demand (covers, staffing, purchases) using RAG + external signals (weather, events, holidays, and real-time social sentiment)
 - **Explains** its predictions (impact %, confidence score) for transparency and adoption
 - **Learns** from your corrections and PMS data (feedback loop) for continuous and autonomous improvement
 - **Delivers where you work**: WhatsApp/Slack for quick briefs, dashboard for adoption, config & deep dive
