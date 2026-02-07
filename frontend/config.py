@@ -66,7 +66,8 @@ AETHERIX_CSS = """
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] * {
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
         color: #FFFFFF !important;
     }
     
