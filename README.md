@@ -193,7 +193,7 @@ OPENWEATHER_API_KEY=...               # Weather data
 ELEVENLABS_API_KEY=...                # Voice interface
 ```
 
-### Tech Stack (2026-ready)
+### Tech Stack
 
 - **Backend**: FastAPI · Python 3.11
 - **AI**: Claude Sonnet 4 (Anthropic) · Mistral Embeddings
