@@ -85,10 +85,18 @@ AETHERIX_CSS = """
         background-color: rgba(255,255,255,0.1);
     }
     
-    /* Sidebar dropdowns - readable */
+    /* Sidebar dropdowns - white text, readable on dark green */
+    [data-testid="stSidebar"] .stSelectbox label {
+        color: #ffffff !important;
+    }
     [data-testid="stSidebar"] .stSelectbox > div > div {
-        background-color: rgba(255,255,255,0.1);
+        background-color: #14532d !important;
+        color: #ffffff !important;
         border: 1px solid rgba(255,255,255,0.2);
+    }
+    [data-testid="stSidebar"] .stSelectbox input,
+    [data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] {
+        color: #ffffff !important;
     }
     
     /* Sidebar dividers */
@@ -147,6 +155,21 @@ AETHERIX_CSS = """
     }
     
     /* ===== BUTTONS ===== */
+    /* Main content: high-contrast navigation (Prev, Today, Next) and primary actions */
+    .stApp .stButton > button {
+        background-color: #166534 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 6px;
+        font-weight: 600;
+    }
+    
+    .stApp .stButton > button:hover {
+        background-color: #14532d !important;
+        color: white !important;
+    }
+    
+    /* Fallback for any button outside sidebar (legacy selector) */
     .stButton > button {
         background-color: #2D6A4F;
         color: white;

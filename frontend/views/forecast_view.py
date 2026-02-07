@@ -328,6 +328,7 @@ def render_forecast_view(context: dict) -> None:
     date_display = selected_date.strftime("%A, %B %d")
     view = header["view"]
     week_predictions = None
+    month_predictions = None
 
     # Optional cache for day view prediction
     cache_key = f"{selected_date.strftime('%Y-%m-%d')}_{context['restaurant']}_{context['service']}"
@@ -414,14 +415,20 @@ def render_forecast_view(context: dict) -> None:
             st.info(get_text("week.no_data", lang))
     elif view == "month":
         if month_predictions:
-            render_month_chart_from_data(month_predictions)
+            render_month_chart_from_data(month_predictions, lang=lang)
         else:
             st.info(get_text("month.no_data", lang))
 
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Factors panel (expandable, uses real prediction data)
-    render_factors_panel(prediction, view, lang)
+    render_factors_panel(
+        prediction,
+        view,
+        lang,
+        week_predictions=week_predictions,
+        month_predictions=month_predictions,
+    )
 
     st.markdown("<br>", unsafe_allow_html=True)
 

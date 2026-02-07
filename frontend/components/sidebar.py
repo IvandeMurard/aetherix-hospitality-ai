@@ -32,7 +32,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
                     letter-spacing: -0.02em;
                 ">Aetherix</h1>
                 <p style="
-                    color: rgba(255,255,255,0.8);
+                    color: #d1d5db;
                     font-size: 0.875rem;
                     margin: 0.25rem 0 0 0;
                     font-weight: 400;
@@ -46,7 +46,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
         st.markdown(
             """
             <p style="
-                color: rgba(255,255,255,0.6);
+                color: #ffffff;
                 font-size: 0.7rem;
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
@@ -92,7 +92,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
         st.markdown(
             """
             <p style="
-                color: rgba(255,255,255,0.6);
+                color: #ffffff;
                 font-size: 0.7rem;
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
@@ -140,16 +140,16 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
         st.markdown(
             """
             <p style="
-                color: rgba(255,255,255,0.6);
+                color: #ffffff;
                 font-size: 0.7rem;
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
                 margin-bottom: 0.75rem;
             ">Data</p>
-            <div style="color: #FFFFFF; font-size: 0.875rem; line-height: 1.8;">
-                <div><span style="color: rgba(255,255,255,0.6);">Patterns:</span> 495</div>
-                <div><span style="color: rgba(255,255,255,0.6);">Period:</span> 2015-2017</div>
-                <div><span style="color: rgba(255,255,255,0.6);">Updated:</span> 2h ago</div>
+            <div style="color: #ffffff; font-size: 0.875rem; line-height: 1.8;">
+                <div><span style="color: #d1d5db;">Patterns:</span> 495</div>
+                <div><span style="color: #d1d5db;">Period:</span> 2015-2017</div>
+                <div><span style="color: #d1d5db;">Updated:</span> 2h ago</div>
             </div>
         """,
             unsafe_allow_html=True,
@@ -162,14 +162,14 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
         st.markdown(
             """
             <p style="
-                color: rgba(255,255,255,0.6);
+                color: #ffffff;
                 font-size: 0.7rem;
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
                 margin-bottom: 0.75rem;
             ">Coming Soon</p>
             <div style="
-                color: rgba(255,255,255,0.5);
+                color: #a7f3d0;
                 font-size: 0.85rem;
                 font-style: italic;
                 line-height: 1.8;
@@ -192,7 +192,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
             st.markdown(
                 """
                 <a href="#" style="
-                    color: rgba(255,255,255,0.7);
+                    color: #ffffff;
                     text-decoration: none;
                     font-size: 0.875rem;
                 ">? Help</a>

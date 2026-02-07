@@ -6,7 +6,8 @@
     },
     "sidebar": {
         "restaurant": "Restaurant",
-        "service": "Service"
+        "service": "Service",
+        "show_menu": "☰ Menu"
     },
     "header": {
         "day": "Day",
@@ -19,6 +20,7 @@
     },
     "chart": {
         "week_forecast": "Weekly Forecast",
+        "month_forecast": "Monthly Forecast",
         "covers": "Covers"
     },
     "week": {

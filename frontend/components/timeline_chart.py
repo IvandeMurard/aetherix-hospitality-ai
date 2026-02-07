@@ -40,48 +40,50 @@ def render_day_hero(prediction: dict, date: datetime, lang: str = "en") -> None:
     st.html(
         f"""<div style="
             background: linear-gradient(135deg, #1B4332 0%, #2D6A4F 100%);
-            border-radius: 12px;
-            padding: 2.5rem;
+            border-radius: 16px;
+            padding: 40px;
             text-align: center;
             margin: 1rem 0;
         ">
             <p style="
-                color: rgba(255,255,255,0.7);
-                font-size: 0.875rem;
+                color: #a7f3d0;
+                font-size: 14px;
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
-                margin-bottom: 0.5rem;
+                margin-bottom: 16px;
             ">{date.strftime('%A, %B %d, %Y')}</p>
 
-            <h1 style="
-                color: #FFFFFF;
-                font-size: 4rem;
+            <div style="
+                font-size: 96px;
                 font-weight: 700;
-                margin: 0.5rem 0;
-                letter-spacing: -0.02em;
-            ">{covers}</h1>
+                line-height: 1;
+                color: #4ade80;
+                letter-spacing: -2px;
+                margin-bottom: 8px;
+            ">{covers}</div>
 
             <p style="
-                color: rgba(255,255,255,0.8);
-                font-size: 1.125rem;
-                margin-bottom: 1.5rem;
+                color: #d1d5db;
+                font-size: 18px;
+                font-weight: 400;
+                margin-bottom: 32px;
             ">{expected_label}</p>
 
             <div style="
                 display: flex;
                 justify-content: center;
-                gap: 3rem;
-                margin-top: 1rem;
+                gap: 48px;
+                font-size: 14px;
             ">
                 <div>
-                    <p style="color: rgba(255,255,255,0.6); font-size: 0.75rem; margin: 0;">{range_label}</p>
-                    <p style="color: #FFFFFF; font-size: 1.25rem; font-weight: 600; margin: 0.25rem 0 0 0;">
+                    <p style="color: #9ca3af; font-size: 14px; margin: 0;">{range_label}</p>
+                    <p style="color: #ffffff; font-weight: 600; font-size: 18px; margin-top: 4px; margin-bottom: 0;">
                         {range_low} – {range_high}
                     </p>
                 </div>
                 <div>
-                    <p style="color: rgba(255,255,255,0.6); font-size: 0.75rem; margin: 0;">{conf_header}</p>
-                    <p style="color: {conf_color}; font-size: 1.25rem; font-weight: 600; margin: 0.25rem 0 0 0;">
+                    <p style="color: #9ca3af; font-size: 14px; margin: 0;">{conf_header}</p>
+                    <p style="color: {conf_color}; font-weight: 600; font-size: 18px; margin-top: 4px; margin-bottom: 0;">
                         {conf_label}
                     </p>
                 </div>
@@ -156,6 +158,8 @@ def get_week_predictions(
                 continue
             norm = _normalize_prediction(p, dates, start_date, i)
             if norm:
+                if p.get("reasoning") is not None:
+                    norm["reasoning"] = p.get("reasoning")
                 predictions.append(norm)
         if len(predictions) < 7:
             for i in range(len(predictions), 7):
@@ -221,6 +225,7 @@ def get_month_predictions(
                     ),
                     "predicted_covers": norm["covers"],
                     "confidence": norm["confidence"],
+                    "reasoning": p.get("reasoning"),
                 })
         return normalized if normalized else None
     except requests.exceptions.ConnectionError:
@@ -280,7 +285,7 @@ def render_week_chart(
         )
 
     fig.update_layout(
-        title=None,
+        title=get_text("chart.week_forecast", lang),
         xaxis=dict(
             title=None,
             tickfont=dict(size=14, color="#495057"),
@@ -359,7 +364,7 @@ def render_day_chart(prediction: Dict) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_month_chart_from_data(month_predictions: List[Dict]) -> None:
+def render_month_chart_from_data(month_predictions: List[Dict], lang: str = "en") -> None:
     """Render monthly bar chart from pre-fetched predictions."""
     if not month_predictions:
         return
@@ -379,7 +384,7 @@ def render_month_chart_from_data(month_predictions: List[Dict]) -> None:
         )
     )
     fig.update_layout(
-        title=None,
+        title=get_text("chart.month_forecast", lang),
         xaxis=dict(title="Day", tickfont=dict(size=11, color="#495057"), showgrid=False),
         yaxis=dict(title=None, tickfont=dict(size=11, color="#6C757D"), gridcolor="#E9ECEF", zeroline=False),
         plot_bgcolor="white",
