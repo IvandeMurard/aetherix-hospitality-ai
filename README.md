@@ -111,17 +111,18 @@ An **intelligence layer** for hotel managers that:
 
 ## 🚀 Live Demo
 
-🔗 **Live Dashboard:** [https://aetherix.streamlit.app](https://aetherix.streamlit.app)  
-🔗 **API:** [https://ivandemurard-fb-agent-api.hf.space](https://ivandemurard-fb-agent-api.hf.space)  
-🔗 **API Docs:** [https://ivandemurard-fb-agent-api.hf.space/docs](https://ivandemurard-fb-agent-api.hf.space/docs)
+🔗 **HuggingFace Space (dashboard + API):** [https://ivandemurard-fb-agent-api.hf.space](https://ivandemurard-fb-agent-api.hf.space) — Streamlit dashboard; API at `/docs`.  
+🔗 **Dashboard only (Streamlit Cloud):** [https://aetherix.streamlit.app](https://aetherix.streamlit.app)
 
 ### Deployment
 
 | Component | Status | URL |
 |-----------|--------|-----|
-| Dashboard | ✅ Live | [aetherix.streamlit.app](https://aetherix.streamlit.app) |
-| API | ✅ Live | [HuggingFace Spaces](https://ivandemurard-fb-agent-api.hf.space) |
+| HF Space (dashboard + API) | ✅ Live | [ivandemurard-fb-agent-api.hf.space](https://ivandemurard-fb-agent-api.hf.space) |
+| Dashboard only (Streamlit Cloud) | ✅ Live | [aetherix.streamlit.app](https://aetherix.streamlit.app) |
 | Vector DB | ✅ Live | Qdrant Cloud (495 patterns) |
+
+**Docker:** The default `Dockerfile` runs API (port 8000) + Streamlit dashboard (port 7860) for the HF Space. For API-only deployment use `Dockerfile.api`.
 
 ---
 
