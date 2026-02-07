@@ -111,7 +111,7 @@ An **intelligence layer** for hotel managers that:
 
 ## 🚀 Live Demo
 
-🔗 **HuggingFace Space (dashboard + API):** [https://ivandemurard-fb-agent-api.hf.space](https://ivandemurard-fb-agent-api.hf.space) — Streamlit dashboard; API at `/docs`.  
+🔗 **HuggingFace Space (dashboard + API):** [https://ivandemurard-fb-agent-api.hf.space](https://ivandemurard-fb-agent-api.hf.space) Streamlit dashboard; API at `/docs`.  
 🔗 **Dashboard only (Streamlit Cloud):** [https://aetherix.streamlit.app](https://aetherix.streamlit.app)
 
 ### Deployment
