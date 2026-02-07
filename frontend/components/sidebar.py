@@ -1,5 +1,6 @@
 """Aetherix Sidebar Component"""
 
+import os
 from typing import Optional
 
 import streamlit as st
@@ -208,6 +209,10 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
                 label_visibility="collapsed",
                 key="lang_select",
             )
+
+        # Build id (set in Dockerfile) to confirm deployed version
+        build_id = os.environ.get("AETHERIX_BUILD", "dev")
+        st.caption(f"Build {build_id}")
 
     return {
         "page": st.session_state.current_page,
