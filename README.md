@@ -84,7 +84,7 @@ An **intelligence layer** for hotel managers that:
 
 **🔗 PMS-Agnostic Integration**
 - Semantic layer abstracts any PMS API
-- No vendor lock-in — works with Mews, Opera, Protel, Cloudbeds
+- No vendor lock-in, it will work with Mews, Opera, Protel, Cloudbeds
 - Adding new PMS = new adapter, not agent rewrite
 
 **📱 Ambient Experience**
@@ -114,12 +114,6 @@ An **intelligence layer** for hotel managers that:
 🔗 **Live Dashboard:** [https://aetherix.streamlit.app](https://aetherix.streamlit.app)  
 🔗 **API:** [https://ivandemurard-fb-agent-api.hf.space](https://ivandemurard-fb-agent-api.hf.space)  
 🔗 **API Docs:** [https://ivandemurard-fb-agent-api.hf.space/docs](https://ivandemurard-fb-agent-api.hf.space/docs)
-
-### Current Status
-
-- ✅ Phase 1: Backend MVP (prediction engine, reasoning)
-- ✅ Phase 2: RAG with Qdrant (495 patterns, semantic search)
-- 🔄 Phase 3: Dashboard MVP (Aetherix)
 
 ### Deployment
 
@@ -207,32 +201,10 @@ ELEVENLABS_API_KEY=...                # Voice interface
 - **Frontend MVP**: Streamlit · (Next.js planned for v2)
 - **Deploy**: Hugging Face Spaces (Docker)
 
-### Early Results (Phase 3 – Using a Kaggle dataset)
-
-- Initial accuracy (naive baseline) : ~68–72%
-- After RAG + feedback loop (3–5 iterations) : **+7–12%** improvement  
-  → MAPE reduced to ~18–22% on tested scenarios
-- Simulated time saved : **~4–6 hours/week** per restaurant
-- Vector search latency : < 300 ms (Qdrant + Mistral combo)
-
-### Roadmap (Linear-style, public view available)
-
-- ✅ Phase 1: Backend API + core agents (Q3 2025)
-- ✅ Phase 2: RAG foundation + 495 historical patterns (Q4 2025)
-- 🚧 Phase 3: Dashboard MVP + feedback loop (ongoing - Streamlit live, test it!)
-- □ Phase 4: Semantic layer + real PMS integrations (Mews first, open to partners)
-- □ Phase 5: Full ambient experience (proactive WhatsApp/Slack, voice input, deeper NLP)
-
-### Try It Now
-
-- **Live interactive dashboard** → https://aetherix.streamlit.app/
-- **API + Swagger interactive docs** → https://ivandemurard-fb-agent-api.hf.space/docs
-- **Share feedback or become a beta tester** → DM me on X @ivandemurard or [Book a call](https://cal.com/ivandemurard/30min)
-
-**Looking for**  
-- Honest feedback on project and UX / ambient delivery  
-- Beta hotels or restaurants (mock data is fine to start)  
-- Ideas or priorities for PMS connectors  
+## **Looking for**  
+- **Feedback on project** DM me on X @ivandemurard or [Book a call](https://cal.com/ivandemurard/30min)
+- Beta hotels or restaurants (currently using mock data to start)
+- Tips
 - A product / AI role in hospitality tech SaaS
 
 **Say Hi!**
