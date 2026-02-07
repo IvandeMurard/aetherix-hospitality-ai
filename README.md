@@ -1,3 +1,15 @@
+---
+title: F&B Agent API
+emoji: 🍽️
+colorFrom: blue
+colorTo: purple
+sdk: docker
+sdk_version: "4.0.0"
+python_version: "3.11"
+app_port: 7860
+pinned: false
+---
+
 # Aetherix – F&B Ambient Agent  
 **PMS-agnostic intelligence layer to anticipate staffing & F&B needs in hotels**
 
