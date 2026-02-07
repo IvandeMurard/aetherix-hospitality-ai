@@ -1,19 +1,26 @@
+# HuggingFace Space: API + Streamlit dashboard (single container).
+# Exposes port 7860 = dashboard. API runs on 8000 inside container; dashboard calls it via localhost.
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy and install dependencies
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Backend deps
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
-# Copy backend code
-COPY backend/ ./backend/
+# Frontend deps (Streamlit + requests, plotly, etc.)
+COPY frontend/requirements.txt /app/frontend/requirements.txt
+RUN pip install --no-cache-dir -r /app/frontend/requirements.txt
 
-# Environment: disable file logging by default in production
+# App code
+COPY backend/ /app/backend/
+COPY frontend/ /app/frontend/
+COPY scripts/start_app_with_dashboard.sh /app/scripts/
+
 ENV DISABLE_FILE_LOGGING=true
+ENV AETHERIX_API_BASE=http://localhost:8000
 
-# HuggingFace Spaces uses port 7860
 EXPOSE 7860
 
-# Start FastAPI (module path: backend.main:app)
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "7860"]
+RUN chmod +x /app/scripts/start_app_with_dashboard.sh
+CMD ["/app/scripts/start_app_with_dashboard.sh"]
