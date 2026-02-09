@@ -37,10 +37,7 @@ lang = context.get("language", "en")
 # Button to restore sidebar when it is collapsed (no server-side API; use JS to click Streamlit's toggle)
 _show_menu_label = get_text("sidebar.show_menu", lang)
 
-# Use components.v1.html for cleaner JavaScript injection
-import streamlit.components.v1 as components
-
-# Build HTML with proper escaping - SIMPLIFIED: Always visible button
+# Use st.markdown instead of components.html to avoid BodyStreamBuffer errors
 _sidebar_toggle_html = f"""
 <div id="aetherix-menu-wrap" style="position: fixed; top: 0.75rem; right: 1rem; z-index: 99999; display: block !important;">
     <button id="aetherix-menu-btn" type="button" onclick="window.aetherixToggleSidebar()" style="background-color: #166534; color: white; border: none; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">{_show_menu_label}</button>
@@ -86,18 +83,11 @@ _sidebar_toggle_html = f"""
     
     // Expose globally
     window.aetherixToggleSidebar = toggleSidebar;
-    
-    // Initialize on load
-    if (document.readyState === 'loading') {{
-        document.addEventListener('DOMContentLoaded', function() {{
-            setTimeout(toggleSidebar, 100);
-        }});
-    }}
 }})();
 </script>
 """
 
-components.html(_sidebar_toggle_html, height=50)
+st.markdown(_sidebar_toggle_html, unsafe_allow_html=True)
 
 # Route to correct view based on sidebar selection
 if context["page"] == "forecast":

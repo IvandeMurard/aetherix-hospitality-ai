@@ -301,9 +301,11 @@ def render_forecast_view(context: dict) -> None:
     """Render the forecast page."""
     lang = context["language"]
 
-    # Initialize forecast_requested flag if not set
+    # Initialize session state variables if not set
     if "forecast_requested" not in st.session_state:
         st.session_state.forecast_requested = False
+    if "view_toggle" not in st.session_state:
+        st.session_state.view_toggle = "day"
 
     # Cache invalidation: clear caches when restaurant or service changes
     cache_context = f"{context['restaurant']}_{context['service']}"
