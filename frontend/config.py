@@ -3,52 +3,35 @@
 import os
 from pathlib import Path
 
-# API - Smart detection for different environments
+# API - Simplified detection: always use HuggingFace API in production
 def _detect_api_base() -> str:
     """
     Detect API base URL based on environment.
     - If AETHERIX_API_BASE is set, use it (highest priority)
-    - If on Streamlit Cloud (detected via URL or env), use HuggingFace API
-    - Otherwise, use localhost for local development
+    - If running on localhost (local development), use localhost API
+    - Otherwise (production: Streamlit Cloud, HuggingFace Space), use HuggingFace API
     """
     # Check if explicitly set (highest priority)
     api_base = os.environ.get("AETHERIX_API_BASE")
     if api_base:
         return api_base.rstrip("/")  # Remove trailing slash if present
     
-    # Detect Streamlit Cloud environment
-    # Streamlit Cloud sets specific environment variables
-    # Check multiple indicators to be more reliable
-    is_streamlit_cloud = False
+    # Check if we're running locally (localhost or 127.0.0.1)
+    # This is the only case where we use localhost API
+    hostname = os.environ.get("HOSTNAME", "").lower()
+    server_name = os.environ.get("SERVER_NAME", "").lower()
+    is_local = (
+        "localhost" in hostname or "127.0.0.1" in hostname or
+        "localhost" in server_name or "127.0.0.1" in server_name or
+        (not hostname and not server_name)  # No hostname usually means local
+    )
     
-    # Method 1: Check for Streamlit Cloud specific env vars
-    if os.environ.get("STREAMLIT_SERVER_PORT"):
-        is_streamlit_cloud = True
+    # Use localhost API only for local development
+    if is_local:
+        return "http://localhost:8000"
     
-    # Method 2: Check if running in a cloud environment (not localhost)
-    # On Streamlit Cloud, SERVER_NAME is set to the app domain
-    server_name = os.environ.get("SERVER_NAME", "")
-    if "streamlit.app" in server_name.lower():
-        is_streamlit_cloud = True
-    
-    # Method 3: Check if we're not on localhost (fallback detection)
-    # This is less reliable but can help if other methods fail
-    if not is_streamlit_cloud:
-        # If we're not explicitly on localhost and no API_BASE is set,
-        # assume we're on Streamlit Cloud
-        hostname = os.environ.get("HOSTNAME", "")
-        if hostname and "localhost" not in hostname.lower() and "127.0.0.1" not in hostname.lower():
-            # Additional check: if we have a port but it's not 8501 (default local), might be cloud
-            port = os.environ.get("PORT", "")
-            if port and port != "8501":
-                is_streamlit_cloud = True
-    
-    # If on Streamlit Cloud and no API_BASE set, use HuggingFace API
-    if is_streamlit_cloud:
-        return "https://ivandemurard-fb-agent-api.hf.space"
-    
-    # Default to localhost for local development
-    return "http://localhost:8000"
+    # For all production environments (Streamlit Cloud, HuggingFace Space), use HuggingFace API
+    return "https://ivandemurard-fb-agent-api.hf.space"
 
 API_BASE = _detect_api_base()
 
@@ -245,38 +228,90 @@ AETHERIX_CSS = """
         50% { opacity: 0.5; }
     }
     
-    /* ===== MENU BUTTON (SIDEBAR TOGGLE) ===== */
-    #aetherix-menu-wrap {
-        position: fixed !important;
-        top: 0.75rem !important;
-        right: 1rem !important;
-        z-index: 99999 !important;
+    /* ===== SIDEBAR ALWAYS VISIBLE ===== */
+    /* Hide Streamlit's native sidebar collapse button */
+    [data-testid="collapsedControl"],
+    button[aria-label*="sidebar" i],
+    button[aria-label*="Sidebar"],
+    button[aria-label*="collapse" i],
+    button[aria-label*="expand" i] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+    }
+    
+    /* Force sidebar to always be visible */
+    [data-testid="stSidebar"] {
+        transform: none !important;
+        min-width: 21rem !important;
         display: block !important;
         visibility: visible !important;
     }
     
-    #aetherix-menu-btn {
-        background-color: #166534 !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 6px;
-        padding: 0.5rem 0.75rem;
-        font-size: 0.875rem;
-        font-weight: 500;
-        cursor: pointer;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-        transition: opacity 0.2s, background-color 0.2s, visibility 0.2s;
+    [data-testid="stSidebar"][aria-expanded="false"] {
+        transform: none !important;
+        display: block !important;
+        visibility: visible !important;
+        min-width: 21rem !important;
     }
     
-    #aetherix-menu-btn:hover {
-        background-color: #14532d !important;
-        opacity: 0.9;
-    }
-    
-    #aetherix-menu-btn:active {
-        opacity: 0.8;
+    /* Prevent sidebar from being hidden */
+    section.stSidebar {
+        transform: none !important;
+        min-width: 21rem !important;
     }
 </style>
+<script>
+// Prevent sidebar from collapsing - force it to always be visible
+(function() {{
+    function forceSidebarVisible() {{
+        var sidebar = document.querySelector('[data-testid="stSidebar"]') || document.querySelector('section.stSidebar');
+        if (sidebar) {{
+            sidebar.setAttribute('aria-expanded', 'true');
+            sidebar.style.transform = '';
+            sidebar.style.display = 'block';
+            sidebar.style.visibility = 'visible';
+            sidebar.style.minWidth = '21rem';
+        }}
+    }}
+    
+    // Run immediately
+    forceSidebarVisible();
+    
+    // Run on DOM ready
+    if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', forceSidebarVisible);
+    }}
+    
+    // Run periodically to prevent collapse
+    setInterval(forceSidebarVisible, 100);
+    
+    // Watch for any attempts to collapse
+    var observer = new MutationObserver(function(mutations) {{
+        mutations.forEach(function(mutation) {{
+            if (mutation.type === 'attributes' && mutation.attributeName === 'aria-expanded') {{
+                forceSidebarVisible();
+            }}
+            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {{
+                forceSidebarVisible();
+            }}
+        }});
+    }});
+    
+    // Start observing when sidebar is found
+    setTimeout(function() {{
+        var sidebar = document.querySelector('[data-testid="stSidebar"]') || document.querySelector('section.stSidebar');
+        if (sidebar) {{
+            observer.observe(sidebar, {{
+                attributes: true,
+                attributeFilter: ['aria-expanded', 'style'],
+                subtree: false
+            }});
+        }}
+    }}, 500);
+}})();
+</script>
+"""
 <script>
 // Détecter si Streamlit JS n'est pas chargé après 2s
 setTimeout(function() {
