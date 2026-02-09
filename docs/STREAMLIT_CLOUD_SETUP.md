@@ -55,6 +55,12 @@ AETHERIX_API_BASE = "https://ivandemurard-fb-agent-api.hf.space"
 - L'URL doit être accessible publiquement (ton API HuggingFace Spaces)
 - Le code détecte automatiquement Streamlit Cloud et utilise l'API HuggingFace par défaut, mais **il est fortement recommandé de configurer ce secret explicitement** pour éviter tout problème
 
+**Comment vérifier que le secret est bien configuré :**
+1. Va dans **Settings** → **Secrets** de ton app Streamlit Cloud
+2. Vérifie que `AETHERIX_API_BASE` est présent avec la valeur `https://ivandemurard-fb-agent-api.hf.space`
+3. Après avoir ajouté/modifié un secret, **redémarre l'app** (clique sur "Reboot app" dans Settings)
+4. Les logs de l'app afficheront `[API_DETECT] Using explicit AETHERIX_API_BASE: https://ivandemurard-fb-agent-api.hf.space` si le secret est bien lu
+
 ---
 
 ## ✅ Vérification

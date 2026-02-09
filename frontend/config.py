@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-# API - Simplified detection: always use HuggingFace API in production
+# API - Improved detection: always use HuggingFace API in production
 def _detect_api_base() -> str:
     """
     Detect API base URL based on environment.
@@ -14,24 +14,34 @@ def _detect_api_base() -> str:
     # Check if explicitly set (highest priority)
     api_base = os.environ.get("AETHERIX_API_BASE")
     if api_base:
-        return api_base.rstrip("/")  # Remove trailing slash if present
+        detected_url = api_base.rstrip("/")
+        print(f"[API_DETECT] Using explicit AETHERIX_API_BASE: {detected_url}")
+        return detected_url
     
     # Check if we're running locally (localhost or 127.0.0.1)
     # This is the only case where we use localhost API
     hostname = os.environ.get("HOSTNAME", "").lower()
     server_name = os.environ.get("SERVER_NAME", "").lower()
+    streamlit_server_port = os.environ.get("STREAMLIT_SERVER_PORT", "")
+    port = os.environ.get("PORT", "")
+    
+    # More comprehensive local detection
     is_local = (
         "localhost" in hostname or "127.0.0.1" in hostname or
         "localhost" in server_name or "127.0.0.1" in server_name or
-        (not hostname and not server_name)  # No hostname usually means local
+        (not hostname and not server_name and not streamlit_server_port)  # No hostname/server_port usually means local
     )
     
     # Use localhost API only for local development
     if is_local:
-        return "http://localhost:8000"
+        detected_url = "http://localhost:8000"
+        print(f"[API_DETECT] Detected local environment, using: {detected_url}")
+        return detected_url
     
     # For all production environments (Streamlit Cloud, HuggingFace Space), use HuggingFace API
-    return "https://ivandemurard-fb-agent-api.hf.space"
+    detected_url = "https://ivandemurard-fb-agent-api.hf.space"
+    print(f"[API_DETECT] Detected production environment (hostname={hostname}, server_name={server_name}, port={port}), using: {detected_url}")
+    return detected_url
 
 API_BASE = _detect_api_base()
 
