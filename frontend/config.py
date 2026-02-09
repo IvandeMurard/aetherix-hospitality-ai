@@ -7,40 +7,76 @@ from pathlib import Path
 def _detect_api_base() -> str:
     """
     Detect API base URL based on environment.
-    - If AETHERIX_API_BASE is set, use it (highest priority)
-    - If running on localhost (local development), use localhost API
-    - Otherwise (production: Streamlit Cloud, HuggingFace Space), use HuggingFace API
+    Priority order:
+    1. USE_LOCAL_API=true (force localhost)
+    2. AETHERIX_API_BASE explicit (highest priority)
+    3. Streamlit Cloud detection (via multiple signals)
+    4. Local development detection
+    5. Fallback: HuggingFace API (production default)
     """
-    # Check if explicitly set (highest priority)
-    api_base = os.environ.get("AETHERIX_API_BASE")
+    # Collect environment variables for logging
+    env_vars = {
+        "USE_LOCAL_API": os.environ.get("USE_LOCAL_API", ""),
+        "AETHERIX_API_BASE": os.environ.get("AETHERIX_API_BASE", ""),
+        "HOSTNAME": os.environ.get("HOSTNAME", ""),
+        "SERVER_NAME": os.environ.get("SERVER_NAME", ""),
+        "STREAMLIT_SERVER_PORT": os.environ.get("STREAMLIT_SERVER_PORT", ""),
+        "PORT": os.environ.get("PORT", ""),
+        "STREAMLIT_SHARING_MODE": os.environ.get("STREAMLIT_SHARING_MODE", ""),
+        "STREAMLIT_SERVER_HEADLESS": os.environ.get("STREAMLIT_SERVER_HEADLESS", ""),
+    }
+    
+    print(f"[API_DETECT] Environment detection started")
+    print(f"[API_DETECT] Env vars: {', '.join(f'{k}={v[:50]}' if v else f'{k}=<not-set>' for k, v in env_vars.items())}")
+    
+    # 1. Check for forced local API (for development/testing)
+    use_local = env_vars["USE_LOCAL_API"].lower() in ("true", "1", "yes")
+    if use_local:
+        detected_url = "http://localhost:8000"
+        print(f"[API_DETECT] USE_LOCAL_API=true, forcing local API: {detected_url}")
+        print("[API_DETECT] WARNING: Using local API in production environment!")
+        return detected_url
+    
+    # 2. Check if explicitly set (highest priority)
+    api_base = env_vars["AETHERIX_API_BASE"]
     if api_base:
         detected_url = api_base.rstrip("/")
         print(f"[API_DETECT] Using explicit AETHERIX_API_BASE: {detected_url}")
         return detected_url
     
-    # Check if we're running locally (localhost or 127.0.0.1)
-    # This is the only case where we use localhost API
-    hostname = os.environ.get("HOSTNAME", "").lower()
-    server_name = os.environ.get("SERVER_NAME", "").lower()
-    streamlit_server_port = os.environ.get("STREAMLIT_SERVER_PORT", "")
-    port = os.environ.get("PORT", "")
-    
-    # More comprehensive local detection
-    is_local = (
-        "localhost" in hostname or "127.0.0.1" in hostname or
-        "localhost" in server_name or "127.0.0.1" in server_name or
-        (not hostname and not server_name and not streamlit_server_port)  # No hostname/server_port usually means local
+    # 3. Detect Streamlit Cloud explicitly
+    # Streamlit Cloud sets specific environment variables
+    server_name_lower = env_vars["SERVER_NAME"].lower()
+    is_streamlit_cloud = (
+        env_vars["STREAMLIT_SHARING_MODE"] == "true" or
+        "streamlit.app" in server_name_lower or
+        "share.streamlit.io" in server_name_lower or
+        env_vars["STREAMLIT_SERVER_HEADLESS"] == "true"
     )
     
-    # Use localhost API only for local development
-    if is_local:
-        detected_url = "http://localhost:8000"
-        print(f"[API_DETECT] Detected local environment, using: {detected_url}")
+    if is_streamlit_cloud:
+        # Always use HuggingFace API for Streamlit Cloud
+        detected_url = "https://ivandemurard-fb-agent-api.hf.space"
+        print(f"[API_DETECT] Detected Streamlit Cloud (SERVER_NAME={env_vars['SERVER_NAME']}, STREAMLIT_SHARING_MODE={env_vars['STREAMLIT_SHARING_MODE']}), using: {detected_url}")
         return detected_url
     
-    # For all production environments (Streamlit Cloud, HuggingFace Space), use HuggingFace API
+    # 4. Detect local development
+    hostname_lower = env_vars["HOSTNAME"].lower()
+    is_local = (
+        "localhost" in hostname_lower or "127.0.0.1" in hostname_lower or
+        "localhost" in server_name_lower or "127.0.0.1" in server_name_lower or
+        (not env_vars["HOSTNAME"] and not env_vars["SERVER_NAME"] and 
+         not env_vars["STREAMLIT_SERVER_PORT"] and not env_vars["PORT"])
+    )
+    
+    if is_local:
+        detected_url = "http://localhost:8000"
+        print(f"[API_DETECT] Detected local environment (hostname={env_vars['HOSTNAME']}, server_name={env_vars['SERVER_NAME']}), using: {detected_url}")
+        return detected_url
+    
+    # 5. Fallback: Always use HuggingFace API for any production environment
     detected_url = "https://ivandemurard-fb-agent-api.hf.space"
-    print(f"[API_DETECT] Detected production environment (hostname={hostname}, server_name={server_name}, port={port}), using: {detected_url}")
+    print(f"[API_DETECT] Using production fallback (hostname={env_vars['HOSTNAME']}, server_name={env_vars['SERVER_NAME']}), using: {detected_url}")
     return detected_url
 
 API_BASE = _detect_api_base()
@@ -94,10 +130,6 @@ AETHERIX_CSS = """
         background-color: #1B4332 !important;
     }
     
-    [data-testid="stSidebar"] > div:first-child {
-        padding-top: 0.5rem !important;
-    }
-    
     /* ALL SIDEBAR TEXT - PURE WHITE */
     /* Catch-all rule to override any gray colors - very aggressive */
     [data-testid="stSidebar"],
@@ -124,14 +156,19 @@ AETHERIX_CSS = """
     }
     
     /* Override any inline styles that might set gray colors */
+    /* Match various formats: with/without spaces, uppercase/lowercase */
     [data-testid="stSidebar"] [style*="color: #6b7280"],
     [data-testid="stSidebar"] [style*="color:#6b7280"],
     [data-testid="stSidebar"] [style*="color: #9ca3af"],
     [data-testid="stSidebar"] [style*="color:#9ca3af"],
     [data-testid="stSidebar"] [style*="color: #94a3b8"],
     [data-testid="stSidebar"] [style*="color:#94a3b8"],
+    [data-testid="stSidebar"] [style*="color: #d1d5db"],
+    [data-testid="stSidebar"] [style*="color:#d1d5db"],
     [data-testid="stSidebar"] [style*="color: gray"],
-    [data-testid="stSidebar"] [style*="color:grey"] {
+    [data-testid="stSidebar"] [style*="color:grey"],
+    [data-testid="stSidebar"] [style*="COLOR: #d1d5db"],
+    [data-testid="stSidebar"] [style*="COLOR:#d1d5db"] {
         color: #FFFFFF !important;
     }
     
@@ -349,6 +386,13 @@ AETHERIX_CSS = """
     [data-testid="stSidebar"] > button,
     [data-testid="stSidebar"] button[aria-label*="arrow" i],
     [data-testid="stSidebar"] button[aria-label*="chevron" i],
+    /* Hide double arrow icon (<<) in sidebar */
+    [data-testid="stSidebar"] > div:first-child > button,
+    [data-testid="stSidebar"] header button,
+    [data-testid="stSidebar"] [role="button"][aria-label*="sidebar" i],
+    /* Hide buttons with SVG icons in sidebar (likely collapse arrows) */
+    [data-testid="stSidebar"] button svg,
+    [data-testid="stSidebar"] button:has(svg),
     /* Hide collapse control in main app area */
     .stApp > header button[data-testid="collapsedControl"],
     .stApp > header button[aria-label*="sidebar" i],
@@ -407,8 +451,14 @@ AETHERIX_CSS = """
     
     /* Adjust sidebar content positioning - move content up */
     [data-testid="stSidebar"] > div:first-child {
-        padding-top: 0.5rem !important;
+        padding-top: 0 !important;
         margin-top: 0 !important;
+    }
+    
+    /* Remove any spacing from sidebar header/container */
+    [data-testid="stSidebar"] > div:first-child > *:first-child {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
     }
     
     /* Prevent sidebar from being hidden */
@@ -452,7 +502,11 @@ AETHERIX_CSS = """
             'button[aria-label*="Open sidebar" i]',
             '.stApp [data-testid="collapsedControl"]',
             'header button[data-testid="collapsedControl"]',
-            '[data-testid="stSidebar"] > button:first-child'
+            '[data-testid="stSidebar"] > button:first-child',
+            '[data-testid="stSidebar"] > button',
+            '[data-testid="stSidebar"] > div:first-child > button',
+            '[data-testid="stSidebar"] header button',
+            '[data-testid="stSidebar"] button:has(svg)'
         ];
         
         selectors.forEach(function(selector) {{
@@ -460,21 +514,55 @@ AETHERIX_CSS = """
                 var elements = document.querySelectorAll(selector);
                 elements.forEach(function(el) {{
                     if (el) {{
-                        el.style.display = 'none';
-                        el.style.visibility = 'hidden';
-                        el.style.opacity = '0';
-                        el.style.width = '0';
-                        el.style.height = '0';
-                        el.style.position = 'absolute';
-                        el.style.left = '-9999px';
-                        el.style.pointerEvents = 'none';
-                        el.remove();
+                        // Check if it's a collapse button by text content or SVG
+                        var text = el.textContent || '';
+                        var hasArrow = text.includes('<<') || text.includes('‹‹') || text.includes('←') || text.includes('◄');
+                        var hasSVG = el.querySelector('svg');
+                        var ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
+                        var isCollapseButton = ariaLabel.includes('sidebar') || ariaLabel.includes('collapse') || ariaLabel.includes('expand');
+                        
+                        // Hide if it matches any criteria
+                        if (hasArrow || hasSVG || isCollapseButton || selector.includes('stSidebar')) {{
+                            el.style.display = 'none';
+                            el.style.visibility = 'hidden';
+                            el.style.opacity = '0';
+                            el.style.width = '0';
+                            el.style.height = '0';
+                            el.style.position = 'absolute';
+                            el.style.left = '-9999px';
+                            el.style.pointerEvents = 'none';
+                            el.remove();
+                        }}
                     }}
                 }});
             }} catch(e) {{
                 // Ignore selector errors
             }}
         }});
+        
+        // Also check all buttons in sidebar and remove any that look like collapse buttons
+        var sidebar = document.querySelector('[data-testid="stSidebar"]');
+        if (sidebar) {{
+            var allButtons = sidebar.querySelectorAll('button');
+            allButtons.forEach(function(button) {{
+                var text = button.textContent || '';
+                var ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+                var hasArrow = text.includes('<<') || text.includes('‹‹') || text.includes('←') || text.includes('◄');
+                var hasSVG = button.querySelector('svg');
+                
+                if (hasArrow || (hasSVG && (ariaLabel.includes('sidebar') || ariaLabel.includes('collapse') || ariaLabel.includes('expand')))) {{
+                    button.style.display = 'none';
+                    button.style.visibility = 'hidden';
+                    button.style.opacity = '0';
+                    button.style.width = '0';
+                    button.style.height = '0';
+                    button.style.position = 'absolute';
+                    button.style.left = '-9999px';
+                    button.style.pointerEvents = 'none';
+                    button.remove();
+                }}
+            }});
+        }}
     }}
     
     function forceSidebarVisible() {{
@@ -487,6 +575,20 @@ AETHERIX_CSS = """
             sidebar.style.minWidth = '21rem';
             sidebar.style.paddingTop = '0';
             sidebar.style.marginTop = '0';
+            
+            // Remove padding from first child to move content up
+            var firstChild = sidebar.querySelector('> div:first-child');
+            if (firstChild) {{
+                firstChild.style.paddingTop = '0';
+                firstChild.style.marginTop = '0';
+                
+                // Also remove padding from first element inside
+                var firstElement = firstChild.querySelector(':first-child');
+                if (firstElement) {{
+                    firstElement.style.marginTop = '0';
+                    firstElement.style.paddingTop = '0';
+                }}
+            }}
         }}
     }}
     
@@ -546,8 +648,37 @@ setTimeout(function() {{
 // Force button styles for navigation buttons (Today, Prev, Next)
 // Ultra-aggressive approach: target ALL buttons in main content area
 var styledButtons = new WeakSet();
+var styleSheet = null;
+
+// Create a style sheet with maximum priority
+function createStyleSheet() {{
+    if (!styleSheet) {{
+        var style = document.createElement('style');
+        style.id = 'aetherix-button-override';
+        style.textContent = `
+            .stApp [data-testid="column"] .stButton > button,
+            .stApp [data-testid="column"] button[type="button"] {{
+                background-color: #166534 !important;
+                color: #ffffff !important;
+                border: none !important;
+                border-radius: 6px !important;
+                font-weight: 500 !important;
+                padding: 8px 16px !important;
+            }}
+            .stApp [data-testid="column"] .stButton > button *,
+            .stApp [data-testid="column"] button[type="button"] * {{
+                color: #ffffff !important;
+            }}
+        `;
+        document.head.appendChild(style);
+        styleSheet = style;
+    }}
+}}
 
 function styleNavigationButtons() {{
+    // Create style sheet if not exists
+    createStyleSheet();
+    
     // Get all buttons in main content, excluding sidebar
     var allButtons = document.querySelectorAll('.stApp button:not([data-testid="stSidebar"] button)');
     
@@ -566,7 +697,6 @@ function styleNavigationButtons() {{
         }}
         
         var buttonText = button.textContent.trim();
-        var buttonTextLower = buttonText.toLowerCase();
         
         // Check if it's a navigation button by text content
         var isNavButton = /today|aujourd|prev|précédent|next|suivant/i.test(buttonText);
@@ -579,13 +709,20 @@ function styleNavigationButtons() {{
         var parentCol = button.closest('[data-testid="column"]');
         var isInNavArea = parentCol && parentCol.querySelector('[data-testid="stDateInput"]');
         
-        if ((isNavButton || isNavByKey || isInNavArea) && !styledButtons.has(button)) {{
-            // Mark as styled
-            styledButtons.add(button);
-            
+        // Apply to all buttons in navigation columns OR navigation buttons
+        var shouldStyle = isNavButton || isNavByKey || isInNavArea;
+        
+        if (shouldStyle) {{
             // Force styles with maximum priority - override any inline styles
+            // Remove and re-apply to ensure our styles take precedence
             button.style.removeProperty('background-color');
             button.style.removeProperty('color');
+            button.style.removeProperty('border');
+            button.style.removeProperty('border-radius');
+            button.style.removeProperty('font-weight');
+            button.style.removeProperty('padding');
+            
+            // Apply our styles with !important
             button.style.setProperty('background-color', '#166534', 'important');
             button.style.setProperty('color', '#ffffff', 'important');
             button.style.setProperty('border', 'none', 'important');
@@ -594,33 +731,54 @@ function styleNavigationButtons() {{
             button.style.setProperty('padding', '8px 16px', 'important');
             
             // Also force text color on any child elements (spans, divs, etc.)
-            var textElements = button.querySelectorAll('span, div, p, label');
+            var textElements = button.querySelectorAll('*');
             textElements.forEach(function(el) {{
+                el.style.removeProperty('color');
                 el.style.setProperty('color', '#ffffff', 'important');
             }});
             
-            // Add hover listener
-            button.addEventListener('mouseenter', function() {{
-                this.style.setProperty('background-color', '#14532d', 'important');
-            }}, true);
-            button.addEventListener('mouseleave', function() {{
-                this.style.setProperty('background-color', '#166534', 'important');
-            }}, true);
+            // Mark as styled
+            if (!styledButtons.has(button)) {{
+                styledButtons.add(button);
+                
+                // Add hover listener
+                button.addEventListener('mouseenter', function() {{
+                    this.style.setProperty('background-color', '#14532d', 'important');
+                }}, true);
+                button.addEventListener('mouseleave', function() {{
+                    this.style.setProperty('background-color', '#166534', 'important');
+                }}, true);
+            }}
         }}
         
-        // Re-apply styles periodically to override Streamlit's inline styles
+        // Re-apply styles for already styled buttons to override Streamlit's inline styles
         if (styledButtons.has(button)) {{
-            button.style.setProperty('background-color', '#166534', 'important');
-            button.style.setProperty('color', '#ffffff', 'important');
-            var textElements = button.querySelectorAll('span, div, p, label');
-            textElements.forEach(function(el) {{
-                el.style.setProperty('color', '#ffffff', 'important');
-            }});
+            // Check if styles were overridden
+            var computedBg = window.getComputedStyle(button).backgroundColor;
+            var computedColor = window.getComputedStyle(button).color;
+            
+            // If background is not our green or color is not white, re-apply
+            if (!computedBg.includes('rgb(22, 101, 52)') || 
+                (!computedColor.includes('rgb(255, 255, 255)') && !computedColor.includes('rgba(255, 255, 255'))) {{
+                button.style.removeProperty('background-color');
+                button.style.removeProperty('color');
+                button.style.setProperty('background-color', '#166534', 'important');
+                button.style.setProperty('color', '#ffffff', 'important');
+                
+                var textElements = button.querySelectorAll('*');
+                textElements.forEach(function(el) {{
+                    var elColor = window.getComputedStyle(el).color;
+                    if (!elColor.includes('rgb(255, 255, 255)') && !elColor.includes('rgba(255, 255, 255')) {{
+                        el.style.removeProperty('color');
+                        el.style.setProperty('color', '#ffffff', 'important');
+                    }}
+                }});
+            }}
         }}
     }});
 }}
 
-// Force sidebar text to be white
+// Force sidebar text to be white - ultra aggressive
 function styleSidebarText() {{
     var sidebar = document.querySelector('[data-testid="stSidebar"]');
     if (!sidebar) return;
@@ -632,15 +790,54 @@ function styleSidebarText() {{
             return;
         }}
         
+        // Check inline style attribute first (highest priority)
+        var inlineStyle = el.getAttribute('style') || '';
+        var hasGrayInline = inlineStyle && (
+            inlineStyle.toLowerCase().includes('#d1d5db') ||
+            inlineStyle.toLowerCase().includes('#6b7280') ||
+            inlineStyle.toLowerCase().includes('#9ca3af') ||
+            inlineStyle.toLowerCase().includes('#94a3b8') ||
+            inlineStyle.toLowerCase().includes('color: gray') ||
+            inlineStyle.toLowerCase().includes('color:grey')
+        );
+        
+        // Check computed color
         var computedColor = window.getComputedStyle(el).color;
-        // If color is gray/dark, force it to white
-        if (computedColor && (
+        var isGrayColor = computedColor && (
             computedColor.includes('rgb(107, 114, 128)') || // #6b7280
             computedColor.includes('rgb(156, 163, 175)') || // #9ca3af
             computedColor.includes('rgb(148, 163, 184)') || // #94a3b8
-            computedColor.includes('rgb(75, 85, 99)')       // #4b5563
-        )) {{
+            computedColor.includes('rgb(75, 85, 99)') ||   // #4b5563
+            computedColor.includes('rgb(209, 213, 219)')    // #d1d5db
+        );
+        
+        // Force ALL gray text to white for maximum readability on dark green background
+        if (hasGrayInline || isGrayColor) {{
+            // Remove inline color style completely and force white
+            if (hasGrayInline) {{
+                // Remove color property from inline style
+                var newStyle = inlineStyle.replace(/color\s*:\s*[^;]+;?/gi, '').trim();
+                // Clean up any double semicolons or trailing semicolons
+                newStyle = newStyle.replace(/;;+/g, ';').replace(/;\s*$/, '');
+                if (newStyle && !newStyle.endsWith(';')) {{
+                    newStyle += ';';
+                }}
+                // Add white color with !important
+                el.setAttribute('style', newStyle + ' color: #ffffff !important;');
+            }}
+            
+            // Force white color via style property (overrides inline styles)
             el.style.setProperty('color', '#ffffff', 'important');
+            
+            // Also force on any child text nodes
+            var textNodes = [];
+            var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+            var node;
+            while (node = walker.nextNode()) {{
+                if (node.parentElement) {{
+                    node.parentElement.style.setProperty('color', '#ffffff', 'important');
+                }}
+            }}
         }}
     }});
 }}
@@ -653,16 +850,42 @@ styleSidebarText();
 setInterval(function() {{
     styleNavigationButtons();
     styleSidebarText();
-}}, 100); // Every 100ms to catch Streamlit's style updates
+}}, 50); // Every 50ms to catch Streamlit's style updates
 
-// Watch for new elements
-var observer = new MutationObserver(function(mutations) {{
+// Also run on every frame for maximum coverage
+function frameStyleUpdate() {{
+    styleSidebarText();
+    requestAnimationFrame(frameStyleUpdate);
+}}
+requestAnimationFrame(frameStyleUpdate);
+
+// Use requestAnimationFrame for even more aggressive updates
+function rafStyleUpdate() {{
     styleNavigationButtons();
     styleSidebarText();
+    requestAnimationFrame(rafStyleUpdate);
+}}
+requestAnimationFrame(rafStyleUpdate);
+
+// Watch for new elements AND style attribute changes
+var observer = new MutationObserver(function(mutations) {{
+    var shouldUpdate = false;
+    mutations.forEach(function(mutation) {{
+        if (mutation.type === 'childList' || 
+            (mutation.type === 'attributes' && mutation.attributeName === 'style')) {{
+            shouldUpdate = true;
+        }}
+    }});
+    if (shouldUpdate) {{
+        styleNavigationButtons();
+        styleSidebarText();
+    }}
 }});
 observer.observe(document.body, {{
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['style']
 }});
 </script>
 """
