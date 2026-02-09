@@ -404,12 +404,15 @@ def render_week_chart(
             text=covers,
             textposition="outside",
             textfont=dict(size=14, color="#212529", family="Inter, sans-serif"),
+            customdata=[[f"{c:.0%}"] for c in confidences] if confidences else None,
             hovertemplate=(
                 "<b>%{x}</b><br>"
                 "Covers: %{y}<br>"
-                "Confidence: " + (
-                    f"{confidences[%{pointNumber}]:.0%}" if confidences else "N/A"
-                ) + "<br>"
+                "Confidence: %{customdata[0]}<br>"
+                "<extra></extra>"
+            ) if confidences else (
+                "<b>%{x}</b><br>"
+                "Covers: %{y}<br>"
                 "<extra></extra>"
             ),
             name="Covers",
@@ -544,12 +547,15 @@ def render_month_chart_from_data(month_predictions: List[Dict], lang: str = "en"
             text=covers,
             textposition="outside",
             textfont=dict(size=10, color="#212529", family="Inter, sans-serif"),
+            customdata=[[f"{c:.0%}"] for c in confidences] if confidences else None,
             hovertemplate=(
                 "<b>Day %{x}</b><br>"
                 "Covers: %{y}<br>"
-                "Confidence: " + (
-                    f"{confidences[%{pointNumber}]:.0%}" if confidences else "N/A"
-                ) + "<br>"
+                "Confidence: %{customdata[0]}<br>"
+                "<extra></extra>"
+            ) if confidences else (
+                "<b>Day %{x}</b><br>"
+                "Covers: %{y}<br>"
                 "<extra></extra>"
             ),
             name="Covers",
