@@ -26,7 +26,7 @@ Remplis les champs suivants :
 | Champ | Valeur |
 |------|--------|
 | **Repository** | `IvandeMurard/Hospitality-Operations-Agentic-AI-B2B` (ou ton repo GitHub) |
-| **Branch** | `master` (ou la branche où se trouve ton code) |
+| **Branch** | **`master`** ou **`main`** (une GitHub Action synchronise `main` → `master` à chaque push ; les deux branches sont identiques) |
 | **Main file path** | **`frontend/app.py`** ⚠️ (pas `streamlit_app.py` !) |
 | **App URL (optional)** | `aetherix` (donnera `aetherix.streamlit.app`) |
 
@@ -117,11 +117,12 @@ Alors `Main file path` = `frontend/app.py` ✅
 
 ## 🔄 Mise à jour après déploiement
 
-Streamlit Cloud redéploie automatiquement à chaque push sur la branche configurée (`master` par défaut).
+Streamlit Cloud redéploie automatiquement à chaque push sur la branche configurée. Une **GitHub Action** synchronise `main` → `master` à chaque push sur `main`, donc **`main`** et **`master`** restent identiques : tu peux utiliser l’une ou l’autre (par ex. `master` si l’app est déjà configurée ainsi, sans rien changer).
 
-Pour forcer un redéploiement manuel :
-1. Va dans les settings de l'app sur Streamlit Cloud
-2. Clique sur **"Reboot app"** ou **"Redeploy"**
+**Si l’app n’est pas à jour :**
+1. Va sur [share.streamlit.io](https://share.streamlit.io), ouvre ton app **aetherix**
+2. **Settings** (ou "Manage app") → vérifie que **Branch** = **`master`** ou **`main`**
+3. Clique sur **"Reboot app"** (ou "Redeploy") pour forcer un nouveau build
 
 ---
 
@@ -130,7 +131,7 @@ Pour forcer un redéploiement manuel :
 | Paramètre | Valeur |
 |-----------|--------|
 | Repository | `IvandeMurard/Hospitality-Operations-Agentic-AI-B2B` |
-| Branch | `master` |
+| Branch | **`master`** ou **`main`** (synchronisées par l’action GitHub) |
 | Main file path | **`frontend/app.py`** |
 | App URL | `aetherix` |
 | Python version | `3.11` |
