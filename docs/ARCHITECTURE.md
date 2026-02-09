@@ -69,6 +69,14 @@ This dual approach aligns with hospitality's evolution toward **autonomous agent
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Architecture Diagrams
+
+**Flow View** - Sequential data flow through layers:
+<img src="assets/architecture-flux.svg" width="100%" alt="Aetherix Architecture Flow Diagram showing Semantic, Intelligence, and Delivery layers" loading="lazy">
+
+**Value View** - Layered architecture with feedback loop:
+<img src="assets/architecture-value.svg" width="100%" alt="Aetherix Architecture Value Diagram showing layered architecture with feedback loop" loading="lazy">
+
 ### Component Status
 
 | Component | Phase | Status |
