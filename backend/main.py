@@ -73,11 +73,21 @@ async def log_requests(request, call_next):
 
 # CORS for frontend
 # Allow all origins in development, restrict in production
-cors_origins = os.getenv(
+# Include Streamlit Cloud and HuggingFace Space domains
+cors_origins_env = os.getenv(
     "CORS_ORIGINS",
     "http://localhost:3000,http://localhost:8000,http://localhost:8501,"
-    "http://127.0.0.1:3000,http://127.0.0.1:8000,http://127.0.0.1:8501"
-).split(",")
+    "http://127.0.0.1:3000,http://127.0.0.1:8000,http://127.0.0.1:8501,"
+    "https://aetherix.streamlit.app,https://share.streamlit.io,"
+    "https://ivandemurard-fb-agent-api.hf.space"
+)
+cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+
+# For HuggingFace Spaces and Streamlit Cloud, allow all subdomains
+# FastAPI CORSMiddleware doesn't support wildcards, so we allow all origins
+# In production, you should restrict this to specific domains
+if os.getenv("ALLOW_ALL_ORIGINS", "true").lower() == "true":
+    cors_origins = ["*"]  # Allow all origins for flexibility
 
 app.add_middleware(
     CORSMiddleware,
