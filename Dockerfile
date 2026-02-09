@@ -36,5 +36,5 @@ EXPOSE 7860
 
 RUN chmod +x /app/scripts/start_app_with_dashboard.sh && \
     chmod +x /app/scripts/start_app_with_proxy.py
-# Use Python proxy instead of nginx (more compatible with HuggingFace Spaces)
-CMD ["python3", "/app/scripts/start_app_with_proxy.py"]
+# Use nginx reverse proxy (WebSocket support, reliable routing)
+CMD ["/app/scripts/start_app_with_dashboard.sh"]
