@@ -11,6 +11,7 @@ print(f"[STARTUP] Loaded .env from: {env_path} (exists: {env_path.exists()})")
 # IMPORT UTF-8 CONFIG FIRST - before any other imports
 import backend.utf8_config  # noqa: F401
 
+import asyncio
 import os
 import sys
 import io
@@ -54,27 +55,52 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# Add middleware to log all requests
+# Add middleware to log all requests with CORS diagnostics
 @app.middleware("http")
 async def log_requests(request, call_next):
     import sys
     import logging
     
     logger = logging.getLogger("uvicorn")
-    logger.info(f"[MIDDLEWARE] Request: {request.method} {request.url.path}")
-    _write_debug_log(f"[MIDDLEWARE] Request: {request.method} {request.url.path}")
+    
+    # Log request details including origin header for CORS debugging
+    origin = request.headers.get("origin", "no-origin-header")
+    referer = request.headers.get("referer", "no-referer-header")
+    user_agent = request.headers.get("user-agent", "no-user-agent")[:100]
+    
+    logger.info(
+        f"[MIDDLEWARE] Request: {request.method} {request.url.path} | "
+        f"Origin: {origin} | Referer: {referer[:50]}"
+    )
+    _write_debug_log(
+        f"[MIDDLEWARE] Request: {request.method} {request.url.path} | "
+        f"Origin: {origin} | Referer: {referer[:50]}"
+    )
     
     response = await call_next(request)
     
-    logger.info(f"[MIDDLEWARE] Response: {response.status_code}")
-    _write_debug_log(f"[MIDDLEWARE] Response: {response.status_code}")
+    # Log response with CORS headers
+    cors_headers = {
+        "access-control-allow-origin": response.headers.get("access-control-allow-origin", "not-set"),
+        "access-control-allow-methods": response.headers.get("access-control-allow-methods", "not-set"),
+        "access-control-allow-headers": response.headers.get("access-control-allow-headers", "not-set"),
+    }
+    
+    logger.info(
+        f"[MIDDLEWARE] Response: {response.status_code} | "
+        f"CORS Origin: {cors_headers['access-control-allow-origin']}"
+    )
+    _write_debug_log(
+        f"[MIDDLEWARE] Response: {response.status_code} | "
+        f"CORS Headers: {cors_headers}"
+    )
     
     return response
 
 # CORS for frontend
 # Allow all origins to fix 403 errors from Streamlit Cloud and HuggingFace Space
 # Note: FastAPI CORSMiddleware with allow_credentials=True cannot use ["*"]
-# So we set allow_credentials=False to allow "*" origins
+# So we set allow_credentials=False to allow "*" origins (required for CORS with "*")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins - required for Streamlit Cloud and HF Space
@@ -83,6 +109,12 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],  # Expose all headers
 )
+
+# Log CORS configuration at startup
+import logging
+logger = logging.getLogger("uvicorn")
+logger.info("[CORS] Configured: allow_origins=['*'], allow_credentials=False")
+_write_debug_log("[CORS] Configured: allow_origins=['*'], allow_credentials=False")
 
 # F&B Agent API routes (restaurant profile, predictions, feedback)
 from backend.api.routes import router as api_router
@@ -103,6 +135,45 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy", "version": "1.0.0"}
+
+@app.get("/diagnostic")
+async def diagnostic():
+    """
+    Diagnostic endpoint to check system health and configuration.
+    Useful for debugging 403 errors and CORS issues.
+    """
+    import os
+    required_vars = [
+        "ANTHROPIC_API_KEY",
+        "QDRANT_URL",
+        "QDRANT_API_KEY",
+        "MISTRAL_API_KEY",
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+    ]
+    missing_vars = [k for k in required_vars if not os.getenv(k)]
+    
+    # Check if backend can import required modules
+    backend_status = "ok"
+    try:
+        from backend.utils.claude_client import ClaudeClient
+        from backend.utils.qdrant_client import QdrantManager
+    except Exception as e:
+        backend_status = f"error: {str(e)}"
+    
+    return {
+        "status": "running",
+        "version": "1.0.0",
+        "cors_configured": True,
+        "cors_allow_origins": ["*"],
+        "cors_allow_credentials": False,
+        "environment": os.getenv("ENVIRONMENT", "production"),
+        "port": os.getenv("PORT", "7860"),
+        "missing_env_vars": missing_vars,
+        "env_vars_count": len([k for k in required_vars if os.getenv(k)]),
+        "backend_status": backend_status,
+        "api_base_url": os.getenv("AETHERIX_API_BASE", "not-set"),
+    }
 
 @app.get("/test/claude")
 async def test_claude():
@@ -334,11 +405,28 @@ async def create_prediction(request: PredictionRequest):
         raise HTTPException(status_code=500, detail=error_detail)
 
 
+# Limit concurrent predictions to avoid overwhelming Claude/Mistral APIs
+BATCH_CONCURRENCY = 5
+
+
+async def _create_prediction_with_semaphore(sem: asyncio.Semaphore, single: PredictionRequest, d: str):
+    """Run create_prediction with semaphore; return (date_str, result_or_exception)."""
+    async with sem:
+        try:
+            resp = await create_prediction(single)
+            out = resp.model_dump()
+            out["date"] = d
+            out["service_date"] = d
+            return (d, out)
+        except Exception as e:
+            return (d, e)
+
+
 @app.post("/predict/batch")
 async def create_prediction_batch(request: BatchPredictionRequest):
     """
     Generate predictions for multiple dates at once.
-    More efficient than calling /predict multiple times.
+    Runs up to BATCH_CONCURRENCY predictions in parallel for faster loading.
     Max 31 dates per request.
     """
     import logging
@@ -355,36 +443,43 @@ async def create_prediction_batch(request: BatchPredictionRequest):
         except (ValueError, AttributeError):
             st_enum = ServiceType.DINNER
 
-        predictions = []
+        # Build list of (date_str, PredictionRequest) for valid dates
+        singles = []
         for d in dates:
             try:
                 service_date = date.fromisoformat(d)
             except ValueError as e:
                 logger.warning(f"[PREDICT/BATCH] Invalid date format: {d} - {e}")
                 continue
-            single = PredictionRequest(
-                restaurant_id=request.restaurant_id,
-                service_date=service_date,
-                service_type=st_enum,
-            )
-            try:
-                resp = await create_prediction(single)
-                out = resp.model_dump()
-                out["date"] = d
-                out["service_date"] = d
-                predictions.append(out)
-            except Exception as e:
-                logger.warning(f"[PREDICT/BATCH] Skip date {d}: {e}")
-                _write_debug_log(f"[PREDICT/BATCH] Skip date {d}: {e}")
-                predictions.append({
-                    "date": d,
-                    "service_date": d,
-                    "predicted_covers": 0,
-                    "confidence": 0.0,
-                    "accuracy_metrics": {"prediction_interval": [0, 0]},
-                    "staff_recommendation": {},
-                })
-        
+            singles.append((
+                d,
+                PredictionRequest(
+                    restaurant_id=request.restaurant_id,
+                    service_date=service_date,
+                    service_type=st_enum,
+                ),
+            ))
+
+        # Run predictions in parallel with semaphore
+        sem = asyncio.Semaphore(BATCH_CONCURRENCY)
+        tasks = [_create_prediction_with_semaphore(sem, single, d) for d, single in singles]
+        results = await asyncio.gather(*tasks, return_exceptions=False)
+
+        predictions = []
+        fallback = {
+            "predicted_covers": 0,
+            "confidence": 0.0,
+            "accuracy_metrics": {"prediction_interval": [0, 0]},
+            "staff_recommendation": {},
+        }
+        for (date_str, result) in results:
+            if isinstance(result, Exception):
+                logger.warning(f"[PREDICT/BATCH] Skip date {date_str}: {result}")
+                _write_debug_log(f"[PREDICT/BATCH] Skip date {date_str}: {result}")
+                predictions.append({"date": date_str, "service_date": date_str, **fallback})
+            else:
+                predictions.append(result)
+
         logger.info(f"[PREDICT/BATCH] Success: {len(predictions)} predictions generated")
         _write_debug_log(f"[PREDICT/BATCH] Success: {len(predictions)} predictions generated")
         

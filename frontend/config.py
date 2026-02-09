@@ -368,283 +368,64 @@ AETHERIX_CSS = """
         50% { opacity: 0.5; }
     }
     
-    /* ===== SIDEBAR ALWAYS VISIBLE ===== */
-    /* Hide all possible sidebar collapse buttons/arrows - ULTRA AGGRESSIVE */
+    /* Sidebar: hide collapse button, keep visible, compact spacing */
     [data-testid="collapsedControl"],
     button[data-testid="collapsedControl"],
     button[aria-label*="sidebar" i],
-    button[aria-label*="Sidebar" i],
     button[aria-label*="collapse" i],
     button[aria-label*="expand" i],
-    button[aria-label*="Close sidebar" i],
-    button[aria-label*="Open sidebar" i],
-    [data-testid="collapsedControl"] button,
-    .stApp [data-testid="collapsedControl"],
-    .stApp button[data-testid="collapsedControl"],
-    /* Hide any arrow icons in sidebar header */
-    [data-testid="stSidebar"] > button:first-child,
-    [data-testid="stSidebar"] > button,
-    [data-testid="stSidebar"] button[aria-label*="arrow" i],
-    [data-testid="stSidebar"] button[aria-label*="chevron" i],
-    /* Hide double arrow icon (<<) in sidebar */
-    [data-testid="stSidebar"] > div:first-child > button,
-    [data-testid="stSidebar"] header button,
-    [data-testid="stSidebar"] [role="button"][aria-label*="sidebar" i],
-    /* Hide buttons with SVG icons in sidebar (likely collapse arrows) */
-    [data-testid="stSidebar"] button svg,
-    [data-testid="stSidebar"] button:has(svg),
-    /* Hide collapse control in main app area */
-    .stApp > header button[data-testid="collapsedControl"],
-    .stApp > header button[aria-label*="sidebar" i],
-    header button[data-testid="collapsedControl"],
-    header button[aria-label*="sidebar" i],
-    /* Hide any button with collapse/expand in aria-label anywhere */
-    button[aria-label*="Collapse" i],
-    button[aria-label*="Expand" i],
-    /* Hide Streamlit's native sidebar toggle button - more specific selectors */
     .stApp header [data-testid="collapsedControl"],
-    .stApp header button[aria-label*="sidebar" i],
-    .stApp header button[aria-label*="Collapse" i],
-    .stApp header button[aria-label*="Expand" i],
-    /* Hide any SVG icons that might be arrows/chevrons for sidebar */
-    [data-testid="collapsedControl"] svg,
-    button[data-testid="collapsedControl"] svg,
-    button[aria-label*="sidebar" i] svg,
-    /* Hide any element with class names that suggest collapse/expand */
-    [class*="collapse"],
-    [class*="expand"],
-    [class*="sidebar-toggle"],
-    [class*="sidebar-collapse"],
-    /* Nuclear option: hide any button that might be a collapse button */
-    button[type="button"][aria-label]:has([aria-label*="sidebar" i]),
-    button[type="button"]:has([aria-label*="collapse" i]) {
+    [data-testid="stSidebar"] > div:first-child > button {
         display: none !important;
         visibility: hidden !important;
-        opacity: 0 !important;
-        width: 0 !important;
-        height: 0 !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        position: absolute !important;
-        left: -9999px !important;
         pointer-events: none !important;
     }
-    
-    /* Force sidebar to always be visible */
-    [data-testid="stSidebar"] {
-        transform: none !important;
-        min-width: 21rem !important;
-        display: block !important;
-        visibility: visible !important;
-        padding-top: 0 !important;
-        margin-top: 0 !important;
-    }
-    
+    [data-testid="stSidebar"],
+    section.stSidebar,
     [data-testid="stSidebar"][aria-expanded="false"] {
         transform: none !important;
+        min-width: 21rem !important;
         display: block !important;
         visibility: visible !important;
-        min-width: 21rem !important;
-        padding-top: 0 !important;
+        padding: 0.25rem 0 0.5rem 0 !important;
         margin-top: 0 !important;
     }
-    
-    /* Adjust sidebar content positioning - move content up */
-    [data-testid="stSidebar"] > div:first-child {
-        padding-top: 0 !important;
-        margin-top: 0 !important;
-    }
-    
-    /* Remove any spacing from sidebar header/container */
+    [data-testid="stSidebar"] > div:first-child,
     [data-testid="stSidebar"] > div:first-child > *:first-child {
-        margin-top: 0 !important;
-        padding-top: 0 !important;
-    }
-    
-    /* Prevent sidebar from being hidden */
-    section.stSidebar {
-        transform: none !important;
-        min-width: 21rem !important;
         padding-top: 0 !important;
         margin-top: 0 !important;
     }
-    
-    /* Reduce bottom spacing in sidebar */
-    [data-testid="stSidebar"] {
-        padding-bottom: 0.5rem !important;
-    }
-    
-    [data-testid="stSidebar"] > div:last-child {
-        padding-bottom: 0.5rem !important;
-        margin-bottom: 0 !important;
-    }
-    
-    /* Reduce spacing after footer elements */
     [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
         margin-bottom: 0 !important;
         padding-bottom: 0 !important;
     }
 </style>
 <script>
-// Prevent sidebar from collapsing - force it to always be visible
-// ULTRA AGGRESSIVE approach to hide collapse button and force sidebar visible
 (function() {{
-    function hideCollapseButton() {{
-        // Find and hide ALL possible collapse buttons
-        var selectors = [
-            '[data-testid="collapsedControl"]',
-            'button[data-testid="collapsedControl"]',
-            'button[aria-label*="sidebar" i]',
-            'button[aria-label*="Sidebar" i]',
-            'button[aria-label*="collapse" i]',
-            'button[aria-label*="expand" i]',
-            'button[aria-label*="Close sidebar" i]',
-            'button[aria-label*="Open sidebar" i]',
-            '.stApp [data-testid="collapsedControl"]',
-            'header button[data-testid="collapsedControl"]',
-            '[data-testid="stSidebar"] > button:first-child',
-            '[data-testid="stSidebar"] > button',
-            '[data-testid="stSidebar"] > div:first-child > button',
-            '[data-testid="stSidebar"] header button',
-            '[data-testid="stSidebar"] button:has(svg)'
-        ];
-        
-        selectors.forEach(function(selector) {{
-            try {{
-                var elements = document.querySelectorAll(selector);
-                elements.forEach(function(el) {{
-                    if (el) {{
-                        // Check if it's a collapse button by text content or SVG
-                        var text = el.textContent || '';
-                        var hasArrow = text.includes('<<') || text.includes('‹‹') || text.includes('←') || text.includes('◄');
-                        var hasSVG = el.querySelector('svg');
-                        var ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
-                        var isCollapseButton = ariaLabel.includes('sidebar') || ariaLabel.includes('collapse') || ariaLabel.includes('expand');
-                        
-                        // Hide if it matches any criteria
-                        if (hasArrow || hasSVG || isCollapseButton || selector.includes('stSidebar')) {{
-                            el.style.display = 'none';
-                            el.style.visibility = 'hidden';
-                            el.style.opacity = '0';
-                            el.style.width = '0';
-                            el.style.height = '0';
-                            el.style.position = 'absolute';
-                            el.style.left = '-9999px';
-                            el.style.pointerEvents = 'none';
-                            el.remove();
-                        }}
-                    }}
-                }});
-            }} catch(e) {{
-                // Ignore selector errors
-            }}
-        }});
-        
-        // Also check all buttons in sidebar and remove any that look like collapse buttons
+    function sidebarCleanup() {{
         var sidebar = document.querySelector('[data-testid="stSidebar"]');
-        if (sidebar) {{
-            var allButtons = sidebar.querySelectorAll('button');
-            allButtons.forEach(function(button) {{
-                var text = button.textContent || '';
-                var ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
-                var hasArrow = text.includes('<<') || text.includes('‹‹') || text.includes('←') || text.includes('◄');
-                var hasSVG = button.querySelector('svg');
-                
-                if (hasArrow || (hasSVG && (ariaLabel.includes('sidebar') || ariaLabel.includes('collapse') || ariaLabel.includes('expand')))) {{
-                    button.style.display = 'none';
-                    button.style.visibility = 'hidden';
-                    button.style.opacity = '0';
-                    button.style.width = '0';
-                    button.style.height = '0';
-                    button.style.position = 'absolute';
-                    button.style.left = '-9999px';
-                    button.style.pointerEvents = 'none';
-                    button.remove();
-                }}
+        if (!sidebar) return;
+        sidebar.setAttribute('aria-expanded', 'true');
+        sidebar.style.paddingTop = '0';
+        sidebar.style.marginTop = '0';
+        var first = sidebar.querySelector('> div:first-child');
+        if (first) {{
+            first.style.paddingTop = '0';
+            first.style.marginTop = '0';
+            first.querySelectorAll('button').forEach(function(b) {{
+                if (b.querySelector('svg')) b.remove();
             }});
         }}
-    }}
-    
-    function forceSidebarVisible() {{
-        var sidebar = document.querySelector('[data-testid="stSidebar"]') || document.querySelector('section.stSidebar');
-        if (sidebar) {{
-            sidebar.setAttribute('aria-expanded', 'true');
-            sidebar.style.transform = '';
-            sidebar.style.display = 'block';
-            sidebar.style.visibility = 'visible';
-            sidebar.style.minWidth = '21rem';
-            sidebar.style.paddingTop = '0';
-            sidebar.style.marginTop = '0';
-            
-            // Remove padding from first child to move content up
-            var firstChild = sidebar.querySelector('> div:first-child');
-            if (firstChild) {{
-                firstChild.style.paddingTop = '0';
-                firstChild.style.marginTop = '0';
-                
-                // Also remove padding from first element inside
-                var firstElement = firstChild.querySelector(':first-child');
-                if (firstElement) {{
-                    firstElement.style.marginTop = '0';
-                    firstElement.style.paddingTop = '0';
-                }}
-            }}
-        }}
-    }}
-    
-    // Run immediately
-    hideCollapseButton();
-    forceSidebarVisible();
-    
-    // Run on DOM ready
-    if (document.readyState === 'loading') {{
-        document.addEventListener('DOMContentLoaded', function() {{
-            hideCollapseButton();
-            forceSidebarVisible();
+        sidebar.querySelectorAll('button').forEach(function(b) {{
+            if (b.querySelector('svg') && (b.getAttribute('aria-label') || '').match(/sidebar|collapse|expand/i)) b.remove();
         }});
     }}
-    
-    // Run periodically to prevent collapse and hide button
-    setInterval(function() {{
-        hideCollapseButton();
-        forceSidebarVisible();
-    }}, 50); // More frequent checks
-    
-    // Watch for any attempts to collapse or add buttons
-    var observer = new MutationObserver(function(mutations) {{
-        mutations.forEach(function(mutation) {{
-            if (mutation.type === 'attributes') {{
-                forceSidebarVisible();
-            }}
-            if (mutation.type === 'childList') {{
-                hideCollapseButton();
-                forceSidebarVisible();
-            }}
-        }});
-    }});
-    
-    // Start observing document body for any changes
-    setTimeout(function() {{
-        var sidebar = document.querySelector('[data-testid="stSidebar"]') || document.querySelector('section.stSidebar');
-        if (sidebar) {{
-            observer.observe(document.body, {{
-                attributes: true,
-                childList: true,
-                subtree: true,
-                attributeFilter: ['aria-expanded', 'style', 'class']
-            }});
-        }}
-    }}, 100);
+    sidebarCleanup();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sidebarCleanup);
+    setInterval(sidebarCleanup, 200);
+    var obs = new MutationObserver(function() {{ sidebarCleanup(); }});
+    setTimeout(function() {{ obs.observe(document.body, {{ childList: true, subtree: true }}); }}, 150);
 }})();
-
-// Détecter si Streamlit JS n'est pas chargé après 2s
-setTimeout(function() {{
-    if (typeof window.streamlit === 'undefined') {{
-        // Forcer rechargement sans cache
-        window.location.reload(true);
-    }}
-}}, 2000);
-
 // Force button styles for navigation buttons (Today, Prev, Next)
 // Ultra-aggressive approach: target ALL buttons in main content area
 var styledButtons = new WeakSet();
@@ -846,26 +627,10 @@ function styleSidebarText() {{
 styleNavigationButtons();
 styleSidebarText();
 
-// Run more frequently to override Streamlit's inline styles
 setInterval(function() {{
     styleNavigationButtons();
     styleSidebarText();
-}}, 50); // Every 50ms to catch Streamlit's style updates
-
-// Also run on every frame for maximum coverage
-function frameStyleUpdate() {{
-    styleSidebarText();
-    requestAnimationFrame(frameStyleUpdate);
-}}
-requestAnimationFrame(frameStyleUpdate);
-
-// Use requestAnimationFrame for even more aggressive updates
-function rafStyleUpdate() {{
-    styleNavigationButtons();
-    styleSidebarText();
-    requestAnimationFrame(rafStyleUpdate);
-}}
-requestAnimationFrame(rafStyleUpdate);
+}}, 200);
 
 // Watch for new elements AND style attribute changes
 var observer = new MutationObserver(function(mutations) {{
