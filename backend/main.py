@@ -74,30 +74,14 @@ async def log_requests(request, call_next):
 # CORS for frontend
 # Allow all origins to fix 403 errors from Streamlit Cloud and HuggingFace Space
 # Note: FastAPI CORSMiddleware with allow_credentials=True cannot use ["*"]
-# So we explicitly list common origins and use a custom middleware for others
-cors_origins_env = os.getenv(
-    "CORS_ORIGINS",
-    "http://localhost:3000,http://localhost:8000,http://localhost:8501,"
-    "http://127.0.0.1:3000,http://127.0.0.1:8000,http://127.0.0.1:8501,"
-    "https://aetherix.streamlit.app,https://share.streamlit.io,"
-    "https://*.streamlit.app,https://*.streamlit.io,"
-    "https://ivandemurard-fb-agent-api.hf.space,https://*.hf.space"
-)
-cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
-
-# Remove wildcards (FastAPI doesn't support them directly)
-# Instead, we'll allow all origins by not restricting them
-cors_origins_clean = [origin for origin in cors_origins if "*" not in origin]
-
-# Use allow_origins=["*"] only if allow_credentials=False
-# Since we need credentials, we'll use a more permissive approach
+# So we set allow_credentials=False to allow "*" origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins - required for Streamlit Cloud and HF Space
-    allow_credentials=False,  # Set to False to allow "*" origins
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
+    allow_credentials=False,  # Set to False to allow "*" origins (required for CORS with "*")
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],  # Expose all headers
 )
 
 # F&B Agent API routes (restaurant profile, predictions, feedback)

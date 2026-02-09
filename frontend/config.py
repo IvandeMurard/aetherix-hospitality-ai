@@ -229,15 +229,31 @@ AETHERIX_CSS = """
     }
     
     /* ===== SIDEBAR ALWAYS VISIBLE ===== */
-    /* Hide Streamlit's native sidebar collapse button */
+    /* Hide all possible sidebar collapse buttons/arrows */
     [data-testid="collapsedControl"],
+    button[data-testid="collapsedControl"],
     button[aria-label*="sidebar" i],
     button[aria-label*="Sidebar"],
     button[aria-label*="collapse" i],
-    button[aria-label*="expand" i] {
+    button[aria-label*="expand" i],
+    button[aria-label*="Close sidebar"],
+    button[aria-label*="Open sidebar"],
+    [data-testid="collapsedControl"] button,
+    .stApp [data-testid="collapsedControl"],
+    /* Hide any arrow icons in sidebar header */
+    [data-testid="stSidebar"] > button:first-child,
+    [data-testid="stSidebar"] button[aria-label*="arrow" i],
+    [data-testid="stSidebar"] button[aria-label*="chevron" i],
+    /* Hide collapse control in main app area */
+    .stApp > header button[data-testid="collapsedControl"],
+    .stApp > header button[aria-label*="sidebar" i] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
     }
     
     /* Force sidebar to always be visible */
@@ -246,6 +262,8 @@ AETHERIX_CSS = """
         min-width: 21rem !important;
         display: block !important;
         visibility: visible !important;
+        padding-top: 0 !important;
+        margin-top: 0 !important;
     }
     
     [data-testid="stSidebar"][aria-expanded="false"] {
@@ -253,12 +271,22 @@ AETHERIX_CSS = """
         display: block !important;
         visibility: visible !important;
         min-width: 21rem !important;
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+    
+    /* Adjust sidebar content positioning - move content up */
+    [data-testid="stSidebar"] > div:first-child {
+        padding-top: 1rem !important;
+        margin-top: 0 !important;
     }
     
     /* Prevent sidebar from being hidden */
     section.stSidebar {
         transform: none !important;
         min-width: 21rem !important;
+        padding-top: 0 !important;
+        margin-top: 0 !important;
     }
 </style>
 <script>
