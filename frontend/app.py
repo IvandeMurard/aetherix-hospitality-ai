@@ -36,81 +36,177 @@ _show_menu_label = get_text("sidebar.show_menu", lang)
 # Use components.v1.html for cleaner JavaScript injection
 import streamlit.components.v1 as components
 
-# Build HTML with proper escaping
+# Build HTML with proper escaping - Improved sidebar toggle with direct manipulation
 _sidebar_toggle_html = f"""
-<div id="aetherix-menu-wrap" style="position: fixed; top: 1rem; left: 1rem; z-index: 9999;">
-    <button id="aetherix-menu-btn" type="button" style="background-color: #166534; color: white; border: none; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.15);">{_show_menu_label}</button>
+<div id="aetherix-menu-wrap" style="position: fixed; top: 0.75rem; right: 1rem; z-index: 9999; display: none;">
+    <button id="aetherix-menu-btn" type="button" style="background-color: #166534; color: white; border: none; border-radius: 6px; padding: 0.5rem 0.75rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.15); transition: opacity 0.2s;">{_show_menu_label}</button>
 </div>
 <script>
 (function() {{
-    function tryClick(el) {{
-        if (!el || el.disabled) return false;
-        try {{
-            el.click();
-            el.dispatchEvent(new MouseEvent('click', {{ bubbles: true, cancelable: true, view: window }}));
-            return true;
-        }} catch (e) {{
-            return false;
-        }}
+    var menuWrap = null;
+    var sidebar = null;
+    var observer = null;
+    
+    function getSidebar() {{
+        return document.querySelector('[data-testid="stSidebar"]') || document.querySelector('section.stSidebar');
     }}
     
-    function findSidebarToggle() {{
+    function isSidebarCollapsed() {{
+        if (!sidebar) return false;
+        var ariaExpanded = sidebar.getAttribute('aria-expanded');
+        var computedStyle = window.getComputedStyle(sidebar);
+        var transform = computedStyle.transform;
+        
+        // Check aria-expanded attribute (false = collapsed)
+        if (ariaExpanded === 'false') return true;
+        
+        // Check transform (translateX means collapsed)
+        if (transform && transform !== 'none' && transform.includes('translateX')) {{
+            var match = transform.match(/translateX\\(([^)]+)\\)/);
+            if (match) {{
+                var value = parseFloat(match[1]);
+                // Negative translateX means sidebar is moved off-screen (collapsed)
+                if (value < 0) return true;
+            }}
+        }}
+        
+        return false;
+    }}
+    
+    function updateMenuVisibility() {{
+        if (!menuWrap) return;
+        var collapsed = isSidebarCollapsed();
+        menuWrap.style.display = collapsed ? 'block' : 'none';
+    }}
+    
+    function toggleSidebar() {{
+        if (!sidebar) {{
+            sidebar = getSidebar();
+            if (!sidebar) return;
+        }}
+        
+        // Try to find and click the native Streamlit toggle button first
         var selectors = [
             '[data-testid="collapsedControl"]',
             '[data-testid="stSidebarCollapseControl"]',
             'button[aria-label*="sidebar" i]',
             'button[aria-label*="Sidebar"]',
-            'section.stSidebar > div:first-child button',
-            '[data-testid="stSidebar"] > div:first-child button'
+            'button[aria-label*="collapse" i]',
+            'button[aria-label*="expand" i]'
         ];
         
+        var toggleBtn = null;
         for (var i = 0; i < selectors.length; i++) {{
             try {{
                 var el = document.querySelector(selectors[i]);
-                if (el && el.offsetParent !== null) return el;
+                if (el && el.offsetParent !== null) {{
+                    toggleBtn = el;
+                    break;
+                }}
             }} catch (e) {{
                 continue;
             }}
         }}
         
-        var sidebar = document.querySelector('[data-testid="stSidebar"]') || document.querySelector('section.stSidebar');
-        if (sidebar && sidebar.parentElement) {{
-            var parentBtns = sidebar.parentElement.querySelectorAll('button');
-            for (var j = 0; j < parentBtns.length; j++) {{
-                var btn = parentBtns[j];
-                if (btn.closest && btn.closest('#aetherix-menu-wrap')) continue;
-                var rect = btn.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0 && rect.left < 200 && rect.top < 150) {{
-                    return btn;
-                }}
-            }}
+        if (toggleBtn) {{
+            // Use native toggle if found
+            toggleBtn.click();
+            return;
         }}
         
-        return null;
-    }}
-    
-    function toggleSidebar() {{
-        var toggleBtn = findSidebarToggle();
-        if (toggleBtn) {{
-            tryClick(toggleBtn);
+        // Fallback: Direct manipulation of sidebar
+        var currentState = sidebar.getAttribute('aria-expanded');
+        var newState = currentState === 'false' ? 'true' : 'false';
+        
+        // Update aria-expanded
+        sidebar.setAttribute('aria-expanded', newState);
+        
+        // Update transform style if needed
+        var computedStyle = window.getComputedStyle(sidebar);
+        var currentTransform = computedStyle.transform;
+        
+        if (newState === 'false') {{
+            // Collapse: move sidebar off-screen
+            var sidebarWidth = sidebar.offsetWidth || 300;
+            sidebar.style.transform = 'translateX(-' + sidebarWidth + 'px)';
+        }} else {{
+            // Expand: reset transform
+            sidebar.style.transform = '';
         }}
+        
+        // Trigger resize event for Streamlit to detect change
+        window.dispatchEvent(new Event('resize'));
+        
+        // Update visibility after a short delay
+        setTimeout(updateMenuVisibility, 100);
     }}
     
     function initMenuButton() {{
-        var btn = document.getElementById('aetherix-menu-btn');
-        if (btn) {{
-            btn.addEventListener('click', toggleSidebar);
-        }} else {{
+        menuWrap = document.getElementById('aetherix-menu-wrap');
+        if (!menuWrap) {{
             setTimeout(initMenuButton, 100);
+            return;
         }}
+        
+        var btn = document.getElementById('aetherix-menu-btn');
+        if (!btn) {{
+            setTimeout(initMenuButton, 100);
+            return;
+        }}
+        
+        sidebar = getSidebar();
+        if (!sidebar) {{
+            setTimeout(initMenuButton, 100);
+            return;
+        }}
+        
+        // Attach click handler
+        btn.addEventListener('click', toggleSidebar);
+        
+        // Set up MutationObserver to watch for sidebar state changes
+        observer = new MutationObserver(function(mutations) {{
+            mutations.forEach(function(mutation) {{
+                if (mutation.type === 'attributes' && mutation.attributeName === 'aria-expanded') {{
+                    updateMenuVisibility();
+                }}
+            }});
+        }});
+        
+        observer.observe(sidebar, {{
+            attributes: true,
+            attributeFilter: ['aria-expanded'],
+            subtree: false
+        }});
+        
+        // Also watch for style changes (transform)
+        var styleObserver = new MutationObserver(function() {{
+            updateMenuVisibility();
+        }});
+        
+        styleObserver.observe(sidebar, {{
+            attributes: true,
+            attributeFilter: ['style'],
+            subtree: false
+        }});
+        
+        // Initial visibility check
+        updateMenuVisibility();
+        
+        // Watch for window resize (sidebar state can change on resize)
+        window.addEventListener('resize', function() {{
+            setTimeout(updateMenuVisibility, 100);
+        }});
     }}
     
+    // Initialize when DOM is ready
     if (document.readyState === 'loading') {{
         document.addEventListener('DOMContentLoaded', initMenuButton);
     }} else {{
-        setTimeout(initMenuButton, 50);
+        // DOM already loaded, but wait a bit for Streamlit to render
+        setTimeout(initMenuButton, 200);
     }}
     
+    // Expose toggle function globally for debugging
     window.aetherixToggleSidebar = toggleSidebar;
 }})();
 </script>
