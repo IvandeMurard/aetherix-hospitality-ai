@@ -18,4 +18,14 @@ jobs:
           fetch-depth: 0
 
       - name: Push main to master
-        run: git push origin main:master --force
+        run: |
+          for i in 1 2 3; do
+            if git push origin main:master --force; then
+              echo "Push succeeded"
+              exit 0
+            fi
+            echo "Push failed (attempt $i/3), retrying in 10s..."
+            sleep 10
+          done
+          echo "Push failed after 3 attempts"
+          exit 1
