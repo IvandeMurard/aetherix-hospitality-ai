@@ -1,0 +1,21 @@
+# Sync main → master so Streamlit Cloud (on master) and HF Space (on main) both get the same code on every push to main.
+name: Sync main to master
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push main to master
+        run: git push origin main:master --force
