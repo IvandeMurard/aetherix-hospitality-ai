@@ -40,7 +40,7 @@ Clique sur **"Advanced settings"** et configure :
 ```
 *(Correspond à la version du backend)*
 
-#### Secrets (Variables d'environnement)
+#### Secrets (Variables d'environnement) ⚠️ OBLIGATOIRE
 
 Dans la section **"Secrets"**, ajoute en format TOML :
 
@@ -48,9 +48,12 @@ Dans la section **"Secrets"**, ajoute en format TOML :
 AETHERIX_API_BASE = "https://ivandemurard-fb-agent-api.hf.space"
 ```
 
-**Important** : 
+**⚠️ IMPORTANT** : 
+- **Ce secret est OBLIGATOIRE** pour que les prédictions fonctionnent sur Streamlit Cloud
+- Sans ce secret, le dashboard essaiera de se connecter à `http://localhost:8000` qui n'existe pas sur Streamlit Cloud
 - Pas de slash final (`/`) à la fin de l'URL
 - L'URL doit être accessible publiquement (ton API HuggingFace Spaces)
+- Le code détecte automatiquement Streamlit Cloud et utilise l'API HuggingFace par défaut, mais **il est fortement recommandé de configurer ce secret explicitement** pour éviter tout problème
 
 ---
 
@@ -73,12 +76,15 @@ Après le déploiement :
 - **Cause** : Le chemin du fichier principal est incorrect
 - **Solution** : Vérifie que `Main file path` = `frontend/app.py` (avec le préfixe `frontend/`)
 
-### Erreur de connexion à l'API
-- **Cause** : `AETHERIX_API_BASE` mal configuré ou API HuggingFace non accessible
+### Erreur de connexion à l'API / Prédictions ne fonctionnent pas
+- **Cause** : `AETHERIX_API_BASE` non configuré, mal configuré ou API HuggingFace non accessible
 - **Solution** : 
-  1. Vérifie que l'API répond : `curl https://ivandemurard-fb-agent-api.hf.space/health`
-  2. Vérifie le secret `AETHERIX_API_BASE` dans Advanced Settings (pas de slash final)
-  3. Vérifie les logs Streamlit Cloud pour voir les erreurs exactes
+  1. **Vérifie que le secret `AETHERIX_API_BASE` est bien configuré** dans Advanced Settings → Secrets
+     - Format TOML : `AETHERIX_API_BASE = "https://ivandemurard-fb-agent-api.hf.space"` (sans slash final)
+  2. Vérifie que l'API répond : `curl https://ivandemurard-fb-agent-api.hf.space/health`
+  3. Redémarre l'app après avoir ajouté/modifié le secret (clique sur "Reboot app")
+  4. Vérifie les logs Streamlit Cloud pour voir les erreurs exactes
+  5. Si le problème persiste, vérifie que l'API HuggingFace Space est bien déployée et accessible
 
 ### Erreur d'import Python
 - **Cause** : Dépendances manquantes ou chemin d'import incorrect

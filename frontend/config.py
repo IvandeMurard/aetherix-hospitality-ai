@@ -3,8 +3,54 @@
 import os
 from pathlib import Path
 
-# API
-API_BASE = os.environ.get("AETHERIX_API_BASE", "http://localhost:8000")
+# API - Smart detection for different environments
+def _detect_api_base() -> str:
+    """
+    Detect API base URL based on environment.
+    - If AETHERIX_API_BASE is set, use it (highest priority)
+    - If on Streamlit Cloud (detected via URL or env), use HuggingFace API
+    - Otherwise, use localhost for local development
+    """
+    # Check if explicitly set (highest priority)
+    api_base = os.environ.get("AETHERIX_API_BASE")
+    if api_base:
+        return api_base.rstrip("/")  # Remove trailing slash if present
+    
+    # Detect Streamlit Cloud environment
+    # Streamlit Cloud sets specific environment variables
+    # Check multiple indicators to be more reliable
+    is_streamlit_cloud = False
+    
+    # Method 1: Check for Streamlit Cloud specific env vars
+    if os.environ.get("STREAMLIT_SERVER_PORT"):
+        is_streamlit_cloud = True
+    
+    # Method 2: Check if running in a cloud environment (not localhost)
+    # On Streamlit Cloud, SERVER_NAME is set to the app domain
+    server_name = os.environ.get("SERVER_NAME", "")
+    if "streamlit.app" in server_name.lower():
+        is_streamlit_cloud = True
+    
+    # Method 3: Check if we're not on localhost (fallback detection)
+    # This is less reliable but can help if other methods fail
+    if not is_streamlit_cloud:
+        # If we're not explicitly on localhost and no API_BASE is set,
+        # assume we're on Streamlit Cloud
+        hostname = os.environ.get("HOSTNAME", "")
+        if hostname and "localhost" not in hostname.lower() and "127.0.0.1" not in hostname.lower():
+            # Additional check: if we have a port but it's not 8501 (default local), might be cloud
+            port = os.environ.get("PORT", "")
+            if port and port != "8501":
+                is_streamlit_cloud = True
+    
+    # If on Streamlit Cloud and no API_BASE set, use HuggingFace API
+    if is_streamlit_cloud:
+        return "https://ivandemurard-fb-agent-api.hf.space"
+    
+    # Default to localhost for local development
+    return "http://localhost:8000"
+
+API_BASE = _detect_api_base()
 
 # Brand
 BRAND_NAME = "Aetherix"
@@ -197,6 +243,36 @@ AETHERIX_CSS = """
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
+    }
+    
+    /* ===== MENU BUTTON (SIDEBAR TOGGLE) ===== */
+    #aetherix-menu-wrap {
+        position: fixed;
+        top: 0.75rem;
+        right: 1rem;
+        z-index: 9999;
+    }
+    
+    #aetherix-menu-btn {
+        background-color: #166534 !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        transition: opacity 0.2s, background-color 0.2s;
+    }
+    
+    #aetherix-menu-btn:hover {
+        background-color: #14532d !important;
+        opacity: 0.9;
+    }
+    
+    #aetherix-menu-btn:active {
+        opacity: 0.8;
     }
 </style>
 <script>
