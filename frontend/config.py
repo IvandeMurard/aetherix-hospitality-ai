@@ -99,6 +99,12 @@ AETHERIX_CSS = """
     }
     
     /* ALL SIDEBAR TEXT - PURE WHITE */
+    /* Catch-all rule to override any gray colors */
+    [data-testid="stSidebar"] * {
+        color: #FFFFFF !important;
+    }
+    
+    /* Specific selectors for common elements */
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
     [data-testid="stSidebar"] label,
@@ -106,8 +112,19 @@ AETHERIX_CSS = """
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
-    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+    [data-testid="stSidebar"] div {
         color: #FFFFFF !important;
+    }
+    
+    /* Exception for muted/secondary text - use light gray instead of dark gray */
+    [data-testid="stSidebar"] .muted,
+    [data-testid="stSidebar"] .secondary,
+    [data-testid="stSidebar"] span[style*="#d1d5db"],
+    [data-testid="stSidebar"] span[style*="#9ca3af"],
+    [data-testid="stSidebar"] span[style*="#6b7280"],
+    [data-testid="stSidebar"] span[style*="#94a3b8"] {
+        color: #d1d5db !important;
     }
     
     /* Sidebar buttons - transparent, left-align, white text */
@@ -196,30 +213,35 @@ AETHERIX_CSS = """
     
     /* ===== BUTTONS ===== */
     /* Main content: high-contrast navigation (Prev, Today, Next) and primary actions */
-    .stApp .stButton > button {
+    .stApp .stButton > button,
+    .stApp .stButton > button[kind="primary"] {
         background-color: #166534 !important;
-        color: white !important;
+        color: #ffffff !important;
         border: none !important;
         border-radius: 6px;
-        font-weight: 600;
+        font-weight: 500 !important;
+        padding: 8px 16px !important;
     }
     
-    .stApp .stButton > button:hover {
+    .stApp .stButton > button:hover,
+    .stApp .stButton > button[kind="primary"]:hover {
         background-color: #14532d !important;
-        color: white !important;
+        color: #ffffff !important;
     }
     
     /* Fallback for any button outside sidebar (legacy selector) */
     .stButton > button {
-        background-color: #2D6A4F;
-        color: white;
-        border: none;
+        background-color: #166534 !important;
+        color: #ffffff !important;
+        border: none !important;
         border-radius: 6px;
-        font-weight: 500;
+        font-weight: 500 !important;
+        padding: 8px 16px !important;
     }
     
     .stButton > button:hover {
-        background-color: #1B4332;
+        background-color: #14532d !important;
+        color: #ffffff !important;
     }
     
     /* ===== VIEW TOGGLE ===== */
