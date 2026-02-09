@@ -247,10 +247,12 @@ AETHERIX_CSS = """
     
     /* ===== MENU BUTTON (SIDEBAR TOGGLE) ===== */
     #aetherix-menu-wrap {
-        position: fixed;
-        top: 0.75rem;
-        right: 1rem;
-        z-index: 9999;
+        position: fixed !important;
+        top: 0.75rem !important;
+        right: 1rem !important;
+        z-index: 99999 !important;
+        display: block !important;
+        visibility: visible !important;
     }
     
     #aetherix-menu-btn {
@@ -263,7 +265,7 @@ AETHERIX_CSS = """
         font-weight: 500;
         cursor: pointer;
         box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-        transition: opacity 0.2s, background-color 0.2s;
+        transition: opacity 0.2s, background-color 0.2s, visibility 0.2s;
     }
     
     #aetherix-menu-btn:hover {
