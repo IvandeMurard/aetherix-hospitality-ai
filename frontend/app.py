@@ -1,7 +1,7 @@
 """Aetherix - Main Application"""
 
 import streamlit as st
-import time
+import json
 
 # MUST be first Streamlit command
 st.set_page_config(
@@ -10,13 +10,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-# Meta tags pour forcer le rechargement et éviter le cache JavaScript
-st.markdown("""
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-""", unsafe_allow_html=True)
 
 try:
     from config import AETHERIX_CSS, get_text
@@ -28,11 +21,44 @@ except ImportError as e:
     st.error(f"Import error: {e}")
     st.stop()
 
-# Inject CSS early with cache-busting to avoid BodyStreamBuffer errors
-# Add version/timestamp to force browser reload and avoid caching issues
-css_version = int(time.time())  # Cache-busting timestamp
-css_with_cache_bust = AETHERIX_CSS.replace('</style>', f'</style>\n<!-- CSS Version: {css_version} -->')
-st.markdown(css_with_cache_bust, unsafe_allow_html=True)
+# Inject CSS using JavaScript to ensure it's applied to the document head
+# This approach works more reliably across different Streamlit deployments
+css_escaped = json.dumps(AETHERIX_CSS)  # Escape for JavaScript
+inject_css_js = f"""
+<script>
+(function() {{
+    // Remove existing Aetherix CSS if present
+    var existing = document.getElementById('aetherix-css-injected');
+    if (existing) existing.remove();
+    
+    // Create style element and inject CSS
+    var style = document.createElement('style');
+    style.id = 'aetherix-css-injected';
+    style.type = 'text/css';
+    style.innerHTML = {css_escaped};
+    
+    // Inject into head immediately
+    (document.head || document.getElementsByTagName('head')[0]).appendChild(style);
+    
+    // Also inject meta tags for cache control
+    var metaCache = document.createElement('meta');
+    metaCache.httpEquiv = 'Cache-Control';
+    metaCache.content = 'no-cache, no-store, must-revalidate';
+    (document.head || document.getElementsByTagName('head')[0]).appendChild(metaCache);
+    
+    var metaPragma = document.createElement('meta');
+    metaPragma.httpEquiv = 'Pragma';
+    metaPragma.content = 'no-cache';
+    (document.head || document.getElementsByTagName('head')[0]).appendChild(metaPragma);
+    
+    var metaExpires = document.createElement('meta');
+    metaExpires.httpEquiv = 'Expires';
+    metaExpires.content = '0';
+    (document.head || document.getElementsByTagName('head')[0]).appendChild(metaExpires);
+}})();
+</script>
+"""
+st.markdown(inject_css_js, unsafe_allow_html=True)
 
 # Render sidebar and get context (lang comes from context, set by sidebar selectbox)
 context = render_sidebar()

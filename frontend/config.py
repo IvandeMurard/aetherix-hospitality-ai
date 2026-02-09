@@ -239,24 +239,34 @@ AETHERIX_CSS = """
     }
     
     /* ===== SIDEBAR ALWAYS VISIBLE ===== */
-    /* Hide all possible sidebar collapse buttons/arrows */
+    /* Hide all possible sidebar collapse buttons/arrows - ULTRA AGGRESSIVE */
     [data-testid="collapsedControl"],
     button[data-testid="collapsedControl"],
     button[aria-label*="sidebar" i],
-    button[aria-label*="Sidebar"],
+    button[aria-label*="Sidebar" i],
     button[aria-label*="collapse" i],
     button[aria-label*="expand" i],
-    button[aria-label*="Close sidebar"],
-    button[aria-label*="Open sidebar"],
+    button[aria-label*="Close sidebar" i],
+    button[aria-label*="Open sidebar" i],
     [data-testid="collapsedControl"] button,
     .stApp [data-testid="collapsedControl"],
+    .stApp button[data-testid="collapsedControl"],
     /* Hide any arrow icons in sidebar header */
     [data-testid="stSidebar"] > button:first-child,
+    [data-testid="stSidebar"] > button,
     [data-testid="stSidebar"] button[aria-label*="arrow" i],
     [data-testid="stSidebar"] button[aria-label*="chevron" i],
     /* Hide collapse control in main app area */
     .stApp > header button[data-testid="collapsedControl"],
-    .stApp > header button[aria-label*="sidebar" i] {
+    .stApp > header button[aria-label*="sidebar" i],
+    header button[data-testid="collapsedControl"],
+    header button[aria-label*="sidebar" i],
+    /* Hide any button with collapse/expand in aria-label anywhere */
+    button[aria-label*="Collapse" i],
+    button[aria-label*="Expand" i],
+    /* Nuclear option: hide any button that might be a collapse button */
+    button[type="button"][aria-label]:has([aria-label*="sidebar" i]),
+    button[type="button"]:has([aria-label*="collapse" i]) {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -264,6 +274,9 @@ AETHERIX_CSS = """
         height: 0 !important;
         padding: 0 !important;
         margin: 0 !important;
+        position: absolute !important;
+        left: -9999px !important;
+        pointer-events: none !important;
     }
     
     /* Force sidebar to always be visible */
@@ -301,7 +314,46 @@ AETHERIX_CSS = """
 </style>
 <script>
 // Prevent sidebar from collapsing - force it to always be visible
+// ULTRA AGGRESSIVE approach to hide collapse button and force sidebar visible
 (function() {{
+    function hideCollapseButton() {{
+        // Find and hide ALL possible collapse buttons
+        var selectors = [
+            '[data-testid="collapsedControl"]',
+            'button[data-testid="collapsedControl"]',
+            'button[aria-label*="sidebar" i]',
+            'button[aria-label*="Sidebar" i]',
+            'button[aria-label*="collapse" i]',
+            'button[aria-label*="expand" i]',
+            'button[aria-label*="Close sidebar" i]',
+            'button[aria-label*="Open sidebar" i]',
+            '.stApp [data-testid="collapsedControl"]',
+            'header button[data-testid="collapsedControl"]',
+            '[data-testid="stSidebar"] > button:first-child'
+        ];
+        
+        selectors.forEach(function(selector) {{
+            try {{
+                var elements = document.querySelectorAll(selector);
+                elements.forEach(function(el) {{
+                    if (el) {{
+                        el.style.display = 'none';
+                        el.style.visibility = 'hidden';
+                        el.style.opacity = '0';
+                        el.style.width = '0';
+                        el.style.height = '0';
+                        el.style.position = 'absolute';
+                        el.style.left = '-9999px';
+                        el.style.pointerEvents = 'none';
+                        el.remove();
+                    }}
+                }});
+            }} catch(e) {{
+                // Ignore selector errors
+            }}
+        }});
+    }}
+    
     function forceSidebarVisible() {{
         var sidebar = document.querySelector('[data-testid="stSidebar"]') || document.querySelector('section.stSidebar');
         if (sidebar) {{
@@ -310,43 +362,54 @@ AETHERIX_CSS = """
             sidebar.style.display = 'block';
             sidebar.style.visibility = 'visible';
             sidebar.style.minWidth = '21rem';
+            sidebar.style.paddingTop = '0';
+            sidebar.style.marginTop = '0';
         }}
     }}
     
     // Run immediately
+    hideCollapseButton();
     forceSidebarVisible();
     
     // Run on DOM ready
     if (document.readyState === 'loading') {{
-        document.addEventListener('DOMContentLoaded', forceSidebarVisible);
+        document.addEventListener('DOMContentLoaded', function() {{
+            hideCollapseButton();
+            forceSidebarVisible();
+        }});
     }}
     
-    // Run periodically to prevent collapse
-    setInterval(forceSidebarVisible, 100);
+    // Run periodically to prevent collapse and hide button
+    setInterval(function() {{
+        hideCollapseButton();
+        forceSidebarVisible();
+    }}, 50); // More frequent checks
     
-    // Watch for any attempts to collapse
+    // Watch for any attempts to collapse or add buttons
     var observer = new MutationObserver(function(mutations) {{
         mutations.forEach(function(mutation) {{
-            if (mutation.type === 'attributes' && mutation.attributeName === 'aria-expanded') {{
+            if (mutation.type === 'attributes') {{
                 forceSidebarVisible();
             }}
-            if (mutation.type === 'attributes' && mutation.attributeName === 'style') {{
+            if (mutation.type === 'childList') {{
+                hideCollapseButton();
                 forceSidebarVisible();
             }}
         }});
     }});
     
-    // Start observing when sidebar is found
+    // Start observing document body for any changes
     setTimeout(function() {{
         var sidebar = document.querySelector('[data-testid="stSidebar"]') || document.querySelector('section.stSidebar');
         if (sidebar) {{
-            observer.observe(sidebar, {{
+            observer.observe(document.body, {{
                 attributes: true,
-                attributeFilter: ['aria-expanded', 'style'],
-                subtree: false
+                childList: true,
+                subtree: true,
+                attributeFilter: ['aria-expanded', 'style', 'class']
             }});
         }}
-    }}, 500);
+    }}, 100);
 }})();
 
 // Détecter si Streamlit JS n'est pas chargé après 2s
