@@ -111,10 +111,10 @@
   <!-- Legend -->
   <g transform="translate(80, 568)">
     <rect x="0" y="0" width="13" height="10" rx="2" fill="#f59e0b"/>
-    <text x="18" y="8" class="legend-text">Delivery  Ambient Experience</text>
+    <text x="18" y="8" class="legend-text">Delivery - Ambient Experience</text>
     
     <rect x="160" y="0" width="13" height="10" rx="2" fill="#3b82f6"/>
-    <text x="178" y="8" class="legend-text">Intelligence  RAG + Reasoning</text>
+    <text x="178" y="8" class="legend-text">Intelligence - RAG + Reasoning</text>
     
     <rect x="336" y="0" width="13" height="10" rx="2" fill="#059669"/>
     <text x="354" y="8" class="legend-text">Semantic Layer</text>
