@@ -310,16 +310,14 @@ AETHERIX_CSS = """
         }}
     }}, 500);
 }})();
-</script>
-"""
-<script>
+
 // Détecter si Streamlit JS n'est pas chargé après 2s
-setTimeout(function() {
-    if (typeof window.streamlit === 'undefined') {
+setTimeout(function() {{
+    if (typeof window.streamlit === 'undefined') {{
         // Forcer rechargement sans cache
         window.location.reload(true);
-    }
-}, 2000);
+    }}
+}}, 2000);
 </script>
 """
 
