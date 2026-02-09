@@ -44,7 +44,7 @@ or agent, that:
 
 ### Architecture (3 Layers)
 
-Voir les diagrammes SVG ci-dessous dans la section Architecture.
+Voir le diagramme SVG ci-dessous dans la section Architecture.
 
 ---
 
@@ -61,13 +61,7 @@ An **intelligence layer** for hotel managers that:
 
 ## 🏗️ Architecture
 
-### Flow View
-
-<img src="docs/assets/architecture-flux.svg" width="100%" alt="Aetherix Architecture Flow Diagram showing Semantic, Intelligence, and Delivery layers" loading="lazy">
-
-### Value View
-
-<img src="docs/assets/architecture-value.svg" width="100%" alt="Aetherix Architecture Value Diagram showing layered architecture with feedback loop" loading="lazy">
+<img src="https://raw.githubusercontent.com/IvandeMurard/Hospitality-Operations-Agentic-AI-B2B/main/docs/assets/architecture-value.svg" width="100%" alt="Aetherix Architecture Value Diagram showing layered architecture with feedback loop" loading="lazy">
 ---
 
 ## ✨ Key Features
