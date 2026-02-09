@@ -3,7 +3,9 @@ showSidebarNavigation = false
 
 [server]
 # Headers pour désactiver le cache des assets statiques
-enableXsrfProtection = true
+# Disable XSRF protection to avoid conflict with CORS
+# The backend API handles CORS properly, so XSRF is not needed here
+enableXsrfProtection = false
 enableCORS = false
 
 [browser]

@@ -1,6 +1,7 @@
 """Aetherix - Main Application"""
 
 import streamlit as st
+import time
 
 # MUST be first Streamlit command
 st.set_page_config(
@@ -27,8 +28,11 @@ except ImportError as e:
     st.error(f"Import error: {e}")
     st.stop()
 
-# Inject CSS
-st.markdown(AETHERIX_CSS, unsafe_allow_html=True)
+# Inject CSS early with cache-busting to avoid BodyStreamBuffer errors
+# Add version/timestamp to force browser reload and avoid caching issues
+css_version = int(time.time())  # Cache-busting timestamp
+css_with_cache_bust = AETHERIX_CSS.replace('</style>', f'</style>\n<!-- CSS Version: {css_version} -->')
+st.markdown(css_with_cache_bust, unsafe_allow_html=True)
 
 # Render sidebar and get context (lang comes from context, set by sidebar selectbox)
 context = render_sidebar()
