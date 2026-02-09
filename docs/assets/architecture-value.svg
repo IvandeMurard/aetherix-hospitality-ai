@@ -15,9 +15,6 @@
     <marker id="arrowhead-feedback" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
       <polygon points="0 0, 8 3, 0 6" fill="#f59e0b"/>
     </marker>
-    <marker id="arrowhead-yellow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <polygon points="0 0, 8 3, 0 6" fill="#fbbf24"/>
-    </marker>
   </defs>
   
   <!-- Background -->
@@ -48,70 +45,54 @@
     <text x="350" y="270" text-anchor="middle" class="center-sub">Existing Systems</text>
     <text x="350" y="282" text-anchor="middle" class="center-sub">PMS " POS " RMS</text>
     
-    <!-- Semantic Layer Components (Green) -->
-    <ellipse cx="280" cy="202.5" rx="48" ry="10.5" fill="#059669"/>
+    <!-- Semantic Layer Components -->
+    <rect x="232" y="192" width="96" height="21" rx="10" fill="#059669"/>
     <text x="280" y="206" text-anchor="middle" class="component">Unified Model</text>
     
-    <ellipse cx="376" cy="264.5" rx="32" ry="10.5" fill="#059669"/>
+    <rect x="344" y="254" width="64" height="21" rx="10" fill="#059669"/>
     <text x="376" y="268" text-anchor="middle" class="component">Adapters</text>
     
-    <!-- Intelligence Layer Components (Blue) -->
-    <ellipse cx="200" cy="167" rx="36" ry="11" fill="#3b82f6"/>
+    <rect x="152" y="254" width="56" height="21" rx="10" fill="#059669"/>
+    <text x="180" y="268" text-anchor="middle" class="component">Events</text>
+    
+    <rect x="228" y="320" width="88" height="21" rx="10" fill="#059669"/>
+    <text x="272" y="334" text-anchor="middle" class="component">External APIs</text>
+    
+    <!-- Intelligence Layer Components -->
+    <rect x="164" y="156" width="72" height="22" rx="11" fill="#3b82f6"/>
     <text x="200" y="171" text-anchor="middle" class="component">Reasoning</text>
     
-    <ellipse cx="360" cy="167" rx="36" ry="11" fill="#3b82f6"/>
+    <rect x="324" y="156" width="72" height="22" rx="11" fill="#3b82f6"/>
     <text x="360" y="171" text-anchor="middle" class="component">Prediction</text>
     
-    <ellipse cx="182" cy="359" rx="38" ry="11" fill="#3b82f6"/>
+    <rect x="144" y="348" width="76" height="22" rx="11" fill="#3b82f6"/>
     <text x="182" y="363" text-anchor="middle" class="component">Confidence</text>
     
-    <ellipse cx="368" cy="359" rx="28" ry="11" fill="#3b82f6"/>
+    <rect x="340" y="348" width="56" height="22" rx="11" fill="#3b82f6"/>
     <text x="368" y="363" text-anchor="middle" class="component">RAG</text>
     
-    <!-- Events (moved to Intelligence, positioned between WhatsApp and Reasoning) -->
-    <ellipse cx="110" cy="220" rx="30" ry="11" fill="#3b82f6"/>
-    <text x="110" y="224" text-anchor="middle" class="component">Events</text>
-    
-    <!-- External APIs (moved to Intelligence, bottom-left) -->
-    <ellipse cx="200" cy="330" rx="44" ry="11" fill="#3b82f6"/>
-    <text x="200" y="334" text-anchor="middle" class="component">External APIs</text>
-    
-    <!-- Delivery Layer Components (Orange) -->
-    <ellipse cx="272" cy="91" rx="40" ry="11" fill="#f59e0b"/>
+    <!-- Delivery Layer Components -->
+    <rect x="232" y="80" width="80" height="22" rx="11" fill="#f59e0b"/>
     <text x="272" y="95" text-anchor="middle" class="component-dark">Dashboard</text>
     
-    <ellipse cx="476" cy="265" rx="28" ry="11" fill="#f59e0b"/>
+    <rect x="448" y="254" width="56" height="22" rx="11" fill="#f59e0b"/>
     <text x="476" y="269" text-anchor="middle" class="component-dark">Slack</text>
     
-    <ellipse cx="92" cy="265" rx="36" ry="11" fill="#f59e0b"/>
+    <rect x="56" y="254" width="72" height="22" rx="11" fill="#f59e0b"/>
     <text x="92" y="269" text-anchor="middle" class="component-dark">WhatsApp</text>
     
-    <ellipse cx="272" cy="447" rx="28" ry="11" fill="#f59e0b"/>
+    <rect x="244" y="436" width="56" height="22" rx="11" fill="#f59e0b"/>
     <text x="272" y="451" text-anchor="middle" class="component-dark">Voice</text>
     
-    <!-- Value pastille (in feedback loop) -->
-    <ellipse cx="350" cy="400" rx="30" ry="12" fill="#f59e0b"/>
-    <text x="350" y="404" text-anchor="middle" class="component-dark">Value</text>
-    
-    <!-- Connection arrows (yellow/orange) -->
-    <!-- WhatsApp to Events -->
-    <path d="M 110 265 L 110 231" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowhead-yellow)"/>
-    
-    <!-- Events to Intelligence layer (towards Reasoning) -->
-    <path d="M 140 220 Q 160 240, 180 250" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowhead-yellow)"/>
-    
-    <!-- Slack to Intelligence layer -->
-    <path d="M 448 265 Q 420 250, 400 240" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="3,2" marker-end="url(#arrowhead-yellow)"/>
-    
-    <!-- FEEDBACK LOOP - Prominent curved arrow passing through Value -->
+    <!-- FEEDBACK LOOP - Prominent curved arrow -->
     <path d="M 464 304 
              Q 496 304, 496 336 
-             L 496 388 
-             Q 496 400, 380 400 
-             L 320 400 
-             Q 204 400, 204 388 
-             L 204 336 
-             Q 204 304, 236 304" 
+             L 496 416 
+             Q 496 448, 464 448 
+             L 160 448 
+             Q 128 448, 128 416 
+             L 128 336 
+             Q 128 304, 160 304" 
           fill="none" 
           stroke="#f59e0b" 
           stroke-width="2.5" 
@@ -119,8 +100,8 @@
           marker-end="url(#arrowhead-feedback)"/>
     
     <!-- Feedback Loop Label -->
-    <ellipse cx="288" cy="480" rx="56" ry="11" fill="#f59e0b"/>
-    <text x="288" y="485" text-anchor="middle" class="component-dark">FEEDBACK LOOP</text>
+    <rect x="232" y="480" width="112" height="22" rx="5" fill="#f59e0b"/>
+    <text x="288" y="495" text-anchor="middle" class="component-dark">FEEDBACK LOOP</text>
     
     <!-- Feedback description -->
     <text x="350" y="520" text-anchor="middle" class="feedback-label">Continuous learning from actual results</text>
