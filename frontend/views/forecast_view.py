@@ -4,6 +4,7 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from typing import Optional
+import time
 
 from config import get_text, API_BASE
 from components.header import render_header
@@ -47,63 +48,196 @@ def _parse_staff(staff_rec: dict) -> str:
 
 
 def _render_kpi_cards_day(lang: str, prediction: dict, date_display: str) -> None:
-    """Render KPI cards for day view (single day values)."""
+    """Render KPI cards for day view (single day values) with Perplexity-style design."""
     col1, col2, col3, col4 = st.columns(4)
+    
+    # Perplexity-style card wrapper HTML
+    card_style = """
+    <div style="
+        background-color: white;
+        border-radius: 8px;
+        border: 1px solid #E9ECEF;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        padding: 1.25rem;
+        height: 100%;
+    ">
+    """
+    
     if prediction:
         covers = prediction.get("predicted_covers", "—")
         accuracy_metrics = prediction.get("accuracy_metrics", {})
         interval = accuracy_metrics.get("prediction_interval")
         range_text = f"{interval[0]} – {interval[1]}" if interval and len(interval) == 2 else "—"
-        confidence_label = _confidence_label(prediction.get("confidence", 0), lang)
+        confidence = prediction.get("confidence", 0)
+        confidence_label = _confidence_label(confidence, lang)
         servers = _parse_staff(prediction.get("staff_recommendation", {}))
+        
+        # Determine confidence color (semantic colors)
+        if confidence >= 0.85:
+            conf_color = "#40916C"  # Green for high confidence
+        elif confidence >= 0.7:
+            conf_color = "#E9C46A"  # Yellow/Orange for medium
+        else:
+            conf_color = "#E76F51"  # Red for low
+        
         with col1:
-            st.metric(get_text("kpi.covers", lang).upper(), str(covers) if covers != "—" else "—")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(
+                get_text("kpi.covers", lang).upper(),
+                str(covers) if covers != "—" else "—",
+                delta=None,
+            )
         with col2:
-            st.metric(get_text("kpi.range", lang).upper(), range_text)
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(
+                get_text("kpi.range", lang).upper(),
+                range_text,
+                delta=None,
+            )
         with col3:
-            st.metric(get_text("kpi.staff", lang).upper(), f"{servers} servers" if servers != "—" else "—")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(
+                get_text("kpi.staff", lang).upper(),
+                f"{servers} servers" if servers != "—" else "—",
+                delta=None,
+            )
         with col4:
-            st.metric(get_text("kpi.confidence", lang).upper(), confidence_label)
+            st.markdown(card_style, unsafe_allow_html=True)
+            # Custom metric with color for confidence
+            st.markdown(
+                f"""
+                <div style="margin-bottom: 0.5rem;">
+                    <p style="
+                        color: #6C757D;
+                        font-size: 0.7rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.05em;
+                        margin: 0;
+                        font-weight: 500;
+                    ">{get_text("kpi.confidence", lang).upper()}</p>
+                </div>
+                <div>
+                    <p style="
+                        color: {conf_color};
+                        font-size: 1.75rem;
+                        font-weight: 600;
+                        margin: 0;
+                    ">{confidence_label}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     else:
         with col1:
-            st.metric(get_text("kpi.covers", lang).upper(), "—")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.covers", lang).upper(), "—", delta=None)
         with col2:
-            st.metric(get_text("kpi.range", lang).upper(), "—")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.range", lang).upper(), "—", delta=None)
         with col3:
-            st.metric(get_text("kpi.staff", lang).upper(), "—")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.staff", lang).upper(), "—", delta=None)
         with col4:
-            st.metric(get_text("kpi.confidence", lang).upper(), "—")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.confidence", lang).upper(), "—", delta=None)
         st.warning(f"Could not load prediction for {date_display}")
 
 
 def _render_kpi_cards_week(lang: str, week_predictions: list) -> None:
-    """Render KPI cards for week view (totals, peak, avg)."""
+    """Render KPI cards for week view (totals, peak, avg) with Perplexity-style design."""
     col1, col2, col3, col4 = st.columns(4)
+    
+    # Perplexity-style card wrapper
+    card_style = """
+    <div style="
+        background-color: white;
+        border-radius: 8px;
+        border: 1px solid #E9ECEF;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        padding: 1.25rem;
+        height: 100%;
+    ">
+    """
+    
     if not week_predictions:
         for col in [col1, col2, col3, col4]:
             with col:
-                st.metric("—", "—")
+                st.markdown(card_style, unsafe_allow_html=True)
+                st.metric("—", "—", delta=None)
         return
+    
     total = sum(p.get("covers", 0) for p in week_predictions)
     avg_covers = int(total / 7)
     peak_day = max(week_predictions, key=lambda x: x.get("covers", 0))
     confidences = [p.get("confidence", 0) for p in week_predictions]
     avg_conf = sum(confidences) / len(confidences) if confidences else 0
+    
+    # Determine confidence color
+    if avg_conf >= 0.85:
+        conf_color = "#40916C"
+    elif avg_conf >= 0.7:
+        conf_color = "#E9C46A"
+    else:
+        conf_color = "#E76F51"
+    
     with col1:
-        st.metric(get_text("kpi.total_week", lang), f"{total} covers")
+        st.markdown(card_style, unsafe_allow_html=True)
+        st.metric(get_text("kpi.total_week", lang), f"{total} covers", delta=None)
     with col2:
-        st.metric(get_text("kpi.daily_avg", lang), f"{avg_covers} covers")
+        st.markdown(card_style, unsafe_allow_html=True)
+        st.metric(get_text("kpi.daily_avg", lang), f"{avg_covers} covers", delta=None)
     with col3:
-        st.metric(get_text("kpi.peak_day", lang), f"{peak_day.get('day', '—')} ({peak_day.get('covers', 0)})")
+        st.markdown(card_style, unsafe_allow_html=True)
+        st.metric(
+            get_text("kpi.peak_day", lang),
+            f"{peak_day.get('day', '—')} ({peak_day.get('covers', 0)})",
+            delta=None,
+        )
     with col4:
-        st.metric(get_text("kpi.avg_confidence", lang), _confidence_label(avg_conf, lang))
+        st.markdown(card_style, unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style="margin-bottom: 0.5rem;">
+                <p style="
+                    color: #6C757D;
+                    font-size: 0.7rem;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                    margin: 0;
+                    font-weight: 500;
+                ">{get_text("kpi.avg_confidence", lang).upper()}</p>
+            </div>
+            <div>
+                <p style="
+                    color: {conf_color};
+                    font-size: 1.75rem;
+                    font-weight: 600;
+                    margin: 0;
+                ">{_confidence_label(avg_conf, lang)}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def _render_kpi_cards_month(
     lang: str, month_predictions: Optional[list] = None
 ) -> None:
-    """Render KPI cards for month view (placeholders or aggregated from batch)."""
+    """Render KPI cards for month view with Perplexity-style design."""
     col1, col2, col3, col4 = st.columns(4)
+    
+    # Perplexity-style card wrapper
+    card_style = """
+    <div style="
+        background-color: white;
+        border-radius: 8px;
+        border: 1px solid #E9ECEF;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        padding: 1.25rem;
+        height: 100%;
+    ">
+    """
+    
     if month_predictions:
         total = sum(p.get("predicted_covers", 0) for p in month_predictions)
         n = len(month_predictions)
@@ -111,57 +245,246 @@ def _render_kpi_cards_month(
         peak = max(month_predictions, key=lambda x: x.get("predicted_covers", 0))
         confidences = [p.get("confidence", 0) for p in month_predictions]
         avg_conf = sum(confidences) / len(confidences) if confidences else 0
+        
+        # Determine confidence color
+        if avg_conf >= 0.85:
+            conf_color = "#40916C"
+        elif avg_conf >= 0.7:
+            conf_color = "#E9C46A"
+        else:
+            conf_color = "#E76F51"
+        
         with col1:
-            st.metric(get_text("kpi.total_month", lang), f"{total} covers")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.total_month", lang), f"{total} covers", delta=None)
         with col2:
-            st.metric(get_text("kpi.daily_avg", lang), f"{avg} covers")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.daily_avg", lang), f"{avg} covers", delta=None)
         with col3:
-            st.metric(get_text("kpi.peak_day", lang), f"Day {peak.get('date', '')[-2:]} ({peak.get('predicted_covers', 0)})")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(
+                get_text("kpi.peak_day", lang),
+                f"Day {peak.get('date', '')[-2:]} ({peak.get('predicted_covers', 0)})",
+                delta=None,
+            )
         with col4:
-            st.metric(get_text("kpi.avg_confidence", lang), _confidence_label(avg_conf, lang))
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style="margin-bottom: 0.5rem;">
+                    <p style="
+                        color: #6C757D;
+                        font-size: 0.7rem;
+                        text-transform: uppercase;
+                        letter-spacing: 0.05em;
+                        margin: 0;
+                        font-weight: 500;
+                    ">{get_text("kpi.avg_confidence", lang).upper()}</p>
+                </div>
+                <div>
+                    <p style="
+                        color: {conf_color};
+                        font-size: 1.75rem;
+                        font-weight: 600;
+                        margin: 0;
+                    ">{_confidence_label(avg_conf, lang)}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     else:
         with col1:
-            st.metric(get_text("kpi.total_month", lang), "…")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.total_month", lang), "…", delta=None)
         with col2:
-            st.metric(get_text("kpi.daily_avg", lang), "…")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.daily_avg", lang), "…", delta=None)
         with col3:
-            st.metric(get_text("kpi.peak_day", lang), "…")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.peak_day", lang), "…", delta=None)
         with col4:
-            st.metric(get_text("kpi.confidence", lang), "…")
+            st.markdown(card_style, unsafe_allow_html=True)
+            st.metric(get_text("kpi.confidence", lang), "…", delta=None)
+
+
+def _make_api_request_with_retry(
+    url: str,
+    json_data: dict,
+    max_retries: int = 3,
+    timeout: int = 90,
+    retry_delay: float = 2.0,
+) -> Optional[requests.Response]:
+    """
+    Make API request with retry logic and explicit headers.
+    Handles 403 errors with automatic retry.
+    """
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Aetherix-Streamlit-Cloud/1.0",
+        "Origin": "https://aetherix.streamlit.app",
+        "Referer": "https://aetherix.streamlit.app/",
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                url,
+                json=json_data,
+                headers=headers,
+                timeout=timeout,
+            )
+            
+            # Success
+            if response.status_code == 200:
+                return response
+            
+            # 403 Forbidden - retry with delay
+            if response.status_code == 403:
+                if attempt < max_retries - 1:
+                    error_msg = (
+                        f"API returned 403 (Forbidden). "
+                        f"Retrying ({attempt + 1}/{max_retries})..."
+                    )
+                    st.warning(error_msg)
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                    continue
+                else:
+                    # Enhanced error message with diagnostic information
+                    response_text = response.text[:500] if response.text else "(empty response)"
+                    all_headers = "\n".join(f"{k}: {v}" for k, v in response.headers.items())
+                    
+                    error_details = f"""
+**API Error 403 - Forbidden**
+
+**Request Details:**
+- URL: `{url}`
+- Method: POST
+- Attempts: {max_retries}
+- Headers sent: `{headers}`
+
+**Response Details:**
+- Status: {response.status_code}
+- Response text: `{response_text}`
+- Content-Type: `{response.headers.get('Content-Type', 'not-set')}`
+
+**All Response Headers:**
+```
+{all_headers}
+```
+
+**Possible Causes:**
+1. HuggingFace Spaces may be blocking POST requests from Streamlit Cloud
+2. HuggingFace Spaces backend may be sleeping (try restarting the space)
+3. Proxy/nginx configuration issue in HuggingFace Space
+4. Backend not started or crashed
+5. Missing environment variables on HuggingFace Spaces
+
+**Diagnostic Steps:**
+1. Check if backend is accessible: `{API_BASE}/health`
+2. Check diagnostic endpoint: `{API_BASE}/diagnostic`
+3. Verify HuggingFace Space is running: https://huggingface.co/spaces/IvandeMurard/fb-agent-api
+4. Check HuggingFace Space logs for errors
+5. Try restarting the HuggingFace Space
+6. Test POST request directly: `curl -X POST {API_BASE}/predict -H "Content-Type: application/json" -d '{{"restaurant_id": "hotel_main", "service_date": "2026-02-09", "service_type": "dinner"}}'`
+                    """
+                    st.error(error_details)
+                    return response
+            
+            # Other HTTP errors
+            if response.status_code >= 400:
+                error_details = f"""
+**API Error {response.status_code}**
+
+**Request Details:**
+- URL: `{url}`
+- Method: POST
+
+**Response:**
+```
+{response.text[:500]}
+```
+
+**Diagnostic:**
+- Check backend health: `{API_BASE}/health`
+- Check diagnostic: `{API_BASE}/diagnostic`
+                """
+                st.warning(error_details)
+                return response
+                
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries - 1:
+                st.warning(
+                    f"Connection error. Retrying ({attempt + 1}/{max_retries})..."
+                )
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            else:
+                st.error(
+                    "Unable to connect to backend API after multiple attempts. "
+                    "Please ensure the backend is running and accessible."
+                )
+                return None
+                
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                st.warning(
+                    f"Request timed out. Retrying ({attempt + 1}/{max_retries})..."
+                )
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            else:
+                st.error(
+                    f"Backend API request timed out after {max_retries} attempts. "
+                    "The first prediction can take up to 90 seconds "
+                    "(embedding + Qdrant + Claude). "
+                    "Please try again or check backend logs."
+                )
+                return None
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                st.warning(f"Error: {e}. Retrying ({attempt + 1}/{max_retries})...")
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            else:
+                st.error(f"Prediction error after {max_retries} attempts: {e}")
+                return None
+    
+    return None
 
 
 def fetch_prediction(date: datetime, restaurant: str, service: str) -> dict:
-    """Fetch prediction from backend API."""
-    try:
-        restaurant_map = {
-            "Main Restaurant": "hotel_main",
-            "Pool Bar": "pool_bar",
-            "Room Service": "room_service",
-        }
-        restaurant_id = restaurant_map.get(
-            restaurant, restaurant.lower().replace(" ", "_")
-        )
-        response = requests.post(
-            f"{API_BASE}/predict",
-            json={
-                "service_date": date.strftime("%Y-%m-%d"),
-                "service_type": service.lower(),
-                "restaurant_id": restaurant_id,
-            },
-            timeout=60,
-        )
-        if response.status_code == 200:
+    """Fetch prediction from backend API with improved error handling and retry logic."""
+    restaurant_map = {
+        "Main Restaurant": "hotel_main",
+        "Pool Bar": "pool_bar",
+        "Room Service": "room_service",
+    }
+    restaurant_id = restaurant_map.get(
+        restaurant, restaurant.lower().replace(" ", "_")
+    )
+    
+    json_data = {
+        "service_date": date.strftime("%Y-%m-%d"),
+        "service_type": service.lower(),
+        "restaurant_id": restaurant_id,
+    }
+    
+    response = _make_api_request_with_retry(
+        url=f"{API_BASE}/predict",
+        json_data=json_data,
+        max_retries=3,
+        timeout=90,
+    )
+    
+    if response and response.status_code == 200:
+        try:
             return response.json()
-        st.warning(f"Prediction API returned status {response.status_code}")
-    except requests.exceptions.ConnectionError:
-        st.error("Unable to connect to backend API. Please ensure the backend is running.")
-    except requests.exceptions.Timeout:
-        st.error(
-            "Backend API request timed out. The first prediction can take up to a minute "
-            "(embedding + Qdrant + Claude). Try again or check backend logs."
-        )
-    except Exception as e:
-        st.error(f"Prediction error: {e}")
+        except Exception as e:
+            st.error(f"Failed to parse API response: {e}")
+            return None
+    
     return None
 
 
@@ -318,9 +641,11 @@ def render_forecast_view(context: dict) -> None:
                 del st.session_state[key]
         st.session_state.last_cache_context = cache_context
 
+    # Perplexity-style hierarchy: Title → KPIs → Graphs → Factors → Feedback
+    
+    # 1. HEADER (Title + Navigation)
     header = render_header(lang=lang)
-    st.markdown("<br>", unsafe_allow_html=True)
-
+    
     # Show welcome screen if no forecast has been requested yet
     if not st.session_state.forecast_requested:
         _render_welcome_screen(lang)
@@ -357,10 +682,8 @@ def render_forecast_view(context: dict) -> None:
     else:
         prediction = None  # Week/month use their own data fetch below
 
-    # KPI cards (day view: single prediction; week/month handled below after data fetch)
-    if view == "day":
-        _render_kpi_cards_day(lang, prediction, date_display)
-    elif view == "week":
+    # Fetch week/month data if needed
+    if view == "week":
         week_start = selected_date - timedelta(days=selected_date.weekday())
         if "week_predictions_cache" not in st.session_state:
             st.session_state.week_predictions_cache = {}
@@ -382,9 +705,7 @@ def render_forecast_view(context: dict) -> None:
                 st.session_state.week_predictions_cache[week_cache_key] = week_predictions
         else:
             week_predictions = st.session_state.week_predictions_cache[week_cache_key]
-        _render_kpi_cards_week(lang, week_predictions or [])
-    else:
-        month_predictions = None
+    elif view == "month":
         with st.spinner(get_text("loading.month", lang)):
             month_predictions = get_month_predictions(
                 selected_date.year,
@@ -392,10 +713,42 @@ def render_forecast_view(context: dict) -> None:
                 context["restaurant"],
                 context["service"],
             )
+
+    # 2. TITLE SECTION (Perplexity-style: Clear title for context)
+    st.markdown("<br>", unsafe_allow_html=True)
+    if view == "day":
+        title_text = date_display
+    elif view == "week":
+        week_start = selected_date - timedelta(days=selected_date.weekday())
+        week_end = week_start + timedelta(days=6)
+        title_text = f"{week_start.strftime('%B %d')} – {week_end.strftime('%B %d, %Y')}"
+    else:
+        title_text = selected_date.strftime("%B %Y")
+    
+    st.markdown(
+        f"""
+        <h2 style="
+            color: #212529;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            font-family: 'Inter', sans-serif;
+        ">{title_text}</h2>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # 3. KPI CARDS (Perplexity-style: Key figures prominently displayed)
+    if view == "day":
+        _render_kpi_cards_day(lang, prediction, date_display)
+    elif view == "week":
+        _render_kpi_cards_week(lang, week_predictions or [])
+    else:
         _render_kpi_cards_month(lang, month_predictions)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # 4. GRAPHS (Perplexity-style: Visualizations after key figures)
     if view == "day":
         if prediction:
             render_day_hero(prediction, selected_date, lang=lang)
@@ -423,7 +776,7 @@ def render_forecast_view(context: dict) -> None:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Factors panel (expandable, uses real prediction data)
+    # 5. FACTORS PANEL (Perplexity-style: Expandable details after main content)
     render_factors_panel(
         prediction,
         view,
@@ -434,7 +787,7 @@ def render_forecast_view(context: dict) -> None:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Feedback panel (pre-service / post-service)
+    # 6. FEEDBACK PANEL (Perplexity-style: Action panel at the end)
     render_feedback_panel(
         prediction_id=(prediction or {}).get("prediction_id"),
         predicted_covers=prediction.get("predicted_covers", 0) if prediction else 0,

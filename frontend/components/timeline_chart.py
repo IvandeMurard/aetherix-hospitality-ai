@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import requests
+import time
 
 from config import API_BASE, get_text
 
@@ -127,29 +128,169 @@ def _normalize_prediction(p: dict, dates: list, start_date: datetime, i: int) ->
     }
 
 
+def _make_batch_api_request_with_retry(
+    url: str,
+    json_data: dict,
+    max_retries: int = 3,
+    timeout: int = 180,
+    retry_delay: float = 3.0,
+) -> Optional[requests.Response]:
+    """
+    Make batch API request with retry logic and explicit headers.
+    Handles 403 errors and timeouts with automatic retry.
+    """
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "Aetherix-Streamlit-Cloud/1.0",
+        "Origin": "https://aetherix.streamlit.app",
+        "Referer": "https://aetherix.streamlit.app/",
+    }
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                url,
+                json=json_data,
+                headers=headers,
+                timeout=timeout,
+            )
+            
+            # Success
+            if response.status_code == 200:
+                return response
+            
+            # 403 Forbidden - retry with delay
+            if response.status_code == 403:
+                if attempt < max_retries - 1:
+                    error_msg = (
+                        f"Batch API returned 403 (Forbidden). "
+                        f"Retrying ({attempt + 1}/{max_retries})..."
+                    )
+                    st.warning(error_msg)
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                    continue
+                else:
+                    # Enhanced error message with diagnostic information
+                    error_details = f"""
+**Batch API Error 403 - Forbidden**
+
+**Request Details:**
+- URL: `{url}`
+- Method: POST
+- Attempts: {max_retries}
+
+**Possible Causes:**
+1. HuggingFace Spaces backend may be sleeping (try restarting the space)
+2. CORS configuration issue
+3. Backend not started or crashed
+4. Missing environment variables on HuggingFace Spaces
+
+**Diagnostic Steps:**
+1. Check if backend is accessible: `{API_BASE}/health`
+2. Check diagnostic endpoint: `{API_BASE}/diagnostic`
+3. Verify HuggingFace Space is running: https://huggingface.co/spaces/IvandeMurard/fb-agent-api
+4. Check HuggingFace Space logs for errors
+5. Try restarting the HuggingFace Space
+
+**Response Headers:**
+```
+{chr(10).join(f'{k}: {v}' for k, v in response.headers.items() if 'access-control' in k.lower() or 'content-type' in k.lower())}
+```
+                    """
+                    st.error(error_details)
+                    return response
+            
+            # Other HTTP errors
+            if response.status_code >= 400:
+                error_details = f"""
+**Batch API Error {response.status_code}**
+
+**Request Details:**
+- URL: `{url}`
+- Method: POST
+
+**Response:**
+```
+{response.text[:500]}
+```
+
+**Diagnostic:**
+- Check backend health: `{API_BASE}/health`
+- Check diagnostic: `{API_BASE}/diagnostic`
+                """
+                st.warning(error_details)
+                return response
+                
+        except requests.exceptions.ConnectionError:
+            if attempt < max_retries - 1:
+                st.warning(
+                    f"Connection error. Retrying ({attempt + 1}/{max_retries})..."
+                )
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            else:
+                st.error(
+                    "Unable to connect to backend API after multiple attempts. "
+                    "Please ensure the backend is running and accessible."
+                )
+                return None
+                
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                st.warning(
+                    f"Request timed out. Retrying ({attempt + 1}/{max_retries})..."
+                )
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            else:
+                st.error(
+                    f"Batch API request timed out after {max_retries} attempts. "
+                    "Batch predictions can take several minutes. "
+                    "Please try again or check backend logs."
+                )
+                return None
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                st.warning(f"Error: {e}. Retrying ({attempt + 1}/{max_retries})...")
+                time.sleep(retry_delay * (attempt + 1))
+                continue
+            else:
+                st.error(f"Failed to load batch predictions after {max_retries} attempts: {e}")
+                return None
+    
+    return None
+
+
 def get_week_predictions(
     start_date: datetime, restaurant: str, service: str
 ) -> List[Dict]:
-    """Fetch predictions for 7 days using batch API."""
+    """Fetch predictions for 7 days using batch API with improved error handling."""
     dates = [
         (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
         for i in range(7)
     ]
     restaurant_id = _restaurant_to_id(restaurant)
     service_type = service.lower()
+    
+    json_data = {
+        "dates": dates,
+        "service_type": service_type,
+        "restaurant_id": restaurant_id,
+    }
+    
+    response = _make_batch_api_request_with_retry(
+        url=f"{API_BASE}/predict/batch",
+        json_data=json_data,
+        max_retries=3,
+        timeout=180,  # 3 minutes for batch requests
+    )
+    
+    if not response or response.status_code != 200:
+        return []
+    
     try:
-        response = requests.post(
-            f"{API_BASE}/predict/batch",
-            json={
-                "dates": dates,
-                "service_type": service_type,
-                "restaurant_id": restaurant_id,
-            },
-            timeout=120,
-        )
-        if response.status_code != 200:
-            st.error(f"Week forecast API returned {response.status_code}. Check backend.")
-            return []
         data = response.json()
         raw = data if isinstance(data, list) else (data.get("predictions") or [])
         predictions = []
@@ -173,23 +314,15 @@ def get_week_predictions(
                     "confidence": 0,
                 })
         return predictions[:7]
-    except requests.exceptions.ConnectionError:
-        st.error("Unable to connect to backend API. Please ensure the backend is running.")
-        return []
-    except requests.exceptions.Timeout:
-        st.error(
-            "Batch API request timed out. Week forecast can take up to 2 minutes. Try again."
-        )
-        return []
     except Exception as e:
-        st.error(f"Failed to load week predictions: {e}")
+        st.error(f"Failed to parse week predictions response: {e}")
         return []
 
 
 def get_month_predictions(
     year: int, month: int, restaurant: str, service: str
 ) -> Optional[List[Dict]]:
-    """Fetch all predictions for a month using batch API."""
+    """Fetch all predictions for a month using batch API with improved error handling."""
     from calendar import monthrange
     from datetime import date as date_cls
 
@@ -197,19 +330,24 @@ def get_month_predictions(
     dates = [date_cls(year, month, day).strftime("%Y-%m-%d") for day in range(1, last_day + 1)]
     restaurant_id = _restaurant_to_id(restaurant)
     service_type = service.lower()
+    
+    json_data = {
+        "dates": dates,
+        "service_type": service_type,
+        "restaurant_id": restaurant_id,
+    }
+    
+    response = _make_batch_api_request_with_retry(
+        url=f"{API_BASE}/predict/batch",
+        json_data=json_data,
+        max_retries=3,
+        timeout=300,  # 5 minutes for month requests (28-31 days)
+    )
+    
+    if not response or response.status_code != 200:
+        return None
+    
     try:
-        response = requests.post(
-            f"{API_BASE}/predict/batch",
-            json={
-                "dates": dates,
-                "service_type": service_type,
-                "restaurant_id": restaurant_id,
-            },
-            timeout=120,
-        )
-        if response.status_code != 200:
-            st.error(f"Month forecast API returned {response.status_code}. Check backend.")
-            return None
         data = response.json()
         raw = data if isinstance(data, list) else (data.get("predictions") or [])
         start_date = datetime(year, month, 1)
@@ -228,16 +366,8 @@ def get_month_predictions(
                     "reasoning": p.get("reasoning"),
                 })
         return normalized if normalized else None
-    except requests.exceptions.ConnectionError:
-        st.error("Unable to connect to backend API. Please ensure the backend is running.")
-        return None
-    except requests.exceptions.Timeout:
-        st.error(
-            "Month forecast request timed out. Loading 28–31 days can take several minutes."
-        )
-        return None
     except Exception as e:
-        st.error(f"Failed to load month predictions: {e}")
+        st.error(f"Failed to parse month predictions response: {e}")
         return None
 
 
@@ -247,20 +377,22 @@ def render_week_chart(
     baseline: Optional[float] = None,
     lang: str = "en",
 ) -> None:
-    """Render Apollo-style weekly bar chart."""
+    """Render Mixpanel-style weekly bar chart with improved tooltips and styling."""
     if not predictions:
         st.info(get_text("week.no_data", lang))
         return
 
     days = [p["day"] for p in predictions]
     covers = [p["covers"] for p in predictions]
+    confidences = [p.get("confidence", 0) for p in predictions]
 
+    # Mixpanel-style colors: primary green for selected, lighter green for others
     colors = []
-    for p in predictions:
+    for i, p in enumerate(predictions):
         if selected_date and p["date"].date() == selected_date.date():
-            colors.append("#1B4332")
+            colors.append("#1B4332")  # Dark green for selected
         else:
-            colors.append("#2D6A4F")
+            colors.append("#40916C")  # Medium green for others
 
     fig = go.Figure()
     fig.add_trace(
@@ -268,41 +400,64 @@ def render_week_chart(
             x=days,
             y=covers,
             marker_color=colors,
+            marker_line=dict(color="#E9ECEF", width=1),
             text=covers,
             textposition="outside",
-            textfont=dict(size=14, color="#212529"),
-            hovertemplate="<b>%{x}</b><br>%{y} covers<extra></extra>",
+            textfont=dict(size=14, color="#212529", family="Inter, sans-serif"),
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "Covers: %{y}<br>"
+                "Confidence: " + (
+                    f"{confidences[%{pointNumber}]:.0%}" if confidences else "N/A"
+                ) + "<br>"
+                "<extra></extra>"
+            ),
+            name="Covers",
         )
     )
 
+    # Baseline line with Mixpanel-style annotation
     if baseline is not None:
         fig.add_hline(
             y=baseline,
             line_dash="dash",
             line_color="#ADB5BD",
+            line_width=1.5,
             annotation_text=f"Avg: {int(baseline)}",
             annotation_position="right",
+            annotation_font=dict(size=11, color="#6C757D"),
+            annotation_bgcolor="rgba(255,255,255,0.9)",
+            annotation_bordercolor="#E9ECEF",
         )
 
     fig.update_layout(
-        title=get_text("chart.week_forecast", lang),
+        title=dict(
+            text=get_text("chart.week_forecast", lang),
+            font=dict(size=18, color="#212529", family="Inter, sans-serif"),
+            x=0,
+            xanchor="left",
+        ),
         xaxis=dict(
             title=None,
-            tickfont=dict(size=14, color="#495057"),
+            tickfont=dict(size=13, color="#495057", family="Inter, sans-serif"),
             showgrid=False,
+            showline=False,
         ),
         yaxis=dict(
             title=None,
-            tickfont=dict(size=12, color="#6C757D"),
+            tickfont=dict(size=12, color="#6C757D", family="Inter, sans-serif"),
             gridcolor="#E9ECEF",
+            gridwidth=1,
             zeroline=False,
+            showline=False,
         ),
         plot_bgcolor="white",
         paper_bgcolor="white",
-        margin=dict(l=40, r=40, t=20, b=40),
-        height=300,
+        margin=dict(l=50, r=50, t=50, b=50),
+        height=350,
         showlegend=False,
-        bargap=0.3,
+        bargap=0.35,
+        hovermode="x unified",
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -365,34 +520,84 @@ def render_day_chart(prediction: Dict) -> None:
 
 
 def render_month_chart_from_data(month_predictions: List[Dict], lang: str = "en") -> None:
-    """Render monthly bar chart from pre-fetched predictions."""
+    """Render Mixpanel-style monthly bar chart from pre-fetched predictions."""
     if not month_predictions:
         return
+    
     days = [p.get("date", "")[-2:] for p in month_predictions]
     covers = [p.get("predicted_covers", 0) for p in month_predictions]
-    colors = ["#2D6A4F"] * len(covers)
+    confidences = [p.get("confidence", 0) for p in month_predictions]
+    
+    # Mixpanel-style: consistent green color for all bars
+    colors = ["#40916C"] * len(covers)
+    
+    # Calculate average for baseline
+    avg_covers = sum(covers) / len(covers) if covers else 0
+    
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
             x=days,
             y=covers,
             marker_color=colors,
+            marker_line=dict(color="#E9ECEF", width=0.5),
             text=covers,
             textposition="outside",
-            textfont=dict(size=10, color="#212529"),
-            hovertemplate="<b>Day %{x}</b><br>%{y} covers<extra></extra>",
+            textfont=dict(size=10, color="#212529", family="Inter, sans-serif"),
+            hovertemplate=(
+                "<b>Day %{x}</b><br>"
+                "Covers: %{y}<br>"
+                "Confidence: " + (
+                    f"{confidences[%{pointNumber}]:.0%}" if confidences else "N/A"
+                ) + "<br>"
+                "<extra></extra>"
+            ),
+            name="Covers",
         )
     )
+    
+    # Add baseline average line
+    if avg_covers > 0:
+        fig.add_hline(
+            y=avg_covers,
+            line_dash="dash",
+            line_color="#ADB5BD",
+            line_width=1.5,
+            annotation_text=f"Avg: {int(avg_covers)}",
+            annotation_position="right",
+            annotation_font=dict(size=11, color="#6C757D"),
+            annotation_bgcolor="rgba(255,255,255,0.9)",
+            annotation_bordercolor="#E9ECEF",
+        )
+    
     fig.update_layout(
-        title=get_text("chart.month_forecast", lang),
-        xaxis=dict(title="Day", tickfont=dict(size=11, color="#495057"), showgrid=False),
-        yaxis=dict(title=None, tickfont=dict(size=11, color="#6C757D"), gridcolor="#E9ECEF", zeroline=False),
+        title=dict(
+            text=get_text("chart.month_forecast", lang),
+            font=dict(size=18, color="#212529", family="Inter, sans-serif"),
+            x=0,
+            xanchor="left",
+        ),
+        xaxis=dict(
+            title="Day",
+            tickfont=dict(size=11, color="#495057", family="Inter, sans-serif"),
+            showgrid=False,
+            showline=False,
+        ),
+        yaxis=dict(
+            title=None,
+            tickfont=dict(size=11, color="#6C757D", family="Inter, sans-serif"),
+            gridcolor="#E9ECEF",
+            gridwidth=1,
+            zeroline=False,
+            showline=False,
+        ),
         plot_bgcolor="white",
         paper_bgcolor="white",
-        margin=dict(l=40, r=40, t=20, b=40),
-        height=300,
+        margin=dict(l=50, r=50, t=50, b=50),
+        height=350,
         showlegend=False,
-        bargap=0.3,
+        bargap=0.25,
+        hovermode="x unified",
     )
     st.plotly_chart(fig, use_container_width=True)
 
