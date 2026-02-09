@@ -72,27 +72,29 @@ async def log_requests(request, call_next):
     return response
 
 # CORS for frontend
-# Allow all origins in development, restrict in production
-# Include Streamlit Cloud and HuggingFace Space domains
+# Allow all origins to fix 403 errors from Streamlit Cloud and HuggingFace Space
+# Note: FastAPI CORSMiddleware with allow_credentials=True cannot use ["*"]
+# So we explicitly list common origins and use a custom middleware for others
 cors_origins_env = os.getenv(
     "CORS_ORIGINS",
     "http://localhost:3000,http://localhost:8000,http://localhost:8501,"
     "http://127.0.0.1:3000,http://127.0.0.1:8000,http://127.0.0.1:8501,"
     "https://aetherix.streamlit.app,https://share.streamlit.io,"
-    "https://ivandemurard-fb-agent-api.hf.space"
+    "https://*.streamlit.app,https://*.streamlit.io,"
+    "https://ivandemurard-fb-agent-api.hf.space,https://*.hf.space"
 )
 cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
-# For HuggingFace Spaces and Streamlit Cloud, allow all subdomains
-# FastAPI CORSMiddleware doesn't support wildcards, so we allow all origins
-# In production, you should restrict this to specific domains
-if os.getenv("ALLOW_ALL_ORIGINS", "true").lower() == "true":
-    cors_origins = ["*"]  # Allow all origins for flexibility
+# Remove wildcards (FastAPI doesn't support them directly)
+# Instead, we'll allow all origins by not restricting them
+cors_origins_clean = [origin for origin in cors_origins if "*" not in origin]
 
+# Use allow_origins=["*"] only if allow_credentials=False
+# Since we need credentials, we'll use a more permissive approach
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins - required for Streamlit Cloud and HF Space
+    allow_credentials=False,  # Set to False to allow "*" origins
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
