@@ -95,7 +95,7 @@ AETHERIX_CSS = """
     }
     
     [data-testid="stSidebar"] > div:first-child {
-        padding-top: 1.5rem;
+        padding-top: 0.5rem !important;
     }
     
     /* ALL SIDEBAR TEXT - PURE WHITE */
@@ -264,6 +264,20 @@ AETHERIX_CSS = """
     /* Hide any button with collapse/expand in aria-label anywhere */
     button[aria-label*="Collapse" i],
     button[aria-label*="Expand" i],
+    /* Hide Streamlit's native sidebar toggle button - more specific selectors */
+    .stApp header [data-testid="collapsedControl"],
+    .stApp header button[aria-label*="sidebar" i],
+    .stApp header button[aria-label*="Collapse" i],
+    .stApp header button[aria-label*="Expand" i],
+    /* Hide any SVG icons that might be arrows/chevrons for sidebar */
+    [data-testid="collapsedControl"] svg,
+    button[data-testid="collapsedControl"] svg,
+    button[aria-label*="sidebar" i] svg,
+    /* Hide any element with class names that suggest collapse/expand */
+    [class*="collapse"],
+    [class*="expand"],
+    [class*="sidebar-toggle"],
+    [class*="sidebar-collapse"],
     /* Nuclear option: hide any button that might be a collapse button */
     button[type="button"][aria-label]:has([aria-label*="sidebar" i]),
     button[type="button"]:has([aria-label*="collapse" i]) {
@@ -300,7 +314,7 @@ AETHERIX_CSS = """
     
     /* Adjust sidebar content positioning - move content up */
     [data-testid="stSidebar"] > div:first-child {
-        padding-top: 1rem !important;
+        padding-top: 0.5rem !important;
         margin-top: 0 !important;
     }
     
@@ -310,6 +324,22 @@ AETHERIX_CSS = """
         min-width: 21rem !important;
         padding-top: 0 !important;
         margin-top: 0 !important;
+    }
+    
+    /* Reduce bottom spacing in sidebar */
+    [data-testid="stSidebar"] {
+        padding-bottom: 0.5rem !important;
+    }
+    
+    [data-testid="stSidebar"] > div:last-child {
+        padding-bottom: 0.5rem !important;
+        margin-bottom: 0 !important;
+    }
+    
+    /* Reduce spacing after footer elements */
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+        margin-bottom: 0 !important;
+        padding-bottom: 0 !important;
     }
 </style>
 <script>

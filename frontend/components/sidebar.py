@@ -23,7 +23,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
         # ===== BRAND (FIRST, LARGE) =====
         st.markdown(
             """
-            <div style="margin-bottom: 2rem;">
+            <div style="margin-bottom: 1rem;">
                 <h1 style="
                     color: #FFFFFF;
                     font-size: 2rem;
