@@ -63,7 +63,7 @@ An **intelligence layer** for hotel managers that:
 
 ### Flow View
 
-<img src="docs/assets/architecture-value.svg" width="100%" alt="Aetherix Architecture Flow Diagram showing Semantic, Intelligence, and Delivery layers" loading="lazy">
+<img src="docs/assets/architecture-flux.svg" width="100%" alt="Aetherix Architecture Flow Diagram showing Semantic, Intelligence, and Delivery layers" loading="lazy">
 
 ### Value View
 

@@ -99,31 +99,51 @@ AETHERIX_CSS = """
     }
     
     /* ALL SIDEBAR TEXT - PURE WHITE */
-    /* Catch-all rule to override any gray colors */
-    [data-testid="stSidebar"] * {
-        color: #FFFFFF !important;
-    }
-    
-    /* Specific selectors for common elements */
+    /* Catch-all rule to override any gray colors - very aggressive */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebar"] *,
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
     [data-testid="stSidebar"] label,
     [data-testid="stSidebar"] h1,
     [data-testid="stSidebar"] h2,
     [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h4,
+    [data-testid="stSidebar"] h5,
+    [data-testid="stSidebar"] h6,
+    [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] a,
+    [data-testid="stSidebar"] li,
+    [data-testid="stSidebar"] td,
+    [data-testid="stSidebar"] th,
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
     [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
     [data-testid="stSidebar"] [data-testid="stCaptionContainer"],
-    [data-testid="stSidebar"] div {
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] * {
+        color: #FFFFFF !important;
+    }
+    
+    /* Override any inline styles that might set gray colors */
+    [data-testid="stSidebar"] [style*="color: #6b7280"],
+    [data-testid="stSidebar"] [style*="color:#6b7280"],
+    [data-testid="stSidebar"] [style*="color: #9ca3af"],
+    [data-testid="stSidebar"] [style*="color:#9ca3af"],
+    [data-testid="stSidebar"] [style*="color: #94a3b8"],
+    [data-testid="stSidebar"] [style*="color:#94a3b8"],
+    [data-testid="stSidebar"] [style*="color: gray"],
+    [data-testid="stSidebar"] [style*="color:grey"] {
         color: #FFFFFF !important;
     }
     
     /* Exception for muted/secondary text - use light gray instead of dark gray */
+    /* Only apply if explicitly marked as muted */
     [data-testid="stSidebar"] .muted,
     [data-testid="stSidebar"] .secondary,
     [data-testid="stSidebar"] span[style*="#d1d5db"],
-    [data-testid="stSidebar"] span[style*="#9ca3af"],
-    [data-testid="stSidebar"] span[style*="#6b7280"],
-    [data-testid="stSidebar"] span[style*="#94a3b8"] {
+    [data-testid="stSidebar"] div[style*="#d1d5db"],
+    [data-testid="stSidebar"] p[style*="#d1d5db"],
+    [data-testid="stSidebar"] label[style*="#d1d5db"],
+    [data-testid="stSidebar"] *[style*="#d1d5db"] {
         color: #d1d5db !important;
     }
     
@@ -213,34 +233,85 @@ AETHERIX_CSS = """
     
     /* ===== BUTTONS ===== */
     /* Main content: high-contrast navigation (Prev, Today, Next) and primary actions */
+    /* Ultra-specific selectors to override Streamlit defaults */
     .stApp .stButton > button,
-    .stApp .stButton > button[kind="primary"] {
+    .stApp .stButton > button[kind="primary"],
+    .stApp button.stButton > button,
+    .stApp [data-testid="stButton"] > button,
+    .stApp button[type="button"]:not([data-testid="collapsedControl"]):not([aria-label*="sidebar" i]) {
         background-color: #166534 !important;
         color: #ffffff !important;
         border: none !important;
-        border-radius: 6px;
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+        padding: 8px 16px !important;
+        min-height: auto !important;
+    }
+    
+    /* Force text color on all child elements inside buttons */
+    .stApp .stButton > button *,
+    .stApp .stButton > button[kind="primary"] *,
+    .stApp button[type="button"]:not([data-testid="collapsedControl"]) * {
+        color: #ffffff !important;
+    }
+    
+    .stApp .stButton > button:hover,
+    .stApp .stButton > button[kind="primary"]:hover,
+    .stApp button.stButton > button:hover,
+    .stApp [data-testid="stButton"] > button:hover,
+    .stApp button[type="button"]:not([data-testid="collapsedControl"]):not([aria-label*="sidebar" i]):hover {
+        background-color: #14532d !important;
+        color: #ffffff !important;
+    }
+    
+    .stApp .stButton > button:hover *,
+    .stApp .stButton > button[kind="primary"]:hover * {
+        color: #ffffff !important;
+    }
+    
+    /* Target buttons in columns (navigation area) */
+    .stApp [data-testid="column"] .stButton > button {
+        background-color: #166534 !important;
+        color: #ffffff !important;
+        border: none !important;
+        border-radius: 6px !important;
         font-weight: 500 !important;
         padding: 8px 16px !important;
     }
     
-    .stApp .stButton > button:hover,
-    .stApp .stButton > button[kind="primary"]:hover {
+    .stApp [data-testid="column"] .stButton > button * {
+        color: #ffffff !important;
+    }
+    
+    .stApp [data-testid="column"] .stButton > button:hover {
         background-color: #14532d !important;
+        color: #ffffff !important;
+    }
+    
+    .stApp [data-testid="column"] .stButton > button:hover * {
         color: #ffffff !important;
     }
     
     /* Fallback for any button outside sidebar (legacy selector) */
-    .stButton > button {
+    .stButton > button:not([data-testid="stSidebar"] button) {
         background-color: #166534 !important;
         color: #ffffff !important;
         border: none !important;
-        border-radius: 6px;
+        border-radius: 6px !important;
         font-weight: 500 !important;
         padding: 8px 16px !important;
     }
     
-    .stButton > button:hover {
+    .stButton > button:not([data-testid="stSidebar"] button) * {
+        color: #ffffff !important;
+    }
+    
+    .stButton > button:not([data-testid="stSidebar"] button):hover {
         background-color: #14532d !important;
+        color: #ffffff !important;
+    }
+    
+    .stButton > button:not([data-testid="stSidebar"] button):hover * {
         color: #ffffff !important;
     }
     
@@ -471,6 +542,128 @@ setTimeout(function() {{
         window.location.reload(true);
     }}
 }}, 2000);
+
+// Force button styles for navigation buttons (Today, Prev, Next)
+// Ultra-aggressive approach: target ALL buttons in main content area
+var styledButtons = new WeakSet();
+
+function styleNavigationButtons() {{
+    // Get all buttons in main content, excluding sidebar
+    var allButtons = document.querySelectorAll('.stApp button:not([data-testid="stSidebar"] button)');
+    
+    allButtons.forEach(function(button) {{
+        // Skip sidebar buttons
+        if (button.closest('[data-testid="stSidebar"]')) {{
+            return;
+        }}
+        
+        // Skip radio buttons and other special buttons
+        if (button.closest('[data-testid="stRadio"]') || 
+            button.closest('.stDateInput') ||
+            button.getAttribute('data-testid') === 'collapsedControl' ||
+            button.closest('[data-testid="stHeader"]')) {{
+            return;
+        }}
+        
+        var buttonText = button.textContent.trim();
+        var buttonTextLower = buttonText.toLowerCase();
+        
+        // Check if it's a navigation button by text content
+        var isNavButton = /today|aujourd|prev|précédent|next|suivant/i.test(buttonText);
+        
+        // Check by key/data attributes - Streamlit uses data-testid with baseWidgetHash
+        var testId = button.getAttribute('data-testid') || '';
+        var isNavByKey = /prev_period|next_period|today_btn/.test(testId);
+        
+        // Check if button is in columns near date picker (navigation area)
+        var parentCol = button.closest('[data-testid="column"]');
+        var isInNavArea = parentCol && parentCol.querySelector('[data-testid="stDateInput"]');
+        
+        if ((isNavButton || isNavByKey || isInNavArea) && !styledButtons.has(button)) {{
+            // Mark as styled
+            styledButtons.add(button);
+            
+            // Force styles with maximum priority - override any inline styles
+            button.style.removeProperty('background-color');
+            button.style.removeProperty('color');
+            button.style.setProperty('background-color', '#166534', 'important');
+            button.style.setProperty('color', '#ffffff', 'important');
+            button.style.setProperty('border', 'none', 'important');
+            button.style.setProperty('border-radius', '6px', 'important');
+            button.style.setProperty('font-weight', '500', 'important');
+            button.style.setProperty('padding', '8px 16px', 'important');
+            
+            // Also force text color on any child elements (spans, divs, etc.)
+            var textElements = button.querySelectorAll('span, div, p, label');
+            textElements.forEach(function(el) {{
+                el.style.setProperty('color', '#ffffff', 'important');
+            }});
+            
+            // Add hover listener
+            button.addEventListener('mouseenter', function() {{
+                this.style.setProperty('background-color', '#14532d', 'important');
+            }}, true);
+            button.addEventListener('mouseleave', function() {{
+                this.style.setProperty('background-color', '#166534', 'important');
+            }}, true);
+        }}
+        
+        // Re-apply styles periodically to override Streamlit's inline styles
+        if (styledButtons.has(button)) {{
+            button.style.setProperty('background-color', '#166534', 'important');
+            button.style.setProperty('color', '#ffffff', 'important');
+            var textElements = button.querySelectorAll('span, div, p, label');
+            textElements.forEach(function(el) {{
+                el.style.setProperty('color', '#ffffff', 'important');
+            }});
+        }}
+    }});
+}}
+
+// Force sidebar text to be white
+function styleSidebarText() {{
+    var sidebar = document.querySelector('[data-testid="stSidebar"]');
+    if (!sidebar) return;
+    
+    var allElements = sidebar.querySelectorAll('*');
+    allElements.forEach(function(el) {{
+        // Skip buttons (they have their own styles)
+        if (el.tagName === 'BUTTON' || el.closest('.stButton')) {{
+            return;
+        }}
+        
+        var computedColor = window.getComputedStyle(el).color;
+        // If color is gray/dark, force it to white
+        if (computedColor && (
+            computedColor.includes('rgb(107, 114, 128)') || // #6b7280
+            computedColor.includes('rgb(156, 163, 175)') || // #9ca3af
+            computedColor.includes('rgb(148, 163, 184)') || // #94a3b8
+            computedColor.includes('rgb(75, 85, 99)')       // #4b5563
+        )) {{
+            el.style.setProperty('color', '#ffffff', 'important');
+        }}
+    }});
+}}
+
+// Run immediately and on DOM changes
+styleNavigationButtons();
+styleSidebarText();
+
+// Run more frequently to override Streamlit's inline styles
+setInterval(function() {{
+    styleNavigationButtons();
+    styleSidebarText();
+}}, 100); // Every 100ms to catch Streamlit's style updates
+
+// Watch for new elements
+var observer = new MutationObserver(function(mutations) {{
+    styleNavigationButtons();
+    styleSidebarText();
+}});
+observer.observe(document.body, {{
+    childList: true,
+    subtree: true
+}});
 </script>
 """
 
