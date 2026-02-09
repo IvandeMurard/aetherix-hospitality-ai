@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 800" width="420" height="480">
+  <defs>
+    <style>
+      .title { font-family: 'Segoe UI', Arial, sans-serif; font-size: 18px; font-weight: bold; fill: #ffffff; }
+      .subtitle { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10px; fill: #94a3b8; }
+      .layer-label { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8px; font-weight: 600; fill: #ffffff; letter-spacing: 1.5px; }
+      .component { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9px; font-weight: 500; fill: #ffffff; }
+      .component-dark { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9px; font-weight: 500; fill: #1e293b; }
+      .center-title { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; font-weight: bold; fill: #ffffff; }
+      .center-sub { font-family: 'Segoe UI', Arial, sans-serif; font-size: 7px; fill: #94a3b8; }
+      .legend-text { font-family: 'Segoe UI', Arial, sans-serif; font-size: 8px; fill: #94a3b8; }
+      .tagline { font-family: 'Segoe UI', Arial, sans-serif; font-size: 10px; font-style: italic; fill: #f59e0b; }
+      .feedback-label { font-family: 'Segoe UI', Arial, sans-serif; font-size: 9px; font-weight: 600; fill: #f59e0b; }
+    </style>
+    <marker id="arrowhead-feedback" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#f59e0b"/>
+    </marker>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="700" height="800" fill="#0f172a"/>
+  
+  <!-- Title -->
+  <text x="350" y="28" text-anchor="middle" class="title">Aetherix Architecture</text>
+  <text x="350" y="44" text-anchor="middle" class="subtitle">Intelligence layer connecting existing hotel systems</text>
+  
+  <!-- Main visualization group -->
+  <g transform="translate(0, 24)">
+    
+    <!-- Delivery Layer (outer ring) -->
+    <circle cx="350" cy="264" r="200" fill="none" stroke="#92400e" stroke-width="52"/>
+    <text x="350" y="76" text-anchor="middle" class="layer-label">DELIVERY</text>
+    
+    <!-- Intelligence Layer -->
+    <circle cx="350" cy="264" r="148" fill="#1e3a5f" stroke="#2563eb" stroke-width="2"/>
+    <text x="350" y="128" text-anchor="middle" class="layer-label">INTELLIGENCE</text>
+    
+    <!-- Semantic Layer -->
+    <circle cx="350" cy="264" r="96" fill="#064e3b" stroke="#059669" stroke-width="2"/>
+    <text x="350" y="180" text-anchor="middle" class="layer-label">SEMANTIC LAYER</text>
+    
+    <!-- Center - Hotel Systems -->
+    <circle cx="350" cy="264" r="48" fill="#1e293b" stroke="#475569" stroke-width="2"/>
+    <text x="350" y="258" text-anchor="middle" class="center-title">HOTEL</text>
+    <text x="350" y="270" text-anchor="middle" class="center-sub">Existing Systems</text>
+    <text x="350" y="282" text-anchor="middle" class="center-sub">PMS " POS " RMS</text>
+    
+    <!-- Semantic Layer Components -->
+    <rect x="232" y="192" width="96" height="21" rx="10" fill="#059669"/>
+    <text x="280" y="206" text-anchor="middle" class="component">Unified Model</text>
+    
+    <rect x="344" y="254" width="64" height="21" rx="10" fill="#059669"/>
+    <text x="376" y="268" text-anchor="middle" class="component">Adapters</text>
+    
+    <rect x="152" y="254" width="56" height="21" rx="10" fill="#059669"/>
+    <text x="180" y="268" text-anchor="middle" class="component">Events</text>
+    
+    <rect x="228" y="320" width="88" height="21" rx="10" fill="#059669"/>
+    <text x="272" y="334" text-anchor="middle" class="component">External APIs</text>
+    
+    <!-- Intelligence Layer Components -->
+    <rect x="164" y="156" width="72" height="22" rx="11" fill="#3b82f6"/>
+    <text x="200" y="171" text-anchor="middle" class="component">Reasoning</text>
+    
+    <rect x="324" y="156" width="72" height="22" rx="11" fill="#3b82f6"/>
+    <text x="360" y="171" text-anchor="middle" class="component">Prediction</text>
+    
+    <rect x="144" y="348" width="76" height="22" rx="11" fill="#3b82f6"/>
+    <text x="182" y="363" text-anchor="middle" class="component">Confidence</text>
+    
+    <rect x="340" y="348" width="56" height="22" rx="11" fill="#3b82f6"/>
+    <text x="368" y="363" text-anchor="middle" class="component">RAG</text>
+    
+    <!-- Delivery Layer Components -->
+    <rect x="232" y="80" width="80" height="22" rx="11" fill="#f59e0b"/>
+    <text x="272" y="95" text-anchor="middle" class="component-dark">Dashboard</text>
+    
+    <rect x="448" y="254" width="56" height="22" rx="11" fill="#f59e0b"/>
+    <text x="476" y="269" text-anchor="middle" class="component-dark">Slack</text>
+    
+    <rect x="56" y="254" width="72" height="22" rx="11" fill="#f59e0b"/>
+    <text x="92" y="269" text-anchor="middle" class="component-dark">WhatsApp</text>
+    
+    <rect x="244" y="436" width="56" height="22" rx="11" fill="#f59e0b"/>
+    <text x="272" y="451" text-anchor="middle" class="component-dark">Voice</text>
+    
+    <!-- FEEDBACK LOOP - Prominent curved arrow -->
+    <path d="M 464 304 
+             Q 496 304, 496 336 
+             L 496 416 
+             Q 496 448, 464 448 
+             L 160 448 
+             Q 128 448, 128 416 
+             L 128 336 
+             Q 128 304, 160 304" 
+          fill="none" 
+          stroke="#f59e0b" 
+          stroke-width="2.5" 
+          stroke-dasharray="6,3"
+          marker-end="url(#arrowhead-feedback)"/>
+    
+    <!-- Feedback Loop Label -->
+    <rect x="232" y="480" width="112" height="22" rx="5" fill="#f59e0b"/>
+    <text x="288" y="495" text-anchor="middle" class="component-dark">FEEDBACK LOOP</text>
+    
+    <!-- Feedback description -->
+    <text x="350" y="520" text-anchor="middle" class="feedback-label">Continuous learning from actual results</text>
+    
+  </g>
+  
+  <!-- Legend -->
+  <g transform="translate(80, 568)">
+    <rect x="0" y="0" width="13" height="10" rx="2" fill="#f59e0b"/>
+    <text x="18" y="8" class="legend-text">Delivery  Ambient Experience</text>
+    
+    <rect x="160" y="0" width="13" height="10" rx="2" fill="#3b82f6"/>
+    <text x="178" y="8" class="legend-text">Intelligence  RAG + Reasoning</text>
+    
+    <rect x="336" y="0" width="13" height="10" rx="2" fill="#059669"/>
+    <text x="354" y="8" class="legend-text">Semantic Layer</text>
+  </g>
+  
+  <g transform="translate(200, 588)">
+    <rect x="0" y="0" width="13" height="10" rx="2" fill="#475569"/>
+    <text x="18" y="8" class="legend-text">Existing Systems</text>
+    
+    <line x1="96" y1="5" x2="120" y2="5" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="3,2"/>
+    <text x="128" y="8" class="legend-text">Feedback Loop</text>
+  </g>
+  
+  <!-- Tagline -->
+  <text x="350" y="620" text-anchor="middle" class="tagline">"Glue, not replacement"</text>
+</svg>
