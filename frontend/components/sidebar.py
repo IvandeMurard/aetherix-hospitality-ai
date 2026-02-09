@@ -23,7 +23,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
         # ===== BRAND (FIRST, LARGE) =====
         st.markdown(
             """
-            <div style="margin-bottom: 1rem;">
+            <div style="margin-bottom: 0.5rem;">
                 <h1 style="
                     color: #FFFFFF;
                     font-size: 2rem;
@@ -86,7 +86,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
                     st.session_state.current_page = page_id
                     st.rerun()
 
-        st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.75rem;'></div>", unsafe_allow_html=True)
         st.divider()
 
         # ===== CONTEXT =====
@@ -134,7 +134,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
             key="service_select",
         )
 
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
         st.divider()
 
         # ===== DATA STATUS =====
@@ -145,7 +145,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
                 font-size: 0.7rem;
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
-                margin-bottom: 0.75rem;
+                margin-bottom: 0.5rem;
             ">Data</p>
             <div style="color: #ffffff; font-size: 0.875rem; line-height: 1.8;">
                 <div><span style="color: #d1d5db;">Patterns:</span> 495</div>
@@ -156,7 +156,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
             unsafe_allow_html=True,
         )
 
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
         st.divider()
 
         # ===== COMING SOON =====
@@ -167,13 +167,13 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
                 font-size: 0.7rem;
                 text-transform: uppercase;
                 letter-spacing: 0.1em;
-                margin-bottom: 0.75rem;
+                margin-bottom: 0.5rem;
             ">Coming Soon</p>
             <div style="
                 color: #a7f3d0;
-                font-size: 0.85rem;
+                font-size: 0.8rem;
                 font-style: italic;
-                line-height: 1.8;
+                line-height: 1.5;
             ">
                 ◇ PMS Integration<br>
                 ◇ Staff Planner<br>
@@ -184,7 +184,7 @@ def render_sidebar(lang: Optional[str] = None) -> dict:
             unsafe_allow_html=True,
         )
 
-        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 0.5rem;'></div>", unsafe_allow_html=True)
         st.divider()
 
         # ===== FOOTER =====
