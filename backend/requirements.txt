@@ -8,6 +8,7 @@ pydantic>=2.5.3
 anthropic>=0.8.1
 qdrant-client>=1.7.1
 mistralai>=1.0.0
+prophet>=1.1.5
 
 # Database
 supabase>=2.3.0
