@@ -116,6 +116,9 @@ logger = logging.getLogger("uvicorn")
 logger.info("[CORS] Configured: allow_origins=['*'], allow_credentials=False")
 _write_debug_log("[CORS] Configured: allow_origins=['*'], allow_credentials=False")
 
+# Initialize Prophet engine after logger is configured
+_init_prophet_engine()
+
 # F&B Agent API routes (restaurant profile, predictions, feedback)
 from backend.api.routes import router as api_router
 from backend.api.restaurant_profile_routes import router as restaurant_profile_router
@@ -206,7 +209,53 @@ from backend.models.schemas import (
     ServiceType,
 )
 from backend.agents.demand_predictor import get_demand_predictor
+from backend.agents.reasoning_engine import get_reasoning_engine
+from backend.ml.prediction_engine import get_prediction_engine
 from backend.api.prediction_store import store_prediction_for_feedback
+
+# Initialize Prophet engine at startup (load model if available)
+_prophet_engine = None
+_prophet_model_path = Path(__file__).parent / "ml" / "models" / "prophet_model.json"
+
+def _init_prophet_engine():
+    """Initialize Prophet engine and load model if available"""
+    global _prophet_engine
+    import logging
+    logger = logging.getLogger("uvicorn")
+    try:
+        engine = get_prediction_engine()
+        if _prophet_model_path.exists():
+            logger.info(f"[PROPHET] Loading model from {_prophet_model_path}")
+            engine.load_model(str(_prophet_model_path))
+            _prophet_engine = engine
+            logger.info("[PROPHET] Model loaded successfully")
+        else:
+            logger.warning(f"[PROPHET] Model file not found: {_prophet_model_path}")
+            logger.warning("[PROPHET] Will fallback to RAG-based prediction")
+            _prophet_engine = None
+    except Exception as e:
+        logger.error(f"[PROPHET] Failed to initialize engine: {e}")
+        _prophet_engine = None
+
+# Initialize Prophet engine (will be called after app creation)
+# Note: Called after logger is configured in main.py
+
+def _map_weather_to_score(weather: dict) -> float:
+    """Map weather condition to weather_score (0-1, 1 = bad weather)"""
+    condition = weather.get("condition", "").lower()
+    if condition in ["rain", "heavy rain", "snow"]:
+        return 0.9
+    elif condition == "cloudy":
+        return 0.5
+    else:
+        return 0.1
+
+def _map_events_to_impact(events: list) -> float:
+    """Map events to event_impact (0-1, 1 = major event)"""
+    if not events or len(events) == 0:
+        return 0.0
+    # Impact based on number of events
+    return min(1.0, len(events) * 0.3)
 
 @app.post("/predict", response_model=PredictionResponse)
 async def create_prediction(request: PredictionRequest):
@@ -223,27 +272,109 @@ async def create_prediction(request: PredictionRequest):
         logger.info(f"[PREDICT] Request: {request.service_date} ({request.service_type})")
         _write_debug_log(f"[PREDICT] Request: {request.service_date} ({request.service_type})")
         
-        # Get demand predictor
+        # Get demand predictor for context and RAG
         predictor = get_demand_predictor()
         
-        # Generate prediction
-        result = await predictor.predict(request)
+        # Fetch external context (weather, events)
+        context = await predictor._fetch_external_context(request)
+        logger.info(f"[PREDICT] Context: {context.get('day_type')}, {len(context.get('events', []))} events")
+        
+        # Use Prophet if available, otherwise fallback to RAG
+        if _prophet_engine and _prophet_engine.is_trained:
+            logger.info("[PREDICT] Using Prophet for calculation")
+            
+            # Map context to Prophet features
+            features = {
+                "weather_score": _map_weather_to_score(context.get("weather", {})),
+                "event_impact": _map_events_to_impact(context.get("events", []))
+            }
+            
+            # Prophet prediction
+            date_str = request.service_date.strftime("%Y-%m-%d")
+            prophet_result = _prophet_engine.predict(date_str, features)
+            
+            predicted_covers = prophet_result.predicted
+            confidence = prophet_result.confidence
+            range_low = prophet_result.lower
+            range_high = prophet_result.upper
+            
+            logger.info(f"[PREDICT] Prophet result: {predicted_covers} covers (confidence: {confidence:.2%})")
+            
+            # Get RAG patterns for explanation context
+            similar_patterns = await predictor._find_similar_patterns(request, context)
+            logger.info(f"[PREDICT] Found {len(similar_patterns)} similar patterns from RAG")
+            
+            # Generate explanation with Claude (using Prophet result + RAG patterns)
+            reasoning_engine = get_reasoning_engine()
+            reasoning_data = await reasoning_engine.generate_explanation(
+                predicted_covers=predicted_covers,
+                range_min=range_low,
+                range_max=range_high,
+                confidence=confidence,
+                date=date_str,
+                weather=context.get("weather", {}),
+                events=context.get("events", []),
+                features=features,
+                patterns=similar_patterns,
+                day_of_week=context.get("day_of_week"),
+                service_type=request.service_type.value if hasattr(request.service_type, 'value') else str(request.service_type)
+            )
+            
+            # Calculate staff recommendation
+            from backend.agents.staff_recommender import StaffRecommenderAgent
+            staff_recommender = StaffRecommenderAgent()
+            staff_result = await staff_recommender.recommend(
+                predicted_covers=predicted_covers,
+                restaurant_id=request.restaurant_id
+            )
+            
+            # Build result dict compatible with existing code
+            result = {
+                "predicted_covers": predicted_covers,
+                "confidence": confidence,
+                "reasoning": reasoning_data,
+                "staff_recommendation": staff_result,
+                "accuracy_metrics": {
+                    "method": "prophet",
+                    "estimated_mape": None,
+                    "prediction_interval": [range_low, range_high],
+                    "patterns_analyzed": len(similar_patterns),
+                    "note": "Prophet time-series forecast"
+                }
+            }
+            
+        else:
+            # Fallback to RAG-based prediction
+            logger.warning("[PREDICT] Prophet not available, using RAG fallback")
+            result = await predictor.predict(request)
+        
         logger.info(f"[PREDICT] Result: {result.get('predicted_covers')} covers")
         
-        # TODO Hour 3-4: Add reasoning engine + staff recommender
-        # For now, return basic structure
-        
-        # Extract reasoning from predictor result (now includes Claude-generated reasoning)
+        # Extract reasoning from result (Prophet or RAG)
         reasoning_data = result.get("reasoning", {})
         patterns_from_result = reasoning_data.get("patterns_used", [])
         
+        # Convert Pattern objects to list for Reasoning schema
+        patterns_for_reasoning = []
+        if patterns_from_result:
+            for p in patterns_from_result[:3]:
+                if isinstance(p, dict):
+                    # Already a dict, convert to Pattern if needed
+                    from backend.models.schemas import Pattern
+                    try:
+                        patterns_for_reasoning.append(Pattern(**p))
+                    except:
+                        pass
+                elif hasattr(p, 'date'):
+                    patterns_for_reasoning.append(p)
+        
         reasoning = Reasoning(
             summary=reasoning_data.get("summary", f"{int(result['confidence']*100)}% confidence"),
-            patterns_used=patterns_from_result[:3] if patterns_from_result else [],
+            patterns_used=patterns_for_reasoning,
             confidence_factors=reasoning_data.get("confidence_factors", ["Historical patterns"])
         )
         
-        # Create StaffRecommendation object from dynamic calculation
+        # Create StaffRecommendation object
         staff_data = result.get("staff_recommendation", {})
         staff_recommendation = StaffRecommendation(
             servers=StaffDelta(
@@ -421,12 +552,98 @@ async def _create_prediction_with_semaphore(sem: asyncio.Semaphore, single: Pred
         except Exception as e:
             return (d, e)
 
+async def _create_prediction_batch_prophet(
+    dates: list[str],
+    request: BatchPredictionRequest,
+    predictor
+) -> list:
+    """Create batch predictions using Prophet predict_batch"""
+    if not _prophet_engine or not _prophet_engine.is_trained:
+        return None  # Fallback to individual calls
+    
+    logger.info(f"[PREDICT/BATCH] Using Prophet batch prediction for {len(dates)} dates")
+    
+    # Build features per date
+    features_per_date = {}
+    for date_str in dates:
+        try:
+            service_date = date.fromisoformat(date_str)
+            single_request = PredictionRequest(
+                restaurant_id=request.restaurant_id,
+                service_date=service_date,
+                service_type=ServiceType(request.service_type.lower())
+            )
+            context = await predictor._fetch_external_context(single_request)
+            features_per_date[date_str] = {
+                "weather_score": _map_weather_to_score(context.get("weather", {})),
+                "event_impact": _map_events_to_impact(context.get("events", []))
+            }
+        except Exception as e:
+            logger.warning(f"[PREDICT/BATCH] Failed to get context for {date_str}: {e}")
+            features_per_date[date_str] = {}
+    
+    # Prophet batch prediction
+    prophet_results = _prophet_engine.predict_batch(dates, features_per_date)
+    
+    # Convert to response format (still need RAG + Claude per date for explanation)
+    predictions = []
+    for date_str, prophet_result in zip(dates, prophet_results):
+        try:
+            service_date = date.fromisoformat(date_str)
+            single_request = PredictionRequest(
+                restaurant_id=request.restaurant_id,
+                service_date=service_date,
+                service_type=ServiceType(request.service_type.lower())
+            )
+            context = await predictor._fetch_external_context(single_request)
+            similar_patterns = await predictor._find_similar_patterns(single_request, context)
+            
+            # Generate explanation
+            reasoning_engine = get_reasoning_engine()
+            reasoning_data = await reasoning_engine.generate_explanation(
+                predicted_covers=prophet_result.predicted,
+                range_min=prophet_result.lower,
+                range_max=prophet_result.upper,
+                confidence=prophet_result.confidence,
+                date=date_str,
+                weather=context.get("weather", {}),
+                events=context.get("events", []),
+                features=features_per_date.get(date_str, {}),
+                patterns=similar_patterns,
+                day_of_week=context.get("day_of_week"),
+                service_type=request.service_type
+            )
+            
+            # Build response (simplified, will be converted to PredictionResponse in batch endpoint)
+            predictions.append({
+                "date": date_str,
+                "service_date": date_str,
+                "predicted_covers": prophet_result.predicted,
+                "confidence": prophet_result.confidence,
+                "reasoning": reasoning_data,
+                "accuracy_metrics": {
+                    "method": "prophet",
+                    "prediction_interval": [prophet_result.lower, prophet_result.upper]
+                }
+            })
+        except Exception as e:
+            logger.warning(f"[PREDICT/BATCH] Failed for {date_str}: {e}")
+            predictions.append({
+                "date": date_str,
+                "service_date": date_str,
+                "predicted_covers": 0,
+                "confidence": 0.0,
+                "accuracy_metrics": {"prediction_interval": [0, 0]}
+            })
+    
+    return predictions
+
 
 @app.post("/predict/batch")
 async def create_prediction_batch(request: BatchPredictionRequest):
     """
     Generate predictions for multiple dates at once.
-    Runs up to BATCH_CONCURRENCY predictions in parallel for faster loading.
+    Uses Prophet batch prediction if available, otherwise falls back to parallel individual calls.
     Max 31 dates per request.
     """
     import logging
@@ -443,42 +660,138 @@ async def create_prediction_batch(request: BatchPredictionRequest):
         except (ValueError, AttributeError):
             st_enum = ServiceType.DINNER
 
-        # Build list of (date_str, PredictionRequest) for valid dates
-        singles = []
-        for d in dates:
-            try:
-                service_date = date.fromisoformat(d)
-            except ValueError as e:
-                logger.warning(f"[PREDICT/BATCH] Invalid date format: {d} - {e}")
-                continue
-            singles.append((
-                d,
-                PredictionRequest(
-                    restaurant_id=request.restaurant_id,
-                    service_date=service_date,
-                    service_type=st_enum,
-                ),
-            ))
+        # Try Prophet batch first if available
+        predictor = get_demand_predictor()
+        prophet_batch_results = await _create_prediction_batch_prophet(dates, request, predictor)
+        
+        if prophet_batch_results:
+            # Use Prophet batch results
+            logger.info(f"[PREDICT/BATCH] Using Prophet batch results")
+            predictions = []
+            for batch_result in prophet_batch_results:
+                # Convert to full PredictionResponse format
+                try:
+                    service_date = date.fromisoformat(batch_result["date"])
+                    single_request = PredictionRequest(
+                        restaurant_id=request.restaurant_id,
+                        service_date=service_date,
+                        service_type=st_enum
+                    )
+                    # Get staff recommendation
+                    from backend.agents.staff_recommender import StaffRecommenderAgent
+                    staff_recommender = StaffRecommenderAgent()
+                    staff_result = await staff_recommender.recommend(
+                        predicted_covers=batch_result["predicted_covers"],
+                        restaurant_id=request.restaurant_id
+                    )
+                    
+                    # Build full response
+                    reasoning_data = batch_result.get("reasoning", {})
+                    patterns_from_result = reasoning_data.get("patterns_used", [])
+                    patterns_for_reasoning = []
+                    if patterns_from_result:
+                        for p in patterns_from_result[:3]:
+                            if isinstance(p, dict):
+                                from backend.models.schemas import Pattern
+                                try:
+                                    patterns_for_reasoning.append(Pattern(**p))
+                                except:
+                                    pass
+                            elif hasattr(p, 'date'):
+                                patterns_for_reasoning.append(p)
+                    
+                    reasoning = Reasoning(
+                        summary=reasoning_data.get("summary", f"{int(batch_result['confidence']*100)}% confidence"),
+                        patterns_used=patterns_for_reasoning,
+                        confidence_factors=reasoning_data.get("confidence_factors", [])
+                    )
+                    
+                    accuracy_data = batch_result.get("accuracy_metrics", {})
+                    accuracy_metrics = None
+                    if accuracy_data:
+                        if "prediction_interval" in accuracy_data and accuracy_data["prediction_interval"]:
+                            if isinstance(accuracy_data["prediction_interval"], tuple):
+                                accuracy_data["prediction_interval"] = list(accuracy_data["prediction_interval"])
+                        accuracy_metrics = AccuracyMetrics(**accuracy_data)
+                    
+                    staff_recommendation = StaffRecommendation(
+                        servers=StaffDelta(
+                            recommended=staff_result.get("servers", {}).get("recommended", 7),
+                            usual=staff_result.get("servers", {}).get("usual", 7),
+                            delta=staff_result.get("servers", {}).get("delta", 0)
+                        ),
+                        hosts=StaffDelta(
+                            recommended=staff_result.get("hosts", {}).get("recommended", 2),
+                            usual=staff_result.get("hosts", {}).get("usual", 2),
+                            delta=staff_result.get("hosts", {}).get("delta", 0)
+                        ),
+                        kitchen=StaffDelta(
+                            recommended=staff_result.get("kitchen", {}).get("recommended", 3),
+                            usual=staff_result.get("kitchen", {}).get("usual", 3),
+                            delta=staff_result.get("kitchen", {}).get("delta", 0)
+                        ),
+                        rationale=staff_result.get("rationale", ""),
+                        covers_per_staff=staff_result.get("covers_per_staff", 0.0)
+                    )
+                    
+                    predictions.append({
+                        "date": batch_result["date"],
+                        "service_date": batch_result["service_date"],
+                        "predicted_covers": batch_result["predicted_covers"],
+                        "confidence": batch_result["confidence"],
+                        "reasoning": reasoning,
+                        "staff_recommendation": staff_recommendation,
+                        "accuracy_metrics": accuracy_metrics
+                    })
+                except Exception as e:
+                    logger.warning(f"[PREDICT/BATCH] Failed to format result for {batch_result.get('date')}: {e}")
+                    predictions.append({
+                        "date": batch_result.get("date", ""),
+                        "service_date": batch_result.get("service_date", ""),
+                        "predicted_covers": 0,
+                        "confidence": 0.0,
+                        "accuracy_metrics": {"prediction_interval": [0, 0]}
+                    })
+        else:
+            # Fallback to parallel individual calls
+            logger.info(f"[PREDICT/BATCH] Using parallel individual calls (Prophet not available)")
+            
+            # Build list of (date_str, PredictionRequest) for valid dates
+            singles = []
+            for d in dates:
+                try:
+                    service_date = date.fromisoformat(d)
+                except ValueError as e:
+                    logger.warning(f"[PREDICT/BATCH] Invalid date format: {d} - {e}")
+                    continue
+                singles.append((
+                    d,
+                    PredictionRequest(
+                        restaurant_id=request.restaurant_id,
+                        service_date=service_date,
+                        service_type=st_enum,
+                    ),
+                ))
 
-        # Run predictions in parallel with semaphore
-        sem = asyncio.Semaphore(BATCH_CONCURRENCY)
-        tasks = [_create_prediction_with_semaphore(sem, single, d) for d, single in singles]
-        results = await asyncio.gather(*tasks, return_exceptions=False)
+            # Run predictions in parallel with semaphore
+            sem = asyncio.Semaphore(BATCH_CONCURRENCY)
+            tasks = [_create_prediction_with_semaphore(sem, single, d) for d, single in singles]
+            results = await asyncio.gather(*tasks, return_exceptions=False)
 
-        predictions = []
-        fallback = {
-            "predicted_covers": 0,
-            "confidence": 0.0,
-            "accuracy_metrics": {"prediction_interval": [0, 0]},
-            "staff_recommendation": {},
-        }
-        for (date_str, result) in results:
-            if isinstance(result, Exception):
-                logger.warning(f"[PREDICT/BATCH] Skip date {date_str}: {result}")
-                _write_debug_log(f"[PREDICT/BATCH] Skip date {date_str}: {result}")
-                predictions.append({"date": date_str, "service_date": date_str, **fallback})
-            else:
-                predictions.append(result)
+            predictions = []
+            fallback = {
+                "predicted_covers": 0,
+                "confidence": 0.0,
+                "accuracy_metrics": {"prediction_interval": [0, 0]},
+                "staff_recommendation": {},
+            }
+            for (date_str, result) in results:
+                if isinstance(result, Exception):
+                    logger.warning(f"[PREDICT/BATCH] Skip date {date_str}: {result}")
+                    _write_debug_log(f"[PREDICT/BATCH] Skip date {date_str}: {result}")
+                    predictions.append({"date": date_str, "service_date": date_str, **fallback})
+                else:
+                    predictions.append(result)
 
         logger.info(f"[PREDICT/BATCH] Success: {len(predictions)} predictions generated")
         _write_debug_log(f"[PREDICT/BATCH] Success: {len(predictions)} predictions generated")
