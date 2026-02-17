@@ -368,17 +368,34 @@ AETHERIX_CSS = """
         50% { opacity: 0.5; }
     }
     
-    /* Sidebar: hide collapse button, keep visible, compact spacing */
+    /* Sidebar: hide collapse button (arrow) and its row to free space */
     [data-testid="collapsedControl"],
     button[data-testid="collapsedControl"],
     button[aria-label*="sidebar" i],
     button[aria-label*="collapse" i],
     button[aria-label*="expand" i],
     .stApp header [data-testid="collapsedControl"],
-    [data-testid="stSidebar"] > div:first-child > button {
+    [data-testid="stSidebar"] > div:first-child > button,
+    [data-testid="stSidebar"] > div:first-child > div:first-child > button,
+    [data-testid="stSidebar"] button:first-of-type {
         display: none !important;
         visibility: hidden !important;
         pointer-events: none !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+    }
+    /* Hide the header row that contains the collapse arrow (frees top space) */
+    [data-testid="stSidebar"] > div:first-child > div:first-child:has(button) {
+        min-height: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
     }
     [data-testid="stSidebar"],
     section.stSidebar,
@@ -387,7 +404,7 @@ AETHERIX_CSS = """
         min-width: 21rem !important;
         display: block !important;
         visibility: visible !important;
-        padding: 0.25rem 0 0.5rem 0 !important;
+        padding: 0 !important;
         margin-top: 0 !important;
     }
     [data-testid="stSidebar"] > div:first-child,
@@ -412,8 +429,24 @@ AETHERIX_CSS = """
         if (first) {{
             first.style.paddingTop = '0';
             first.style.marginTop = '0';
-            first.querySelectorAll('button').forEach(function(b) {{
-                if (b.querySelector('svg')) b.remove();
+            var firstRow = first.querySelector(':first-child');
+            if (firstRow && firstRow.querySelector('button svg')) {{
+                var text = (firstRow.textContent || '').trim().replace(/\\s/g, '');
+                if (!text || text === '\u00AB' || text === '\u2039' || text.length < 3) {{
+                    firstRow.style.display = 'none';
+                    firstRow.style.height = '0';
+                    firstRow.style.overflow = 'hidden';
+                    firstRow.style.margin = '0';
+                    firstRow.style.padding = '0';
+                }}
+            }}
+            var buttons = first.querySelectorAll('button');
+            buttons.forEach(function(b) {{
+                var hasSvg = b.querySelector('svg');
+                var label = (b.getAttribute('aria-label') || '').toLowerCase();
+                var text = (b.textContent || '').trim();
+                var isArrow = /^[\\s\u00AB\u2039\u00AF\u201C]*$/.test(text) || text === '' || text === '\u00AB' || text === '\u2039';
+                if (hasSvg || label.indexOf('sidebar') >= 0 || label.indexOf('collapse') >= 0 || label.indexOf('expand') >= 0 || (isArrow && b === buttons[0])) b.remove();
             }});
         }}
         sidebar.querySelectorAll('button').forEach(function(b) {{

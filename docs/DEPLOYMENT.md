@@ -108,7 +108,52 @@ Le frontend appelle l’API via `AETHERIX_API_BASE` (défaut : `http://localhost
 
 ---
 
-## 5. Résumé des commandes utiles
+## 5. Diagnostic HuggingFace Spaces
+
+### Vérifier que l'API fonctionne
+
+```bash
+# Health check
+curl https://ivandemurard-fb-agent-api.hf.space/health
+
+# Diagnostic complet
+curl https://ivandemurard-fb-agent-api.hf.space/diagnostic
+```
+
+### Vérifier les logs
+
+```bash
+# Utiliser les scripts de diagnostic
+python scripts/check_space_logs.py
+python scripts/fetch_space_logs.py
+```
+
+Ou consulter directement : https://huggingface.co/spaces/IvandeMurard/fb-agent-api/logs
+
+### Vérifier les variables d'environnement
+
+```bash
+python scripts/verify_hf_secrets.py
+```
+
+### Problèmes courants
+
+**Erreur 403 :**
+- L'espace HF peut être en "sleep" → Redémarrer l'espace
+- Variables d'environnement manquantes → Vérifier avec `verify_hf_secrets.py`
+- Backend crashé → Vérifier les logs
+
+**Timeout :**
+- Backend non démarré → Vérifier les logs de démarrage
+- Cold start HuggingFace (~30s) → Attendre le démarrage complet
+
+**CORS errors :**
+- Vérifier que CORS est configuré dans `backend/main.py`
+- Vérifier les logs pour "[CORS] Configured"
+
+Voir [docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md) pour plus de détails.
+
+## 6. Résumé des commandes utiles
 
 ```bash
 # Backend en local (écoute local uniquement)

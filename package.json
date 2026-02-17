@@ -1,0 +1,8 @@
+{
+  "name": "fb-agent-mvp",
+  "private": true,
+  "scripts": {
+    "build": "npm run build --prefix aetherix-dashboard",
+    "dev:dashboard": "npm run dev --prefix aetherix-dashboard"
+  }
+}
