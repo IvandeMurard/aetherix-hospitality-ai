@@ -22,6 +22,33 @@ pinned: false
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![HF Spaces](https://img.shields.io/badge/HuggingFace-Spaces-blueviolet)](https://huggingface.co/spaces/ivandemurard/fb-agent-api)
 
+## 🎯 Philosophy: Human-in-the-Loop Copilot, not Autopilot
+
+Aetherix is designed as an **intelligent assistant**, not an autonomous decision-maker.
+
+| Autopilot (❌ Not us) | Copilot (✅ Aetherix) |
+|-----------------------|----------------------|
+| AI decides and acts alone | AI recommends, human validates |
+| Black box predictions | Transparent reasoning with impact % |
+| Replaces the manager | Augments the manager |
+| "Trust me" | "Here's why, do you agree?" |
+
+**Why this matters:**
+> "In hospitality, the human must remain sovereign. Data is the advisor, not the ruler." - Industry validation
+
+**The feedback loop:**
+1. Aetherix predicts → "I expect 47 covers tomorrow"
+2. Manager validates → "Looks right" or "Too low, there's an event"
+3. Aetherix learns → Accuracy improves over time
+4. Repeat
+
+This approach ensures:
+- **Accountability**: Human approval for all operational decisions
+- **Trust**: Managers understand and can challenge predictions
+- **Compliance**: Aligns with EU AI Act requirements for human oversight
+
+---
+
 **Live Dashboard (Phase 3, early prototype)** → https://aetherix.streamlit.app/
 
 ### Real Problem (Hospitality 2026)
@@ -59,9 +86,62 @@ An **intelligence layer** for hotel managers that:
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture: ML + LLM Hybrid
+
+Aetherix uses a **hybrid architecture** separating calculation from explanation:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    DATA LAYER                       │
+│  Qdrant (patterns) + Weather API + Events API      │
+└─────────────────────────┬───────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────┐
+│              PREDICTION ENGINE (ML)                 │
+│                                                     │
+│  Prophet (Meta) - Deterministic calculation         │
+│  • Same input = same output (testable)             │
+│  • No hallucination risk on numbers                │
+│  • Handles seasonality automatically               │
+│                                                     │
+│  Output: { predicted: 47, range: [42, 52] }        │
+└─────────────────────────┬───────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────┐
+│              REASONING ENGINE (LLM)                 │
+│                                                     │
+│  Claude (Anthropic) - Explanation only             │
+│  • Receives the calculated number                  │
+│  • Generates human-readable reasoning              │
+│  • Never calculates, only explains                 │
+│                                                     │
+│  Output: "47 covers expected because..."           │
+└─────────────────────────┬───────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────┐
+│                 DELIVERY LAYER                      │
+│  Dashboard (Next.js) • WhatsApp/Slack (planned)    │
+│                                                     │
+│  + FEEDBACK LOOP: Manager corrections → Model      │
+└─────────────────────────────────────────────────────┘
+```
+
+**Why separate ML and LLM?**
+
+| Concern | ML (Prophet) | LLM (Claude) |
+|---------|--------------|--------------|
+| **Numbers** | ✅ Deterministic, reliable | ❌ Can hallucinate |
+| **Explanations** | ❌ Can't generate text | ✅ Natural language |
+| **Reproducibility** | ✅ Same input = same output | ❌ May vary |
+| **Auditability** | ✅ Traceable calculations | ❌ Black box |
+
+> "LLMs are poets, not accountants. For forecasting, use deterministic ML models." - Audit feedback
 
 <img src="https://raw.githubusercontent.com/IvandeMurard/Hospitality-Operations-Agentic-AI-B2B/main/docs/assets/architecture-value.svg" width="100%" alt="Aetherix Architecture Value Diagram showing layered architecture with feedback loop" loading="lazy">
+
 ---
 
 ## ✨ Key Features
@@ -74,6 +154,12 @@ An **intelligence layer** for hotel managers that:
 **🔍 Transparent Reasoning**
 - Every prediction shows WHY with a clear breakdown of impact percentages
 - Confidence scoring based on pattern match quality
+
+**🧮 Deterministic Predictions**
+- ML-based calculation (Prophet) ensures reproducibility
+- Same date + same conditions = same prediction
+- No LLM hallucination risk on numbers
+- Auditable and testable forecasts
 
 **🔄 Learning Feedback Loop**
 - Pre-service validation: "Does 26 covers look right to you?"
@@ -92,18 +178,119 @@ An **intelligence layer** for hotel managers that:
 
 ---
 
+## 📊 Data Sources & Signals
+
+Aetherix combines **internal operations data**, **external signals**, and **reservation behavior** to generate accurate predictions.
+
+### Internal Data (from PMS/POS)
+
+| Signal | Description | Impact Example |
+|--------|-------------|----------------|
+| **Occupancy rate** | Hotel rooms booked vs available | 95% occupancy → +20% dinner covers |
+| **Capture rate** | % of hotel guests eating at restaurant | 15% capture × 80 guests = 12 internal covers |
+| **Guest segmentation** | Leisure vs Corporate vs Group | Corporate = low lunch, high breakfast |
+| **Historical covers** | Past performance by day/season | "Last Tuesday = 42 covers" |
+| **Restaurant profile** | Capacity, breakeven, staff ratios | Breakeven = 35 → below = alert |
+
+### External Signals (from APIs)
+
+| Signal | Source | Impact Example |
+|--------|--------|----------------|
+| **Weather** | OpenWeather API | Rain → +15% dinner (guests stay in) |
+| **City events** | PredictHQ API | Fashion Week → -20% lunch, +30% late dinner |
+| **Holidays** | Calendar API | Bank holiday → +25% brunch |
+| **Transport disruptions** | Manual signal | RATP strike → -external, +internal capture |
+| **Social buzz** | Manual signal | Viral post → +10% walk-ins |
+
+### No-Show Prediction Factors
+
+| Factor | Description | Impact on No-Show Rate |
+|--------|-------------|------------------------|
+| **Reservation source** | TheFork -50% vs Concierge | Discount = higher no-show risk |
+| **Lead time** | Days between booking and date | 3 months ahead = higher risk |
+| **Credit card guarantee** | Deposit taken via Zenchef/SevenRooms | Guarantee → no-show ≈ 0% |
+| **Weather forecast** | Heavy rain predicted | Rain → +30% external no-shows |
+| **Transport forecast** | Strike announced | Strike → massive no-show spike |
+
+### Data Flow
+
+```
+INTERNAL (PMS)          EXTERNAL (APIs)         RESERVATIONS (TMS)
+     │                        │                        │
+     ├─ Occupancy             ├─ Weather               ├─ Source (TheFork, etc.)
+     ├─ Capture rate          ├─ Events                ├─ Lead time
+     ├─ Segmentation          ├─ Holidays              ├─ Guarantee status
+     ├─ Historical            ├─ Disruptions           └─ Party size
+     └─ Profile               └─ Buzz signals
+            │                        │                        │
+            └────────────────────────┼────────────────────────┘
+                                     │
+                                     ▼
+                        ┌────────────────────────┐
+                        │   PREDICTION ENGINE    │
+                        │   (Prophet + Claude)   │
+                        └────────────────────────┘
+                                     │
+                    ┌────────────────┴────────────────┐
+                    ▼                                 ▼
+            Covers Prediction               No-Show Prediction
+            "47 covers expected"            "12% no-show risk"
+                    │                                 │
+                    └────────────────┬────────────────┘
+                                     ▼
+                        ┌────────────────────────┐
+                        │   RECOMMENDATIONS      │
+                        │   Staff: 3 servers     │
+                        │   Overbooking: +5      │
+                        └────────────────────────┘
+```
+
+### Current Status
+
+| Data Source | Status | Notes |
+|-------------|--------|-------|
+| Historical patterns (Qdrant) | ✅ Live | 495 patterns from Kaggle dataset |
+| Weather API | ✅ Live | OpenWeather integration |
+| Events API | ✅ Live | PredictHQ integration |
+| PMS integration | 🔜 Planned | Mews connector in roadmap |
+| TMS integration | 🔜 Planned | Zenchef/SevenRooms planned |
+| Social signals | 🔜 Planned | Manual input first, API later |
+| No-show prediction | 🔜 Planned | Separate module (IVA-91) |
+
+---
+
 ## 🛠️ Tech Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Backend** | FastAPI + Python 3.11 | REST API, multi-agent orchestration |
-| **AI/ML** | Claude Sonnet 4 (Anthropic) | Reasoning engine, natural language explanations |
-| **Embeddings** | Mistral Embed | Vector embeddings for semantic search (1024 dim) |
+| **Backend** | FastAPI + Python 3.11 | REST API, orchestration |
+| **Prediction (ML)** | Prophet (Meta) | Deterministic demand forecasting |
+| **Reasoning (LLM)** | Claude Sonnet 4 (Anthropic) | Explanation generation (no calculation) |
+| **Embeddings** | Mistral Embed | Vector embeddings for semantic search |
 | **Vector DB** | Qdrant Cloud | Semantic pattern search (495 patterns) |
-| **Database** | Supabase (PostgreSQL) | Restaurant profiles, predictions, feedback, accuracy |
+| **Database** | Supabase (PostgreSQL) | Profiles, predictions, feedback, accuracy |
 | **Cache** | Redis (Upstash) | Session state, conversation context |
 | **Frontend** | Streamlit (MVP) / Next.js (v2) | Dashboard interface |
-| **Deployment** | HuggingFace Spaces (Docker) | Cloud hosting, auto-scaling |
+| **Deployment** | HuggingFace Spaces (Docker) | Cloud hosting |
+
+---
+
+## 🔒 Privacy & Compliance
+
+**Data handling:**
+- All predictions use **aggregated patterns**, not individual guest data
+- No PII (Personally Identifiable Information) is sent to LLM APIs
+- Historical patterns are anonymized before vectorization
+
+**GDPR compliance:**
+- Data minimization: Only operational data required for predictions
+- Right to explanation: Every prediction includes transparent reasoning
+- Human oversight: Manager validation required for operational decisions
+
+**EU AI Act alignment:**
+- Human-in-the-loop design (Copilot, not Autopilot)
+- Explainable AI: Impact factors visible for every prediction
+- No fully automated decisions affecting individuals
 
 ---
 
@@ -196,7 +383,8 @@ ELEVENLABS_API_KEY=...                # Voice interface
 ### Tech Stack
 
 - **Backend**: FastAPI · Python 3.11
-- **AI**: Claude Sonnet 4 (Anthropic) · Mistral Embeddings
+- **Prediction (ML)**: Prophet (Meta)
+- **Reasoning (LLM)**: Claude Sonnet 4 (Anthropic) · Mistral Embeddings
 - **Vector DB**: Qdrant Cloud (495 patterns indexed)
 - **Storage**: Supabase (PostgreSQL) · Redis (cache & sessions)
 - **Frontend MVP**: Streamlit · (Next.js planned for v2)
