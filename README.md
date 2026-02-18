@@ -171,7 +171,7 @@ Aetherix uses a **hybrid architecture** separating calculation from explanation:
 
 Aetherix combines **internal operations data**, **external signals**, and **reservation behavior** to generate accurate predictions.
 
-### Internal Data (from PMS/POS)
+### Internal Data (from PMS/POS/TMS)
 
 | Signal | Description | Impact Example |
 |--------|-------------|----------------|
@@ -302,53 +302,6 @@ INTERNAL (PMS)          EXTERNAL (APIs)         RESERVATIONS (TMS)
 
 ---
 
-## 📈 Roadmap
-
-### ✅ Phase 1 - Backend API (Complete)
-
-Delivered:
-- Multi-agent system (Demand Predictor, Staff Recommender, Reasoning Engine)
-- Context-aware prediction with mock patterns
-- Confidence scoring + explainable reasoning
-- HuggingFace Spaces deployment
-
-### ✅ Phase 2 - RAG Implementation (Complete)
-
-Delivered:
-- Kaggle Hotel Booking dataset processed (119K reservations → 495 F&B patterns)
-- Qdrant vector database with Mistral embeddings
-- Semantic similarity search powering predictions
-- Live API with real vector search
-
-### 🔄 Phase 3 - Dashboard & Feedback Loop (Current)
-
-In progress:
-- **Restaurant Profile**: Capacity, breakeven, staff ratios configuration
-- **Post-service Feedback**: Actual covers input to close the loop
-- **Accuracy Tracking**: Real MAPE calculation, visible learning progress
-- **UI Anti-Slop**: Factor visibility, human context, contextual recommendations
-- **Data Sources UI**: Transparent architecture roadmap in Settings
-
-Linear issues: IVA-52, IVA-53, IVA-54, IVA-55, IVA-56
-
-### 📋 Phase 4 - Feedback Loop + Accuracy (Next)
-
-Planned:
-- **Post-service Feedback**: Actual covers input to close the loop
-- **MAPE Tracking**: Real accuracy calculation and display
-- **Prediction History**: Accuracy history view
-- **Continuous Learning**: Pipeline from feedback to model improvement
-
-### 🔮 Phase 5 - Integrations (Future)
-
-Vision:
-- **PMS Connectors**: Mews, Opera, Protel adapters
-- **POS Auto-sync**: Real cover data from Toast, Square, etc.
-- **Voice/Chat Interface**: WhatsApp, Slack, Teams (ambient AX)
-- **What-if Scenario Modeling**
-
----
-
 ## ⚙️ Configuration
 
 ```bash
@@ -368,16 +321,6 @@ PREDICTHQ_API_KEY=...                 # Events data
 OPENWEATHER_API_KEY=...               # Weather data
 ELEVENLABS_API_KEY=...                # Voice interface
 ```
-
-### Tech Stack
-
-- **Backend**: FastAPI · Python 3.11
-- **Prediction (ML)**: Prophet (Meta)
-- **Reasoning (LLM)**: Claude Sonnet 4 (Anthropic) · Mistral Embeddings
-- **Vector DB**: Qdrant Cloud (495 patterns indexed)
-- **Storage**: Supabase (PostgreSQL) · Redis (cache & sessions)
-- **Frontend MVP**: Streamlit · (Next.js planned for v2)
-- **Deploy**: Hugging Face Spaces (Docker)
 
 ## **Looking for**  
 - **Feedback on project** DM me on X @ivandemurard or [Book a call](https://cal.com/ivandemurard/30min)
