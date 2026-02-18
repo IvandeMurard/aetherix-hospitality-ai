@@ -13,7 +13,7 @@ pinned: false
 # Aetherix – F&B Ambient Agent  
 **PMS-agnostic intelligence layer to anticipate staffing & F&B needs in hotels**
 
-> (AI) Insights come to and learn from you (WhatsApp, Slack, Teams) instead of yet another dashboard to onboard.  
+> (AI) Insights learn from and come to you (WhatsApp, Slack, Teams) instead of yet another dashboard to onboard.
 > Contextual predictions + feedback loop + explainability, no vendor lock-in.
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)](https://www.python.org)
@@ -32,6 +32,7 @@ Aetherix is designed as an **intelligent assistant**, not an autonomous decision
 | Black box predictions | Transparent reasoning with impact % |
 | Replaces the manager | Augments the manager |
 | "Trust me" | "Here's why, do you agree?" |
+| Does not evolve | Learns from your context (POS/PMS/TMS) and feedback |
 
 **Why this matters:**
 > "In hospitality, the human must remain sovereign. Data is the advisor, not the ruler." - Industry validation
