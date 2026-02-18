@@ -38,30 +38,31 @@ Aetherix is designed as an **intelligent assistant**, not an autonomous decision
 > "In hospitality, the human must remain sovereign. Data is the advisor, not the ruler." - Industry validation
 
 **The feedback loop:**
-1. Aetherix predicts → "I expect 47 covers tomorrow"
-2. Manager validates → "Looks right" or "Too low, there's an event"
-3. Aetherix learns → Accuracy improves over time
+1. Aetherix predicts → "I expect 47 covers tomorrow (+ explanation)."
+2. Manager validates → "Looks right" or "Too low, there's an event."
+3. Aetherix learns → Accuracy improves over time.
 4. Repeat
 
 This approach ensures:
 - **Accountability**: Human approval for all operational decisions
-- **Trust**: Managers understand and can challenge predictions
+- **Trust** (and transparency): Managers understand and can challenge predictions
 - **Compliance**: Aligns with EU AI Act requirements for human oversight
 
 ---
 
 **Live Dashboard (Phase 3, early prototype)** → https://aetherix.streamlit.app/
+- Vercel deployment coming soon
 
 ### Real Problem (Hospitality 2026)
 Restaurant managers spend **5–8 hours/week** on manual forecasting with ~**70%** accuracy → over/under-staffing, food waste, operational stress.
 
-### Solution: A new (AI) Colleague
-or agent, that:
-- **Anticipates** demand (covers, staffing, purchases) using RAG + external signals (weather, events, holidays, and real-time social sentiment)
+### Solution: An AI-augmented Colleague
+that:
+- **Anticipates** demand (covers, staffing, f&b purchases) using RAG + internal (captation capability, history, ...) and external signals (weather, events, holidays, and real-time social sentiment)
 - **Explains** its predictions (impact %, confidence score) for transparency and adoption
-- **Learns** from your corrections and PMS data (feedback loop) for continuous and autonomous improvement
+- **Learns** from your corrections and SOPs/PMS/POS/TMS data (feedback loop) for continuous and autonomous improvement
 - **Delivers where you work**: WhatsApp/Slack for quick briefs, dashboard for adoption, config & deep dive
-- **PMS-agnostic**: using a semantic layer connecting Mews, Opera, Apaleo, Cloudbeds, etc. without lock-in. Smart!
+- **PMS-agnostic**: using a semantic layer connecting Mews, Opera, Apaleo, Cloudbeds, etc. without lock-in.
 
 | Classic Dashboard            | Ambient Agent (Aetherix)              |
 |------------------------------|----------------------------------------|
@@ -73,17 +74,6 @@ or agent, that:
 ### Architecture (3 Layers)
 
 Voir le diagramme SVG ci-dessous dans la section Architecture.
-
----
-
-## 💡 The solution I'm working on:
-
-An **intelligence layer** for hotel managers that:
-- **Connects to any PMS** through a semantic abstraction layer (Mews, Opera, Apaleo, Protel, Cloudbeds, ...)
-- **Predicts demand** using RAG architecture with internal and external historical pattern matching
-- **Explains reasoning** so managers can trust and correct predictions (transparency)
-- **Learns from feedback** to improve accuracy over time (feedback loop)
-- **Lives where you work** : via a dashboard for analytics, and messaging apps for daily operations
 
 ---
 
@@ -138,8 +128,6 @@ Aetherix uses a **hybrid architecture** separating calculation from explanation:
 | **Explanations** | ❌ Can't generate text | ✅ Natural language |
 | **Reproducibility** | ✅ Same input = same output | ❌ May vary |
 | **Auditability** | ✅ Traceable calculations | ❌ Black box |
-
-> "LLMs are poets, not accountants. For forecasting, use deterministic ML models." - Audit feedback
 
 <img src="https://raw.githubusercontent.com/IvandeMurard/Hospitality-Operations-Agentic-AI-B2B/main/docs/assets/architecture-value.svg" width="100%" alt="Aetherix Architecture Value Diagram showing layered architecture with feedback loop" loading="lazy">
 
