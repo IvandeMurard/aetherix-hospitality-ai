@@ -1,0 +1,5 @@
+// Features components directory
+// Complex view components (not shadcn/ui primitives)
+// Example future component: PredictionChart.tsx
+// ARCHITECTURE RULE: Components here must be strictly presentational.
+// [Source: architecture.md#Structure-Patterns]
