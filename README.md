@@ -16,8 +16,12 @@ The result? Contextualized intelligence delivered directly to departmental manag
 
 ### The Problem vs. The Aetherix Solution
 
-*   **The Problem:** Traditional scheduling relies on "pull" mechanics—a manager must log into a dashboard, stare at historical data, and guess the future.
-*   **The Solution:** Aetherix pushes clear, highly reliable, and actionable predictions directly to managers via SMS, WhatsApp, or email, exactly when needed.
+| Feature | The Problem (Traditional "Pull") | The Solution (Aetherix "Push") |
+| :--- | :--- | :--- |
+| **Data Interaction** | Requires manual login & dashboard checks | Proactive alerts via SMS, WhatsApp, or Email |
+| **Forecasting** | Guesswork based on static historical reports | Contextualized ML/LLM predictions |
+| **Actionability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives |
+| **Context** | Siloed PMS data | Synthesized internal + external (weather, events) data |
 
 #### 💡 "The Surge Save" (Core Use Case)
 1. **The Context:** It's Tuesday morning. The hotel is at a quiet 45% occupancy. No extra staff scheduled for the evening.
@@ -47,13 +51,70 @@ Aetherix was conceived, structured, and validated using the rigorous **BMAD (Bus
 
 ## Architecture & Technical Strategy
 
-The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy, optimizing for robust LLM orchestration and data segregation.
+The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy, optimizing for robust LLM orchestration and strict data segregation.
 
-*   **Frontend (UI):** Next.js App Router (React), Tailwind CSS, and shadcn/ui.
-*   **Backend (AI/Orchestration):** Python + FastAPI. Fully asynchronous to handle long-running LLM chains and webhook processing.
-*   **Data & Reasoning:** Supabase (PostgreSQL) integrated with `pgvector` for fast similarity search, retrieval-augmented generation (RAG), and tenant segregation (Row-Level Security).
-*   **Delivery Layer:** Push notifications managed via Twilio (SMS/WhatsApp) and SendGrid/Postmark (Email).
-*   **Type Safety:** End-to-end type safety between the Python backend and TypeScript frontend using OpenAPI Client generation (`openapi-fetch`).
+```mermaid
+graph TD
+    %% External Data Sources
+    subgraph "External Integrations"
+        PMS[Mews/Apaleo PMS (Read-Only)]
+        Weather[Weather API]
+        Events[PredictHQ Events]
+    end
+
+    %% Backend Layer
+    subgraph "Fat Backend (FastAPI + Python)"
+        Sync[PMS Sync Service]
+        Semantic[Semantic Reasoning Engine]
+        RAG[LLM Orchestrator]
+    end
+
+    %% Database Layer
+    subgraph "Data Storage"
+        DB[(Supabase PostgreSQL)]
+        Vector[(pgvector - similarity search)]
+    end
+
+    %% Delivery / Frontend
+    subgraph "Delivery & UI"
+        Frontend[Next.js App Router UI]
+        Push[Delivery Layer: WhatsApp/SMS/Email]
+    end
+
+    %% Relationships
+    PMS -- Webhooks/API --> Sync
+    Weather --> Semantic
+    Events --> Semantic
+
+    Sync --> DB
+    Semantic --> Vector
+    Vector --> RAG
+    DB --> RAG
+
+    RAG -- Conversational Receipts --> Push
+    RAG -- Typed API (openapi-fetch) --> Frontend
+    Frontend -- Typesafe Contract --> RAG
+
+    classDef external fill:#f9f9f9,stroke:#333,stroke-width:2px;
+    classDef backend fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef db fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
+    classDef delivery fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
+
+    class PMS,Weather,Events external;
+    class Sync,Semantic,RAG backend;
+    class DB,Vector db;
+    class Frontend,Push delivery;
+```
+
+### Tech Stack Breakdown
+
+| Layer | Technologies | Purpose |
+| :--- | :--- | :--- |
+| **Frontend (UI)** | Next.js (App Router), Tailwind CSS, shadcn/ui | "Thin Frontend" presentation and dashboarding. |
+| **Backend (AI/Logic)** | Python, FastAPI | "Fat Backend" for LLM chains and async webhook processing. |
+| **Data & Reasoning** | Supabase (PostgreSQL), `pgvector` | RAG, similarity search, and tenant isolation (RLS). |
+| **Delivery** | Twilio, SendGrid/Postmark | Orchestrating multi-channel push notifications. |
+| **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety preventing integration bugs. |
 
 ---
 
