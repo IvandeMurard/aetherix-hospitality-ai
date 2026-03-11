@@ -57,7 +57,7 @@ The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy, o
 graph TD
     %% External Data Sources
     subgraph "External Integrations"
-        PMS[Mews/Apaleo PMS (Read-Only)]
+        PMS["Mews/Apaleo PMS (Read-Only)"]
         Weather[Weather API]
         Events[PredictHQ Events]
     end
