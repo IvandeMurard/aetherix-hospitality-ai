@@ -1,28 +1,86 @@
-# Stack locale ou déploiement self-hosted (backend + dashboard)
+# Aetherix local dev stack
 # Usage: docker compose up --build
-# API: http://localhost:8000  |  Dashboard: http://localhost:8501
+# Frontend: http://localhost:3000
+# Backend API + Swagger: http://localhost:8000/docs
+# MailHog UI: http://localhost:8025
 
 services:
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8000:7860"
+      context: fastapi-backend
     environment:
-      - DISABLE_FILE_LOGGING=true
-      # Les clés API (ANTHROPIC, QDRANT, MISTRAL, SUPABASE) doivent être
-      # passées via un fichier .env ou les secrets Docker
-    env_file:
-      - .env
+      - OPENAPI_OUTPUT_FILE=./shared-data/openapi.json
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/aetherix
+      - TEST_DATABASE_URL=postgresql+asyncpg://postgres:password@db_test:5432/aetherix_test
+      - MAIL_SERVER=mailhog
+    ports:
+      - "8000:8000"
+    networks:
+      - aetherix_network
+    volumes:
+      - ./fastapi-backend:/app
+      - fastapi-venv:/app/.venv
+      - ./local-shared-data:/app/shared-data
+    depends_on:
+      - db
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: aetherix
+    ports:
+      - "5432:5432"
+    networks:
+      - aetherix_network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  db_test:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: aetherix_test
+    ports:
+      - "5433:5432"
+    networks:
+      - aetherix_network
+    restart: always
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: ./nextjs-frontend
+    user: node
     ports:
-      - "8501:8501"
+      - "3000:3000"
+    networks:
+      - aetherix_network
     environment:
-      - AETHERIX_API_BASE=http://backend:7860
+      NODE_ENV: development
+      API_BASE_URL: http://backend:8000
+      OPENAPI_OUTPUT_FILE: ./shared-data/openapi.json
+    volumes:
+      - ./nextjs-frontend:/app
+      - nextjs-node-modules:/app/node_modules
+      - ./local-shared-data:/app/shared-data
     depends_on:
       - backend
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - aetherix_network
+
+volumes:
+  postgres_data:
+  nextjs-node-modules:
+  fastapi-venv:
+
+networks:
+  aetherix_network:
+    driver: bridge
