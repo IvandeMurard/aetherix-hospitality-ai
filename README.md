@@ -1,337 +1,112 @@
----
-title: F&B Agent API
-emoji: 🍽️
-colorFrom: blue
-colorTo: purple
-sdk: docker
-sdk_version: "4.0.0"
-python_version: "3.11"
-app_port: 7860
-pinned: false
----
+<p align="center">
+  <img src="docs/images/banner.png" alt="Aetherix MVP Logo" width="400" style="display: block; margin: auto; padding-bottom: 20px;">
+</p>
+<h1 align="center">Aetherix</h1>
+<p align="center">
+  <em>Proactive, Agentic AI for Hospitality F&B Forecasting.</em>
+</p>
 
-# Aetherix – F&B Ambient Agent  
-**PMS-agnostic intelligence layer to anticipate staffing & F&B needs in hotels**
+## Overview
 
-> (AI) Insights learn from and come to you (WhatsApp, Slack, Teams) instead of yet another dashboard to onboard.
-> Contextual predictions + feedback loop + explainability, no vendor lock-in.
+Aetherix is an Agentic AI solution designed to solve the manual, anxiety-inducing process of Food & Beverage forecasting for hotel and restaurant managers. 
 
-[![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)](https://www.python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green?logo=fastapi)](https://fastapi.tiangolo.com)
-[![Streamlit](https://img.shields.io/badge/Streamlit-Live-orange?logo=streamlit)](https://aetherix.streamlit.app/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![HF Spaces](https://img.shields.io/badge/HuggingFace-Spaces-blueviolet)](https://huggingface.co/spaces/ivandemurard/fb-agent-api)
+By transitioning from traditional, static "pull" dashboards to a proactive "push" model, Aetherix anticipates operational load. It synthesizes internal property data (occupancy, bookings) with an external semantic layer—incorporating local events, weather, and real-time social sentiment. 
 
-## 🎯 Philosophy: Human-in-the-Loop Copilot, not Autopilot
+The result? Contextualized intelligence delivered directly to departmental managers when they need it, empowering them to focus on exceptional customer experiences while reducing food waste and optimizing labor costs.
 
-Aetherix is designed as an **intelligent assistant**, not an autonomous decision-maker.
+### The Problem vs. The Aetherix Solution
 
-| Autopilot (❌ Not us) | Copilot (✅ Aetherix) |
-|-----------------------|----------------------|
-| AI decides and acts alone | AI recommends, human validates |
-| Black box predictions | Transparent reasoning with impact % |
-| Replaces the manager | Augments the manager |
-| "Trust me" | "Here's why, do you agree?" |
-| Does not evolve | Learns from your context (POS/PMS/TMS) and feedback |
+*   **The Problem:** Traditional scheduling relies on "pull" mechanics—a manager must log into a dashboard, stare at historical data, and guess the future.
+*   **The Solution:** Aetherix pushes clear, highly reliable, and actionable predictions directly to managers via SMS, WhatsApp, or email, exactly when needed.
 
-**Why this matters:**
-> "In hospitality, the human must remain sovereign. Data is the advisor, not the ruler." - Industry validation
-
-**The feedback loop:**
-1. Aetherix predicts → "I expect 47 covers tomorrow (+ explanation)."
-2. Manager validates → "Looks right" or "Too low, there's an event."
-3. Aetherix learns → Accuracy improves over time.
-4. Repeat
-
-This approach ensures:
-- **Accountability**: Human approval for all operational decisions
-- **Trust** (and transparency): Managers understand and can challenge predictions
-- **Compliance**: Aligns with EU AI Act requirements for human oversight
+#### 💡 "The Surge Save" (Core Use Case)
+1. **The Context:** It's Tuesday morning. The hotel is at a quiet 45% occupancy. No extra staff scheduled for the evening.
+2. **The Intelligence:** Aetherix detects a tech conference relocated next door. Historical data shows similar local events cause a 25% bump in external walk-ins.
+3. **The Push:** Aetherix alerts the F&B Manager via WhatsApp: *"Anticipating an extra £1,200 in F&B revenue tonight (6 PM - 9 PM) due to nearby conference. Recommend calling 2 servers and 1 prep cook (est. labor cost: £180). Target: 14 total staff."*
+4. **The Action:** The manager secures the staff, captures the external revenue, and avoids a dinner service meltdown.
 
 ---
 
-**Live Dashboard (Phase 3, early prototype)** → https://aetherix.streamlit.app/
-- Vercel deployment coming soon
+## Key Features & Innovation
 
-### Real Problem (Hospitality 2026)
-Restaurant managers spend **5–8 hours/week** on manual forecasting with ~**70%** accuracy → over/under-staffing, food waste, operational stress.
-
-### Solution: An AI-augmented Colleague
-that:
-- **Anticipates** demand (covers, staffing, f&b purchases) using RAG + internal (captation capability, history, ...) and external signals (weather, events, holidays, and real-time social sentiment)
-- **Explains** its predictions (impact %, confidence score) for transparency and adoption
-- **Learns** from your corrections and SOPs/PMS/POS/TMS data (feedback loop) for continuous and autonomous improvement
-- **Delivers where you work**: WhatsApp/Slack for quick briefs, dashboard for adoption, config & deep dive
-- **PMS-agnostic**: using a semantic layer connecting Mews, Opera, Apaleo, Cloudbeds, etc. without lock-in.
-
-| Classic Dashboard            | Ambient Agent (Aetherix)              |
-|------------------------------|----------------------------------------|
-| You have to remember to check| Agent proactively sends you the brief |
-| Painful context switching    | Integrated into your daily tools       |
-| Feedback = separate step     | Natural correction in conversation     |
-| PMS + external data silos    | Semantic unification + contextual RAG  |
-
-### Architecture (3 Layers)
-
-Voir le diagramme SVG ci-dessous dans la section Architecture.
+*   **Semantic Reasoning Engine:** Mathematical translation of chaotic external data (weather, events, traffic) into specific, high-ROI operational directives (revenue opportunity vs. labor cost).
+*   **Conversational Receipts (Zero-Dashboard Trust):** If a manager questions a recommendation (e.g., replies "Why?"), Aetherix instantly responds with the mathematical breakdown and historical context. Trust is built via immediate, conversational Q&A, not complex dashboards.
+*   **Painless Pilot & 1-Way Sync:** Designed for zero-friction integration. Aetherix requires only a read-only webhook/API key from legacy or modern PMS systems (Mews, Apaleo) to begin establishing baselines.
 
 ---
 
-## 🏗️ Architecture: ML + LLM Hybrid
+## Built with the BMAD Methodology
 
-Aetherix uses a **hybrid architecture** separating calculation from explanation:
+Aetherix was conceived, structured, and validated using the rigorous **BMAD (Business, Market, Architecture, Design)** methodology. This ensures the project is not just a technical proof-of-concept, but a viable SaaS product.
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    DATA LAYER                       │
-│  Qdrant (patterns) + Weather API + Events API      │
-└─────────────────────────┬───────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────┐
-│              PREDICTION ENGINE (ML)                 │
-│                                                     │
-│  Prophet (Meta) - Deterministic calculation         │
-│  • Same input = same output (testable)             │
-│  • No hallucination risk on numbers                │
-│  • Handles seasonality automatically               │
-│                                                     │
-│  Output: { predicted: 47, range: [42, 52] }        │
-└─────────────────────────┬───────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────┐
-│              REASONING ENGINE (LLM)                 │
-│                                                     │
-│  Claude (Anthropic) - Explanation only             │
-│  • Receives the calculated number                  │
-│  • Generates human-readable reasoning              │
-│  • Never calculates, only explains                 │
-│                                                     │
-│  Output: "47 covers expected because..."           │
-└─────────────────────────┬───────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────┐
-│                 DELIVERY LAYER                      │
-│  Dashboard (Next.js) • WhatsApp/Slack (planned)    │
-│                                                     │
-│  + FEEDBACK LOOP: Manager corrections → Model      │
-└─────────────────────────────────────────────────────┘
+*   **Business Justification:** Clear financial ROI and metrics for success (e.g., Target MAPE < 15%, Labor Cost reduction).
+*   **Domain Compliance:** Explicit architectural decisions to handle GDPR (anonymized PII) and European Labor Laws (calculating penalty pay into recommendations).
+*   **Traceable Architecture:** Documented logic separating business requirements from technical implementation layers.
+
+---
+
+## Architecture & Technical Strategy
+
+The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy, optimizing for robust LLM orchestration and data segregation.
+
+*   **Frontend (UI):** Next.js App Router (React), Tailwind CSS, and shadcn/ui.
+*   **Backend (AI/Orchestration):** Python + FastAPI. Fully asynchronous to handle long-running LLM chains and webhook processing.
+*   **Data & Reasoning:** Supabase (PostgreSQL) integrated with `pgvector` for fast similarity search, retrieval-augmented generation (RAG), and tenant segregation (Row-Level Security).
+*   **Delivery Layer:** Push notifications managed via Twilio (SMS/WhatsApp) and SendGrid/Postmark (Email).
+*   **Type Safety:** End-to-end type safety between the Python backend and TypeScript frontend using OpenAPI Client generation (`openapi-fetch`).
+
+---
+
+## Project Structure
+
+The repository is structured as a monorepo separating the frontend and backend concerns cleanly:
+
+```text
+aetherix-mvp/
+├── nextjs-frontend/         # The React/Next.js UI Application
+│   ├── src/app/             # App Router pages (Dashboard, Settings)
+│   ├── src/components/      # UI components (shadcn/ui)
+│   └── src/lib/             # openapi-fetch generated client API
+├── fastapi-backend/         # The Python AI/Orchestration Application
+│   ├── app/api/             # strictly HTTP presentation routes
+│   ├── app/db/              # Supabase/pgvector models
+│   └── app/services/        # Business logic, AI reasoning, and PMS Sync
+└── docker-compose.yml       # Local dev orchestration
 ```
 
-**Why separate ML and LLM?**
-
-| Concern | ML (Prophet) | LLM (Claude) |
-|---------|--------------|--------------|
-| **Numbers** | ✅ Deterministic, reliable | ❌ Can hallucinate |
-| **Explanations** | ❌ Can't generate text | ✅ Natural language |
-| **Reproducibility** | ✅ Same input = same output | ❌ May vary |
-| **Auditability** | ✅ Traceable calculations | ❌ Black box |
-
-<img src="https://raw.githubusercontent.com/IvandeMurard/Hospitality-Operations-Agentic-AI-B2B/main/docs/assets/architecture-value.svg" width="100%" alt="Aetherix Architecture Value Diagram showing layered architecture with feedback loop" loading="lazy">
-
 ---
 
-## ✨ Key Features
+## Quick Start (Local Development)
 
-**🧠 Contextual Predictions**
-- Combines external signals (city events, weather, holidays, real-time social sentiment) with internal data (occupancy, past demand)
-- Qdrant vector search finds similar historical patterns
-- Claude AI generates explainable reasoning
+The MVP is built on top of the robust [Next.js FastAPI Template](https://github.com/vintasoftware/nextjs-fastapi-template).
 
-**🔍 Transparent Reasoning**
-- Every prediction shows WHY with a clear breakdown of impact percentages
-- Confidence scoring based on pattern match quality
+**Prerequisites:**
+- [Docker](https://www.docker.com/) and Docker Compose.
+- [Node.js](https://nodejs.org/) (useful for local frontend linting, but Docker handles execution).
 
-**🧮 Deterministic Predictions**
-- ML-based calculation (Prophet) ensures reproducibility
-- Same date + same conditions = same prediction
-- No LLM hallucination risk on numbers
-- Auditable and testable forecasts
+**Bootstrapping the Environment:**
 
-**🔄 Learning Feedback Loop**
-- Pre-service validation: "Does 26 covers look right to you?"
-- Post-service feedback: Actual covers input
-- Visible accuracy improvement: "Your feedback improved accuracy: 68% → 74%"
+1. **Clone the repository:**
+   ```bash
+   git clone <repository_url>
+   cd aetherix-mvp
+   ```
 
-**🔗 PMS-Agnostic Integration**
-- Semantic layer abstracts any PMS API
-- No vendor lock-in, it will work with Mews, Opera, Protel, Cloudbeds
-- Adding new PMS = new adapter, not agent rewrite
+2. **Configure Environment Variables:**
+   Copy the `.env.example` templates and fill in the required keys for Supabase/LLM APIs.
+   ```bash
+   cp fastapi-backend/.env.example fastapi-backend/.env
+   cp nextjs-frontend/.env.local.example nextjs-frontend/.env.local
+   ```
 
-**📱 Ambient Experience**
-- Dashboard-first design (Aetherix UI live)
-- Dashboard for transparency, settings, analytics, and complex planning
-- Voice/chat in messaging apps (WhatsApp, Slack, Teams) planned for Phase 5
+3. **Start the containers:**
+   ```bash
+   docker compose up --build
+   ```
 
----
-
-## 📊 Data Sources & Signals
-
-Aetherix combines **internal operations data**, **external signals**, and **reservation behavior** to generate accurate predictions.
-
-### Internal Data (from PMS/POS/TMS)
-
-| Signal | Description | Impact Example |
-|--------|-------------|----------------|
-| **Occupancy rate** | Hotel rooms booked vs available | 95% occupancy → +20% dinner covers |
-| **Capture rate** | % of hotel guests eating at restaurant | 15% capture × 80 guests = 12 internal covers |
-| **Guest segmentation** | Leisure vs Corporate vs Group | Corporate = low lunch, high breakfast |
-| **Historical covers** | Past performance by day/season | "Last Tuesday = 42 covers" |
-| **Restaurant profile** | Capacity, breakeven, staff ratios | Breakeven = 35 → below = alert |
-
-### External Signals (from APIs)
-
-| Signal | Source | Impact Example |
-|--------|--------|----------------|
-| **Weather** | OpenWeather API | Rain → +15% dinner (guests stay in) |
-| **City events** | PredictHQ API | Fashion Week → -20% lunch, +30% late dinner |
-| **Holidays** | Calendar API | Bank holiday → +25% brunch |
-| **Transport disruptions** | Manual signal | RATP strike → -external, +internal capture |
-| **Social buzz** | Manual signal | Viral post → +10% walk-ins |
-
-### No-Show Prediction Factors
-
-| Factor | Description | Impact on No-Show Rate |
-|--------|-------------|------------------------|
-| **Reservation source** | TheFork -50% vs Concierge | Discount = higher no-show risk |
-| **Lead time** | Days between booking and date | 3 months ahead = higher risk |
-| **Credit card guarantee** | Deposit taken via Zenchef/SevenRooms | Guarantee → no-show ≈ 0% |
-| **Weather forecast** | Heavy rain predicted | Rain → +30% external no-shows |
-| **Transport forecast** | Strike announced | Strike → massive no-show spike |
-
-### Data Flow
-
-```
-INTERNAL (PMS)          EXTERNAL (APIs)         RESERVATIONS (TMS)
-     │                        │                        │
-     ├─ Occupancy             ├─ Weather               ├─ Source (TheFork, etc.)
-     ├─ Capture rate          ├─ Events                ├─ Lead time
-     ├─ Segmentation          ├─ Holidays              ├─ Guarantee status
-     ├─ Historical            ├─ Disruptions           └─ Party size
-     └─ Profile               └─ Buzz signals
-            │                        │                        │
-            └────────────────────────┼────────────────────────┘
-                                     │
-                                     ▼
-                        ┌────────────────────────┐
-                        │   PREDICTION ENGINE    │
-                        │   (Prophet + Claude)   │
-                        └────────────────────────┘
-                                     │
-                    ┌────────────────┴────────────────┐
-                    ▼                                 ▼
-            Covers Prediction               No-Show Prediction
-            "47 covers expected"            "12% no-show risk"
-                    │                                 │
-                    └────────────────┬────────────────┘
-                                     ▼
-                        ┌────────────────────────┐
-                        │   RECOMMENDATIONS      │
-                        │   Staff: 3 servers     │
-                        │   Overbooking: +5      │
-                        └────────────────────────┘
-```
-
-### Current Status
-
-| Data Source | Status | Notes |
-|-------------|--------|-------|
-| Historical patterns (Qdrant) | ✅ Live | 495 patterns from Kaggle dataset |
-| Weather API | ✅ Live | OpenWeather integration |
-| Events API | ✅ Live | PredictHQ integration |
-| PMS integration | 🔜 Planned | Mews connector in roadmap |
-| TMS integration | 🔜 Planned | Zenchef/SevenRooms planned |
-| Social signals | 🔜 Planned | Manual input first, API later |
-| No-show prediction | 🔜 Planned | Separate module (IVA-91) |
+4. **Access the application:**
+   - Frontend: `http://localhost:3000`
+   - Backend API Docs (Swagger): `http://localhost:8000/api/docs`
 
 ---
-
-## 🛠️ Tech Stack
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Backend** | FastAPI + Python 3.11 | REST API, orchestration |
-| **Prediction (ML)** | Prophet (Meta) | Deterministic demand forecasting |
-| **Reasoning (LLM)** | Claude Sonnet 4 (Anthropic) | Explanation generation (no calculation) |
-| **Embeddings** | Mistral Embed | Vector embeddings for semantic search |
-| **Vector DB** | Qdrant Cloud | Semantic pattern search (495 patterns) |
-| **Database** | Supabase (PostgreSQL) | Profiles, predictions, feedback, accuracy |
-| **Cache** | Redis (Upstash) | Session state, conversation context |
-| **Frontend** | Streamlit (MVP) / Next.js (v2) | Dashboard interface |
-| **Deployment** | HuggingFace Spaces (Docker) | Cloud hosting |
-
----
-
-## 🔒 Privacy & Compliance
-
-**Data handling:**
-- All predictions use **aggregated patterns**, not individual guest data
-- No PII (Personally Identifiable Information) is sent to LLM APIs
-- Historical patterns are anonymized before vectorization
-
-**GDPR compliance:**
-- Data minimization: Only operational data required for predictions
-- Right to explanation: Every prediction includes transparent reasoning
-- Human oversight: Manager validation required for operational decisions
-
-**EU AI Act alignment:**
-- Human-in-the-loop design (Copilot, not Autopilot)
-- Explainable AI: Impact factors visible for every prediction
-- No fully automated decisions affecting individuals
-
----
-
-## 🚀 Live Demo
-
-**Primary dashboard:** [https://aetherix.streamlit.app](https://aetherix.streamlit.app) (Streamlit Cloud)  
-**Also:** [https://ivandemurard-fb-agent-api.hf.space](https://ivandemurard-fb-agent-api.hf.space) (HuggingFace Space: dashboard + API; API docs at `/docs`)
-
-### Deployment
-
-| Component | Status | URL |
-|-----------|--------|-----|
-| **Dashboard (primary)** | ✅ Live | [aetherix.streamlit.app](https://aetherix.streamlit.app) |
-| HF Space (dashboard + API) | ✅ Live | [ivandemurard-fb-agent-api.hf.space](https://ivandemurard-fb-agent-api.hf.space) |
-| Vector DB | ✅ Live | Qdrant Cloud (495 patterns) |
-
-**Sync:** One push to `main` updates both: a GitHub Action syncs `main` → `master`, so Streamlit Cloud (on `master`) and the HF Space (on `main`) deploy the same code.
-
-**Docker:** The default `Dockerfile` runs API (port 8000) + Streamlit dashboard (port 7860) for the HF Space. For API-only deployment use `Dockerfile.api`.
-
----
-
-## ⚙️ Configuration
-
-```bash
-# Required
-ANTHROPIC_API_KEY=sk-ant-...          # Claude AI
-QDRANT_API_KEY=...                    # Vector database
-QDRANT_URL=https://...                # Qdrant cluster URL
-MISTRAL_API_KEY=...                   # Embeddings generation
-
-# Database
-SUPABASE_URL=...                      # PostgreSQL
-SUPABASE_KEY=...                      # Database auth
-
-# Optional (for enhanced features)
-REDIS_URL=...                         # Session cache
-PREDICTHQ_API_KEY=...                 # Events data
-OPENWEATHER_API_KEY=...               # Weather data
-ELEVENLABS_API_KEY=...                # Voice interface
-```
-
-## **Looking for**  
-- **Feedback on project** DM me on X @ivandemurard or [Book a call](https://cal.com/ivandemurard/30min)
-- Beta hotels or restaurants (currently using mock data to start)
-- Tips
-- A product / AI role in hospitality tech SaaS
-
-**Say Hi!**
-
-Built with ❤️ by Ivan de Murard for hotels, restaurants, and those who love them
-[Portfolio](https://ivandemurard.com) · [X](https://x.com/ivandemurard) · [LinkedIn](https://linkedin.com/in/ivandemurard) · ivandemurard@gmail.com
-
-MIT License
-
+*Aetherix - Contextual Intelligence for Hospitality.* 
