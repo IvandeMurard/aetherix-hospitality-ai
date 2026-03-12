@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
-from app.api.routes import pms, webhooks, auth, dashboard, predictions
+from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports
 
 app = FastAPI(
     title="Aetherix API",
@@ -31,6 +31,7 @@ app.include_router(predictions.router, prefix="/api/v1")
 app.include_router(webhooks.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------

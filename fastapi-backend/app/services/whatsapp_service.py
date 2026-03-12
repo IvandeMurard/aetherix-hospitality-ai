@@ -4,6 +4,7 @@ import logging
 from datetime import date
 from typing import Dict, Any, Optional
 from app.services.aetherix_engine import AetherixEngine
+from app.services.memory_service import MemoryService
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class WhatsAppService:
         self.auth_token = os.getenv("TWILIO_AUTH_TOKEN", "MOCK_TOKEN")
         self.whatsapp_from = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886") # Twilio Sandbox
         self.engine = AetherixEngine()
+        self.memory = MemoryService()
 
     async def handle_inbound_message(self, data: Dict[str, Any]):
         """
@@ -33,9 +35,13 @@ class WhatsAppService:
 
         logger.info(f"Received WhatsApp from {sender}: {body}")
         
-        # 1. Logic: Determine if it's a forecast request or general query
-        # For Phase 2 Pilot, we assume queries are about restaurant demand.
-        response_text = await self._generate_response(body)
+        # 1. Feedback Detection (Phase 3 Learning Loop)
+        if any(w in body.lower() for w in ["wrong", "incorrect", "too high", "too low", "no"]):
+            await self.memory.learn_from_feedback("pilot_hotel", "latest_alert", body)
+            response_text = "Thank you for the feedback. I've noted this for future forecasts."
+        else:
+            # 2. General logic: Determine if it's a forecast request or general query
+            response_text = await self._generate_response(body)
         
         # 2. Send response back
         await self.send_message(sender, response_text)
