@@ -3,8 +3,15 @@ import os
 import sys
 from datetime import datetime
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env so BACKBOARD_API_KEY and friends
+# are available when running this script directly on staging/localhost.
+load_dotenv()
+
 # Ensure app is in path to use MemoryService
-sys.path.append(os.path.join(os.getcwd(), "fastapi-backend"))
+# In Docker, ./fastapi-backend is mounted to /app, so os.getcwd() ("/app") is correct.
+sys.path.insert(0, os.getcwd())
 
 from app.services.memory_service import MemoryService
 
