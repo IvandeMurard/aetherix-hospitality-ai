@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Dict, Any
 from app.services.prediction_engine import PredictionEngine
 from app.services.rag_service import RAGService
@@ -60,6 +60,12 @@ class AetherixEngine:
         # 4. Actionable Staffing
         staffing = self.staffer.calculate_recommendation(predicted_covers)
 
+        # 5. Cache for Action (Phase 3 2-Way Sync)
+        await self.memory.cache_recommendation(property_id, {
+            "date": target_date.isoformat(),
+            "staffing": staffing
+        })
+
         return {
             "prediction": {
                 "covers": predicted_covers,
@@ -74,3 +80,25 @@ class AetherixEngine:
                 "service_type": service_type
             }
         }
+
+    async def push_staffing(self, property_id: str) -> Dict[str, Any]:
+        """
+        Orchestrates the 2-Way Sync by pushing the latest cached recommendation to the PMS.
+        """
+        latest = await self.memory.get_latest_recommendation(property_id)
+        if not latest:
+            return {"success": False, "message": "No recent recommendation found to push."}
+        
+        target_date = date.fromisoformat(latest["date"])
+        staffing_deltas = latest["staffing"]["deltas"]
+        
+        # In a real pilot, we'd use the appropriate adapter (Apaleo)
+        from app.services.apaleo_adapter import ApaleoPMSAdapter
+        adapter = ApaleoPMSAdapter() 
+        
+        success = await adapter.update_staffing_in_pms(property_id, target_date, staffing_deltas)
+        
+        if success:
+            return {"success": True, "message": f"Successfully pushed staffing to Apaleo for {target_date}."}
+        else:
+            return {"success": False, "message": "Failed to push staffing to Apaleo. Check logs."}

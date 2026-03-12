@@ -21,6 +21,11 @@ class PMSAdapter(abc.ABC):
         """Fetch historical data for a range of dates."""
         ...
 
+    @abc.abstractmethod
+    async def update_staffing_in_pms(self, property_id: str, target_date: date, staffing_deltas: Dict[str, int]) -> bool:
+        """Write staffing recommendations back to the PMS schedules/tasks."""
+        ...
+
 class MockPMSAdapter(PMSAdapter):
     """Mock adapter for development and pilot verification."""
     
@@ -47,6 +52,11 @@ class MockPMSAdapter(PMSAdapter):
                 "fb_revenue": 2000.0,
             } for target_date in [start_date] # Simplification for mock
         ]
+
+    async def update_staffing_in_pms(self, property_id: str, target_date: date, staffing_deltas: Dict[str, int]) -> bool:
+        # Simulate successful write-back
+        print(f"Mocked push to {property_id} on {target_date}: {staffing_deltas}")
+        return True
 
 class PIIStripper:
     """Utility to ensure GDPR compliance by stripping/hashing guest PII."""
