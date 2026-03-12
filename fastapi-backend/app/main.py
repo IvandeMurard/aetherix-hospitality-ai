@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
+from app.api.routes import pms, webhooks, auth, dashboard, predictions
 
 app = FastAPI(
     title="Aetherix API",
@@ -21,18 +22,15 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS: allow Next.js dev server and any configured origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# RFC 7807: register handler BEFORE any routes so all exceptions use it
-# AC #4: all HTTPExceptions → {type, title, status, detail}
+# ... (middleware and exception handlers)
 app.add_exception_handler(HTTPException, problem_details_handler)
+
+# Include routers
+app.include_router(pms.router, prefix="/api/v1")
+app.include_router(predictions.router, prefix="/api/v1")
+app.include_router(webhooks.router, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(dashboard.router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
