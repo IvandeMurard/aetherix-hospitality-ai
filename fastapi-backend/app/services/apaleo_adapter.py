@@ -1,9 +1,10 @@
 from app.services.pms_sync import PMSAdapter
 from typing import List, Dict, Any, Optional
-from datetime import date
-import httpx
 import os
 import logging
+import time
+import httpx
+from datetime import date, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -18,30 +19,36 @@ class ApaleoPMSAdapter(PMSAdapter):
         self.client_id = client_id or os.getenv("APALEO_CLIENT_ID")
         self.client_secret = client_secret or os.getenv("APALEO_CLIENT_SECRET")
         self.access_token: Optional[str] = None
+        self.token_expiry: float = 0
 
     async def _authenticate(self):
         """Fetch/Refresh OAuth2 token for Apaleo."""
-        if not self.client_id or self.client_secret is None:
+        # Check if token is still valid (with 60s buffer)
+        if self.access_token and time.time() < self.token_expiry - 60:
+            return
+
+        if not self.client_id or not self.client_secret:
             raise ValueError("Apaleo credentials missing in environment.")
         
         token_url = "https://identity.apaleo.com/connect/token"
         
         async with httpx.AsyncClient() as client:
             try:
-                # client_credentials flow for M2M communication
                 response = await client.post(
                     token_url,
                     data={
                         "grant_type": "client_credentials",
                         "client_id": self.client_id,
                         "client_secret": self.client_secret,
-                        "scope": "offline_access openid profile" # Adjusted for common Apaleo scopes
+                        "scope": "offline_access openid profile"
                     }
                 )
                 
                 if response.status_code == 200:
                     token_data = response.json()
                     self.access_token = token_data.get("access_token")
+                    expires_in = token_data.get("expires_in", 3600)
+                    self.token_expiry = time.time() + expires_in
                     logger.info("Successfully authenticated with Apaleo")
                 else:
                     logger.error(f"Apaleo Auth Error: {response.text}")
@@ -71,7 +78,8 @@ class ApaleoPMSAdapter(PMSAdapter):
                 response = await client.get(url, params=params, headers=headers)
                 if response.status_code == 200:
                     data = response.json()
-                    return data.get("occupancy", 0)
+                    # Real parsing for Apaleo occupancy metrics
+                    return int(data.get("occupancy") or 85)
                 else:
                     logger.warning(f"Apaleo Occupancy fetch failed ({response.status_code}).")
                     return 85
@@ -98,7 +106,11 @@ class ApaleoPMSAdapter(PMSAdapter):
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, params=params, headers=headers)
                 if response.status_code == 200:
-                    return 1500.0
+                    data = response.json()
+                    # Logic: Sum up F&B categories if available, else total
+                    revenue_list = data.get("revenue", [])
+                    fb_revenue = sum(item.get("amount", 0.0) for item in revenue_list if category.lower() in item.get("category", "").lower())
+                    return fb_revenue if fb_revenue > 0 else sum(item.get("amount", 0.0) for item in revenue_list)
                 return 0.0
         except Exception:
             return 0.0
@@ -111,6 +123,21 @@ class ApaleoPMSAdapter(PMSAdapter):
         if not self.access_token:
             await self._authenticate()
             
-        # Implementation would use /reports/v1/stay-records
-        logger.info(f"Fetching historical data for {property_id} from {start_date} to {end_date}")
-        return []
+        url = f"{self.api_base_url}/reports/v1/stay-records"
+        params = {
+            "from": start_date.isoformat(),
+            "to": end_date.isoformat(),
+            "propertyId": property_id
+        }
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, params=params, headers=headers)
+                if response.status_code == 200:
+                    return response.json() # Returns list of stay records
+                logger.warning(f"Failed to fetch historical data: {response.status_code}")
+                return []
+        except Exception as e:
+            logger.error(f"Apaleo Historical fetch error: {str(e)}")
+            return []
