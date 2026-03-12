@@ -141,3 +141,32 @@ class ApaleoPMSAdapter(PMSAdapter):
         except Exception as e:
             logger.error(f"Apaleo Historical fetch error: {str(e)}")
             return []
+
+    async def update_staffing_in_pms(self, property_id: str, target_date: date, staffing_deltas: Dict[str, int]) -> bool:
+        """
+        Writes staffing recommendations back to Apaleo Schedules/Operations.
+        Note: Target endpoint is exploratory based on 'Schedules' project requirement.
+        """
+        if not self.access_token:
+            await self._authenticate()
+            
+        url = f"{self.api_base_url}/operations/v1/schedules"
+        payload = {
+            "propertyId": property_id,
+            "date": target_date.isoformat(),
+            "deltas": staffing_deltas,
+            "source": "Aetherix-AI"
+        }
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload, headers=headers)
+                if response.status_code in [200, 201, 204]:
+                    logger.info(f"Successfully pushed staffing to Apaleo for {property_id}")
+                    return True
+                logger.error(f"Apaleo Push Failed ({response.status_code}): {response.text}")
+                return False
+        except Exception as e:
+            logger.error(f"Apaleo Push Exception: {str(e)}")
+            return False

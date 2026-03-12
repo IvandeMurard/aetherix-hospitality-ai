@@ -39,8 +39,12 @@ class WhatsAppService:
         if any(w in body.lower() for w in ["wrong", "incorrect", "too high", "too low", "no"]):
             await self.memory.learn_from_feedback("pilot_hotel", "latest_alert", body)
             response_text = "Thank you for the feedback. I've noted this for future forecasts."
+        elif body.lower() == "push":
+            # 2. 2-Way Sync Action
+            result = await self.engine.push_staffing("pilot_hotel")
+            response_text = result["message"]
         else:
-            # 2. General logic: Determine if it's a forecast request or general query
+            # 3. General logic: Determine if it's a forecast request or general query
             response_text = await self._generate_response(body)
         
         # 2. Send response back
@@ -91,7 +95,8 @@ class WhatsAppService:
                 "I'm monitoring your operations. You can ask me:\n"
                 "• \"What's the forecast for tonight?\"\n"
                 "• \"Should I change staffing levels?\"\n"
-                "• \"Show covers for today.\""
+                "• \"Show covers for today.\"\n"
+                "• \"PUSH\" (to sync the latest recommendation with Apaleo)"
             )
         
         return "I'm not sure how to help with that yet. Try asking for a 'forecast' or 'staffing' update."

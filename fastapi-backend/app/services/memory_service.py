@@ -75,3 +75,37 @@ class MemoryService:
         Specifically stores negative feedback to prevent "Boy who cried wolf" repetition.
         """
         await self.store_reflection(tenant_id, f"AlertID: {alert_id}", f"Manager Feedback: {feedback}")
+
+    async def cache_recommendation(self, tenant_id: str, data: Dict[str, Any]):
+        """
+        Temporarily stores the latest recommendation for action/push.
+        """
+        import json
+        payload = {
+            "projectId": self.project_id,
+            "tags": [tenant_id, "recommendation_cache"],
+            "content": json.dumps(data)
+        }
+        async with httpx.AsyncClient() as client:
+            await client.post(f"{self.base_url}/memories", json=payload, headers=self.headers)
+
+    async def get_latest_recommendation(self, tenant_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves the most recent recommendation from the cache.
+        """
+        import json
+        params = {
+            "projectId": self.project_id,
+            "tag": "recommendation_cache",
+            "limit": 1
+        }
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(f"{self.base_url}/memories/search", params=params, headers=self.headers)
+                if response.status_code == 200:
+                    memories = response.json().get("data", [])
+                    if memories:
+                        return json.loads(memories[0].get("content", "{}"))
+                return None
+            except Exception:
+                return None
