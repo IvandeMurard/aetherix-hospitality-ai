@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
 from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports
+from app.db.models import Base
+from app.db.session import engine
 
 app = FastAPI(
     title="Aetherix API",
@@ -24,6 +26,12 @@ app = FastAPI(
 
 # ... (middleware and exception handlers)
 app.add_exception_handler(HTTPException, problem_details_handler)
+
+@app.on_event("startup")
+async def on_startup():
+    async with engine.begin() as conn:
+        # Create tables
+        await conn.run_sync(Base.metadata.create_all)
 
 # Include routers
 app.include_router(pms.router, prefix="/api/v1")
