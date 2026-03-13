@@ -5,6 +5,8 @@ from app.services.rag_service import RAGService
 from app.services.reasoning_service import ReasoningService
 from app.services.staffing_service import StaffingService
 from app.services.memory_service import MemoryService
+from app.db.session import AsyncSessionLocal
+from app.db.models import RecommendationCache
 
 class AetherixEngine:
     """
@@ -28,8 +30,6 @@ class AetherixEngine:
         4. Staffing calculation
         """
         # 1. Numerical "Source of Truth"
-        # In a real pilot, we'd ensure the model is loaded/trained
-        # For now, if not trained, we might use a simplified fallback or mock
         if not self.forecaster.is_trained:
             # Fallback to a simpler logic if no historical model loaded
             predicted_covers = 145 # Pilot mock
@@ -61,6 +61,22 @@ class AetherixEngine:
         staffing = self.staffer.calculate_recommendation(predicted_covers)
 
         # 5. Cache for Action (Phase 3 2-Way Sync)
+        async with AsyncSessionLocal() as session:
+            cache_entry = RecommendationCache(
+                tenant_id=property_id,
+                target_date=target_date,
+                prediction_data={
+                    "covers": predicted_covers,
+                    "confidence": confidence,
+                    "interval": [range_min, range_max]
+                },
+                reasoning_summary=reasoning.get("summary", ""),
+                staffing_recommendation=staffing
+            )
+            session.add(cache_entry)
+            await session.commit()
+
+        # Also store in MemoryService for cognitive recall
         await self.memory.cache_recommendation(property_id, {
             "date": target_date.isoformat(),
             "staffing": staffing

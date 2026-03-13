@@ -51,7 +51,7 @@ development_status:
 
   # ── Epic 2: Operations Baseline (PMS Data Sync) ────────────────────────────
   epic-2: backlog
-  2-1-establish-pms-api-connection-and-auth: backlog
+  2-1-establish-pms-api-connection-and-auth: ready-for-dev
   2-2-initial-historical-data-ingestion: backlog
   2-3-continuous-sync-via-webhook-polling: backlog
   2-4-calculate-baseline-captation-rates: backlog

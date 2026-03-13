@@ -2,6 +2,9 @@ import abc
 import hashlib
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
+from app.db.session import AsyncSessionLocal
+from app.db.models import PMSSyncLog
+from sqlalchemy.future import select
 
 class PMSAdapter(abc.ABC):
     """Base class for all Property Management System (PMS) adapters."""
@@ -92,8 +95,18 @@ class PMSSyncService:
         occupancy = await self.adapter.get_occupancy(property_id, target_date)
         revenue = await self.adapter.get_revenue(property_id, target_date, category="F&B")
         
-        # In a real implementation, this would save to Supabase
-        # print(f"Synced {property_id} for {target_date}: {occupancy} rooms, {revenue} revenue.")
+        # Story 2.2: Persist sync result to Supabase
+        async with AsyncSessionLocal() as session:
+            sync_log = PMSSyncLog(
+                tenant_id=property_id,
+                sync_date=target_date,
+                occupancy=occupancy,
+                fb_revenue=revenue,
+                status="success"
+            )
+            session.add(sync_log)
+            await session.commit()
+
         return {
             "property_id": property_id,
             "date": target_date.isoformat(),
