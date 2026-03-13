@@ -1,8 +1,23 @@
 from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean
 from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.dialects.postgresql import UUID
+from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from datetime import datetime
+import uuid
 
 Base = declarative_base()
+
+class User(SQLAlchemyBaseUserTableUUID, Base):
+    """
+    User model for Aetherix.
+    """
+    __tablename__ = "users"
+    
+    full_name = Column(String)
+    department_role = Column(String) # f&b, front_office, operations
+    
+    # Relationship to owned properties
+    properties = relationship("RestaurantProfile", back_populates="owner")
 
 class RestaurantProfile(Base):
     """
@@ -11,8 +26,12 @@ class RestaurantProfile(Base):
     """
     __tablename__ = "restaurant_profiles"
 
-    id = Column(String, primary_key=True, index=True) # UUID in Supabase
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     tenant_id = Column(String, unique=True, index=True, nullable=False)
+    
+    # Administrative Link
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    owner = relationship("User", back_populates="properties")
     property_name = Column(String, nullable=False)
     outlet_name = Column(String, nullable=False)
     outlet_type = Column(String, default="restaurant")

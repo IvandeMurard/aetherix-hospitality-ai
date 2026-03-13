@@ -1,6 +1,6 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
-from mistralai import Mistral
+from mistralai.client import Mistral
 import os
 import asyncio
 from typing import List, Dict, Any, Optional
