@@ -40,7 +40,7 @@ class ApaleoPMSAdapter(PMSAdapter):
                         "grant_type": "client_credentials",
                         "client_id": self.client_id,
                         "client_secret": self.client_secret,
-                        "scope": "offline_access openid profile"
+                        "scope": "offline_access openid profile read:occupancy read:revenue write:schedules"
                     }
                 )
                 
