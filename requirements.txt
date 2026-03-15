@@ -8,3 +8,7 @@ pydantic==2.5.0
 requests==2.31.0
 predicthq==1.0.0
 streamlit==1.28.0
+
+# MCP + Claude (hotel context layer)
+anthropic>=0.40.0
+mcp>=1.0.0
