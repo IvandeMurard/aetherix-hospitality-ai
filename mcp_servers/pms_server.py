@@ -118,5 +118,96 @@ def get_guest_profile(guest_id: str) -> dict:
     }
 
 
+@mcp.tool()
+def get_fb_forecast_context(date: str) -> dict:
+    """
+    Get F&B-specific operational context for a date, aggregated from PMS data.
+    Returns meal plan breakdown, breakfast covers, dietary restrictions by type,
+    VIP guests, and group meal commitments — the exact inputs an F&B manager
+    needs to plan staffing and mise en place.
+
+    This is the PMS tool most directly relevant to F&B planning.
+    It aggregates data that would otherwise require 3-4 separate PMS screens.
+
+    Args:
+        date: Date in YYYY-MM-DD format
+    """
+    day = datetime.strptime(date, "%Y-%m-%d").strftime("%A")
+    is_weekend = day in ["Friday", "Saturday", "Sunday"]
+
+    # Occupancy base (mirrors get_hotel_reservations logic)
+    base_occupancy = 0.85 if day in ["Friday", "Saturday"] else 0.70 if day == "Sunday" else 0.62
+    occupancy = min(1.0, max(0.0, base_occupancy + random.uniform(-0.05, 0.05)))
+    occupied_rooms = int(120 * occupancy)
+
+    # Meal plan breakdown — how many guests have pre-paid meals
+    half_board_rooms = int(occupied_rooms * (0.30 if not is_weekend else 0.20))
+    full_board_rooms = int(occupied_rooms * (0.10 if not is_weekend else 0.25))
+    bb_only_rooms = occupied_rooms - half_board_rooms - full_board_rooms
+
+    # Breakfast covers = all guests with any meal plan + some room-only guests
+    breakfast_covers = int(
+        (full_board_rooms + half_board_rooms) * 1.8   # avg 1.8 guests/room
+        + bb_only_rooms * 1.6
+        + int(bb_only_rooms * 0.25)                    # ~25% room-only still eat breakfast
+    )
+
+    # Dietary restrictions breakdown (more granular than get_hotel_reservations)
+    total_dietary = random.randint(8, 25)
+    dietary_breakdown = {
+        "vegetarian": int(total_dietary * 0.35),
+        "vegan": int(total_dietary * 0.15),
+        "gluten_free": int(total_dietary * 0.20),
+        "halal": int(total_dietary * 0.15),
+        "seafood_allergy": int(total_dietary * 0.10),
+        "other": int(total_dietary * 0.05),
+    }
+
+    # VIP guests (loyalty platinum + special flags)
+    vip_count = random.randint(2, 8) if is_weekend else random.randint(1, 4)
+
+    # Group meal commitments (pre-contracted F&B)
+    group_meals = []
+    if day not in ["Saturday", "Sunday"]:
+        group_meals.append({
+            "group": "Tech conference group",
+            "size": 28,
+            "meal": "dinner",
+            "time": "19:30",
+            "menu": "set_menu_B",
+            "prepaid": True,
+        })
+    if day == "Saturday":
+        group_meals.append({
+            "group": "Wedding party",
+            "size": 45,
+            "meal": "dinner",
+            "time": "20:00",
+            "menu": "wedding_banquet",
+            "prepaid": True,
+        })
+
+    # Revenue opportunity flag
+    upsell_opportunity = vip_count >= 4 or len(group_meals) > 0
+
+    return {
+        "date": date,
+        "day_of_week": day,
+        "meal_plan_breakdown": {
+            "full_board_rooms": full_board_rooms,
+            "half_board_rooms": half_board_rooms,
+            "bb_only_rooms": bb_only_rooms,
+            "room_only_rooms": bb_only_rooms,  # alias for clarity
+        },
+        "expected_breakfast_covers": breakfast_covers,
+        "dietary_restrictions": dietary_breakdown,
+        "dietary_total": total_dietary,
+        "vip_guests": vip_count,
+        "group_meal_commitments": group_meals,
+        "upsell_opportunity": upsell_opportunity,
+        "source": "mock_pms",
+    }
+
+
 if __name__ == "__main__":
     mcp.run()
