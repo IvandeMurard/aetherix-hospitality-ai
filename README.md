@@ -1,641 +1,240 @@
-# 🏨 F&B Operations Agent
+# F&B Operations Agent
 
-> AI-powered hospitality demand prediction with voice interface and pattern memory
+> AI-powered demand forecasting for hotel Food & Beverage operations,
+> built on the Model Context Protocol (MCP).
 
-[![Built for Pioneers AILab](https://img.shields.io/badge/Hackathon-Pioneers%20AILab-blue)](https://pioneers.io)
-[![Qdrant Track](https://img.shields.io/badge/Track-Qdrant-red)](https://qdrant.tech)
-[![Built in 6h](https://img.shields.io/badge/Built%20in-6%20hours-green)](.)
-
-**Demo Video:** [Watch 2-min demo →](YOUR_VIDEO_LINK)
+Built for the **Pioneers AILab Hackathon** · Qdrant Track
 
 ---
 
-# 🚀 DÉMO RAPIDE (5 MIN)
+## The Problem
 
-## Lancement
+Hotel F&B managers make staffing and procurement decisions 24–48 hours
+in advance, with no tools that combine their PMS data, local events, and
+weather into a single actionable forecast. The result: chronic
+over-staffing on quiet nights and under-staffing when a concert or
+conference spills into the restaurant.
 
-1. **API** : `uvicorn api:app --reload --port 8000`
+This project solves that with an AI agent that pulls all three signals
+through a single protocol (MCP) and delivers a structured operational
+recommendation in plain English.
 
-2. **Interface** : `streamlit run demo_app.py`
+---
 
-3. **Ouvrir** : http://localhost:8501
+## Architecture
 
-## Test API direct
+```
+User query (date + location)
+        │
+        ▼
+  Agent Router  ──────────────────────────────────────────────┐
+        │                                                      │
+   ANTHROPIC_API_KEY set?                                      │
+        │ yes                                                  │ no
+        ▼                                                      ▼
+  MCP Agent (Claude)                             Autonomous Agent (Mistral)
+        │ MCP protocol                                    │ direct calls
+        ▼                                                      ▼
+  Hotel Context Layer                               agents/ modules
+  (hotel_context_server.py)                     ┌──────────────────────┐
+  ┌──────────────────────────────────┐           │ Analyzer             │
+  │  PMS Server  ←→  Apaleo API      │           │ PatternSearch(Qdrant)│
+  │  Events Server ← PredictHQ       │           │ Predictor (Mistral)  │
+  │  Weather Server ← OpenWeather    │           │ Voice (ElevenLabs)   │
+  │  Pattern Memory ← Qdrant         │           └──────────────────────┘
+  └──────────────────────────────────┘
+```
+
+Both paths produce the same structured output: expected covers,
+recommended staff count, confidence score, and key factors.
+
+**The MCP path is the primary architecture.** The direct path is a
+graceful fallback when Claude / MCP servers are unavailable.
+
+---
+
+## Key Design Decisions
+
+**MCP as the hotel integration layer.**
+Each hotel system (PMS, events, weather, memory) is a standalone MCP
+server. The AI agent discovers and calls tools through the protocol —
+zero hardcoded integrations. Adding a new system means shipping a new
+MCP server, not editing the agent.
+
+**Apaleo PMS integration.**
+`mcp_servers/pms_server.py` calls the Apaleo Booking and Inventory APIs
+via OAuth2 client credentials. Token is cached and refreshed
+automatically. Falls back to mock data when credentials are not set,
+so the demo always works.
+
+**Pattern memory in Qdrant.**
+Historical F&B scenarios (actual covers, staffing, outcome) are stored
+as embeddings. At query time, the agent retrieves the 3 most similar
+past events by cosine similarity to anchor its prediction.
+
+**Vendor-agnostic by design.**
+The routing layer (`agent_router.py`) picks the best available path at
+runtime. Swapping the LLM or any hotel system requires only a registry
+update, not code changes.
+
+---
+
+## Repository Structure
+
+```
+.
+├── api.py                        FastAPI REST endpoint (/predict)
+├── mcp_agent.py                  Claude MCP agent (primary path)
+├── agent_router.py               Routes between MCP and direct paths
+├── autonomous_agent.py           Mistral-based fallback agent
+├── demo_app.py                   Streamlit demo UI
+├── seed_data.py                  Seeds Qdrant with historical scenarios
+├── setup_qdrant.py               Creates Qdrant collection
+│
+├── mcp_servers/
+│   ├── hotel_context_server.py   Unified MCP server (all tools)
+│   ├── pms_server.py             PMS tools — Apaleo API or mock
+│   ├── events_server.py          Local events — PredictHQ API or mock
+│   ├── weather_server.py         Weather — OpenWeatherMap API or mock
+│   └── registry.py               Server registry and availability checks
+│
+├── agents/
+│   ├── analyzer.py               Parses query into structured features
+│   ├── pattern_search.py         Qdrant vector search
+│   ├── predictor.py              LLM reasoning → structured prediction
+│   ├── events_fetcher.py         PredictHQ client
+│   ├── weather_fetcher.py        OpenWeatherMap client
+│   └── mock_data_fetcher.py      Offline fallback data
+│
+├── tests/
+│   ├── test_full_pipeline.py     End-to-end pipeline tests
+│   └── test_scenarios.py         Scenario-based agent tests
+│
+├── docs/
+│   ├── quick_start.md            5-minute setup guide
+│   ├── demo_script.md            Live demo walkthrough
+│   ├── integration_report.md     API integration details
+│   ├── validation_report.md      Test results and validation
+│   ├── roadmap.md                Development roadmap
+│   └── presentation.md           Full project presentation
+│
+├── .env.example                  Credential template (copy → .env)
+└── requirements.txt
+```
+
+---
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
-python test_final.py
-```
-
-## Technologies
-
-- ✅ Mistral AI (embeddings + LLM)
-- ✅ Qdrant (vector search - local)
-- ✅ ElevenLabs (voice - intégré)
-
----
-
-## 🎯 The Problem
-
-Saturday night, 7:30 PM. Restaurant fully booked.
-
-**Suddenly:**
-- 3 walk-ins arrive
-- 2 allergy requests
-- 1 VIP menu modification
-
-The manager juggles between kitchen coordination, reservation systems, and stressed servers.
-
-**This isn't a people problem. It's a coordination problem.**
-
-As a former server, I've lived this chaos. Traditional forecasting tools provide numbers, but they don't *act*. They inform, but don't coordinate.
-
----
-
-## 💡 The Solution
-
-A voice-enabled multi-agent system that:
-1. **Predicts** F&B demand 48 hours ahead using pattern matching
-2. **Recommends** specific actions (procurement, staffing, prep)
-3. **Speaks** predictions naturally via voice interface
-
-### Demo Flow
-
-```bash
-$ python main.py "Concert tomorrow evening, sunny weather"
-
-🔍 Analyzing event...
-   Features: Saturday, concert, large, sunny
-
-🔎 Searching Qdrant for similar patterns...
-   #1: Coldplay concert nearby (similarity: 0.89)
-   #2: Jazz festival Saturday (similarity: 0.85)
-   #3: Rock concert evening (similarity: 0.82)
-
-🎯 Generating prediction...
-   Prediction: 90 covers (87% confidence)
-
-🔊 Voice output:
-   "Based on similar patterns, expect 90 covers tonight 
-    with 87% confidence. I recommend scheduling 6 staff 
-    members. Key factors: nearby concert, weekend demand, 
-    favorable weather."
-
-📊 RESULTS
-Expected Covers:     90
-Confidence:          87%
-Recommended Staff:   6
-Voice file saved:    prediction_voice.mp3
-```
-
----
-
-## 🛠️ Partner Technologies (3+)
-
-### 🔍 Qdrant Vector Search
-**Role:** Core pattern memory system
-
-- Stores historical F&B scenarios as vector embeddings
-- Retrieves top-3 similar events via semantic similarity
-- COSINE distance matching (1024-dimensional vectors)
-
-**Why Qdrant:** Hospitality patterns are nuanced. Traditional databases miss semantic connections. Qdrant finds: *"jazz festival Saturday"* ≈ *"concert Friday evening"* through vector similarity.
-
----
-
-### 🤖 Mistral AI
-**Role:** Embeddings generation + Reasoning engine
-
-**Models used:**
-- **Mistral Embed** – Generates 1024-dim embeddings from event descriptions
-- **Mistral Large** – Powers both Analyzer and Predictor agents
-
-**Why Mistral:** Fast, accurate embeddings + strong reasoning. Perfect for real-time hospitality decisions where every minute counts.
-
----
-
-### 🔊 Eleven Labs Voice
-**Role:** Natural voice synthesis
-
-- Converts predictions to professional voice ("Adam" model)
-- Makes the agent feel like a real assistant
-- Hands-free interaction for busy managers
-
-**Why Voice:** Hospitality managers are on their feet, moving between kitchen and floor. Voice output = hands-free, natural interaction. Much more practical than reading terminal logs.
-
----
-
-**Total: 3 partner tools integrated** ✅
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────┐
-│  Event Input    │  "Concert tomorrow evening"
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│  Agent 1        │  Extract features
-│  (Analyzer)     │  → Generate Mistral embedding
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│  Qdrant Search  │  Find 3 similar scenarios
-│                 │  → Return patterns with scores
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│  Agent 2        │  Analyze patterns
-│  (Predictor)    │  → Generate prediction + confidence
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│  Eleven Labs    │  Voice synthesis
-│  Voice Output   │  → "Expect 90 covers..."
-└────────┬────────┘
-         ↓
-┌─────────────────┐
-│  Terminal       │  Display detailed results
-└─────────────────┘
-```
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.9+
-- API keys: [Qdrant Cloud](https://cloud.qdrant.io), [Mistral AI](https://mistral.ai), [Eleven Labs](https://elevenlabs.io)
-
-### Installation
-
-```bash
-# Clone repository
-git clone https://github.com/YOUR_USERNAME/fbf-agent-qdrant
-cd fbf-agent-qdrant
-
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env with your API keys
 ```
 
-### Setup
+### 2. Configure credentials
 
 ```bash
-# Create Qdrant collection
-python setup_qdrant.py
+cp .env.example .env
+# Fill in your keys — see .env.example for all variables
+```
 
-# Seed historical data (10 scenarios)
+Required for the MCP path (Claude agent):
+```
+ANTHROPIC_API_KEY=...
+```
+
+Required for the direct path (Mistral agent):
+```
+MISTRAL_API_KEY=...
+QDRANT_URL=...
+QDRANT_API_KEY=...
+```
+
+Optional — activates real data instead of mock:
+```
+APALEO_CLIENT_ID=...          # Apaleo PMS (reservations)
+APALEO_CLIENT_SECRET=...
+APALEO_PROPERTY_ID=MUC        # 3-letter property code
+PREDICTHQ_API_KEY=...         # Local events
+OPENWEATHER_API_KEY=...       # Weather forecast
+ELEVENLABS_API_KEY=...        # Voice output
+```
+
+Every integration falls back to realistic mock data when its key is
+absent — the agent always produces a usable output.
+
+### 3. Seed pattern memory
+
+```bash
 python seed_data.py
 ```
 
-### Run Demo
+### 4. Run
 
+**MCP agent (recommended):**
 ```bash
-# Interactive mode
-python main.py
-
-# Or provide event directly
-python main.py "Concert tomorrow evening, sunny weather"
-
-# Agent will:
-# 1. Extract features from description
-# 2. Search Qdrant for similar patterns
-# 3. Generate prediction with confidence
-# 4. Speak the prediction (save as .mp3)
-# 5. Display detailed results
+python agent_router.py --date 2025-12-24 --location "Paris, France"
 ```
 
----
-
-## 🎬 Démo Rapide
-
-### Tester l'API
-
-L'API FastAPI est accessible et prête à recevoir des requêtes de prédiction.
-
-#### 1. Lancer l'API
-
+**REST API:**
 ```bash
-# Activer l'environnement virtuel
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Lancer l'API
-python start_api.py
+uvicorn api:app --reload --port 8000
+# POST http://localhost:8000/predict
 ```
 
-L'API sera accessible sur : **http://127.0.0.1:8000**
-
-#### 2. Accéder à la documentation interactive
-
-Ouvrez votre navigateur : **http://127.0.0.1:8000/docs**
-
-Vous verrez l'interface Swagger avec l'endpoint `/predict` prêt à être testé.
-
-#### 3. Tester avec un script Python
-
+**Streamlit demo:**
 ```bash
-# Test complet du pipeline
-python test_full_pipeline.py
-
-# Test de 3 scénarios différents
-python test_scenarios.py
+streamlit run demo_app.py
 ```
 
-#### 4. Exemple de requête cURL
+---
 
-```bash
-curl -X POST "http://127.0.0.1:8000/predict" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "date": "2024-11-20",
-    "events": "Concert Coldplay au Stade de France, soirée ensoleillée",
-    "weather": "Ciel dégagé, 22°C"
-  }'
+## Sample Output
+
+```
+Date: Saturday 2025-12-24 | Location: Paris, France
+
+DEMAND FORECAST
+  Expected covers:      94
+  Recommended staff:    6
+  Confidence:           87%
+
+KEY FACTORS
+  · Christmas Eve — strong in-house dining demand
+  · Weather: clear, 4°C — no outdoor seating, indoor fully utilized
+  · 2 corporate groups confirmed (38 guests, full-board)
+  · Pattern match: "Dec 24 2023 — 91 covers, 6 staff" (similarity 0.91)
+
+ACTIONS
+  · Open private dining room by 18:00
+  · Pre-prep for 95+ covers as buffer
+  · Assign dedicated sommelier — VIP guests × 4
 ```
 
-#### 5. Exemple de réponse
+---
 
-```json
-{
-  "date": "2024-11-20",
-  "events": "Concert Coldplay au Stade de France, soirée ensoleillée",
-  "weather": "Ciel dégagé, 22°C",
-  "expected_covers": 98,
-  "recommended_staff": 7,
-  "confidence": 88,
-  "key_factors": [
-    "Large-scale Coldplay concert at Stade de France (historically +53-58% variance)",
-    "Favorable weather (22°C, clear skies) likely to extend pre/post-event foot traffic",
-    "Wednesday event (vs. weekend in past patterns) may slightly dampen but not negate surge"
-  ]
-}
-```
+## Tech Stack
 
-### Les 3 Outils Utilisés
-
-#### 🔍 **Qdrant** - Recherche Vectorielle
-- **Rôle** : Trouve les 3 scénarios historiques les plus similaires
-- **Où** : `agents/pattern_search.py`
-- **Fonction** : `search_similar_patterns()`
-- **Input** : Embedding vectoriel (1024 dimensions)
-- **Output** : 3 patterns avec scores de similarité
-
-#### 🤖 **Mistral AI** - Embeddings + Reasoning
-- **Rôle** : Génère des embeddings ET des prédictions intelligentes
-- **Où** : 
-  - `agents/analyzer.py` → Embeddings + extraction de features
-  - `agents/predictor.py` → Génération de prédictions
-- **Modèles** : 
-  - `mistral-embed` pour les embeddings
-  - `mistral-large-latest` pour le reasoning
-- **Performance** : ~2.5s par requête complète
-
-#### 🔊 **ElevenLabs** - Synthèse Vocale
-- **Rôle** : Convertit les prédictions en audio naturel
-- **Où** : `agents/predictor.py`
-- **Fonction** : `generate_voice_output()`
-- **Modèle** : `eleven_multilingual_v2`
-- **Voix** : Sarah (voix professionnelle féminine)
-- **Format** : MP3 (`prediction_voice.mp3`)
+| Layer | Technology |
+|---|---|
+| Primary LLM | Claude (Anthropic) |
+| Fallback LLM | Mistral AI |
+| Vector memory | Qdrant |
+| PMS | Apaleo (OAuth2 client credentials) |
+| Events | PredictHQ |
+| Weather | OpenWeatherMap |
+| Voice | ElevenLabs |
+| Protocol | Model Context Protocol (MCP) |
+| API | FastAPI |
+| Demo UI | Streamlit |
 
 ---
 
-## 📊 Example Output
-
-**Input:**
-```
-"Jazz festival tomorrow night, sunny weather, Saturday"
-```
-
-**Qdrant Retrieval:**
-```
-Top 3 similar scenarios:
-1. "Coldplay concert nearby" (similarity: 0.89)
-   → 95 covers, +58% variance, 6 staff
-   
-2. "Saturday night + festival" (similarity: 0.85)
-   → 82 covers, +37% variance, 5 staff
-   
-3. "Outdoor event + clear skies" (similarity: 0.82)
-   → 88 covers, +60% variance, 6 staff
-```
-
-**Prediction:**
-```
-Expected covers:     90
-Usual baseline:      60
-Variance:           +50%
-Confidence:          87%
-Recommended staff:   6
-```
-
-**Key Factors:**
-- Nearby festival (500m)
-- Weekend demand spike
-- Favorable weather
-
-**Voice Output:** 🔊
-*"Based on similar patterns, expect 90 covers tonight with 87% confidence. I recommend scheduling 6 staff members. Key factors are the nearby festival, weekend demand, and favorable weather."*
-
----
-
-## 💪 Why This Approach Works
-
-### Hospitality-First Thinking
-
-Built by someone who's lived the problem. Tech people optimize workflows. I optimize for the waiter's stress, the chef's rhythm, the manager's sanity.
-
-### Pattern Memory > Rules
-
-Traditional systems use if/then rules. This agent learns from actual operational history via Qdrant vector search. More flexible, more accurate.
-
-### Voice = Natural Interface
-
-Managers don't sit at terminals. They move. Voice output means they can hear predictions while coordinating the floor.
-
----
-
-## 🎯 Market Validation
-
-**Two independent validations of this approach:**
-
-### 1. Guac AI (Y Combinator-backed)
-
-**What they do:** AI demand forecasting for grocery fresh products  
-**Results:** 38% waste reduction, 3% sales increase  
-**Coverage:** TechCrunch, Progressive Grocer
-
-**Validation:** Proves that AI forecasting can dramatically reduce waste for perishable products. Hospitality F&B has identical perishability challenges.
-
-[Read more →](https://techcrunch.com/guac-ai-yc)
-
----
-
-### 2. Mews (Leading hospitality PMS)
-
-**What they're building:** "Operations agents" for hotel F&B  
-**Approach:** Enterprise focus, tech-first  
-
-**Validation:** Independent convergence on agent-based automation for hospitality operations.
-
-[Learn more →](https://mews.com)
-
----
-
-### My Differentiation
-
-**Guac approach** (proven forecasting) + **Mews vision** (operations agents) + **Voice interface** (hands-free) + **Hospitality expertise** (lived it)
-
-| Feature | Guac AI | Mews | F&B Agent (Me) |
-|---------|---------|------|----------------|
-| **Vertical** | Grocery | Hotels (PMS) | F&B Operations |
-| **Approach** | Proprietary AI | Agent-based | Multi-agent + Voice |
-| **Interface** | Dashboard | Web platform | Voice + Terminal |
-| **Team** | Tech-first | Tech-first | Hospitality-first |
-
----
-
-## 🔮 Future Enhancements
-
-This 6-hour MVP demonstrates core feasibility. Planned V2 features:
-
-### Visual Intelligence with Fal AI 🎨
-
-**Integration planned:** Fal generative AI for visual outputs
-
-**Use cases:**
-
-**1. Restaurant Layout Visualization**
-```python
-fal.generate_image(
-    prompt="Restaurant floor plan, 90 covers, 
-            80% occupancy heatmap, professional style"
-)
-```
-→ Visual representation of table allocation, hot zones, traffic flow
-
-**2. Menu Item Forecasting**
-```python
-fal.generate_image(
-    prompt="Top 5 predicted menu items, 
-            visual presentation with confidence scores"
-)
-```
-→ Visual menu recommendations with popularity predictions
-
-**3. Kitchen Prep Guides**
-```python
-fal.generate_image(
-    prompt="Kitchen prep checklist for 90 covers, 
-            visual workflow diagram"
-)
-```
-→ Step-by-step visual guides for kitchen staff
-
-**Why Fal:** Hospitality is a visual industry. Floor plans, plating, presentation matter. Fal enables the agent to communicate through images, not just text/voice.
-
-**Timeline:** 2-3 weeks post-hackathon
-
----
-
-### Workflow Automation with n8n ⚙️
-
-**Use cases:**
-- Automatic procurement orders (integrate with suppliers)
-- Staff scheduling integrations (sync with HR systems)
-- PMS bi-directional sync (Mews, Cloudbeds, Opera)
-- Email/SMS notifications to team
-- Visual workflow builder (accessible for non-technical managers)
-
-**Why n8n:** Open-source, self-hostable, visual workflow design. Perfect for hospitality managers to customize automation without coding.
-
-**Timeline:** 1-2 months post-hackathon
-
----
-
-### Additional Roadmap (3-6 months)
-
-**Multi-language Support**
-- Expand Eleven Labs voices (French, Spanish, German)
-- International hospitality coverage
-
-**Advanced Analytics**
-- Historical accuracy tracking
-- Pattern drift detection
-- Continuous learning pipeline
-- Multi-department expansion (banquet, room service, bar)
-
-**Mobile Interface**
-- iOS/Android apps
-- Push notifications for predictions
-- Voice commands via device
-- Offline mode for unstable connectivity
-
-**Enterprise Features**
-- Multi-location management
-- Centralized dashboards
-- Team collaboration tools
-- Advanced permissions
-- SLA guarantees
-
----
-
-## 🧪 Tech Stack
-
-**Core (Current):**
-- Python 3.9+
-- [Qdrant Cloud](https://qdrant.tech) (vector database)
-- [Mistral AI](https://mistral.ai) (embeddings + LLM)
-- [Eleven Labs](https://elevenlabs.io) (voice synthesis)
-
-**Supporting:**
-- python-dotenv (environment management)
-- requests (API calls)
-
-**Future (V2):**
-- [Fal AI](https://fal.ai) (visual generation)
-- [n8n](https://n8n.io) (workflow automation)
-- React + TypeScript (web dashboard)
-- PostgreSQL (structured data)
-- Redis (caching)
-
----
-
-## 📈 Performance
-
-**Current MVP:**
-- Pattern retrieval: <500ms (Qdrant)
-- Prediction generation: ~2-3s (Mistral Large)
-- Voice synthesis: ~1-2s (Eleven Labs)
-- **Total latency:** 3-6 seconds
-
-**Optimization roadmap:**
-- Cache embeddings for common events
-- Parallel API calls where possible
-- Edge deployment for latency reduction
-- Batch processing for multiple predictions
-
----
-
-## 🎓 Learnings & Insights
-
-### What Worked Well
-
-**1. Hospitality-First Approach**
-Understanding the real operational challenges (from personal experience) led to better product decisions than pure tech optimization.
-
-**2. Voice Interface**
-Initially seemed like a "nice to have" → became the core differentiator. Hands-free interaction is perfect for hospitality.
-
-**3. Pattern Memory (Qdrant)**
-Vector search finds nuanced similarities that rule-based systems miss. "Concert Saturday" ≈ "Festival Friday" through semantic meaning.
-
-### Challenges Encountered
-
-**1. Prediction Confidence**
-With only 10 historical scenarios, confidence scores are directional, not statistical. Need 100+ scenarios for real accuracy.
-
-**2. Data Quality**
-Historical F&B data is often messy, incomplete, or in disparate systems. Integration layer will be critical in V2.
-
-**3. Voice Latency**
-1-2 seconds for voice generation feels slow in real-time interaction. Caching common phrases could help.
-
----
-
-## 🤝 Contributing
-
-Built in 6 hours for Pioneers AILab Hackathon. Not accepting contributions yet, but feedback welcome!
-
-**Interested in collaborating?**
-- Hotels/restaurants for pilot programs
-- PMS vendors for integration partnerships
-- Investors/advisors in hospitality tech
-
-**Contact:**
-- Email: ivandemurard@hotmail.Fr
-- LinkedIn: [linkedin.com/in/ivandemurard](https://linkedin.com/in/ivandemurard)
-- Twitter: [@IvanMurard](https://twitter.com/ivanMurard)
-
----
-
-## 📜 License
-
-MIT License - See [LICENSE](LICENSE) file
-
----
-
-## 🙏 Acknowledgments
-
-- **Qdrant** for vector search infrastructure
-- **Mistral AI** for powerful, fast embeddings and reasoning
-- **Eleven Labs** for natural voice synthesis
-- **Pioneers AILab** for the hackathon opportunity
-- **Guac AI** for proving the approach works
-- **Mews** for validating agent-based hospitality automation
-- Every hospitality worker who's ever experienced the Saturday night chaos
-
----
-
-## 📺 Demo Video
-
-[**Watch the 2-minute demo →**](YOUR_VIDEO_LINK)
-
-**See:**
-- Event input → Qdrant pattern search
-- Mistral prediction generation
-- Eleven Labs voice output 🔊
-- Complete workflow in action
-
----
-
-## 🚀 What's Next?
-
-**Short-term (1-2 months):**
-- [ ] 3-5 pilot hotels recruited
-- [ ] Real operational data integration
-- [ ] Accuracy tracking dashboard
-- [ ] Fal AI visual generation added
-
-**Medium-term (3-6 months):**
-- [ ] 20-30 paying customers
-- [ ] First revenue: €10-15K MRR
-- [ ] n8n workflow automation
-- [ ] Mobile app (iOS/Android)
-
-**Long-term (6-12 months):**
-- [ ] Enterprise features (multi-location)
-- [ ] Advanced analytics & insights
-- [ ] Series Seed funding consideration
-- [ ] Team expansion (CS + Sales + Engineering)
-
----
-
-## 💬 Feedback
-
-This was built in 6 hours as a proof of concept. Your feedback matters!
-
-**Questions? Ideas? Interested in a pilot?**
-
-Open an issue or reach out directly: your.email@example.com
-
----
-
-**Built with ❤️ for the hospitality industry**  
-*By someone who's been in the weeds*
-
----
-
-<p align="center">
-  <sub>F&B Operations Agent | Pioneers AILab Hackathon 2024</sub>
-</p>
+## Credential Security
+
+- `.env` is in `.gitignore` — credentials never committed
+- `.env.example` ships with placeholder values only
+- Each integration degrades gracefully to mock when its key is absent
+- See `.env.example` for the full list of expected variables
