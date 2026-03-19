@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, BackgroundTasks
+from fastapi.responses import Response
 from app.services.whatsapp_service import WhatsAppService
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -16,5 +17,10 @@ async def twilio_whatsapp_webhook(request: Request, background_tasks: Background
     
     # Process in background to respond to Twilio immediately (200 OK)
     background_tasks.add_task(whatsapp.handle_inbound_message, data)
-    
-    return {"status": "received"}
+
+    # Twilio expects TwiML from a Messaging webhook; returning a minimal,
+    # empty <Response/> avoids webhook parsing issues.
+    return Response(
+        content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+        media_type="text/xml",
+    )
