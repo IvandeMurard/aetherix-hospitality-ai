@@ -59,6 +59,13 @@ REGISTRY = {
         "description": "Historical F&B pattern memory — data warehouse / CDP",
         "vendor_example": "Snowflake, BigQuery, internal data warehouse",
     },
+    "search": {
+        "server_path": _server("search_server.py"),
+        "tools": ["web_search"],
+        "enabled": True,
+        "description": "Web search — Serper (Google Search API) with mock fallback",
+        "vendor_example": "Serper, Google Custom Search, Bing Search",
+    },
 }
 
 # All of these must be available for the MCP path to be selected.
