@@ -8,6 +8,8 @@
 
 The market has arrived at exactly the problem Aetherix is solving. ITB Berlin 2026 was dominated by agentic AI — but almost entirely through the lens of guest-facing booking, messaging, and concierge. **F&B operations forecasting and staffing is a visible gap.** The infrastructure narrative (semantic layers, open APIs, data quality) validates every architectural decision in this codebase.
 
+A hotel GM in France is already manually building his own version of Aetherix with Claude Code, duct-taping together Cloudbeds + Google Drive. That's the demand signal: operators are self-building because no product exists. The product window is now.
+
 ---
 
 ## 1. The Macro Signal: Agentic AI is Infrastructure Now
@@ -197,4 +199,101 @@ This is almost exactly what Mews CEO Matthijs Welle said about their platform, a
 
 ---
 
-*Next update: After HITEC 2026. Flag for: Trybe, Juyo Analytics "Kassandra", Apaleo Agent Hub listing window.*
+---
+
+## 9. Field Signal: Operators Are Self-Building
+
+**Source:** LinkedIn post by Piers Thackray (hotel GM/owner, France), March 2026
+
+This is the most important signal in the dataset. A hotel owner with no AI background built his own operational AI assistant using Claude Code in two days. What he built — and what he *couldn't* productize — is exactly the Aetherix whitespace.
+
+### What he built (Day 2 results):
+
+**The scheduling workflow (3 minutes, one sentence):**
+> *"Create the cleaning schedule for April."*
+
+The agent:
+1. Went into Google Drive, found the empty sheet
+2. Pulled every booking from Cloudbeds via API
+3. Built a full 30-day schedule
+4. **Proactively flagged** a room conflict it wasn't asked to find (guest Liebmann — Sea-View King, no room assigned, both rooms occupied)
+5. Resolved it autonomously: moved Rutherford from MAX3 → MAX2 (same type, no downgrade), freed MAX3 for Liebmann
+6. Made both changes in Cloudbeds via API
+7. Drafted staff emails — one in French for Evgeniya, one in English for Shannon — with schedules, working days, and key notes
+
+**Same day, also:**
+- Morning routine: checked emails, answered outstanding ones, reviewed calendar, created tasks
+- Drafted staff emails and contracts from existing templates
+- Connected to Google Ads + Analytics, reviewed villa rental performance, suggested new campaign focus
+- Found two plumbers based on reviews, experience, location — drafted outreach messages
+- Created and maintained a task tracker in Sheets
+
+### Why this matters for Aetherix:
+
+**1. Validated demand signal.** A busy hotel operator with no AI background spent a full day on infrastructure — Cloudbeds, Drive, Sheets, Calendar — before it worked. He describes delaying *for weeks* on setup that took one day. That's a product gap: Aetherix is the pre-plumbed version of what he built himself.
+
+**2. Proactive anomaly detection IS the core value.** The room conflict finding is precisely the "Surge Save" use case for F&B. He didn't ask for it. The agent found it, reasoned about it, and fixed it. This is the pattern: one directive → AI finds what you didn't know to look for.
+
+**3. Cloudbeds = third PMS integration priority.** He's using Cloudbeds (400+ marketplace partners, cloud API). Add to the integration roadmap after Apaleo + Mews.
+
+**4. "One sentence" UX is the right bar.** The cleaning schedule from one sentence is the UX analogue to our "push notification before morning briefing." Complexity hidden, result surfaced. Managers shouldn't configure AI — they should receive it.
+
+**5. The self-build signal predicts market timing.** When operators start hand-rolling solutions, a productized version typically wins 12–18 months later. This post is March 2026.
+
+### The gap between his build and Aetherix:
+
+| Piers Thackray's self-build | Aetherix |
+|---|---|
+| Manually connected APIs (one day of work) | Pre-integrated (Apaleo, Mews, Cloudbeds) |
+| General-purpose assistant | F&B operations-specific domain model |
+| Reactive (responds to prompts) | Proactive (pushes before you ask) |
+| No historical pattern matching | RAG on 495 operational patterns + pgvector |
+| No external signal enrichment | Events + weather + PMS synthesized |
+| Single property, self-managed | Multi-tenant SaaS, zero-setup pilot |
+| Built on Claude Code (raw API) | Productized with UI, delivery, explainability |
+
+He built the proof. We're building the product.
+
+---
+
+## 10. The MCP Infrastructure Frame
+
+The Obsidian research document *"The Next Layer of Hotel Technology: AI Context"* (see `docs/AI_CONTEXT_LAYER.md`) articulates the architecture layer that makes all of this possible — and positions Aetherix correctly within it.
+
+The key insight: **the constraint isn't AI capability, it's context access.** Hotels have the data. The PMS, POS, CRM, RMS, channel manager — each holds a fragment of the operational picture. Without a unifying layer, AI can't reason across them.
+
+MCP is that layer. Aetherix's `mcp_servers/` directory is not a side project — it's the context infrastructure that makes our F&B reasoning engine possible. Every hotel system we connect increases the quality of what the agent can see and therefore the reliability of what it recommends.
+
+**Framing for conversations with hotel tech buyers:**
+> *"We're not asking you to replace your PMS. We're adding a read-only context layer that lets AI reason across what your systems already know — and push the F&B implication to your manager's phone before the morning briefing."*
+
+This maps directly onto the future hotel tech stack model:
+```
+All Hotel Systems → Context Layer (MCP) → Hotel Staff + AI
+```
+Aetherix is the F&B-specialized instance of that middle layer.
+
+---
+
+## Sources
+
+- [Mews at ITB Berlin 2026 — HospitalityNet](https://www.hospitalitynet.org/news/4131151/mews-raises-the-bar-at-itb-berlin-with-high-performance-hospitality-and-agentic-ai-innovation)
+- [Mews + PhocusWire ITB 2026 roundup](https://www.phocuswire.com/news/technology/travel-tourism-itb-berlin-2026-mews-sojern-shiji)
+- [Agentic AI: An Inflection Point for Hospitality — Hotel Yearbook](https://www.hotelyearbook.com/article/122000518/agentic-ai-an-inflection-point-for-hospitality-in-2026.html)
+- [Bookboost AI Agent launch — HospitalityNet](https://www.hospitalitynet.org/news/4131126/bookboost-launches-ai-agent-powered-by-guest-data-bringing-personalised-autonomous-service-to-hospitality)
+- [Beyond the Buzzword: ITB Berlin 2026 AI — HospitalityNet](https://www.hospitalitynet.org/opinion/4131437/beyond-the-buzzword-what-itb-berlin-2026-really-said-about-ai-in-travel)
+- [Hotel Yearbook 2026 Annual Edition](https://www.hotelyearbook.com/)
+- [Apaleo agentic AI trends 2026](https://apaleo.com/blog/industry-trends/10-agentic-AI-trends)
+- [Apaleo + THE FLAG agentic AI in live hotel operations](https://www.hospitalitynet.org/news/4131029/apaleo-and-the-flag-bring-agentic-ai-into-live-hotel-operations-with-autonomous-task-creation)
+- [McKinsey: Remapping travel with agentic AI](https://www.mckinsey.com/industries/travel/our-insights/remapping-travel-with-agentic-ai)
+- [IDC: Agentic AI will redefine travel and hospitality in 2026](https://www.idc.com/resource-center/blog/agentic-ai-will-redefine-travel-and-hospitality-in-2026/)
+- [ITB Berlin 2026: AI and Agentic Commerce](https://www.itb.com/en/press/press-releases/news_28096.html)
+- [Mews: 2026 is make-or-break year for hotel transformation](https://www.prnewswire.com/news-releases/ai-tipping-point-mews-warns-2026-is-make-or-break-year-for-hotel-transformation-302638149.html)
+- [10 Agentic AI Trends Redefining Hotel Operations — Hotel Yearbook](https://www.hotelyearbook.com/article/122000515/10-agentic-ai-trends-that-will-redefine-hotel-operations-in-2026.html)
+- Piers Thackray, LinkedIn post — "If you run a hotel, here's what our AI assistant did on Day 2" (March 2026)
+- Internal research: *The Next Layer of Hotel Technology: AI Context* → `docs/AI_CONTEXT_LAYER.md`
+- Internal research: *AI Agents: The First Digital Employees in Hotels* → `docs/AI_CONTEXT_LAYER.md`
+
+---
+
+*Next update: After HITEC 2026. Flag for: Trybe, Juyo Analytics "Kassandra", Apaleo Agent Hub listing window, Cloudbeds marketplace integration.*
