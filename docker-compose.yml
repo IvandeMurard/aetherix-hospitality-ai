@@ -7,7 +7,7 @@
 services:
   backend:
     build:
-      context: fastapi-backend
+      context: backend
     env_file: .env
     environment:
       - OPENAPI_OUTPUT_FILE=./shared-data/openapi.json
@@ -19,7 +19,7 @@ services:
     networks:
       - aetherix_network
     volumes:
-      - ./fastapi-backend:/app
+      - ./backend:/app
       - ./scripts:/scripts
       - fastapi-venv:/app/.venv
       - ./local-shared-data:/app/shared-data
@@ -53,7 +53,7 @@ services:
 
   frontend:
     build:
-      context: ./nextjs-frontend
+      context: ./frontend
     user: node
     ports:
       - "3000:3000"
@@ -64,8 +64,8 @@ services:
       API_BASE_URL: http://backend:8000
       OPENAPI_OUTPUT_FILE: ./shared-data/openapi.json
     volumes:
-      - ./nextjs-frontend:/app
-      - nextjs-node-modules:/app/node_modules
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
       - ./local-shared-data:/app/shared-data
     depends_on:
       - backend
@@ -80,7 +80,7 @@ services:
 
 volumes:
   postgres_data:
-  nextjs-node-modules:
+  frontend-node-modules:
   fastapi-venv:
 
 networks:
