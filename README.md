@@ -21,12 +21,6 @@ The result? Contextualized intelligence delivered directly to departmental manag
 | **Actionability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives |
 | **Context** | Siloed PMS data | Synthesized internal + external (weather, events) data |
 
-#### 💡 "The Surge Save" (Core Use Case)
-1. **The Context:** It's Tuesday morning. The hotel is at a quiet 45% occupancy. No extra staff scheduled for the evening.
-2. **The Intelligence:** Aetherix detects a tech conference relocated next door. Historical data shows similar local events cause a 25% bump in external walk-ins.
-3. **The Push:** Aetherix alerts the F&B Manager via WhatsApp: *"Anticipating an extra £1,200 in F&B revenue tonight (6 PM - 9 PM) due to nearby conference. Recommend calling 2 servers and 1 prep cook (est. labor cost: £180). Target: 14 total staff."*
-4. **The Action:** The manager secures the staff, captures the external revenue, and avoids a dinner service meltdown.
-
 ---
 
 ## Key Features & Innovation
