@@ -1,151 +1,251 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import List
-import os
-from dotenv import load_dotenv
-from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct, Distance, VectorParams
-from mistralai import Mistral
-import uuid
+"""
+F&B Operations Agent — FastAPI
 
-from agents.analyzer import AnalyzerAgent
-from agents.pattern_search import PatternSearcher
-from agents.predictor import PredictorAgent
+Two execution paths, selected automatically:
+  · Claude MCP  (ANTHROPIC_API_KEY set)   — full LLM reasoning via MCP tools
+  · Heuristic   (no keys needed)          — rule-based, always works
+
+Endpoints:
+  GET  /              → redirect to /docs
+  GET  /health        → service + key status
+  POST /predict       → demand forecast for a date / location
+  POST /predict/quick → same but heuristic-only (faster, no LLM)
+"""
+
+import asyncio
+import os
+from datetime import datetime, timedelta
+from typing import List, Optional
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 
 load_dotenv()
 
-# Initialiser FastAPI
 app = FastAPI(
-    title="F&B Operations Agent API",
-    description="API de prédiction F&B (covers + staff + confiance) basée sur Qdrant + Mistral",
-    version="1.0.0",
+    title="F&B Operations Agent",
+    description=(
+        "AI-powered demand forecasting for hotel Food & Beverage operations. "
+        "Combines PMS data, local events, weather, and historical patterns "
+        "to produce actionable staffing and procurement recommendations."
+    ),
+    version="2.0.0",
 )
 
-# Instancier les agents une seule fois (réutilisés à chaque requête)
-analyzer = AnalyzerAgent()
-pattern_searcher = PatternSearcher()
-predictor = PredictorAgent()
-
-# Seed Qdrant in-memory on startup
-def seed_qdrant_on_startup():
-    """Seed in-memory Qdrant with historical data"""
-    qdrant = pattern_searcher.qdrant
-    collection_name = pattern_searcher.collection_name
-    
-    # Create collection if needed
-    try:
-        qdrant.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(size=1024, distance=Distance.COSINE)
-        )
-    except:
-        pass  # Collection exists
-    
-    # Check if already seeded
-    try:
-        result = qdrant.scroll(collection_name=collection_name, limit=1)
-        if len(result[0]) > 0:
-            print("✅ Qdrant already seeded")
-            return
-    except:
-        pass
-    
-    # Seed data
-    print("🌱 Seeding Qdrant with historical data...")
-    mistral = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
-    
-    scenarios = [
-        {"date": "2024-01-15", "day": "Saturday", "event_type": "concert", "event_name": "Coldplay concert nearby", "event_magnitude": "large", "distance": "500m", "weather": "clear, 22°C", "actual_covers": 95, "usual_covers": 60, "variance": "+58%", "staffing": 6, "notes": "High demand from concert attendees"},
-        {"date": "2024-02-10", "day": "Saturday", "event_type": "festival", "event_name": "Jazz festival downtown", "event_magnitude": "medium", "distance": "800m", "weather": "sunny, 20°C", "actual_covers": 82, "usual_covers": 60, "variance": "+37%", "staffing": 5, "notes": "Steady flow throughout evening"},
-        {"date": "2024-03-22", "day": "Friday", "event_type": "sports", "event_name": "Football match nearby", "event_magnitude": "large", "distance": "1km", "weather": "cloudy, 18°C", "actual_covers": 88, "usual_covers": 55, "variance": "+60%", "staffing": 6, "notes": "Pre-match crowd, quick service needed"},
-        {"date": "2024-04-14", "day": "Sunday", "event_type": "fair", "event_name": "Food festival", "event_magnitude": "medium", "distance": "600m", "weather": "sunny, 24°C", "actual_covers": 70, "usual_covers": 45, "variance": "+56%", "staffing": 4, "notes": "Families, relaxed pace"},
-        {"date": "2024-05-18", "day": "Saturday", "event_type": "concert", "event_name": "Rock concert", "event_magnitude": "large", "distance": "400m", "weather": "clear, 23°C", "actual_covers": 92, "usual_covers": 60, "variance": "+53%", "staffing": 6, "notes": "Young crowd, high energy"},
-        {"date": "2024-06-08", "day": "Saturday", "event_type": "wedding", "event_name": "Wedding season peak", "event_magnitude": "small", "distance": "0m", "weather": "sunny, 26°C", "actual_covers": 75, "usual_covers": 60, "variance": "+25%", "staffing": 5, "notes": "In-house wedding party"},
-        {"date": "2024-07-20", "day": "Saturday", "event_type": "festival", "event_name": "Summer music festival", "event_magnitude": "large", "distance": "700m", "weather": "hot, 30°C", "actual_covers": 85, "usual_covers": 60, "variance": "+42%", "staffing": 5, "notes": "Hot weather, drinks high demand"},
-        {"date": "2024-08-25", "day": "Friday", "event_type": "corporate", "event_name": "Conference dinner", "event_magnitude": "medium", "distance": "0m", "weather": "clear, 25°C", "actual_covers": 78, "usual_covers": 55, "variance": "+42%", "staffing": 5, "notes": "Business crowd, wine focus"},
-        {"date": "2024-09-14", "day": "Saturday", "event_type": "sports", "event_name": "Marathon event", "event_magnitude": "large", "distance": "1.5km", "weather": "cool, 17°C", "actual_covers": 65, "usual_covers": 60, "variance": "+8%", "staffing": 4, "notes": "Post-race crowd, late arrival"},
-        {"date": "2024-10-30", "day": "Saturday", "event_type": "holiday", "event_name": "Halloween weekend", "event_magnitude": "medium", "distance": "0m", "weather": "rainy, 12°C", "actual_covers": 68, "usual_covers": 60, "variance": "+13%", "staffing": 4, "notes": "Theme-driven bookings"}
-    ]
-    
-    points = []
-    for idx, scenario in enumerate(scenarios):
-        text = f"{scenario['day']} {scenario['event_type']}: {scenario['event_name']}. Distance: {scenario['distance']}, Weather: {scenario['weather']}. Resulted in {scenario['actual_covers']} covers (usual: {scenario['usual_covers']}, variance: {scenario['variance']}). Staffing: {scenario['staffing']}."
-        embedding_response = mistral.embeddings.create(model="mistral-embed", inputs=[text])
-        embedding = embedding_response.data[0].embedding
-        point = PointStruct(id=str(uuid.uuid4()), vector=embedding, payload=scenario)
-        points.append(point)
-    
-    qdrant.upsert(collection_name=collection_name, points=points)
-    print(f"✅ Seeded {len(scenarios)} scenarios!")
-
-# Seed on startup
-@app.on_event("startup")
-async def startup_event():
-    seed_qdrant_on_startup()
+DATE_FMT = "%Y-%m-%d"
 
 
-# ---------- Modèles d'entrée / sortie ----------
+# ── Models ────────────────────────────────────────────────────────────────────
 
-class PredictionRequest(BaseModel):
-    date: str           # ex: "2024-11-15"
-    events: str         # ex: "Soirée DJ, promo cocktails, match de foot à 600m"
-    weather: str        # ex: "Pluie faible, 12°C"
+class PredictRequest(BaseModel):
+    date: str = Field(
+        default_factory=lambda: (datetime.now() + timedelta(days=1)).strftime(DATE_FMT),
+        example="2025-12-24",
+        description="Target date (YYYY-MM-DD). Defaults to tomorrow.",
+    )
+    location: str = Field(
+        default="Paris, France",
+        example="Paris, France",
+        description="Hotel location — used for local events lookup.",
+    )
+    city: str = Field(
+        default="Paris",
+        example="Paris",
+        description="City name — used for weather lookup.",
+    )
 
 
-class PredictionResponse(BaseModel):
+class PredictResponse(BaseModel):
     date: str
-    events: str
-    weather: str
+    location: str
     expected_covers: int
     recommended_staff: int
     confidence: int
     key_factors: List[str]
+    operational_recommendations: List[str]
+    method: str
 
 
-# ---------- Endpoint principal ----------
+class HealthResponse(BaseModel):
+    status: str
+    active_path: str
+    keys: dict
+    mcp_servers: dict
 
-@app.post("/predict", response_model=PredictionResponse)
-def predict_covers(req: PredictionRequest) -> PredictionResponse:
+
+# ── Health ────────────────────────────────────────────────────────────────────
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")
+
+
+@app.get("/health", response_model=HealthResponse, tags=["System"])
+def health():
+    """Service health — shows active path and credential status."""
+    from mcp_servers.registry import get_available_systems
+
+    has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+    has_mistral = bool(os.getenv("MISTRAL_API_KEY"))
+
+    if has_claude:
+        path = "claude_mcp"
+    elif has_mistral:
+        path = "mistral_direct"
+    else:
+        path = "heuristic"
+
+    return HealthResponse(
+        status="ok",
+        active_path=path,
+        keys={
+            "ANTHROPIC_API_KEY": "set" if has_claude else "not set",
+            "MISTRAL_API_KEY": "set" if has_mistral else "not set",
+            "QDRANT_URL": "set" if os.getenv("QDRANT_URL") else "not set",
+            "APALEO_CLIENT_ID": "set" if os.getenv("APALEO_CLIENT_ID") else "not set",
+            "PREDICTHQ_API_KEY": "set" if os.getenv("PREDICTHQ_API_KEY") else "not set",
+            "OPENWEATHER_API_KEY": "set" if os.getenv("OPENWEATHER_API_KEY") else "not set",
+        },
+        mcp_servers=get_available_systems(),
+    )
+
+
+# ── Predict (unified) ─────────────────────────────────────────────────────────
+
+@app.post("/predict", response_model=PredictResponse, tags=["Forecast"])
+async def predict(req: PredictRequest):
     """
-    Endpoint de prédiction :
-    - Input : date future, événements prévus, météo
-    - Process : Analyzer -> Qdrant vector search -> Predictor
-    - Output : covers, staff, score de confiance
+    Demand forecast for a given date and location.
+
+    - When **ANTHROPIC_API_KEY** is set: uses Claude + MCP tools for rich
+      reasoning over PMS data, local events, weather, and historical patterns.
+    - Otherwise: runs the heuristic pipeline (mock data, zero keys needed).
     """
+    try:
+        datetime.strptime(req.date, DATE_FMT)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid date format: {req.date!r}. Use YYYY-MM-DD.")
 
-    # 1) Construire une description compréhensible par l’agent
-    event_description = (
-        f"Date: {req.date}. "
-        f"Events: {req.events}. "
-        f"Weather forecast: {req.weather}."
-    )
+    has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
 
-    # 2) Analyse + embedding
-    analysis = analyzer.analyze(event_description)
+    if has_claude:
+        result = await _run_mcp(req.date, req.location, req.city)
+    else:
+        result = _run_heuristic(req.date, req.location, req.city)
 
-    # 3) Recherche des patterns similaires dans Qdrant
-    similar_patterns = pattern_searcher.search_similar_patterns(
-        analysis["embedding"],
-        limit=3,
-    )
-
-    # 4) Prédiction (covers / staff / confiance)
-    prediction = predictor.predict(
-        event_description=event_description,
-        features=analysis["features"],
-        similar_patterns=similar_patterns,
-    )
-
-    # (Optionnel pour l’API : génération audio)
-    # voice_file = predictor.generate_voice_output(event_description, prediction)
-
-    # 5) Normaliser la réponse
-    return PredictionResponse(
+    return PredictResponse(
         date=req.date,
-        events=req.events,
-        weather=req.weather,
-        expected_covers=int(prediction["expected_covers"]),
-        recommended_staff=int(prediction["recommended_staff"]),
-        confidence=int(prediction["confidence"]),
-        key_factors=prediction["key_factors"],
+        location=req.location,
+        expected_covers=int(result["expected_covers"]),
+        recommended_staff=int(result["recommended_staff"]),
+        confidence=int(result["confidence"]),
+        key_factors=result.get("key_factors", []),
+        operational_recommendations=result.get("operational_recommendations", []),
+        method=result.get("method", "unknown"),
     )
+
+
+@app.post("/predict/quick", response_model=PredictResponse, tags=["Forecast"])
+def predict_quick(req: PredictRequest):
+    """
+    Heuristic-only forecast — always fast, no LLM, no API keys required.
+    Use when you need a sub-second response or when Claude is unavailable.
+    """
+    try:
+        datetime.strptime(req.date, DATE_FMT)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid date format: {req.date!r}. Use YYYY-MM-DD.")
+
+    result = _run_heuristic(req.date, req.location, req.city)
+    return PredictResponse(
+        date=req.date,
+        location=req.location,
+        expected_covers=int(result["expected_covers"]),
+        recommended_staff=int(result["recommended_staff"]),
+        confidence=int(result["confidence"]),
+        key_factors=result.get("key_factors", []),
+        operational_recommendations=result.get("operational_recommendations", []),
+        method=result.get("method", "heuristic"),
+    )
+
+
+# ── Execution paths ───────────────────────────────────────────────────────────
+
+def _run_heuristic(date: str, location: str, city: str) -> dict:
+    """Call the heuristic pipeline from run_scenario directly."""
+    from run_scenario import (
+        step_reservations,
+        step_fb_context,
+        step_comment_signals,
+        step_events,
+        step_weather,
+        step_patterns,
+        _heuristic_predict,
+    )
+    from datetime import datetime as dt
+
+    reservations = step_reservations(date)
+    fb_context = step_fb_context(date)
+    comment_signals = step_comment_signals(date)
+    events = step_events(date, location)
+    weather = step_weather(city)
+
+    event_desc = (
+        f"{'weekend' if dt.strptime(date, DATE_FMT).weekday() >= 4 else 'weekday'} "
+        + (events[0]["title"] if events else "business day")
+    )
+    patterns = step_patterns(event_desc)
+
+    return _heuristic_predict(
+        date=date,
+        reservations=reservations,
+        fb_context=fb_context,
+        events=events,
+        weather=weather,
+        patterns=patterns,
+        comment_signals=comment_signals,
+    )
+
+
+async def _run_mcp(date: str, location: str, city: str) -> dict:
+    """Run the Claude MCP agent and parse its output into a dict."""
+    from mcp_agent import run_hotel_mcp_agent
+
+    raw: str = await run_hotel_mcp_agent(date, location, city)
+
+    import re
+
+    def _extract_int(pattern: str, text: str, default: int) -> int:
+        m = re.search(pattern, text, re.IGNORECASE)
+        return int(m.group(1).replace(",", "")) if m else default
+
+    covers = _extract_int(r"expected covers[:\s]*(\d[\d,]*)", raw, 0)
+    staff = _extract_int(r"recommended staff[:\s]*(\d+)", raw, 0)
+    confidence_str = re.search(r"confidence[:\s]*(\d+)\s*%?", raw, re.IGNORECASE)
+    confidence = int(confidence_str.group(1)) if confidence_str else 75
+
+    factors = re.findall(r"[·•\-\*]\s+(.+)", raw)
+
+    reco_match = re.search(
+        r"operational recommendations[:\s]*\n(.*?)(?:\n\n|\Z)",
+        raw, re.IGNORECASE | re.DOTALL
+    )
+    recommendations = []
+    if reco_match:
+        recommendations = [
+            l.strip().lstrip("→·•-* ")
+            for l in reco_match.group(1).split("\n")
+            if l.strip()
+        ]
+
+    return {
+        "expected_covers": covers if covers > 0 else 80,
+        "recommended_staff": staff if staff > 0 else 5,
+        "confidence": confidence,
+        "key_factors": factors[:5] if factors else ["See full Claude analysis"],
+        "operational_recommendations": recommendations[:5] if recommendations else [],
+        "raw_analysis": raw,
+        "method": "claude_mcp",
+    }
