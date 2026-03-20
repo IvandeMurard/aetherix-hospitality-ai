@@ -107,24 +107,31 @@ graph TD
 | **Data & Reasoning** | Supabase (PostgreSQL), `pgvector` | RAG, similarity search, and tenant isolation (RLS). |
 | **Delivery** | Twilio, SendGrid/Postmark | Orchestrating multi-channel push notifications. |
 | **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety preventing integration bugs. |
+| **Integrations** | Notion API, Linear GraphQL API | Knowledge base (runbooks, SOPs) and issue/task tracking. |
 
 ---
 
 ## Project Structure
 
-The repository is structured as a monorepo separating the frontend and backend concerns cleanly:
-
 ```text
-aetherix-mvp/
-├── nextjs-frontend/         # The React/Next.js UI Application
-│   ├── src/app/             # App Router pages (Dashboard, Settings)
-│   ├── src/components/      # UI components (shadcn/ui)
-│   └── src/lib/             # openapi-fetch generated client API
-├── fastapi-backend/         # The Python AI/Orchestration Application
-│   ├── app/api/             # strictly HTTP presentation routes
-│   ├── app/db/              # Supabase/pgvector models
-│   └── app/services/        # Business logic, AI reasoning, and PMS Sync
-└── docker-compose.yml       # Local dev orchestration
+aetherix/
+├── backend/                 # FastAPI — AI orchestration & business logic
+│   └── app/
+│       ├── api/             # HTTP routes (auth, pms, predictions, reports)
+│       ├── db/              # PostgreSQL models & session
+│       ├── services/        # Reasoning engine, RAG, PMS sync, WhatsApp…
+│       └── integrations/    # External tools: Notion (knowledge base), Linear (issues)
+├── frontend/                # Next.js App Router UI
+│   └── src/
+│       ├── app/             # Pages: dashboard, settings, auth
+│       ├── components/      # shadcn/ui + feature components
+│       └── lib/             # openapi-fetch generated API client
+├── docs/                    # Architecture, roadmap, BMAD methodology
+├── scripts/                 # Dev & ops utility scripts
+├── supabase/                # DB migrations
+├── local-shared-data/       # OpenAPI spec shared between backend & frontend
+├── docker-compose.yml       # Local dev: backend + frontend + postgres + mailhog
+└── archive/                 # Legacy code (pre-FastAPI era) — not used in production
 ```
 
 ---
