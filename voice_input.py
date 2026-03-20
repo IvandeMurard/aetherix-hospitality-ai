@@ -228,12 +228,26 @@ def voice_to_prediction(audio_path: str | None = None,
 
     # Hand off to the scenario runner
     import subprocess
+    import re as _re
+    date_val     = query["date"]
+    location_val = query["location"]
+    city_val     = query["city"]
+
+    # Validate before passing to subprocess (date comes from datetime so always clean;
+    # location/city come from a whitelist dict — this is a belt-and-suspenders check).
+    if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_val):
+        raise ValueError(f"Unexpected date format from parse_query: {date_val!r}")
+    if not _re.fullmatch(r"[\w ,.\-]+", location_val) or len(location_val) > 100:
+        raise ValueError(f"Unexpected location value from parse_query: {location_val!r}")
+    if not _re.fullmatch(r"[\w .\-]+", city_val) or len(city_val) > 50:
+        raise ValueError(f"Unexpected city value from parse_query: {city_val!r}")
+
     subprocess.run([
         sys.executable, "run_scenario.py",
-        "--date", query["date"],
-        "--location", query["location"],
-        "--city", query["city"],
-    ])
+        "--date", date_val,
+        "--location", location_val,
+        "--city", city_val,
+    ], check=False)
 
 
 # ---------------------------------------------------------------------------
@@ -291,13 +305,22 @@ def main() -> None:
         query = parse_query(text)
         print(f"\n  Parsed — date: {query['date']} | location: {query['location']}")
         print()
-        import subprocess
+        import subprocess, re as _re
+        date_val     = query["date"]
+        location_val = query["location"]
+        city_val     = query["city"]
+        if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_val):
+            raise ValueError(f"Unexpected date: {date_val!r}")
+        if not _re.fullmatch(r"[\w ,.\-]+", location_val) or len(location_val) > 100:
+            raise ValueError(f"Unexpected location: {location_val!r}")
+        if not _re.fullmatch(r"[\w .\-]+", city_val) or len(city_val) > 50:
+            raise ValueError(f"Unexpected city: {city_val!r}")
         subprocess.run([
             sys.executable, "run_scenario.py",
-            "--date", query["date"],
-            "--location", query["location"],
-            "--city", query["city"],
-        ])
+            "--date", date_val,
+            "--location", location_val,
+            "--city", city_val,
+        ], check=False)
         return
 
     if args.file:
