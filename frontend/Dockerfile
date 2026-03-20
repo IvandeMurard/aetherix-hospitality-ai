@@ -1,14 +1,17 @@
-# Dashboard Streamlit - Aetherix
-FROM python:3.11-slim
+FROM node:20-bookworm
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN npm install -g pnpm
+
+# Install deps as root first (volume will overlay /app later in dev)
+COPY package*.json ./
+RUN pnpm install
+
+USER node
 
 COPY . .
 
-EXPOSE 8501
+EXPOSE 3000
 
-# Écoute sur toutes les interfaces pour être joignable depuis l’extérieur du conteneur
-CMD ["streamlit", "run", "app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+CMD ["bash", "start.sh"]
