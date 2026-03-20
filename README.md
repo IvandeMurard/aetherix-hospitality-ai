@@ -137,37 +137,5 @@ aetherix-mvp/
 
 ---
 
-## Quick Start (Local Development)
-
-The MVP is built on top of the robust [Next.js FastAPI Template](https://github.com/vintasoftware/nextjs-fastapi-template).
-
-**Prerequisites:**
-- [Docker](https://www.docker.com/) and Docker Compose.
-- [Node.js](https://nodejs.org/) (useful for local frontend linting, but Docker handles execution).
-
-**Bootstrapping the Environment:**
-
-1. **Clone the repository:**
-   ```bash
-   git clone <repository_url>
-   cd aetherix-mvp
-   ```
-
-2. **Configure Environment Variables:**
-   Copy the `.env.example` templates and fill in the required keys for Supabase/LLM APIs.
-   ```bash
-   cp fastapi-backend/.env.example fastapi-backend/.env
-   cp nextjs-frontend/.env.local.example nextjs-frontend/.env.local
-   ```
-
-3. **Start the containers:**
-   ```bash
-   docker compose up --build
-   ```
-
-4. **Access the application:**
-   - Frontend: `http://localhost:3000`
-   - Backend API Docs (Swagger): `http://localhost:8000/api/docs`
-
 ---
 *Aetherix - Contextual Intelligence for Hospitality.* 
