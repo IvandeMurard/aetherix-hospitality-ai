@@ -14,13 +14,14 @@ Endpoints:
 
 import asyncio
 import os
+import re
 from datetime import datetime, timedelta
 from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 load_dotenv()
 
@@ -49,12 +50,33 @@ class PredictRequest(BaseModel):
         default="Paris, France",
         example="Paris, France",
         description="Hotel location — used for local events lookup.",
+        max_length=120,
     )
     city: str = Field(
         default="Paris",
         example="Paris",
         description="City name — used for weather lookup.",
+        max_length=60,
     )
+
+    @field_validator("date")
+    @classmethod
+    def _validate_date(cls, v: str) -> str:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v):
+            raise ValueError("date must be YYYY-MM-DD")
+        try:
+            datetime.strptime(v, DATE_FMT)
+        except ValueError:
+            raise ValueError(f"Invalid calendar date: {v!r}")
+        return v
+
+    @field_validator("location", "city")
+    @classmethod
+    def _validate_text(cls, v: str) -> str:
+        # Only allow printable characters; no control chars or injection payloads
+        if not re.fullmatch(r"[\w ,.\-]+", v):
+            raise ValueError(f"Invalid characters in field: {v!r}")
+        return v
 
 
 class PredictResponse(BaseModel):
@@ -123,11 +145,6 @@ async def predict(req: PredictRequest):
       reasoning over PMS data, local events, weather, and historical patterns.
     - Otherwise: runs the heuristic pipeline (mock data, zero keys needed).
     """
-    try:
-        datetime.strptime(req.date, DATE_FMT)
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"Invalid date format: {req.date!r}. Use YYYY-MM-DD.")
-
     has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
 
     if has_claude:

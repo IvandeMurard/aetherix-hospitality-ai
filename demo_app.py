@@ -346,17 +346,22 @@ with tab_voice:
 
         if uploaded:
             import tempfile
-            suffix = "." + uploaded.name.rsplit(".", 1)[-1]
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-                tmp.write(uploaded.read())
-                tmp_path = tmp.name
-            with st.spinner("Transcribing …"):
-                try:
-                    from voice_input import transcribe
-                    text = transcribe(tmp_path)
-                    os.unlink(tmp_path)
-                except RuntimeError as e:
-                    st.error(str(e))
+            _MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
+            raw_bytes = uploaded.read()
+            if len(raw_bytes) > _MAX_AUDIO_BYTES:
+                st.error(f"File too large ({len(raw_bytes) // (1024*1024)} MB). Maximum is 25 MB.")
+            else:
+                suffix = "." + uploaded.name.rsplit(".", 1)[-1].lower()
+                with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                    tmp.write(raw_bytes)
+                    tmp_path = tmp.name
+                with st.spinner("Transcribing …"):
+                    try:
+                        from voice_input import transcribe
+                        text = transcribe(tmp_path)
+                        os.unlink(tmp_path)
+                    except RuntimeError as e:
+                        st.error(str(e))
         elif typed_query:
             text = typed_query
         else:
