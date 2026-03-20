@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="docs/images/banner.png" alt="Aetherix MVP Logo" width="400" style="display: block; margin: auto; padding-bottom: 20px;">
-</p>
+
 <h1 align="center">Aetherix</h1>
 <p align="center">
   <em>Proactive, Agentic AI for Hospitality F&B Forecasting.</em>
