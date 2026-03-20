@@ -118,6 +118,82 @@ def _meal_plan_from_reservation(res: dict) -> str:
     return mapping.get(meal_plan, "room_only")
 
 
+def _parse_comment_signals(comment: str) -> dict:
+    """
+    Extract F&B-relevant signals from a reservation comment string.
+
+    Returns a dict with:
+      dietary      : list of dietary tags found
+      celebrations : list of celebration types (birthday, anniversary, …)
+      fb_requests  : list of explicit F&B requests (restaurant_reservation, room_service, …)
+      group_signals: list of group-context keywords (corporate_dinner, team_meeting, …)
+      raw          : the original (lowercase) comment
+    """
+    c = (comment or "").lower()
+
+    dietary: list[str] = []
+    _dietary_patterns = [
+        ("vegetarian",      ["vegetar"]),
+        ("vegan",           ["vegan"]),
+        ("gluten_free",     ["gluten", "gluten-free", "gluten free", "celiac", "coeliaque"]),
+        ("halal",           ["halal"]),
+        ("kosher",          ["kosher", "kasher"]),
+        ("seafood_allergy", ["seafood", "shellfish", "crevette", "fruits de mer"]),
+        ("nut_allergy",     ["nut allerg", "peanut", "tree nut", "noix", "arachide"]),
+        ("lactose_free",    ["lactose", "dairy free", "dairy-free", "no dairy"]),
+        ("other_allergy",   ["allerg"]),
+    ]
+    for tag, keywords in _dietary_patterns:
+        if any(kw in c for kw in keywords):
+            dietary.append(tag)
+
+    celebrations: list[str] = []
+    _celebration_patterns = [
+        ("birthday",     ["birthday", "anniversaire", "bday", "happy birthday"]),
+        ("anniversary",  ["anniversary", "anniversaire de mariage"]),
+        ("honeymoon",    ["honeymoon", "lune de miel"]),
+        ("proposal",     ["proposal", "engagement", "fiancailles", "propose"]),
+        ("celebration",  ["celebrat", "célébr", "special occasion"]),
+    ]
+    for tag, keywords in _celebration_patterns:
+        if any(kw in c for kw in keywords):
+            celebrations.append(tag)
+
+    fb_requests: list[str] = []
+    _fb_patterns = [
+        ("restaurant_reservation", ["restaurant", "table reservation", "dinner reserv", "book a table"]),
+        ("room_service",           ["room service", "in-room dining", "service en chambre"]),
+        ("champagne",              ["champagne", "sparkling", "prosecco", "bubbly"]),
+        ("cake",                   ["cake", "gâteau", "gateau", "birthday cake"]),
+        ("late_dinner",            ["late dinner", "late arrival", "arrive late", "arrivée tardive"]),
+        ("breakfast_in_room",      ["breakfast in room", "petit déjeuner en chambre"]),
+        ("dietary_menu_needed",    ["special menu", "menu spécial", "menu special"]),
+    ]
+    for tag, keywords in _fb_patterns:
+        if any(kw in c for kw in keywords):
+            fb_requests.append(tag)
+
+    group_signals: list[str] = []
+    _group_patterns = [
+        ("corporate_group",   ["corporate", "company", "team", "business group"]),
+        ("corporate_dinner",  ["corporate dinner", "team dinner", "business dinner", "dîner d'entreprise"]),
+        ("conference_group",  ["conference", "seminar", "meeting", "conférence"]),
+        ("wedding_group",     ["wedding", "mariage", "bridal"]),
+        ("sports_group",      ["sports team", "équipe", "football team"]),
+    ]
+    for tag, keywords in _group_patterns:
+        if any(kw in c for kw in keywords):
+            group_signals.append(tag)
+
+    return {
+        "dietary": dietary,
+        "celebrations": celebrations,
+        "fb_requests": fb_requests,
+        "group_signals": group_signals,
+        "raw": c[:200] if c else "",
+    }
+
+
 def _parse_reservations(reservations: list) -> dict:
     """Aggregate a list of Apaleo reservations into summary stats."""
     in_house = [r for r in reservations if r.get("status") in ("InHouse", "Confirmed", "Arrived")]
@@ -126,23 +202,20 @@ def _parse_reservations(reservations: list) -> dict:
     meal_counts: Counter = Counter()
     total_adults = 0
     dietary_requests: list[str] = []
+    all_celebrations: list[str] = []
+    all_fb_requests: list[str] = []
+    all_group_signals: list[str] = []
 
     for r in in_house:
         meal_counts[_meal_plan_from_reservation(r)] += 1
-        adults = r.get("adults", 1)
-        total_adults += adults
+        total_adults += r.get("adults", 1)
 
-        # Special requests / comments — look for dietary keywords
-        comment = (r.get("comment", "") or "").lower()
-        for tag, keyword in [
-            ("vegetarian", "vegetar"),
-            ("vegan", "vegan"),
-            ("gluten_free", "gluten"),
-            ("halal", "halal"),
-            ("seafood_allergy", "seafood"),
-        ]:
-            if keyword in comment:
-                dietary_requests.append(tag)
+        comment = r.get("comment", "") or ""
+        signals = _parse_comment_signals(comment)
+        dietary_requests.extend(signals["dietary"])
+        all_celebrations.extend(signals["celebrations"])
+        all_fb_requests.extend(signals["fb_requests"])
+        all_group_signals.extend(signals["group_signals"])
 
     groups = []
     for r in in_house:
@@ -154,13 +227,14 @@ def _parse_reservations(reservations: list) -> dict:
                 "meal_plan": _meal_plan_from_reservation(r),
             })
 
-    dietary_breakdown = Counter(dietary_requests)
-
     return {
         "occupied_rooms": occupied_rooms,
         "total_adults": total_adults,
         "meal_counts": dict(meal_counts),
-        "dietary_breakdown": dict(dietary_breakdown),
+        "dietary_breakdown": dict(Counter(dietary_requests)),
+        "celebrations": list(set(all_celebrations)),
+        "fb_requests": list(set(all_fb_requests)),
+        "group_signals": list(set(all_group_signals)),
         "groups": groups,
         "in_house_reservations": in_house,
     }
@@ -457,6 +531,83 @@ def get_fb_forecast_context(date: str) -> dict:
         return result
 
 
+@mcp.tool()
+def parse_reservation_comments(date: str) -> dict:
+    """
+    Parse free-text comments on all reservations for a date and return
+    structured F&B signals: dietary restrictions, celebration flags,
+    explicit F&B requests, and group context.
+
+    This bridges the gap between unstructured guest notes and actionable
+    F&B intelligence — without requiring manual staff review.
+
+    When Apaleo credentials are configured, reads real reservation comments.
+    Falls back to illustrative mock comments otherwise.
+
+    Args:
+        date: Date in YYYY-MM-DD format
+    """
+    if not _apaleo.has_credentials:
+        return _mock_parse_reservation_comments(date)
+
+    try:
+        date_obj = datetime.strptime(date, "%Y-%m-%d")
+        next_day = (date_obj + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        data = _apaleo.get(
+            "/booking/v1/reservations",
+            params={
+                "propertyIds": _apaleo.property_id,
+                "dateFilter": "Stay",
+                "from": date,
+                "to": next_day,
+                "pageSize": 500,
+            },
+        )
+        reservations = data.get("reservations", [])
+
+        parsed: list[dict] = []
+        dietary_totals: Counter = Counter()
+        celebration_totals: Counter = Counter()
+        fb_request_totals: Counter = Counter()
+
+        for r in reservations:
+            comment = r.get("comment", "") or ""
+            if not comment.strip():
+                continue
+            signals = _parse_comment_signals(comment)
+            if not any([signals["dietary"], signals["celebrations"],
+                        signals["fb_requests"], signals["group_signals"]]):
+                continue
+            parsed.append({
+                "reservation_id": r.get("id", ""),
+                "guest": (r.get("primaryGuest", {}).get("firstName", "") + " "
+                          + r.get("primaryGuest", {}).get("lastName", "")).strip(),
+                "comment": comment[:200],
+                "signals": signals,
+            })
+            dietary_totals.update(signals["dietary"])
+            celebration_totals.update(signals["celebrations"])
+            fb_request_totals.update(signals["fb_requests"])
+
+        return {
+            "date": date,
+            "reservations_with_signals": len(parsed),
+            "total_reservations": len(reservations),
+            "dietary_summary": dict(dietary_totals),
+            "celebration_summary": dict(celebration_totals),
+            "fb_request_summary": dict(fb_request_totals),
+            "details": parsed,
+            "source": "apaleo",
+        }
+
+    except Exception as exc:
+        result = _mock_parse_reservation_comments(date)
+        result["source"] = "mock_pms_fallback"
+        result["apaleo_error"] = str(exc)
+        return result
+
+
 # ---------------------------------------------------------------------------
 # Mock fallbacks (kept so the server works without credentials)
 # ---------------------------------------------------------------------------
@@ -550,6 +701,67 @@ def _mock_fb_forecast_context(date: str) -> dict:
         "vip_guests": vip_count,
         "group_meal_commitments": group_meals,
         "upsell_opportunity": vip_count >= 4 or len(group_meals) > 0,
+        "source": "mock_pms",
+    }
+
+
+def _mock_parse_reservation_comments(date: str) -> dict:
+    """Return illustrative parsed comment signals for demo purposes."""
+    day = datetime.strptime(date, "%Y-%m-%d").strftime("%A")
+    is_weekend = day in ["Friday", "Saturday", "Sunday"]
+
+    mock_comments = [
+        {
+            "reservation_id": "RES-1042",
+            "guest": "Sophie Martin",
+            "comment": "Celebrating our anniversary — champagne in room please",
+            "signals": _parse_comment_signals(
+                "Celebrating our anniversary — champagne in room please"
+            ),
+        },
+        {
+            "reservation_id": "RES-1051",
+            "guest": "James Chen",
+            "comment": "Gluten-free diet required, severe allergy. No wheat.",
+            "signals": _parse_comment_signals(
+                "Gluten-free diet required, severe allergy. No wheat."
+            ),
+        },
+        {
+            "reservation_id": "RES-1063",
+            "guest": "Amina Diallo",
+            "comment": "Halal meals only. Restaurant reservation for 20:00 please.",
+            "signals": _parse_comment_signals(
+                "Halal meals only. Restaurant reservation for 20:00 please."
+            ),
+        },
+    ]
+    if is_weekend:
+        mock_comments.append({
+            "reservation_id": "RES-1077",
+            "guest": "Thomas Blanc",
+            "comment": "Birthday surprise dinner for my wife — cake and sparkling wine",
+            "signals": _parse_comment_signals(
+                "Birthday surprise dinner for my wife — cake and sparkling wine"
+            ),
+        })
+
+    dietary_totals: Counter = Counter()
+    celebration_totals: Counter = Counter()
+    fb_request_totals: Counter = Counter()
+    for item in mock_comments:
+        dietary_totals.update(item["signals"]["dietary"])
+        celebration_totals.update(item["signals"]["celebrations"])
+        fb_request_totals.update(item["signals"]["fb_requests"])
+
+    return {
+        "date": date,
+        "reservations_with_signals": len(mock_comments),
+        "total_reservations": 85 if is_weekend else 62,
+        "dietary_summary": dict(dietary_totals),
+        "celebration_summary": dict(celebration_totals),
+        "fb_request_summary": dict(fb_request_totals),
+        "details": mock_comments,
         "source": "mock_pms",
     }
 

@@ -45,6 +45,7 @@ REGISTRY = {
         "tools": [
             "get_hotel_reservations",
             "get_fb_forecast_context",
+            "parse_reservation_comments",
             "create_service_request",
             "get_guest_profile",
         ],

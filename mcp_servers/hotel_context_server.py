@@ -214,6 +214,71 @@ def get_hotel_reservations(date: str) -> dict:
 
 
 @mcp.tool()
+def parse_reservation_comments(date: str) -> dict:
+    """
+    Parse free-text reservation comments for a date and return structured
+    F&B signals: dietary restrictions, celebrations, explicit F&B requests,
+    and group context.
+
+    This surfaces actionable guest intent buried in unstructured notes —
+    dietary needs, anniversary dinners, champagne requests, etc. — without
+    staff having to manually read every comment.
+
+    Args:
+        date: Date in YYYY-MM-DD format
+    """
+    # Delegate to the standalone PMS server implementation (Apaleo-aware)
+    try:
+        from mcp_servers.pms_server import parse_reservation_comments as _pms_parse
+        return _pms_parse(date=date)
+    except Exception:
+        pass
+
+    # Inline fallback (no dependency on pms_server)
+    day = datetime.strptime(date, "%Y-%m-%d").strftime("%A")
+    is_weekend = day in ["Friday", "Saturday", "Sunday"]
+    mock_comments = [
+        {"reservation_id": "RES-1042", "guest": "Sophie Martin",
+         "comment": "Celebrating our anniversary — champagne in room please",
+         "signals": {"dietary": [], "celebrations": ["anniversary", "celebration"],
+                     "fb_requests": ["champagne"], "group_signals": [], "raw": ""}},
+        {"reservation_id": "RES-1051", "guest": "James Chen",
+         "comment": "Gluten-free diet required, severe allergy",
+         "signals": {"dietary": ["gluten_free"], "celebrations": [],
+                     "fb_requests": [], "group_signals": [], "raw": ""}},
+        {"reservation_id": "RES-1063", "guest": "Amina Diallo",
+         "comment": "Halal meals only. Restaurant reservation for 20:00 please.",
+         "signals": {"dietary": ["halal"], "celebrations": [],
+                     "fb_requests": ["restaurant_reservation"], "group_signals": [], "raw": ""}},
+    ]
+    if is_weekend:
+        mock_comments.append({
+            "reservation_id": "RES-1077", "guest": "Thomas Blanc",
+            "comment": "Birthday surprise — cake and sparkling wine",
+            "signals": {"dietary": [], "celebrations": ["birthday"],
+                        "fb_requests": ["cake", "champagne"], "group_signals": [], "raw": ""}
+        })
+    from collections import Counter as _Counter
+    dietary_totals: _Counter = _Counter()
+    celebration_totals: _Counter = _Counter()
+    fb_request_totals: _Counter = _Counter()
+    for item in mock_comments:
+        dietary_totals.update(item["signals"]["dietary"])
+        celebration_totals.update(item["signals"]["celebrations"])
+        fb_request_totals.update(item["signals"]["fb_requests"])
+    return {
+        "date": date,
+        "reservations_with_signals": len(mock_comments),
+        "total_reservations": 85 if is_weekend else 62,
+        "dietary_summary": dict(dietary_totals),
+        "celebration_summary": dict(celebration_totals),
+        "fb_request_summary": dict(fb_request_totals),
+        "details": mock_comments,
+        "source": "mock_pms",
+    }
+
+
+@mcp.tool()
 def create_service_request(guest_id: str, service_type: str, notes: str = "") -> dict:
     """
     Create a service request in the PMS for a guest.
