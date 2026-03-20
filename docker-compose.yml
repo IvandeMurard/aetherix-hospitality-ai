@@ -1,0 +1,102 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# F&B Operations Agent — Docker Compose
+#
+# Services:
+#   api      — FastAPI prediction endpoint   http://localhost:8000
+#   demo     — Streamlit demo UI             http://localhost:8501
+#   qdrant   — Vector database               http://localhost:6333
+#
+# Usage:
+#   docker compose up                  # all services
+#   docker compose up api              # API only
+#   docker compose up demo             # Streamlit only
+#   docker compose down -v             # stop + remove volumes
+#
+# Keys: copy .env.example → .env and fill in your keys.
+# All keys are optional; missing keys fall back to mock data.
+# ANTHROPIC_API_KEY activates the Claude MCP path (recommended).
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Qdrant vector database ──────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: fbagent-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── FastAPI prediction endpoint ─────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fbagent-api
+    command: uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Allow override via docker compose run -e KEY=value
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - APALEO_CLIENT_ID=${APALEO_CLIENT_ID:-}
+      - APALEO_CLIENT_SECRET=${APALEO_CLIENT_SECRET:-}
+      - APALEO_PROPERTY_ID=${APALEO_PROPERTY_ID:-MUC}
+      - PREDICTHQ_API_KEY=${PREDICTHQ_API_KEY:-}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY:-}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+  # ── Streamlit demo UI ───────────────────────────────────────────────────────
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fbagent-demo
+    command: streamlit run demo_app.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - APALEO_CLIENT_ID=${APALEO_CLIENT_ID:-}
+      - APALEO_CLIENT_SECRET=${APALEO_CLIENT_SECRET:-}
+      - APALEO_PROPERTY_ID=${APALEO_PROPERTY_ID:-MUC}
+      - PREDICTHQ_API_KEY=${PREDICTHQ_API_KEY:-}
+      - OPENWEATHER_API_KEY=${OPENWEATHER_API_KEY:-}
+      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY:-}
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
