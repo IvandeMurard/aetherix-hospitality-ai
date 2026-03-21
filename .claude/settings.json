@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/user/Hospitality-Operations-Agentic-AI-B2B && git diff --cached --name-only | grep -q '.' && python scripts/obsidian_sync.py --no-pull || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/user/Hospitality-Operations-Agentic-AI-B2B && python scripts/intelligence_report.py --hook"
+          }
+        ]
+      }
+    ]
+  }
+}
