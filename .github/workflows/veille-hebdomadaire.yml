@@ -1,0 +1,67 @@
+name: Veille Hebdomadaire
+
+on:
+  schedule:
+    # Lundi 7h30 UTC = 8h30 CET (hiver) / 9h30 CEST (été, décalage d'1h accepté)
+    - cron: "30 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Simulation sans écriture (true/false)"
+        required: false
+        default: "false"
+      min_score:
+        description: "Score minimum de pertinence (0-10)"
+        required: false
+        default: "5"
+
+jobs:
+  veille:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # pour committer le rapport dans le repo
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install httpx
+
+      - name: Run veille proactive
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          MIN_SCORE="${{ github.event.inputs.min_score || '5' }}"
+          FLAGS="--min-score $MIN_SCORE"
+          if [ "$DRY_RUN" = "true" ]; then
+            FLAGS="$FLAGS --dry-run"
+          fi
+          python scripts/veille_proactive.py $FLAGS
+
+      - name: Commit rapport de veille
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name  "aetherix-veille[bot]"
+          git config user.email "aetherix-veille[bot]@users.noreply.github.com"
+          # Commit seulement si des fichiers ont changé dans docs/veille/
+          if git diff --quiet docs/veille/; then
+            echo "Aucun nouveau rapport — rien à committer"
+          else
+            DATE=$(date +"%Y-%m-%d")
+            git add docs/veille/
+            git commit -m "veille: rapport hebdomadaire $DATE [automated]"
+            git push origin ${{ github.ref_name }}
+            echo "Rapport commité et pushé"
+          fi

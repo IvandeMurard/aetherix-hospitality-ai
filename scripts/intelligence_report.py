@@ -62,6 +62,9 @@ STRATEGIC_KEYWORDS = [
 
 PRIORITY_MAP = {"urgent": 1, "high": 2, "medium": 3, "low": 4}
 
+# Score minimum pour pousser vers Linear/Obsidian en mode réactif (0-10)
+RELEVANCE_THRESHOLD = 7
+
 # ─── Linear ───────────────────────────────────────────────────────────────────
 
 CREATE_ISSUE_GQL = """
@@ -204,6 +207,78 @@ def write_obsidian_note(
     return dest
 
 
+# ─── Relevance scoring ────────────────────────────────────────────────────────
+
+PROJECT_CONTEXT = """
+Projet Aetherix : IA agentique pour opérations F&B hôtelières.
+- Prédiction de la demande F&B (restaurant d'hôtel)
+- Intégrations PMS : Apaleo (prioritaire), Mews
+- Alertes proactives WhatsApp
+- Phase actuelle : architecture + intégrations de base
+- Concurrents/références : Guac.com (YC), Mews Agents
+"""
+
+
+def score_content_relevance(title: str, body: str) -> tuple[int, str]:
+    """
+    Évalue la pertinence d'un contenu pour le projet Aetherix via Claude.
+    Retourne (score 0-10, justification).
+    Fallback par mots-clés si ANTHROPIC_API_KEY absente.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+
+    if api_key:
+        import textwrap
+        prompt = textwrap.dedent(f"""
+            Tu évalues la pertinence d'un contenu pour une startup hospitality tech.
+
+            {PROJECT_CONTEXT}
+
+            Critères (score de 0 à 10) :
+            - 8-10 : Directement actionnable (concurrent direct, technologie clé, opportunité marché immédiate)
+            - 6-7 : Pertinent, apporte du contexte utile au projet
+            - 4-5 : Informatif mais impact faible
+            - 0-3 : Non pertinent
+
+            Titre : {title}
+            Contenu : {body[:1000]}
+
+            Réponds UNIQUEMENT en JSON : {{"score": X, "raison": "..."}}
+        """)
+        try:
+            resp = httpx.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                json={
+                    "model": "claude-haiku-4-5-20251001",
+                    "max_tokens": 256,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=20,
+            )
+            resp.raise_for_status()
+            raw = resp.json()["content"][0]["text"].strip()
+            raw = re.sub(r"```(?:json)?", "", raw).strip().rstrip("`").strip()
+            data = json.loads(raw)
+            return int(data.get("score", 0)), data.get("raison", "")
+        except Exception as e:
+            print(f"[!] Scoring ignoré : {e}", file=sys.stderr)
+
+    # Fallback : mots-clés
+    keywords = [
+        "agentic", "agentique", "forecasting", "F&B", "food and beverage",
+        "hotel", "PMS", "apaleo", "mews", "hospitality AI", "YC", "guac",
+        "demand prediction", "revenue management", "concurrent", "startup",
+    ]
+    text = (title + " " + body).lower()
+    score = sum(1 for kw in keywords if kw.lower() in text)
+    return min(score * 2, 10), "scoring par mots-clés (ANTHROPIC_API_KEY absente)"
+
+
 # ─── Hook mode ────────────────────────────────────────────────────────────────
 
 def handle_stop_hook(raw_json: str, dry_run: bool) -> None:
@@ -268,13 +343,16 @@ def main() -> None:
         description="Rapport d'intelligence → Obsidian + Linear",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--title",    help="Titre du rapport / ticket")
-    parser.add_argument("--body",     help="Corps : chemin vers un .md OU texte direct OU '-' pour stdin")
-    parser.add_argument("--linear",   action="store_true", help="Crée aussi un ticket Linear")
-    parser.add_argument("--priority", default="medium", choices=["urgent","high","medium","low"])
-    parser.add_argument("--tags",     nargs="*", default=["intelligence","veille"])
-    parser.add_argument("--dry-run",  action="store_true", help="Simulation sans écriture")
-    parser.add_argument("--hook",     action="store_true", help="Mode hook Stop (lit stdin JSON)")
+    parser.add_argument("--title",         help="Titre du rapport / ticket")
+    parser.add_argument("--body",          help="Corps : chemin vers un .md OU texte direct OU '-' pour stdin")
+    parser.add_argument("--linear",        action="store_true", help="Crée aussi un ticket Linear")
+    parser.add_argument("--priority",      default="medium", choices=["urgent","high","medium","low"])
+    parser.add_argument("--tags",          nargs="*", default=["intelligence","veille"])
+    parser.add_argument("--dry-run",       action="store_true", help="Simulation sans écriture")
+    parser.add_argument("--hook",          action="store_true", help="Mode hook Stop (lit stdin JSON)")
+    parser.add_argument("--force",         action="store_true", help="Ignorer le gate de pertinence")
+    parser.add_argument("--min-score",     type=int, default=RELEVANCE_THRESHOLD,
+                        help=f"Score min pour pousser vers Linear/Obsidian (défaut: {RELEVANCE_THRESHOLD})")
     args = parser.parse_args()
 
     print(f"\n{'─'*55}")
@@ -301,6 +379,16 @@ def main() -> None:
 
     if not body.strip():
         parser.error("Corps vide — fournir --body ou piper du texte")
+
+    # 0. Gate de pertinence (mode réactif)
+    if not args.force:
+        score, raison = score_content_relevance(args.title, body)
+        print(f"[i] Score de pertinence : {score}/10 — {raison}")
+        if score < args.min_score:
+            print(f"[–] Contenu non poussé (score {score} < seuil {args.min_score}).")
+            print("    Utilisez --force pour ignorer ce seuil.")
+            return
+        print(f"[✓] Seuil atteint ({score} >= {args.min_score}) — publication en cours...")
 
     # 1. Créer le ticket Linear si demandé
     linear_url = None
