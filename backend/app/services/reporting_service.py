@@ -5,6 +5,8 @@ import pandas as pd # For easy data manipulation
 
 logger = logging.getLogger(__name__)
 
+MAPE_ALERT_THRESHOLD = 30.0  # % — above this triggers a Linear issue
+
 class ReportingService:
     """
     Performance Reporting Layer (Phase 3).
@@ -37,7 +39,7 @@ class ReportingService:
         # simplified for pilot: £15/cover for captured revenue, £12/hr for labor reduction
         labor_savings = self._calculate_savings(df)
 
-        return {
+        result = {
             "tenant_id": tenant_id,
             "period": f"{week_start} to {week_start + timedelta(days=6)}",
             "metrics": {
@@ -50,6 +52,47 @@ class ReportingService:
                 "roi_multiplier": round(labor_savings / 50.0, 1) # $50 is a mock SaaS cost
             }
         }
+
+        await self._dispatch_ops(result, mape)
+        return result
+
+    async def _dispatch_ops(self, result: Dict[str, Any], mape: float) -> None:
+        """Fire-and-forget: write audit to Obsidian; alert Linear if accuracy drops."""
+        from app.services.ops_dispatcher import dispatch_report, dispatch_anomaly
+        from app.integrations.obsidian import VAULT_FOLDERS
+
+        m = result["metrics"]
+        f = result["financial_impact"]
+        period = result["period"]
+        tenant = result["tenant_id"]
+
+        note_content = (
+            f"# Weekly Audit — {tenant}\n\n"
+            f"**Period:** {period}\n\n"
+            f"| Metric | Value |\n|---|---|\n"
+            f"| Accuracy | {m['accuracy']}% |\n"
+            f"| MAPE | {m['mape']}% |\n"
+            f"| Total covers | {m['total_covers']} |\n"
+            f"| Estimated savings | £{f['estimated_savings_gbp']} |\n"
+            f"| ROI | {f['roi_multiplier']}x |\n"
+        )
+        await dispatch_report(
+            title=f"Weekly Audit {period}",
+            content=note_content,
+            folder=VAULT_FOLDERS["reports"],
+            tags=["weekly-audit", tenant],
+        )
+
+        if mape > MAPE_ALERT_THRESHOLD:
+            await dispatch_anomaly(
+                title=f"[{tenant}] Forecast accuracy degraded — MAPE {m['mape']}%",
+                detail=(
+                    f"Weekly MAPE exceeded {MAPE_ALERT_THRESHOLD}% threshold for period {period}.\n"
+                    f"Accuracy: {m['accuracy']}% | Covers: {m['total_covers']}\n\n"
+                    "Possible causes: missing PMS data, model drift, or unusual demand spike."
+                ),
+                tags=["model", "accuracy"],
+            )
 
     def _calculate_savings(self, df: pd.DataFrame) -> float:
         """Heuristic for labor savings based on prediction accuracy."""

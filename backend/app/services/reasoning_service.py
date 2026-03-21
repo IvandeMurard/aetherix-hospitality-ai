@@ -42,6 +42,13 @@ class ReasoningService:
                 "confidence_factors": self._extract_factors(context, similar_patterns)
             }
         except Exception as e:
+            import asyncio
+            from app.services.ops_dispatcher import dispatch_error
+            asyncio.ensure_future(dispatch_error(
+                title="Reasoning service failure — Claude API error",
+                detail=f"Exception: {e}\nDate: {target_date} | Service: {service_type} | Covers: {predicted_covers}",
+                tags=["claude", "reasoning"],
+            ))
             return {"summary": f"Reasoning failed: {str(e)}", "confidence_factors": []}
 
     def _build_prompt(self, predicted, confidence, dt, svc, context, patterns, cognitive_context) -> str:

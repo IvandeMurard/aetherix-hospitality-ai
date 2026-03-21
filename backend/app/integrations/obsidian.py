@@ -20,6 +20,22 @@ from pathlib import Path
 from typing import Any
 
 
+# Standard folder layout inside the vault
+VAULT_FOLDERS = {
+    "reports":   "AI Reports",
+    "alerts":    "Alerts",
+    "runbooks":  "Runbooks",
+    "sync_logs": "Sync Logs",
+}
+
+
+def ensure_vault_structure() -> None:
+    """Create the expected folder hierarchy inside the vault if missing."""
+    vault = _vault()
+    for folder in VAULT_FOLDERS.values():
+        (vault / folder).mkdir(parents=True, exist_ok=True)
+
+
 def _vault() -> Path:
     raw = os.environ["OBSIDIAN_VAULT_PATH"]
     p = Path(raw)

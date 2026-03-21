@@ -1,3 +1,4 @@
+import asyncio
 import math
 from typing import Dict, Optional
 from pydantic import BaseModel
@@ -35,7 +36,9 @@ class StaffingService:
         
         warnings = []
         if current_cost > cfg.labor_budget_gbp:
-            warnings.append(f"Budget Alert: Estimated cost £{current_cost} exceeds limit £{cfg.labor_budget_gbp}")
+            msg = f"Budget Alert: Estimated cost £{current_cost} exceeds limit £{cfg.labor_budget_gbp}"
+            warnings.append(msg)
+            asyncio.ensure_future(self._dispatch_budget_alert(predicted_covers, current_cost, cfg.labor_budget_gbp))
         
         return {
             "servers": servers,
@@ -50,3 +53,16 @@ class StaffingService:
             "warnings": warnings,
             "rationale": f"Staffing suggestion based on {predicted_covers} covers. Optimized for role-ratios."
         }
+
+    @staticmethod
+    async def _dispatch_budget_alert(covers: int, cost: float, budget: float) -> None:
+        from app.services.ops_dispatcher import dispatch_anomaly
+        await dispatch_anomaly(
+            title=f"Labor budget exceeded — £{cost:.0f} vs £{budget:.0f} limit",
+            detail=(
+                f"Predicted covers: {covers}\n"
+                f"Estimated cost: £{cost:.2f} | Budget: £{budget:.2f} | Overage: £{cost - budget:.2f}\n\n"
+                "Review staffing ratios or adjust the labor budget in StaffingConfig."
+            ),
+            tags=["budget", "staffing"],
+        )
