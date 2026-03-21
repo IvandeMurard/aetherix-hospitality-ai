@@ -22,11 +22,12 @@ import sys
 import httpx
 
 LABELS = [
-    {"name": "AI Alert",  "color": "#ef4444"},  # red
-    {"name": "Budget",    "color": "#f97316"},  # orange
-    {"name": "Model",     "color": "#a855f7"},  # purple
-    {"name": "PMS Sync",  "color": "#3b82f6"},  # blue
-    {"name": "WhatsApp",  "color": "#22c55e"},  # green
+    {"name": "AI Alert",               "color": "#ef4444"},  # red     — LLM/service errors
+    {"name": "Budget",                 "color": "#f97316"},  # orange  — labor cost overruns
+    {"name": "Model",                  "color": "#a855f7"},  # purple  — forecast accuracy
+    {"name": "PMS Sync",               "color": "#3b82f6"},  # blue    — data pipeline
+    {"name": "WhatsApp",               "color": "#22c55e"},  # green   — inbound feedback
+    {"name": "Strategic Intelligence", "color": "#0ea5e9"},  # sky     — market/competitive watch
 ]
 
 CREATE_LABEL = """
