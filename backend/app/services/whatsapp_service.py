@@ -38,6 +38,12 @@ class WhatsAppService:
         # 1. Feedback Detection (Phase 3 Learning Loop)
         if any(w in body.lower() for w in ["wrong", "incorrect", "too high", "too low", "no"]):
             await self.memory.learn_from_feedback("pilot_hotel", "latest_alert", body)
+            from app.services.ops_dispatcher import dispatch_anomaly
+            await dispatch_anomaly(
+                title=f"Manager negative feedback via WhatsApp — {sender}",
+                detail=f"Message: {body!r}\n\nThe memory service has stored this for future learning.",
+                tags=["feedback", "whatsapp"],
+            )
             response_text = "Thank you for the feedback. I've noted this for future forecasts."
         elif body.lower() == "push":
             # 2. 2-Way Sync Action
