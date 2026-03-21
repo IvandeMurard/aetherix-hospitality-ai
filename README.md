@@ -81,6 +81,11 @@ graph TD
         Push["WhatsApp / SMS / Email"]
     end
 
+    subgraph OPS["📋 Ops & Knowledge"]
+        Linear["Linear\n(Issue Tracker)"]
+        Obsidian["Obsidian Vault\n(OneDrive sync)"]
+    end
+
     PMS -- "Webhooks/API" --> Sync
     Weather --> Semantic
     Events --> Semantic
@@ -91,16 +96,20 @@ graph TD
     RAG -- "Conversational Receipts" --> Push
     RAG -- "Typed API (openapi-fetch)" --> Frontend
     Frontend -- "Typesafe Contract" --> RAG
+    RAG -- "Auto-create issues" --> Linear
+    RAG -- "Write runbooks/reports" --> Obsidian
 
-    classDef external fill:#0f2744,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
-    classDef backend fill:#2d1b69,stroke:#a855f7,stroke-width:2px,color:#e9d5ff
-    classDef db      fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#bbf7d0
-    classDef delivery fill:#431407,stroke:#f97316,stroke-width:2px,color:#fed7aa
+    classDef external  fill:#0f2744,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
+    classDef backend   fill:#2d1b69,stroke:#a855f7,stroke-width:2px,color:#e9d5ff
+    classDef db        fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#bbf7d0
+    classDef delivery  fill:#431407,stroke:#f97316,stroke-width:2px,color:#fed7aa
+    classDef ops       fill:#3b2800,stroke:#eab308,stroke-width:2px,color:#fef08a
 
     class PMS,Weather,Events external
     class Sync,Semantic,RAG backend
     class DB,Vector db
     class Frontend,Push delivery
+    class Linear,Obsidian ops
 ```
 
 ### Tech Stack Breakdown
@@ -112,7 +121,8 @@ graph TD
 | **Data & Reasoning** | Supabase (PostgreSQL), `pgvector` | RAG, similarity search, and tenant isolation (RLS). |
 | **Delivery** | Twilio, SendGrid/Postmark | Orchestrating multi-channel push notifications. |
 | **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety preventing integration bugs. |
-| **Integrations** | Notion API, Linear GraphQL API | Knowledge base (runbooks, SOPs) and issue/task tracking. |
+| **Knowledge Base** | Obsidian vault (OneDrive sync) | Runbooks, SOPs, and AI-generated operational reports — local-first, Markdown native. |
+| **Issue Tracking** | Linear GraphQL API | Maintenance requests and ops alerts created automatically by the LLM Orchestrator. |
 
 ---
 
@@ -125,7 +135,7 @@ aetherix/
 │       ├── api/             # HTTP routes (auth, pms, predictions, reports)
 │       ├── db/              # PostgreSQL models & session
 │       ├── services/        # Reasoning engine, RAG, PMS sync, WhatsApp…
-│       └── integrations/    # External tools: Notion (knowledge base), Linear (issues)
+│       └── integrations/    # External tools: Obsidian (knowledge base), Linear (issues)
 ├── frontend/                # Next.js App Router UI
 │   └── src/
 │       ├── app/             # Pages: dashboard, settings, auth
