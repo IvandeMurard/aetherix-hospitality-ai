@@ -107,9 +107,27 @@ class PMSSyncService:
             session.add(sync_log)
             await session.commit()
 
-        return {
+        result = {
             "property_id": property_id,
             "date": target_date.isoformat(),
             "occupancy": occupancy,
-            "fb_revenue": revenue
+            "fb_revenue": revenue,
         }
+
+        from app.services.ops_dispatcher import dispatch_report
+        from app.integrations.obsidian import VAULT_FOLDERS
+        await dispatch_report(
+            title=f"PMS Sync — {property_id} — {target_date.isoformat()}",
+            content=(
+                f"# PMS Sync Log\n\n"
+                f"**Property:** {property_id}  \n"
+                f"**Date:** {target_date.isoformat()}  \n\n"
+                f"| Field | Value |\n|---|---|\n"
+                f"| Occupancy | {occupancy} rooms |\n"
+                f"| F&B Revenue | £{revenue:.2f} |\n"
+                f"| Status | success |\n"
+            ),
+            folder=VAULT_FOLDERS["sync_logs"],
+            tags=["pms-sync", property_id],
+        )
+        return result

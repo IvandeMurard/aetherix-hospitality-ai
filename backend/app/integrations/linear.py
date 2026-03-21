@@ -1,74 +1,88 @@
-"""
-Linear integration — issue and project tracking for Aetherix ops workflows.
-
-Env vars required:
-  LINEAR_API_KEY   — Personal API key from https://linear.app/settings/api
-  LINEAR_TEAM_ID   — Target team ID for created issues
-"""
-
+"""Linear integration — create and query issues via GraphQL API."""
 import os
-from typing import Any
-
 import httpx
 
-GRAPHQL_URL = "https://api.linear.app/graphql"
+LINEAR_API_URL = "https://api.linear.app/graphql"
 
 
-def _headers() -> dict[str, str]:
-    return {
-        "Authorization": os.environ["LINEAR_API_KEY"],
-        "Content-Type": "application/json",
-    }
+def _headers() -> dict:
+    key = os.environ.get("LINEAR_API_KEY", "")
+    return {"Authorization": key, "Content-Type": "application/json"}
 
 
-async def _run(query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            GRAPHQL_URL,
-            headers=_headers(),
-            json={"query": query, "variables": variables or {}},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if "errors" in data:
-            raise ValueError(data["errors"])
-        return data["data"]
+def _team_id() -> str:
+    return os.environ.get("LINEAR_TEAM_ID", "")
 
 
-async def create_issue(title: str, description: str, priority: int = 2, team_id: str | None = None) -> dict[str, Any]:
-    """
-    Create a Linear issue — e.g. a maintenance request or ops alert.
-    Priority: 0=No priority, 1=Urgent, 2=High, 3=Medium, 4=Low.
-    """
-    tid = team_id or os.environ["LINEAR_TEAM_ID"]
-    query = """
-    mutation CreateIssue($title: String!, $description: String!, $teamId: String!, $priority: Int) {
-      issueCreate(input: {
-        title: $title
-        description: $description
-        teamId: $teamId
-        priority: $priority
-      }) {
+async def create_issue(
+    title: str,
+    description: str = "",
+    priority: int = 0,
+    team_id: str | None = None,
+) -> dict:
+    """Create a Linear issue. Priority: 0=No, 1=Urgent, 2=High, 3=Medium, 4=Low."""
+    mutation = """
+    mutation CreateIssue($input: IssueCreateInput!) {
+      issueCreate(input: $input) {
         success
-        issue { id identifier title url }
-      }
-    }
-    """
-    result = await _run(query, {"title": title, "description": description, "teamId": tid, "priority": priority})
-    return result["issueCreate"]["issue"]
-
-
-async def list_issues(team_id: str | None = None, limit: int = 25) -> list[dict[str, Any]]:
-    """Fetch the most recent open issues for the team."""
-    tid = team_id or os.environ["LINEAR_TEAM_ID"]
-    query = """
-    query ListIssues($teamId: ID!, $first: Int) {
-      team(id: $teamId) {
-        issues(first: $first, filter: { state: { type: { nin: ["completed", "cancelled"] } } }) {
-          nodes { id identifier title priority state { name } assignee { name } }
+        issue {
+          id
+          identifier
+          title
+          url
+          priority
         }
       }
     }
     """
-    result = await _run(query, {"teamId": tid, "first": limit})
-    return result["team"]["issues"]["nodes"]
+    variables = {
+        "input": {
+            "teamId": team_id or _team_id(),
+            "title": title,
+            "description": description,
+            "priority": priority,
+        }
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            LINEAR_API_URL,
+            json={"query": mutation, "variables": variables},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "errors" in data:
+            raise RuntimeError(data["errors"])
+        return data["data"]["issueCreate"]
+
+
+async def list_issues(limit: int = 10, team_id: str | None = None) -> list[dict]:
+    """Return the most recent issues for the team."""
+    query = """
+    query ListIssues($teamId: String!, $first: Int!) {
+      team(id: $teamId) {
+        issues(first: $first, orderBy: createdAt) {
+          nodes {
+            id
+            identifier
+            title
+            state { name }
+            priority
+            url
+          }
+        }
+      }
+    }
+    """
+    variables = {"teamId": team_id or _team_id(), "first": limit}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            LINEAR_API_URL,
+            json={"query": query, "variables": variables},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if "errors" in data:
+            raise RuntimeError(data["errors"])
+        return data["data"]["team"]["issues"]["nodes"]

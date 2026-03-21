@@ -23,6 +23,9 @@ services:
       - ./scripts:/scripts
       - fastapi-venv:/app/.venv
       - ./local-shared-data:/app/shared-data
+      # Obsidian vault — OneDrive-synced local knowledge base
+      # Windows host path uses forward slashes; adjust if vault moves.
+      - "C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitality:/vault"
     depends_on:
       - db
 
