@@ -98,10 +98,10 @@ graph TD
     RAG -- Typed API (openapi-fetch) --> Frontend
     Frontend -- Typesafe Contract --> RAG
 
-    classDef external fill:#f9f9f9,stroke:#333,stroke-width:2px;
-    classDef backend fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
-    classDef db fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
-    classDef delivery fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
+    classDef external fill:#4B5563,stroke:#9CA3AF,stroke-width:2px,color:#F9FAFB;
+    classDef backend fill:#1D4ED8,stroke:#60A5FA,stroke-width:2px,color:#F9FAFB;
+    classDef db fill:#166534,stroke:#4ADE80,stroke-width:2px,color:#F9FAFB;
+    classDef delivery fill:#B45309,stroke:#FCD34D,stroke-width:2px,color:#F9FAFB;
 
     class PMS,Weather,Events external;
     class Sync,Semantic,RAG backend;
