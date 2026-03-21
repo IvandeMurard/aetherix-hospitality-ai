@@ -57,7 +57,7 @@ Aetherix was conceived, structured, and validated using the rigorous **BMAD (Bus
 The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy, optimizing for robust LLM orchestration and strict data segregation.
 
 ```mermaid
-%%{init: {'theme': 'dark'}}%%
+%%{init: {'theme': 'dark', 'themeVariables': {'edgeLabelBackground': '#1e1e2e', 'lineColor': '#6b7280'}}}%%
 graph TD
     subgraph EXT["📡 External Integrations"]
         PMS["Mews/Apaleo PMS\n(Read-Only)"]
@@ -65,7 +65,7 @@ graph TD
         Events["PredictHQ Events"]
     end
 
-    subgraph BACK["⚙️ Fat Backend (FastAPI + Python)"]
+    subgraph BACK["⚙️ Fat Backend — FastAPI + Python"]
         Sync["PMS Sync Service"]
         Semantic["Semantic Reasoning Engine"]
         RAG["LLM Orchestrator"]
@@ -91,6 +91,16 @@ graph TD
     RAG -- "Conversational Receipts" --> Push
     RAG -- "Typed API (openapi-fetch)" --> Frontend
     Frontend -- "Typesafe Contract" --> RAG
+
+    classDef external fill:#0f2744,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
+    classDef backend fill:#2d1b69,stroke:#a855f7,stroke-width:2px,color:#e9d5ff
+    classDef db      fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#bbf7d0
+    classDef delivery fill:#431407,stroke:#f97316,stroke-width:2px,color:#fed7aa
+
+    class PMS,Weather,Events external
+    class Sync,Semantic,RAG backend
+    class DB,Vector db
+    class Frontend,Push delivery
 ```
 
 ### Tech Stack Breakdown
