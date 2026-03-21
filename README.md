@@ -57,56 +57,40 @@ Aetherix was conceived, structured, and validated using the rigorous **BMAD (Bus
 The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy, optimizing for robust LLM orchestration and strict data segregation.
 
 ```mermaid
+%%{init: {'theme': 'dark'}}%%
 graph TD
-    %% External Data Sources
-    subgraph "External Integrations"
-        PMS["Mews/Apaleo PMS (Read-Only)"]
-        Weather[Weather API]
-        Events[PredictHQ Events]
+    subgraph EXT["📡 External Integrations"]
+        PMS["Mews/Apaleo PMS\n(Read-Only)"]
+        Weather["Weather API"]
+        Events["PredictHQ Events"]
     end
 
-    %% Backend Layer
-    subgraph "Fat Backend (FastAPI + Python)"
-        Sync[PMS Sync Service]
-        Semantic[Semantic Reasoning Engine]
-        RAG[LLM Orchestrator]
+    subgraph BACK["⚙️ Fat Backend (FastAPI + Python)"]
+        Sync["PMS Sync Service"]
+        Semantic["Semantic Reasoning Engine"]
+        RAG["LLM Orchestrator"]
     end
 
-    %% Database Layer
-    subgraph "Data Storage"
-        DB[(Supabase PostgreSQL)]
-        Vector[(pgvector - similarity search)]
+    subgraph DATA["🗄️ Data Storage"]
+        DB[("Supabase PostgreSQL")]
+        Vector[("pgvector")]
     end
 
-    %% Delivery / Frontend
-    subgraph "Delivery & UI"
-        Frontend[Next.js App Router UI]
-        Push[Delivery Layer: WhatsApp/SMS/Email]
+    subgraph DELIVERY["🚀 Delivery & UI"]
+        Frontend["Next.js App Router UI"]
+        Push["WhatsApp / SMS / Email"]
     end
 
-    %% Relationships
-    PMS -- Webhooks/API --> Sync
+    PMS -- "Webhooks/API" --> Sync
     Weather --> Semantic
     Events --> Semantic
-
     Sync --> DB
     Semantic --> Vector
     Vector --> RAG
     DB --> RAG
-
-    RAG -- Conversational Receipts --> Push
-    RAG -- Typed API (openapi-fetch) --> Frontend
-    Frontend -- Typesafe Contract --> RAG
-
-    classDef external fill:#f9f9f9,stroke:#333,stroke-width:2px;
-    classDef backend fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
-    classDef db fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
-    classDef delivery fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
-
-    class PMS,Weather,Events external;
-    class Sync,Semantic,RAG backend;
-    class DB,Vector db;
-    class Frontend,Push delivery;
+    RAG -- "Conversational Receipts" --> Push
+    RAG -- "Typed API (openapi-fetch)" --> Frontend
+    Frontend -- "Typesafe Contract" --> RAG
 ```
 
 ### Tech Stack Breakdown
