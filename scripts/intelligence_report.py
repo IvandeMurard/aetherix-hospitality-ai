@@ -48,7 +48,14 @@ import httpx
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 REPO_ROOT  = Path(__file__).parent.parent.resolve()
-VAULT_ROOT = Path(r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality")
+
+# Vault path: use OBSIDIAN_VAULT_PATH env var (supports WSL, Linux, CI).
+# Fallback to the Windows path for local native dev.
+_vault_env = os.environ.get(
+    "OBSIDIAN_VAULT_PATH",
+    r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality",
+)
+VAULT_ROOT = Path(_vault_env)
 VAULT_INTEL_DIR = VAULT_ROOT / "AI Reports" / "Intelligence"
 
 LINEAR_API = "https://api.linear.app/graphql"
