@@ -1,9 +1,38 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Veille Hebdomadaire — Two-Phase Pipeline
+#
+# PHASE 1 · Job `generate`
+#   Fetches RSS (Hospitalitynet, Mews, Apaleo) + HN searches, scores each
+#   article with Claude Haiku, generates docs/veille/draft-YYYY-MM-DD.md,
+#   commits it to the repo, and prints the full draft to the workflow log.
+#
+# HUMAN VALIDATION GATE
+#   After `generate` succeeds, a required reviewer must approve the run
+#   in GitHub UI → Actions → this run → Review deployments → Approve.
+#   The draft content is visible in the `generate` job log for review.
+#
+# PHASE 2 · Job `publish`
+#   Pushes each retained article's Linear action as an issue (Backlog,
+#   Normal priority) via the Linear GraphQL API, then renames the draft
+#   to report-YYYY-MM-DD.md and commits the final report.
+#
+# ── SETUP REQUIRED ────────────────────────────────────────────────────────────
+# Create a GitHub Environment named exactly `veille-validation` and add
+# yourself as a Required Reviewer:
+#   Repository → Settings → Environments → New environment → veille-validation
+#   → Required reviewers → (your GitHub username) → Save
+#
+# Secrets needed (Settings → Secrets → Actions):
+#   ANTHROPIC_API_KEY   claude-haiku-4-5-20251001 for scoring
+#   LINEAR_API_KEY      lin_api_... (Hospitalityagent workspace)
+#   LINEAR_TEAM_ID      2f6bb5e2-d735-4769-9377-11fe186aa0ad (team HOS)
+# ──────────────────────────────────────────────────────────────────────────────
+
 name: Veille Hebdomadaire
 
 on:
   schedule:
-    # Lundi 7h30 UTC = 8h30 CET (hiver) / 9h30 CEST (été, décalage d'1h accepté)
-    - cron: "30 7 * * 1"
+    - cron: "30 7 * * 1"   # Every Monday at 07:30 UTC
   workflow_dispatch:
     inputs:
       dry_run:
@@ -13,13 +42,15 @@ on:
       min_score:
         description: "Score minimum de pertinence (0-10)"
         required: false
-        default: "5"
+        default: "7"
 
+# ─── Phase 1: Generate draft ──────────────────────────────────────────────────
 jobs:
-  veille:
+  generate:
+    name: "Phase 1 — Générer le brouillon"
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # pour committer le rapport dans le repo
+      contents: write
 
     steps:
       - name: Checkout
@@ -27,41 +58,144 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install httpx
+        run: pip install httpx anthropic
 
-      - name: Run veille proactive
+      - name: Run veille proactive (generate draft)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
           LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
         run: |
+          MIN_SCORE="${{ github.event.inputs.min_score || '7' }}"
           DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
-          MIN_SCORE="${{ github.event.inputs.min_score || '5' }}"
           FLAGS="--min-score $MIN_SCORE"
           if [ "$DRY_RUN" = "true" ]; then
             FLAGS="$FLAGS --dry-run"
           fi
+          echo "🚀 Lancement : python scripts/veille_proactive.py $FLAGS"
           python scripts/veille_proactive.py $FLAGS
 
-      - name: Commit rapport de veille
+      - name: Commit draft to repository
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
           git config user.name  "aetherix-veille[bot]"
           git config user.email "aetherix-veille[bot]@users.noreply.github.com"
-          # Commit seulement si des fichiers ont changé dans docs/veille/
-          if git diff --quiet docs/veille/; then
-            echo "Aucun nouveau rapport — rien à committer"
+          DATE=$(date -u +"%Y-%m-%d")
+          DRAFT="docs/veille/draft-${DATE}.md"
+          if [ -f "$DRAFT" ]; then
+            git add "docs/veille/"
+            if git diff --cached --quiet; then
+              echo "ℹ️  Aucun changement à committer (brouillon identique à la dernière version)."
+            else
+              git commit -m "veille: brouillon ${DATE} [automated — pending review]"
+              git push origin ${{ github.ref_name }}
+              echo "✅ Brouillon commité : $DRAFT"
+            fi
           else
-            DATE=$(date +"%Y-%m-%d")
-            git add docs/veille/
-            git commit -m "veille: rapport hebdomadaire $DATE [automated]"
+            echo "⚠️  Brouillon introuvable : $DRAFT — rien à committer."
+          fi
+
+      - name: Print draft content for reviewer
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          DATE=$(date -u +"%Y-%m-%d")
+          DRAFT="docs/veille/draft-${DATE}.md"
+          echo "════════════════════════════════════════════════════════════"
+          echo "  CONTENU DU BROUILLON — à lire avant d'approuver Phase 2"
+          echo "════════════════════════════════════════════════════════════"
+          if [ -f "$DRAFT" ]; then
+            cat "$DRAFT"
+          else
+            echo "(brouillon absent — dry-run ou aucun article collecté)"
+          fi
+          echo "════════════════════════════════════════════════════════════"
+          echo "  Pour approuver : Actions → ce run → Review deployments → Approve"
+          echo "════════════════════════════════════════════════════════════"
+
+# ─── Phase 2: Publish (requires human approval via environment gate) ──────────
+  publish:
+    name: "Phase 2 — Publier vers Linear"
+    needs: generate
+    runs-on: ubuntu-latest
+    # This environment must have you set as a required reviewer in GitHub Settings.
+    # The workflow pauses here until a reviewer approves in the GitHub Actions UI.
+    environment: veille-validation
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          # Pull latest commit so we get the draft committed by the generate job
+          ref: ${{ github.ref_name }}
+
+      - name: Pull latest (get draft committed in Phase 1)
+        run: git pull origin ${{ github.ref_name }}
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install httpx anthropic
+
+      - name: Find latest draft file
+        id: find_draft
+        run: |
+          # Find the most recently modified draft-*.md in docs/veille/
+          DRAFT=$(ls -t docs/veille/draft-*.md 2>/dev/null | head -n 1)
+          if [ -z "$DRAFT" ]; then
+            echo "❌ Aucun brouillon trouvé dans docs/veille/"
+            exit 1
+          fi
+          echo "draft_path=$DRAFT" >> "$GITHUB_OUTPUT"
+          # Extract date from filename (draft-YYYY-MM-DD.md)
+          DRAFT_DATE=$(basename "$DRAFT" | sed 's/draft-\(.*\)\.md/\1/')
+          echo "draft_date=$DRAFT_DATE" >> "$GITHUB_OUTPUT"
+          echo "✅ Brouillon sélectionné : $DRAFT (date: $DRAFT_DATE)"
+
+      - name: Push Linear issues from draft
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
+        run: |
+          echo "📤 Push Linear depuis : ${{ steps.find_draft.outputs.draft_path }}"
+          python scripts/veille_proactive.py --push-linear "${{ steps.find_draft.outputs.draft_path }}"
+
+      - name: Rename draft to final report
+        run: |
+          DRAFT="${{ steps.find_draft.outputs.draft_path }}"
+          DATE="${{ steps.find_draft.outputs.draft_date }}"
+          REPORT="docs/veille/report-${DATE}.md"
+
+          # Update the YAML front-matter type field
+          sed -i "s/^type: draft-veille$/type: veille-hebdomadaire/" "$DRAFT"
+
+          mv "$DRAFT" "$REPORT"
+          echo "📄 Renommé : $DRAFT → $REPORT"
+          echo "report_path=$REPORT" >> "$GITHUB_ENV"
+
+      - name: Commit final report
+        run: |
+          git config user.name  "aetherix-veille[bot]"
+          git config user.email "aetherix-veille[bot]@users.noreply.github.com"
+          DATE="${{ steps.find_draft.outputs.draft_date }}"
+          git add "docs/veille/"
+          if git diff --cached --quiet; then
+            echo "ℹ️  Aucun changement à committer."
+          else
+            git commit -m "veille: rapport final ${DATE} [published after review]"
             git push origin ${{ github.ref_name }}
-            echo "Rapport commité et pushé"
+            echo "✅ Rapport final commité : docs/veille/report-${DATE}.md"
           fi
