@@ -81,6 +81,28 @@ Résultat : ticket Linear "Veille Hebdomadaire" + note Obsidian dans `AI Reports
 
 ---
 
+## Protocole Dev Agent — Définition of Done par Story
+
+Chaque story est confiée à un dev agent autonome. Le protocole est :
+
+1. **Lire** le spec de la Linear issue (via MCP Linear)
+2. **Auditer** ce qui existe dans le codebase
+3. **Implémenter** la story complète (migration DB, modèle ORM, schemas, service, worker, route)
+4. **Tests** — tous les tests doivent passer (CI green)
+5. **Commit + Push** sur la branche désignée (`claude/<story-suffix>`)
+6. **Ouvrir une PR** contre `main`
+7. **Marquer la Linear issue → Done** et poster l'URL de la PR en commentaire
+
+**Gate de merge :** CI vert → merge manuel par le Scrum Master (sans revue de code).
+
+**Gates de qualité supérieurs (hors périmètre dev agent) :**
+- Fin d'Epic → revue d'architecture
+- Pré-pilote → QA sign-off avec une vraie propriété hôtelière
+
+**Session Scrum Master** (cette session) : dédiée aux sujets de pilotage (backlog, priorités, blockers, process). Ne pas utiliser pour implémenter des stories.
+
+---
+
 ## Variables d'environnement requises
 ```
 ANTHROPIC_API_KEY     — sk-ant-...
