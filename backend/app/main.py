@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
-from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports
+from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, baselines
 from app.db.models import Base
 from app.db.session import engine
 
@@ -40,6 +40,7 @@ app.include_router(webhooks.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+app.include_router(baselines.router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
