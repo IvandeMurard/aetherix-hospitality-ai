@@ -93,6 +93,6 @@ Résultat : ticket Linear "Veille Hebdomadaire" + note Obsidian dans `AI Reports
 ```
 ANTHROPIC_API_KEY     — sk-ant-...
 LINEAR_API_KEY        — lin_api_...
-LINEAR_TEAM_ID        — UUID équipe Linear
+LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad
 OBSIDIAN_VAULT_PATH   — C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitality
 ```
