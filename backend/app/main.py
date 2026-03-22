@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
-from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather
+from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather, baselines
 from app.db.models import Base
 from app.db.session import engine
 from app.workers.weather_sync import start_weather_scheduler, stop_weather_scheduler
@@ -48,6 +48,7 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(weather.router, prefix="/api/v1")
+app.include_router(baselines.router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
