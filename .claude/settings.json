@@ -1,12 +1,12 @@
 {
   "hooks": {
-    "PostToolUse": [
+    "SessionStart": [
       {
-        "matcher": "Bash",
+        "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "cd /home/user/Hospitality-Operations-Agentic-AI-B2B && git diff --cached --name-only | grep -q '.' && python scripts/obsidian_sync.py --no-pull || true"
+            "type": "prompt",
+            "prompt": "A new session has started in the Aetherix / Hospitalityagent project.\n\nIf the user's opening message clearly indicates a BMad agent or session type, adopt that mode immediately and do not ask again.\n\nOtherwise, greet the user briefly in French and ask which session type this is, displaying this exact menu:\n\n'Bonjour ! Quel type de session ?\n🔍 Veille — Intelligence stratégique\n🏃 SM (Bob) — Scrum Master, sprint planning, stories\n💻 Dev (Amelia) — Implémentation, story execution\n🏗️ Architect — Décisions techniques, architecture\n📋 PM — Product management, PRD, roadmap\n📊 Analyst (Mary) — Recherche, analyse marché\n🔬 QA — Tests, validation\n✍️ Tech Writer — Documentation'\n\nOnce the session type is known, state in one line what context you will prioritize for this session (Linear issues / Obsidian notes / open decisions / code). Then stop and wait."
           }
         ]
       }
@@ -16,8 +16,8 @@
         "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "cd /home/user/Hospitality-Operations-Agentic-AI-B2B && python scripts/intelligence_report.py --hook"
+            "type": "prompt",
+            "prompt": "Review this session. Check whether any of the following occurred:\n- A new architectural or strategic decision was made\n- An open question in CLAUDE.md was resolved\n- New work items were identified that should become Linear HOS issues\n- Strategic context changed that should update CLAUDE.md\n- Important findings or research worth saving to Obsidian\n\nIf NOTHING significant happened (e.g. only code was written, bugs fixed, or questions answered without changing direction), stay completely silent.\n\nIf something DID happen, output a short closing reminder specifying exactly what needs to be saved and where (CLAUDE.md / Linear HOS / Obsidian). Be specific, not generic. Maximum 5 lines."
           }
         ]
       }
