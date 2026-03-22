@@ -151,6 +151,50 @@ class WeatherForecast(Base):
     )
 
 
+class LocalEvent(Base):
+    """
+    Localized event data ingested from PredictHQ.
+    Story 3.2: one row per (tenant_id, event_id).
+    Unique constraint on (tenant_id, event_id) enforces idempotent upserts.
+    """
+    __tablename__ = "local_events"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
+
+    # PredictHQ event identifier (stable across re-syncs)
+    event_id = Column(String, nullable=False)
+
+    # Event metadata
+    title = Column(String, nullable=False)
+    category = Column(String, nullable=False)   # e.g. "conferences", "concerts", "sports"
+    rank = Column(Integer)                       # PredictHQ rank (0-100)
+    local_rank = Column(Integer)                 # Local rank within radius
+    phq_attendance = Column(Integer)             # Predicted attendance
+
+    # Temporal data
+    start_dt = Column(DateTime(timezone=True), nullable=False, index=True)
+    end_dt = Column(DateTime(timezone=True))
+
+    # Location (centroid of the event)
+    latitude = Column(Float)
+    longitude = Column(Float)
+
+    # Raw payload for auditing / future feature extraction
+    raw_labels = Column(JSON)
+
+    fetched_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        # Idempotency: upsert on (tenant_id, event_id)
+        __import__("sqlalchemy").UniqueConstraint(
+            "tenant_id", "event_id",
+            name="uq_local_event",
+        ),
+    )
+
+
 class RecommendationCache(Base):
     """
     Persistence for AI staffing recommendations.
