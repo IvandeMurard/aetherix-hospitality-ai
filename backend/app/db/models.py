@@ -85,39 +85,35 @@ class PMSSyncLog(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
-class CaptationBaseline(Base):
+class WeatherForecast(Base):
     """
-    Stores calculated captation rate baselines per tenant/property.
-    Story 2.4: Calculate Baseline Captation Rates (FR3).
-
-    Captation rate = F&B revenue per occupied room.
-    Adjustment factors normalise the baseline by day-of-week and month
-    so that Story 3.3a can detect anomalies relative to the expected pattern.
+    Normalized weather forecast records ingested from Open-Meteo.
+    Story 3.1: one row per (tenant_id, property_id, forecast_timestamp).
+    Unique constraint enforces idempotent upserts (SC #7).
     """
-    __tablename__ = "captation_baselines"
+    __tablename__ = "weather_forecasts"
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
+    property_id = Column(String, nullable=False)
 
-    # Date range of PMSSyncLog data used for this computation
-    period_start = Column(Date, nullable=False)
-    period_end = Column(Date, nullable=False)
+    # Normalized weather fields (SC #4)
+    condition_code = Column(Integer)          # WMO weather interpretation code
+    temperature_c = Column(Float)
+    precipitation_prob = Column(Integer)      # 0-100 %
+    wind_speed_kmh = Column(Float)
+    forecast_timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
 
-    # Core metric: average F&B revenue per occupied room across all data
-    avg_fb_revenue_per_room = Column(Float, nullable=False)
+    fetched_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 
-    # Day-of-week factors (JSON): {"0": 1.05, "1": 0.98, ...} (0=Monday … 6=Sunday)
-    # Each value is the ratio of that weekday's avg captation rate to the overall avg.
-    dow_factors = Column(JSON, nullable=False)
-
-    # Monthly factors (JSON): {"1": 0.90, "2": 0.85, ..., "12": 1.10}
-    # Each value is the ratio of that month's avg captation rate to the overall avg.
-    monthly_factors = Column(JSON, nullable=False)
-
-    # Number of non-zero occupancy records used in the computation
-    data_points_count = Column(Integer, nullable=False)
-
-    computed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    __table_args__ = (
+        # Idempotency: upsert on this composite key (SC #7)
+        __import__("sqlalchemy").UniqueConstraint(
+            "tenant_id", "property_id", "forecast_timestamp",
+            name="uq_weather_forecast",
+        ),
+    )
 
 
 class RecommendationCache(Base):

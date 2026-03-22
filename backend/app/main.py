@@ -10,9 +10,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
-from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, baselines
+from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather
 from app.db.models import Base
 from app.db.session import engine
+from app.workers.weather_sync import start_weather_scheduler, stop_weather_scheduler
 
 app = FastAPI(
     title="Aetherix API",
@@ -32,6 +33,12 @@ async def on_startup():
     async with engine.begin() as conn:
         # Create tables
         await conn.run_sync(Base.metadata.create_all)
+    start_weather_scheduler()
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    stop_weather_scheduler()
 
 # Include routers
 app.include_router(pms.router, prefix="/api/v1")
@@ -40,7 +47,7 @@ app.include_router(webhooks.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
-app.include_router(baselines.router, prefix="/api/v1")
+app.include_router(weather.router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
