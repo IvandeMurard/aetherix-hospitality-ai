@@ -85,6 +85,37 @@ class PMSSyncLog(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class WeatherForecast(Base):
+    """
+    Normalized weather forecast records ingested from Open-Meteo.
+    Story 3.1: one row per (tenant_id, property_id, forecast_timestamp).
+    Unique constraint enforces idempotent upserts (SC #7).
+    """
+    __tablename__ = "weather_forecasts"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
+    property_id = Column(String, nullable=False)
+
+    # Normalized weather fields (SC #4)
+    condition_code = Column(Integer)          # WMO weather interpretation code
+    temperature_c = Column(Float)
+    precipitation_prob = Column(Integer)      # 0-100 %
+    wind_speed_kmh = Column(Float)
+    forecast_timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+
+    fetched_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        # Idempotency: upsert on this composite key (SC #7)
+        __import__("sqlalchemy").UniqueConstraint(
+            "tenant_id", "property_id", "forecast_timestamp",
+            name="uq_weather_forecast",
+        ),
+    )
+
+
 class RecommendationCache(Base):
     """
     Persistence for AI staffing recommendations.
