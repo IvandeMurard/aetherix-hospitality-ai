@@ -62,10 +62,10 @@ development_status:
   3-1-ingest-localized-weather-data: ready-for-dev
   3-2-ingest-localized-event-data-from-predicthq: backlog
   3-1-ingest-localized-weather-data: done
-  3-2-ingest-localized-event-data-from-predicthq: ready-for-dev
-  3-3a-detect-demand-anomalies-against-baseline: backlog
-  3-3b-calculate-financial-roi-for-detected-anomalies: backlog
-  3-3c-format-staffing-recommendations-for-dispatch: backlog
+  3-2-ingest-localized-event-data-from-predicthq: done      # Linear HOS-20 Done (2026-03-23)
+  3-3a-detect-demand-anomalies-against-baseline: ready-for-dev
+  3-3b-calculate-financial-roi-for-detected-anomalies: ready-for-dev
+  3-3c-format-staffing-recommendations-for-dispatch: done   # Linear HOS-23 Done (2026-03-23); no story file — implemented without BMAD artifact
   epic-3-retrospective: optional
 
   # ── Epic 4: Proactive "Push" Delivery & Action Logging ────────────────────
