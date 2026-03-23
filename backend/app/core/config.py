@@ -34,3 +34,10 @@ TWILIO_WHATSAPP_FROM: str = _os.getenv("TWILIO_WHATSAPP_FROM", "")  # whatsapp:+
 # ─── SendGrid (Email) ────────────────────────────────────────────────────────
 SENDGRID_API_KEY: str = _os.getenv("SENDGRID_API_KEY", "")
 SENDGRID_FROM_EMAIL: str = _os.getenv("SENDGRID_FROM_EMAIL", "noreply@aetherix.io")
+
+# ─── Story 4.3 (HOS-26): Twilio Inbound Webhook ──────────────────────────────
+# Set to "true" in CI / test environments to bypass HMAC-SHA1 signature
+# validation on POST /webhooks/twilio/inbound.
+TWILIO_SKIP_SIGNATURE_VALIDATION: bool = (
+    _os.getenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "false").lower() == "true"
+)
