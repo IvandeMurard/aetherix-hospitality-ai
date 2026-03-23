@@ -59,10 +59,12 @@ class RestaurantProfile(Base):
     latitude = Column(Float)
     longitude = Column(Float)
     
-    # Notification preferences
-    notification_channel = Column(String, default="whatsapp")
+    # Notification preferences (Story 4.1 — HOS-24)
+    preferred_channel = Column(String, default="whatsapp")   # sms / whatsapp / email
     phone_number = Column(String)
-    email_address = Column(String)
+    notification_email = Column(String)
+    gps_lat = Column(Float)
+    gps_lng = Column(Float)
 
     # ROI configuration (Story 3.3b) — overrides system defaults when set
     avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # £ per cover
@@ -288,6 +290,77 @@ class DemandAnomaly(Base):
     )
 
 
+class StaffingRecommendation(Base):
+    """
+    Ready-to-dispatch staffing recommendations produced by the
+    RecommendationFormatterService from ROI-positive demand anomalies.
+
+    Story 3.3c (HOS-23): Format Staffing Recommendations for Dispatch.
+
+    Status lifecycle:  ready_to_push → dispatched
+    Idempotency: UNIQUE constraint on anomaly_id prevents duplicates.
+    """
+    __tablename__ = "staffing_recommendations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    anomaly_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("demand_anomalies.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,  # idempotency: one recommendation per anomaly
+    )
+
+    message_text = Column(Text, nullable=False)
+    triggering_factor = Column(Text)
+    recommended_headcount = Column(Integer)
+
+    window_start = Column(DateTime(timezone=True), nullable=False)
+    window_end = Column(DateTime(timezone=True), nullable=False)
+
+    roi_net = Column(Numeric(10, 2))
+    roi_labor_cost = Column(Numeric(10, 2))
+
+    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected
+
+    # Story 4.2 (HOS-25): dispatch tracking
+    dispatched_at = Column(DateTime(timezone=True), nullable=True)
+    dispatch_channel = Column(String(10), nullable=True)  # whatsapp | sms | email
+
+    # Story 4.3 (HOS-26): manager action logging
+    actioned_at = Column(DateTime(timezone=True), nullable=True)
+    action = Column(String(10), nullable=True)  # accepted | rejected
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class ConversationalQuery(Base):
+    """
+    Inbound conversational queries from managers via Twilio webhooks.
+
+    Story 5.1 (HOS-28): Parse Conversational Inbound Queries (FR13).
+
+    Status lifecycle: pending → processing → answered
+    Idempotency: same (from_number, body) within 60 s does not create a duplicate.
+    """
+    __tablename__ = "conversational_queries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    from_number = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    recommendation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status = Column(String, nullable=False, default="pending")  # pending | processing | answered
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class RecommendationCache(Base):
     """
     Persistence for AI staffing recommendations.
@@ -298,12 +371,12 @@ class RecommendationCache(Base):
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
     target_date = Column(Date, index=True, nullable=False)
-    
+
     prediction_data = Column(JSON)
     reasoning_summary = Column(String)
     staffing_recommendation = Column(JSON)
-    
+
     is_pushed = Column(Boolean, default=False)
     pushed_at = Column(DateTime)
-    
+
     created_at = Column(DateTime, default=datetime.utcnow)
