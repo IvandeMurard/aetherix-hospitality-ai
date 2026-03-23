@@ -24,12 +24,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user
 from app.db.session import get_db
-from app.schemas.anomalies import AnomalyListResponse, AnomalyScanResponse, DemandAnomalyRead
+from app.schemas.anomalies import (
+    AnomalyListResponse,
+    AnomalyScanResponse,
+    DemandAnomalyRead,
+    ROICalculationResponse,
+)
 from app.services.anomaly_detection import AnomalyDetectionService
+from app.services.roi_calculator import ROICalculatorService
 
 router = APIRouter(prefix="/anomalies", tags=["anomalies"])
 
 _service = AnomalyDetectionService()
+_roi_service = ROICalculatorService()
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +161,44 @@ async def list_anomalies(
         page=page,
         page_size=page_size,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/anomalies/roi  (Story 3.3b)
+# ---------------------------------------------------------------------------
+@router.post(
+    "/roi",
+    status_code=202,
+    response_model=ROICalculationResponse,
+    summary="Trigger ROI calculation for all detected anomalies (manual trigger)",
+)
+async def trigger_roi_calculation(
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ROICalculationResponse:
+    """Immediately queue a full ROI calculation pass as a BackgroundTask.
+
+    Returns 202 Accepted; the ROI calculation runs asynchronously.
+    The service iterates all anomalies with status='detected', computes ROI
+    metrics, and updates status to 'roi_positive' where net_roi > 0.
+
+    AC 10: Manual trigger endpoint.
+    """
+    background_tasks.add_task(_run_roi_background)
+
+    return ROICalculationResponse(
+        message="ROI calculation triggered",
+        triggered_by=current_user.get("email"),
+    )
+
+
+async def _run_roi_background() -> None:
+    """Background task: open a fresh DB session and run the full ROI scan."""
+    from app.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        await _roi_service.run_full_scan(session)
 
 
 # ---------------------------------------------------------------------------
