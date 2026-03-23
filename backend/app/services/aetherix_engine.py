@@ -52,7 +52,10 @@ class AetherixEngine:
                 "covers": predicted_covers,
                 "confidence": confidence
             },
+            # reasoning["summary"] kept for backward compat (WhatsApp service etc.)
             "reasoning": reasoning["summary"],
+            # full reasoning dict for structured consumers (POST /predict, MCP)
+            "reasoning_detail": reasoning,
             "staffing_recommendation": staffing,
             "historical_patterns": patterns
         }
