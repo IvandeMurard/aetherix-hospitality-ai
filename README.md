@@ -53,18 +53,18 @@ The result: Contextualized intelligence delivered directly to departmental manag
 
 ## How Aetherix Differs from WFM Tools
 
-Existing workforce management tools (Quinyx, Legion, Actabl/Hotel Effectiveness, Unifocus, Deputy) operate on a **scheduling-first** paradigm: they help you build and manage staff schedules, with basic forecasting as an add-on. Their forecasts are typically sales-driven only — they don't incorporate weather, local events, booking pace, or property-specific capture rates.
+Existing workforce management tools (Quinyx, Legion, Actabl/Hotel Effectiveness, Unifocus, Deputy) operate on a **scheduling-first** paradigm: they help you build and manage staff schedules, with basic forecasting as an add-on..
 
-Aetherix operates on a **forecast-first** paradigm. The schedule is the manager's job. Aetherix answers the question that comes before it:
+Aetherix operates on a **forecast-first** paradigm. The schedule is the manager's job. Aetherix answers the question that comes before:
 
-> **"How busy will tomorrow actually be — and what should I adjust?"**
+> **"How busy will (...) actually be, and what should be adjusted?"**
 
 | Dimension | WFM Tools (Quinyx, Legion, Actabl…) | Aetherix |
 | :--- | :--- | :--- |
 | **Paradigm** | Scheduling-first, forecast as add-on | Forecast-first, decision directive as output |
 | **Interface** | Dashboard / mobile app (pull) | WhatsApp / Slack / Email (push, UI-less) |
 | **Demand modeling** | Historical sales patterns | PMS + capture rate + weather + events |
-| **Output** | "Here is your schedule" | "Here is what to adjust — and why" |
+| **Output** | "Here is your schedule" | "Here is what to adjust, and why" |
 | **Explainability** | Limited (score or aggregate view) | Conversational ("Why?", "What if -10% occupancy?") |
 | **Integration model** | Full WFM platform replacement | Additive layer on top of existing tools |
 | **Target buyer** | HR / Operations Director | F&B Manager / Restaurant Manager (daily user) |
@@ -142,8 +142,8 @@ graph TD
 | :--- | :--- | :--- |
 | **1. Numerical Forecast** | Prophet (time-series) | Predicts covers volume from PMS + occupancy + regressors |
 | **2. Semantic Patterns** | Qdrant Cloud (495+ vectors) | Matches current context against similar historical service scenarios |
-| **3. Cognitive Memory** | pgvector → Backboard.io (Ph. 3) | Two-layer design. **Private Memory** (per hotel, Phase 0–1): ultra-specific idiosyncrasies — what works *only* for this property (real capture rate, manager preferences, non-generalizable local patterns). **Hive Memory** (anonymized cross-hotel, Phase 3 via Backboard): patterns grouped by tags (city/resort/airport, clientele type, segment, restaurant size) — enriches predictions with cross-property proof of impact. Each hotel benefits from its own learning *and* collective wisdom, never sharing raw data. |
-| **4. Reasoning & Explanation** | Claude Sonnet (Anthropic) | Synthesizes the three layers into a directive + natural-language explanation |
+| **3. Cognitive Memory** | pgvector → Backboard.io (Ph. 3) | Two-layer design. **Private Memory** (per hotel, Phase 0–1): ultra-specific idiosyncrasies - what works *only* for this property (real capture rate, manager preferences, non-generalizable local patterns). **Hive Memory** (anonymized cross-hotel, Phase 3 via Backboard): patterns grouped by tags (city/resort/airport, clientele type, segment, restaurant size) — enriches predictions with cross-property proof of impact. Each hotel benefits from its own learning *and* collective wisdom, never sharing raw data. |
+| **4. Reasoning & Explanation** | Claude Sonnet (Anthropic) | Synthesizes the three layers into a directive with natural-language explanation |
 
 ### Tech Stack Breakdown
 
