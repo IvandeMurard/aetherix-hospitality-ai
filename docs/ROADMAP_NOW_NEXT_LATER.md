@@ -1,139 +1,149 @@
 # Roadmap: Now → Next → Later
 
+**Last review:** March 20, 2026
+**Current Phase:** Phase 3 — Dashboard MVP (active)
+**Status:** Phases 1 + 2 complete. Next.js dashboard + FastAPI backend live in Docker.
+**Market context:** ITB Berlin 2026 confirmed F&B ops forecasting as an uncontested gap in the agentic AI landscape.
 **Last review:** March 22, 2026
 **Strategic direction:** Agent-First Distribution (MCP Server + Agent SEO)
 **Source:** Andrew Chen (a16z) insight — "distribution shifts from top of funnel to top of call stack"
 
 ---
 
-## 🔥 NOW (This Week - Jan 6-12, 2026)
+## 🔥 NOW (Phase 3 — March 2026)
 
-**Focus:** Fix critical bug → Unblock MVP
+**Focus:** Ship the dashboard MVP. Make predictions visible, interactive, and trusted.
 
-### This Week Priority
+### Active work
 
-**Fix contextual patterns bug** to enable realistic, varied predictions. Currently all predictions return ~143 covers regardless of context (Christmas, weekend, events). This blocks credibility and Staff Recommender work.
+- [ ] **Dashboard MVP — covers forecast view**
+  - Day/Week/Month toggle
+  - Confidence score display + colour coding
+  - "Why this forecast?" expandable panel (Conversational Receipt)
+  - Staff recommendation with ROI breakdown
 
-### Issues
+- [ ] **Manager approval flow in dashboard**
+  - Accept / Modify / Reject recommendation
+  - State persisted to Supabase (pending → approved → actioned)
+  - Audit log visible in UI
 
-- [ ] **IVA-29:** 🔥 CRITICAL - Contextual patterns not applied (1h) - **BLOCKER**
-  - Problem: Patterns always hardcoded (Coldplay/U2), Christmas treated as regular day
-  - Impact: Predictions not credible (always ~143 covers)
-  - Solution: Debug Python cache issue, verify contextual logic executes
+- [ ] **Push notification delivery**
+  - Twilio WhatsApp trigger on anomaly detection
+  - Inbound "Why?" reply → Conversational Receipt response
+  - Under 3 minutes end-to-end (NFR2)
 
-### Success Criteria
+- [ ] **First pilot property onboarding**
+  - Read-only Apaleo webhook live
+  - Baseline captation rate established from historical data
+  - First proactive push sent to a real manager
 
-- ✅ Christmas Day predicts 40-70 covers (not 143)
-- ✅ Weekend vs weekday shows variation (100-160 range)
-- ✅ Events boost covers (+15 per event)
-- ✅ Weather affects predictions (rain -10 covers)
-- ✅ Pattern dates recent (3-12 months ago, not 2023)
+### Phase 3 success criteria
 
-### Intelligence from Veille
+- ✅ Manager receives push notification without logging in
+- ✅ "Why?" reply triggers Conversational Receipt in < 3s
+- ✅ At least one pilot manager acts on a recommendation in first 2 weeks
+- ✅ MAPE on cover predictions stays under 15% across 5 test scenarios
+- ✅ Dashboard accessible at localhost:3000 with full Docker Compose boot
 
-<!-- Update each Monday 9am with relevant insights from Perplexity -->
+### Intelligence from veille — March 2026
 
-**2026-01-07:** Initial roadmap creation
-- No pending insights from veille yet
-- First review scheduled: Monday January 13, 9am
+**ITB Berlin 2026 signals:**
+- Agentic AI dominant theme — "from suggest to execute" is the framing
+- F&B operations forecasting gap confirmed: guest-facing (Bookboost) and room operations (Mews Flexkeeping) saturated; F&B ops uncontested
+- Mews acquired DataChat (semantic layer) — validates our pgvector RAG architecture as the moat
+- Bookboost AI Agent launched at ITB: 5-year training data, 5-sec response, CDP-powered — comparable architecture to Aetherix but guest-facing
 
----
+**Piers Thackray field signal (LinkedIn, March 2026):**
+- Hotel GM in France self-built an operational AI assistant using Claude Code in 2 days
+- Built on: Cloudbeds PMS + Google Drive + Sheets + Calendar
+- Day 2 result: full 30-day cleaning schedule from one sentence + proactive room conflict detection and autonomous resolution
+- This is the demand signal: operators are self-building because no product exists → product window is open, closes in ~12–18 months
 
-## ⏭️ NEXT (Next 2-3 Weeks - Jan 13-26, 2026)
-
-**Focus:** Complete Phase 1 MVP (4 remaining issues, ~4.5h effort)
-
-### Issues
-
-- [ ] **IVA-30:** Staff Recommender Agent (2h)
-  - Adaptive staffing calculations based on predicted covers
-  - Restaurant-specific configs (covers per server ratio)
-  - Integration into prediction pipeline
-  - **Blocked by:** IVA-29
-
-- [ ] **IVA-31:** Integration test suite (1h)
-  - 5 scenarios: weekend, weekday, holiday, rainy, New Year's Eve
-  - Validate covers variation (not all ~143)
-  - Pytest-ready for CI/CD
-  - **Blocked by:** IVA-29
-
-- [ ] **IVA-32:** Deploy to Render.com (1h)
-  - Public demo URL: `https://fb-agent-mvp.onrender.com`
-  - Swagger docs accessible
-  - Deployment guide documentation
-
-- [ ] **IVA-33:** Phase 1 limitations documentation (30min)
-  - Honest assessment of what works/doesn't
-  - Phase 2 roadmap preview
-  - PM critical thinking demonstration
-
-### Potential Additions from Veille
-
-<!-- Capture new features discovered via industry intelligence -->
-
-**To evaluate in weekly reviews:**
-- None currently
-- Will assess based on Perplexity Monday veille
-
-### Success Criteria (Phase 1 Complete)
-
-- ✅ All 11 MVP issues done
-- ✅ Backend API publicly accessible
-- ✅ 5 test scenarios passing
-- ✅ Limitations documented transparently
+**Action from veille:** Prioritize first pilot contact. The self-build signal means the ICP is actively trying to solve this right now.
 
 ---
 
-## 📅 LATER (Phase 2-3 - Feb-Mar 2026)
+## ⏭️ NEXT (Phase 4 — April–June 2026)
 
-**Focus:** Real integrations + Production features
+**Focus:** Close the feedback loop. Make the model learn from outcomes. Add Cloudbeds.
 
-### Phase 2 - Integrations (High Priority)
+### Accuracy tracking & feedback loop
 
-**Critical Path:**
+- [ ] **Post-service actuals input**
+  - Manager submits actual covers at end of service (in-app or WhatsApp reply)
+  - Delta calculated vs prediction (MAPE tracked per property, per service type)
+  - Rolling accuracy score visible in dashboard
 
-- [ ] **IVA-13:** PMS integration (Mews/Apaleo) - **KEY DIFFERENTIATOR**
-  - Occupancy rate → +15% F&B demand boost
-  - Hotel conferences/events
-  - VIP arrivals, dietary preferences
-  - **Impact:** 40% prediction weight from internal data
+- [ ] **Pattern reinforcement pipeline**
+  - High-accuracy outcomes ingested back into Qdrant as validated patterns
+  - Vector store grows from 495 → property-specific patterns over time
+  - Accuracy trend shown to manager to build trust ("Model improved +3% this month")
 
-- [ ] **Real APIs:** PredictHQ (events), Weather API
-  - Replace mock data with real-time info
-  - Improve prediction accuracy
+- [ ] **Prediction explanation upgrade**
+  - Show top 3 similar historical patterns with confidence scores
+  - "This matches 3 similar Fridays with a nearby conference: average outcome was +22% covers"
 
-- [ ] **Qdrant semantic search:** Real pattern matching
-  - Replace hardcoded patterns
-  - Vector similarity search
-  - Contextual historical matches
+### Cloudbeds integration (3rd PMS)
 
-### Phase 2 - UI Features (Medium Priority)
+- [ ] **Cloudbeds OAuth2 + read-only sync**
+  - Add to PMS integration layer alongside Apaleo + Mews
+  - 400+ marketplace partners → validates as distribution channel
+  - Signal: Piers Thackray (self-builder) uses Cloudbeds — ICP overlap confirmed
 
-- [ ] **IVA-9:** Manager approval workflows
-  - Validate/modify/reject predictions
-  - State management (pending, approved, rejected)
-  - Audit log
+### Apaleo Agent Hub listing
 
-- [ ] **IVA-10:** Voice input (reevaluate after industry research)
-  - Note: Noisy restaurant environments challenge voice
-  - May defer based on veille insights
+- [ ] **Package Aetherix as an Apaleo Agent**
+  - Apaleo announced Agent Hub at ITB Berlin 2026 — first AI agent marketplace for hospitality
+  - Our MCP server architecture is already the right integration pattern
+  - Listing = distribution to 2,000+ Apaleo properties without direct sales
+  - Action: Reach out to Apaleo partnerships post-Phase 3
 
-- [ ] **IVA-12:** ElevenLabs voice synthesis
-  - Cost: ~$225/month vs $6.65 Claude API
-  - Dependent on IVA-10 feasibility
+### Phase 4 success criteria
 
-### Backlog - Advanced Features (Low Priority)
+- ✅ MAPE trending downward over 4 weeks for at least one pilot property
+- ✅ Pattern store grows automatically (no manual reseeding required)
+- ✅ Cloudbeds integration live and tested
+- ✅ Apaleo Agent Hub application submitted
 
-- [ ] **IVA-11:** Command palette (Cmd+K style)
-- [ ] **IVA-14:** NLU intent recognition
-- [ ] **IVA-15:** Continuous learning + prediction accuracy tracking
-- [ ] **IVA-16:** No-show risk prediction
-- [ ] **IVA-17:** Semantic layer (PMS-agnostic)
+### Potential additions from veille
 
-### Ideas from Veille (To Scope Later)
+- Trybe (spa/wellness scheduling) partnership — same methodology, adjacent department
+- Juyo Analytics "Kassandra" watch: if they expand to F&B ops, re-evaluate differentiation
+- Oracle Opera Cloud exploration: required for enterprise hotel groups (Phase 5 blocker)
 
-<!-- Capture emerging technologies/features, evaluate ROI -->
+---
 
+## 📅 LATER (Phase 5 — Q3 2026+)
+
+**Focus:** Expand scope. F&B agent becomes full operations layer.
+
+### POS integration → menu & inventory intelligence
+
+- [ ] **POS data ingestion** (manual CSV first, then API)
+  - Actual menu mix per service (what sold vs what didn't)
+  - Average cover spend per event type
+  - High-demand item pre-positioning recommendations ("Order extra salmon for tech conferences")
+
+- [ ] **Inventory procurement directive**
+  - "Based on 3 similar Fridays with a conference: salmon sells out. Recommend ordering 15% more."
+  - Procurement lead time factored into push timing
+
+- [ ] **Menu price optimization suggestions**
+  - High-demand + low-supply scenarios flagged for dynamic pricing
+  - "Events crowd has historically spent 18% more on wine — consider promoting premium list tonight"
+
+### Cross-department context
+
+- [ ] **Front Desk ↔ F&B handoff**
+  - Group check-ins flagged → F&B briefed on expected covers + dietary notes
+  - "Conference group of 45 arriving at 6pm — 4 vegetarian, 2 gluten-free"
+  - MCP cross-system signal passing (PMS → F&B context layer)
+
+- [ ] **Housekeeping coordination**
+  - Occupancy context shared with F&B (checkout patterns → breakfast demand)
+  - Late checkouts → extended breakfast service trigger
+
+### Multi-property & portfolio view
 **In progress (elevated from backlog → Phase 0.5):**
 - ✅ **MCP Server for agent-callable capabilities** — TAC-74 (HOS-xx pending team rename)
   - `forecast_occupancy(hotel_id, date_range)` → F&B demand predictions
@@ -148,62 +158,101 @@
 - New Qdrant features for pattern matching
 - Hospitality-specific LLMs (if emerge)
 
-**Evaluation criteria:**
-- Does it accelerate Phase 2 timeline?
-- Does it improve differentiation vs competitors?
-- Is implementation effort justified?
+- [ ] **Portfolio dashboard** for Operations Directors
+  - Aggregated accuracy metrics across properties
+  - Top/bottom performing properties by MAPE
+  - Chain-level event detection ("tech conference city-wide — alert all F&B managers")
+
+- [ ] **White-label & embedded** offering
+  - Aetherix F&B module embeddable in Mews / Apaleo dashboards
+  - Revenue share model with PMS partners
+
+### Voice input (re-evaluate)
+
+- [ ] **Voice query via WhatsApp** (Phase 5 evaluation)
+  - Manager sends voice note: "What's the forecast for Saturday dinner?"
+  - Transcribed via Whisper → Conversational Receipt response
+  - Note: noisy restaurant environments challenge accuracy — test carefully
+  - Cost: ElevenLabs ~$225/month vs $6.65 Claude API — validate ROI first
+
+### Agentic task auto-creation
+
+- [ ] **From forecast to task**
+  - Aetherix forecast confirmed → auto-creates tasks in hotel ops platform (Flexkeeping, etc.)
+  - "Forecast confirmed: +2 servers needed. Task created: Call Sarah and Marco by 3pm."
+  - Validated pattern from Apaleo + THE FLAG deployment at ITB 2026
+
+### Phase 5 success criteria
+
+- ✅ POS integration live with at least one property
+- ✅ Cross-department data flowing (PMS → F&B → ops tasks)
+- ✅ Portfolio dashboard with 3+ properties
+- ✅ Agentic task creation live
 
 ---
 
-## 📊 Weekly Progress Log
+## 📊 Progress log
 
-### Week of January 6, 2026
+### Week of January 6, 2026 (Phase 1 completion sprint)
+- ✅ IVA-26–28: Backend environment, Demand Predictor skeleton, Enhanced context generation
+- ✅ IVA-5–8: Core MVP capabilities
+- 🔄 IVA-29: Contextual patterns bug (Christmas edge case)
+- ⛔ IVA-30–33: Blocked on IVA-29
 
-**Completed:**
-- ✅ IVA-26: Backend environment setup (Python + FastAPI)
-- ✅ IVA-27: Demand Predictor skeleton
-- ✅ IVA-28: Enhanced context generation
-- ✅ IVA-5, 6, 7, 8: Previous MVP capabilities
+### January–February 2026 (Phase 2 completion)
+- ✅ Phase 1 complete: Backend MVP, prediction + reasoning engines live
+- ✅ RAG with 495 vector patterns (Qdrant)
+- ✅ PMS integrations: Apaleo OAuth2 + Mews webhooks
+- ✅ Supabase PostgreSQL + pgvector + RLS (tenant isolation)
+- ✅ Security hardening (5 HIGH severity fixes)
+- ✅ Docker Compose full stack (backend + frontend + DB + mailhog)
 
-**In Progress:**
-- 🔄 IVA-29: Contextual patterns bug (attempted fixes, not resolved)
-
-**Blocked:**
-- ⛔ IVA-30, 31, 32, 33: All waiting on IVA-29 fix
-
-**Time invested this week:** 4.5h (Hour 1: 1.5h, Hour 2: 2h, Debugging: 1h)
-
-**Veille insights:** N/A (roadmap creation week)
-
-**Next week focus:** Fix IVA-29, unblock remaining MVP work
-
----
-
-### Week of January 13, 2026
-
-**Planned:**
-- [ ] Complete IVA-29 fix
-- [ ] Start IVA-30 (Staff Recommender)
-- [ ] Review Perplexity veille Monday 9am
-
-**To update next Monday...**
+### March 2026 (Phase 3 — active)
+- ✅ Repo cleaned and consolidated (single source of truth)
+- ✅ Market intelligence brief compiled (ITB Berlin 2026, Hotel Yearbook 2026, Bookboost, Mews)
+- ✅ MCP context layer framing documented (`docs/AI_CONTEXT_LAYER.md`)
+- 🔄 Dashboard MVP (Next.js) — active development
+- 🔄 First pilot property identification
 
 ---
 
-## 🧠 Strategic Notes
+## 🧠 Strategic notes
 
-### Key Learnings (Phase 0-1)
+### Architecture principles (unchanged)
 
+- ✅ **Dashboard-first, not voice-first** — industry requires visual transparency + EU AI Act explainability
+- ✅ **Push model, not pull** — managers don't check dashboards; intelligence must arrive at decision moment
+- ✅ **Read-only PMS** — zero-friction pilot, no IT approval required, no write risk
+- ✅ **Explainability mandatory** — every recommendation exposes its reasoning (GDPR Article 22, EU AI Act)
+- ✅ **Thin frontend / fat backend** — LLM orchestration belongs server-side; UI is presentation only
+- ✅ **Data quality over model complexity** — our semantic layer (RAG) is the moat, not the LLM
+
+### Competitive positioning — updated March 2026
+
+| Player | Focus | Our gap vs them |
+|---|---|---|
+| Mews + DataChat | Semantic layer, rooming lists, agentic PMS ops | They won't build F&B-specific; too broad |
+| Apaleo Agent Hub | Marketplace for hotel AI agents | Distribution channel, not competitor |
+| Bookboost | Guest messaging AI (CDP-powered) | Guest-facing; we're ops-facing |
+| Trybe | Spa/wellness scheduling | Same methodology, different department — potential partner |
+| Juyo "Kassandra" | Revenue/demand sensing for GMs | Revenue management focus; we're staffing/ops |
+| Sirma "Vela" | Front desk + housekeeping agent | Front of house; we're F&B |
+| Self-builders (Thackray) | Claude Code + raw API duct-tape | We're the productized version of what they're building |
+
+**The gap:** F&B operations forecasting + proactive push + staffing directives is uncontested at product level as of March 2026.
+
+### Key learnings
 **Architecture Decisions:**
 - ✅ Dashboard-first (not voice-first) — industry requires visual transparency
 - ✅ Agentic-first (not API-first) — aligns with Augmented Hospitality
 - ✅ Explainability critical (EU AI Act, GDPR Article 22)
 
-**Product Insights:**
-- Christmas edge case = critical for credibility (50 covers vs 143)
-- Internal context (PMS) = 40% prediction accuracy
-- Pattern variation > reasoning quality for demo impact
+- Christmas edge case = credibility test for any hospitality forecasting model
+- Internal PMS data = 40% of prediction accuracy; external signals = 60%
+- Pattern variation + explainability > raw prediction accuracy for manager trust
+- Operators are self-building (Thackray signal) = product window is open, not permanent
 
+### Decision framework for veille-driven additions
 ### Strategic Pivot — Agent-First Distribution (March 2026)
 
 **Trigger :** Andrew Chen (a16z) thread on agent-native distribution — score veille 10/10.
@@ -221,61 +270,63 @@
 - Domain expertise: Server background = operations understanding
 - Honest assessment: Documented limitations vs over-promising
 
-### Next Pivots to Consider
+| Impact | Effort | Action |
+|---|---|---|
+| High | Low | Add to NOW |
+| High | High | Plan for NEXT |
+| Low | Any | Reject or defer to Later |
 
+### Pivots to watch
 **Si la veille montre :**
 - Un concurrent lance un MCP server hospitality → accélérer Phase 0.5
 - Apaleo/Mews publie un MCP officiel → évaluer partnership vs compétition
 - Regulatory updates (EU AI Act) → Adjust explainability features
 - New PMS APIs (Mews updates) → Reprioritize integration work
 
-**Decision framework:**
-- High impact + Low effort → Add to NEXT
-- High impact + High effort → Plan for Phase 2
-- Low impact → Reject or defer to Backlog
+- **Mews builds F&B module** → move fast on Apaleo Agent Hub listing; become embedded before they expand
+- **Apaleo pivots to build-in-house** → direct sales motion, emphasize property-specific RAG differentiation
+- **EU AI Act enforcement tightens** → our explainability-first design is already compliant; market it
+- **New Claude capabilities (extended context, tool use)** → evaluate for Conversational Receipt quality uplift
+- **Cloudbeds launches AI marketplace** → position there alongside Apaleo Agent Hub
 
 ---
 
-## 📈 Milestones & Timeline
+## 📈 Milestones
 
-**Phase 1 MVP (January 2026):**
-- ✅ January 6: 64% complete (7/11 issues)
-- 🎯 January 12: IVA-29 resolved (100% unblocked)
-- 🎯 January 19: IVA-30-33 complete (MVP done)
-- 🎯 January 31: Deployed + documented
-
-**Phase 2 Kickoff (February 2026):**
-- 🎯 February 3: PMS integration research (Mews API docs)
-- 🎯 February 10: First PMS mock integration
-- 🎯 February 17: Real APIs (PredictHQ, Weather)
-- 🎯 February 24: Qdrant semantic search
-
-**Case Study Completion (March 2026):**
-- 🎯 March 10: Phase 2 MVP complete
-- 🎯 March 17: Full documentation (Architecture, Decisions, Learnings)
-- 🎯 March 24: Portfolio publish + Mews PM application
+| Milestone | Target | Status |
+|---|---|---|
+| Phase 1 MVP — Backend API + RAG | Jan 2026 | ✅ Done |
+| Phase 2 — PMS integrations + Supabase | Feb 2026 | ✅ Done |
+| Phase 3 — Dashboard MVP (Next.js) | Mar 2026 | 🔄 Active |
+| First pilot property live | Apr 2026 | 🎯 Target |
+| Cloudbeds integration | May 2026 | 🎯 Target |
+| Apaleo Agent Hub listing | Jun 2026 | 🎯 Target |
+| Phase 4 — Feedback loop + accuracy tracking | Q2 2026 | 📋 Planned |
+| Phase 5 — POS + cross-dept + portfolio | Q3 2026 | 📋 Planned |
 
 ---
 
-## 🔗 Links & Resources
+## 🔗 Links & resources
 
+**Repository:** https://github.com/IvandeMurard/Hospitality-Operations-Agentic-AI-B2B
 **Linear Project:** https://linear.app/ivanportfolio/project/fandb-agent-640279ce7d36
 
-**GitHub Repo:** https://github.com/IvandeMurard/fb-agent-mvp
+**Core documentation:**
+- [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) — Technical architecture (v0.2.0)
+- [`docs/MARKET_INTELLIGENCE.md`](MARKET_INTELLIGENCE.md) — Market brief (ITB Berlin 2026)
+- [`docs/AI_CONTEXT_LAYER.md`](AI_CONTEXT_LAYER.md) — MCP context layer framing
+- [`docs/Problem_Statement.md`](Problem_Statement.md) — ICP and problem framing
+- [`docs/Cost_Model.md`](Cost_Model.md) — Unit economics
+- [`_ai_workspace/bmad-output/planning-artifacts/prd.md`](../_ai_workspace/bmad-output/planning-artifacts/prd.md) — Full PRD
+- [`_ai_workspace/bmad-output/planning-artifacts/epics.md`](../_ai_workspace/bmad-output/planning-artifacts/epics.md) — Epic breakdown
 
-**Documentation:**
-- [Architecture.md](ARCHITECTURE.md)
-- [MVP_Scope.md](MVP_SCOPE.md)
-- [Cost_Model.md](Cost_Model.md)
-- [Phase 1 Limitations](PHASE_1_LIMITATIONS.md) (to create)
-
-**Veille Sources:**
-- Perplexity: Monday 9am hospitality agentique trends
-- Comet: Filtered hospitality tech content
-- X follows: @Pauline_Cx, @averycode (build in public)
+**Veille sources:**
+- HospitalityNet — industry news + AI coverage
+- Hotel Yearbook — annual strategic framing
+- PhocusWire — travel tech product announcements
+- LinkedIn: Piers Thackray, Matthijs Welle (Mews CEO), Apaleo, Bookboost
 
 ---
 
-**Last updated:** January 7, 2026 by Ivan de Murard  
-**Next review:** Monday, January 13, 2026 at 9:00 AM
-
+**Last updated:** March 20, 2026 by Ivan de Murard
+**Next review:** Monday, March 24, 2026
