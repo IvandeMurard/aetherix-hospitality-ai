@@ -6,10 +6,20 @@ Architecture constraints:
 - OpenAPI schema is served at /api/openapi.json for the typed client generator.
 [Source: architecture.md#Process-Patterns, architecture.md#Architectural-Boundaries]
 """
+import logging
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
+from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports
+from app.api.routes import anomalies
+from app.db.models import Base
+from app.db.session import engine
+from app.workers.anomaly_scan import register_anomaly_scan_job
+
+logger = logging.getLogger(__name__)
 from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather
 from app.db.models import Base
 from app.db.session import engine
@@ -35,6 +45,10 @@ app = FastAPI(
 # ... (middleware and exception handlers)
 app.add_exception_handler(HTTPException, problem_details_handler)
 
+# APScheduler instance — shared across all registered cron jobs
+_scheduler = AsyncIOScheduler()
+
+
 @app.on_event("startup")
 async def on_startup():
     async with engine.begin() as conn:
@@ -52,6 +66,19 @@ async def on_shutdown():
     stop_weather_scheduler()
     stop_event_scheduler()
 
+    # Register background cron jobs
+    register_anomaly_scan_job(_scheduler)
+    _scheduler.start()
+    logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    if _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        logger.info("APScheduler stopped")
+
+
 # Include routers
 app.include_router(pms.router, prefix="/api/v1")
 app.include_router(predictions.router, prefix="/api/v1")
@@ -59,6 +86,7 @@ app.include_router(webhooks.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+app.include_router(anomalies.router, prefix="/api/v1")
 app.include_router(weather.router, prefix="/api/v1")
 app.include_router(baselines.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
