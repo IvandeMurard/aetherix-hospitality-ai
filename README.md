@@ -83,7 +83,7 @@ Aetherix was conceived, structured, and validated using the rigorous **BMAD (Bus
 
 ## Architecture & Technical Strategy
 
-The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy, optimizing for robust LLM orchestration and strict data segregation.
+The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy. The intelligence stack has four distinct layers working in sequence to produce a single actionable recommendation.
 
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': {'edgeLabelBackground': '#1e1e2e', 'lineColor': '#6b7280'}}}%%
@@ -95,24 +95,21 @@ graph TD
     end
 
     subgraph BACK["⚙️ Fat Backend — FastAPI + Python"]
-        Sync["PMS Sync Service"]
-        Semantic["Semantic Reasoning Engine"]
-        RAG["LLM Orchestrator"]
+        Sync["PMS Sync\n+ Captation Rate"]
+        Semantic["Semantic Reasoning\n+ Anomaly Detection"]
+        RAG["Claude Sonnet\nReasoning Engine"]
+        Explain["Explainability\nService"]
     end
 
-    subgraph DATA["🗄️ Data Storage"]
-        DB[("Supabase PostgreSQL")]
-        Vector[("pgvector")]
+    subgraph DATA["🗄️ Intelligence Layers"]
+        DB[("Supabase PostgreSQL\nOperational data")]
+        Vector[("Qdrant Cloud\nF&B patterns · 495+")]
+        Memory[("Backboard.io\nCognitive memory")]
     end
 
     subgraph DELIVERY["🚀 Delivery & UI"]
-        Frontend["Next.js App Router UI"]
-        Push["WhatsApp / SMS / Email"]
-    end
-
-    subgraph OPS["📋 Ops & Knowledge"]
-        Linear["Linear\n(Issue Tracker)"]
-        Obsidian["Obsidian Vault\n(OneDrive sync)"]
+        Push["WhatsApp / SMS / Email\n(UI-less, push-first)"]
+        Frontend["Next.js Dashboard\n(verification layer)"]
     end
 
     PMS -- "Webhooks/API" --> Sync
@@ -120,38 +117,45 @@ graph TD
     Events --> Semantic
     Sync --> DB
     Semantic --> Vector
-    Vector --> RAG
     DB --> RAG
-    RAG -- "Conversational Receipts" --> Push
-    RAG -- "Typed API (openapi-fetch)" --> Frontend
-    Frontend -- "Typesafe Contract" --> RAG
-    RAG -- "Auto-create issues" --> Linear
-    RAG -- "Write runbooks/reports" --> Obsidian
+    Vector --> RAG
+    Memory --> RAG
+    RAG --> Explain
+    Explain -- "Recommendation + Why?" --> Push
+    Explain -- "Typed API (openapi-fetch)" --> Frontend
+    RAG -- "Learn from feedback" --> Memory
 
     classDef external  fill:#0f2744,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
     classDef backend   fill:#2d1b69,stroke:#a855f7,stroke-width:2px,color:#e9d5ff
     classDef db        fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#bbf7d0
     classDef delivery  fill:#431407,stroke:#f97316,stroke-width:2px,color:#fed7aa
-    classDef ops       fill:#3b2800,stroke:#eab308,stroke-width:2px,color:#fef08a
 
     class PMS,Weather,Events external
-    class Sync,Semantic,RAG backend
-    class DB,Vector db
-    class Frontend,Push delivery
-    class Linear,Obsidian ops
+    class Sync,Semantic,RAG,Explain backend
+    class DB,Vector,Memory db
+    class Push,Frontend delivery
 ```
+
+### The Four Intelligence Layers
+
+| Layer | Technology | Role |
+| :--- | :--- | :--- |
+| **1. Numerical Forecast** | Prophet (time-series) | Predicts covers volume from PMS + occupancy + regressors |
+| **2. Semantic Patterns** | Qdrant Cloud (495+ vectors) | Matches current context against similar historical service scenarios |
+| **3. Cognitive Memory** | Backboard.io | Persists manager feedback, operational insights; learns from rejected recommendations |
+| **4. Reasoning & Explanation** | Claude Sonnet (Anthropic) | Synthesizes the three layers into a directive + natural-language explanation |
 
 ### Tech Stack Breakdown
 
 | Layer | Technologies | Purpose |
 | :--- | :--- | :--- |
-| **Frontend (UI)** | Next.js (App Router), Tailwind CSS, shadcn/ui | "Thin Frontend" presentation and dashboarding. |
-| **Backend (AI/Logic)** | Python, FastAPI | "Fat Backend" for LLM chains and async webhook processing. |
-| **Data & Reasoning** | Supabase (PostgreSQL), `pgvector` | RAG, similarity search, and tenant isolation (RLS). |
-| **Delivery** | Twilio, SendGrid/Postmark | Orchestrating multi-channel push notifications. |
-| **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety preventing integration bugs. |
-| **Knowledge Base** | Obsidian vault (OneDrive sync) | Runbooks, SOPs, and AI-generated operational reports — local-first, Markdown native. |
-| **Issue Tracking** | Linear GraphQL API | Project and Roadmap Management. EPICS, Stories, Success Criteria. |
+| **Frontend (UI)** | Next.js (App Router), Tailwind CSS, shadcn/ui | Verification and oversight layer — not the primary interaction surface |
+| **Backend (AI/Logic)** | Python, FastAPI, APScheduler | LLM orchestration, async jobs, push dispatch |
+| **Operational DB** | Supabase (PostgreSQL) + RLS | Multi-tenant data isolation, actuals tracking |
+| **Pattern Store** | Qdrant Cloud | Vector similarity search for F&B scenario patterns |
+| **Cognitive Memory** | Backboard.io | Cross-session memory: manager preferences, feedback learning |
+| **Delivery** | Twilio (WhatsApp/SMS), SendGrid | UI-less push notifications; inbound "Why?" reply handling |
+| **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety |
 
 ---
 
