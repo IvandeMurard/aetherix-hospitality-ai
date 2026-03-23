@@ -63,7 +63,11 @@ class RestaurantProfile(Base):
     notification_channel = Column(String, default="whatsapp")
     phone_number = Column(String)
     email_address = Column(String)
-    
+
+    # ROI configuration (Story 3.3b) — overrides system defaults when set
+    avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # £ per cover
+    staff_hourly_rate = Column(Numeric(8, 2), nullable=True)     # £ per staff/hour
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
