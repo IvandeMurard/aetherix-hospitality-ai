@@ -198,6 +198,10 @@ class StaffingRecommendation(Base):
 
     status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched
 
+    # Story 4.2 (HOS-25): dispatch tracking
+    dispatched_at = Column(DateTime(timezone=True), nullable=True)
+    dispatch_channel = Column(String(10), nullable=True)  # whatsapp | sms | email
+
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
