@@ -10,6 +10,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
+from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather
+from app.db.models import Base
+from app.db.session import engine
+from app.workers.weather_sync import create_weather_scheduler
+
+_weather_scheduler = create_weather_scheduler()
 from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather, baselines, events
 from app.db.models import Base
 from app.db.session import engine
@@ -34,12 +40,15 @@ async def on_startup():
     async with engine.begin() as conn:
         # Create tables
         await conn.run_sync(Base.metadata.create_all)
+    # Start 12h weather sync scheduler
+    _weather_scheduler.start()
     start_weather_scheduler()
     start_event_scheduler()
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    _weather_scheduler.shutdown(wait=False)
     stop_weather_scheduler()
     stop_event_scheduler()
 
