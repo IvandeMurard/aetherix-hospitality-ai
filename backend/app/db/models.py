@@ -162,6 +162,44 @@ class DemandAnomaly(Base):
     recommendation_text = Column(Text)
 
 
+class StaffingRecommendation(Base):
+    """
+    Ready-to-dispatch staffing recommendations produced by the
+    RecommendationFormatterService from ROI-positive demand anomalies.
+
+    Story 3.3c (HOS-23): Format Staffing Recommendations for Dispatch.
+
+    Status lifecycle:  ready_to_push → dispatched
+    Idempotency: UNIQUE constraint on anomaly_id prevents duplicates.
+    """
+    __tablename__ = "staffing_recommendations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    anomaly_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("demand_anomalies.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,  # idempotency: one recommendation per anomaly
+    )
+
+    message_text = Column(Text, nullable=False)
+    triggering_factor = Column(Text)
+    recommended_headcount = Column(Integer)
+
+    window_start = Column(DateTime(timezone=True), nullable=False)
+    window_end = Column(DateTime(timezone=True), nullable=False)
+
+    roi_net = Column(Numeric(10, 2))
+    roi_labor_cost = Column(Numeric(10, 2))
+
+    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
 class RecommendationCache(Base):
     """
     Persistence for AI staffing recommendations.
@@ -172,12 +210,12 @@ class RecommendationCache(Base):
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
     target_date = Column(Date, index=True, nullable=False)
-    
+
     prediction_data = Column(JSON)
     reasoning_summary = Column(String)
     staffing_recommendation = Column(JSON)
-    
+
     is_pushed = Column(Boolean, default=False)
     pushed_at = Column(DateTime)
-    
+
     created_at = Column(DateTime, default=datetime.utcnow)

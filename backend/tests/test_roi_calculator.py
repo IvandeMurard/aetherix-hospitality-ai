@@ -472,7 +472,7 @@ class TestWorkerChain:
 
     @pytest.mark.asyncio
     async def test_worker_job_chains_roi(self):
-        """_run_anomaly_scan_job calls both anomaly scan and ROI scan."""
+        """_run_anomaly_scan_job calls anomaly scan, ROI scan, and formatter."""
         from app.workers.anomaly_scan import _run_anomaly_scan_job
 
         with patch(
@@ -482,6 +482,10 @@ class TestWorkerChain:
             "app.workers.anomaly_scan._roi_service.run_full_scan",
             new_callable=AsyncMock,
         ) as mock_roi, patch(
+            "app.workers.anomaly_scan._formatter_service.run_full_scan",
+            new_callable=AsyncMock,
+            return_value=0,
+        ) as mock_fmt, patch(
             "app.workers.anomaly_scan.AsyncSessionLocal",
         ) as mock_session_factory:
             mock_session = AsyncMock()
@@ -493,3 +497,4 @@ class TestWorkerChain:
 
         mock_scan.assert_called_once()
         mock_roi.assert_called_once()
+        mock_fmt.assert_called_once()  # Story 3.3c AC 6: formatter chained after ROI
