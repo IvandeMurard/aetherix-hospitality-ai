@@ -31,3 +31,4 @@ out/
 # Misc
 .obsidian/
 backend/data/raw/*.csv
+.claude/
