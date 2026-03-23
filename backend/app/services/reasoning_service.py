@@ -25,13 +25,15 @@ class ReasoningService:
     ) -> Dict:
         """Calls Claude to explain the prediction rationale."""
         if not self.claude:
-            return {"summary": "Claude API key missing. Numerical forecast only.", "confidence_factors": []}
+            return self._heuristic_explanation(
+                predicted_covers, confidence, target_date, service_type, context, similar_patterns
+            )
 
         prompt = self._build_prompt(predicted_covers, confidence, target_date, service_type, context, similar_patterns, cognitive_context)
         
         try:
             message = await self.claude.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-sonnet-4-6",
                 max_tokens=300,
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}]
@@ -39,7 +41,8 @@ class ReasoningService:
             explanation = message.content[0].text.strip()
             return {
                 "summary": explanation,
-                "confidence_factors": self._extract_factors(context, similar_patterns)
+                "confidence_factors": self._extract_factors(context, similar_patterns),
+                "claude_used": True,
             }
         except Exception as e:
             import asyncio
@@ -49,7 +52,13 @@ class ReasoningService:
                 detail=f"Exception: {e}\nDate: {target_date} | Service: {service_type} | Covers: {predicted_covers}",
                 tags=["claude", "reasoning"],
             ))
-            return {"summary": f"Reasoning failed: {str(e)}", "confidence_factors": []}
+            return {
+                **self._heuristic_explanation(
+                    predicted_covers, confidence, target_date, service_type, context, similar_patterns
+                ),
+                "claude_used": False,
+                "fallback_reason": str(e),
+            }
 
     def _build_prompt(self, predicted, confidence, dt, svc, context, patterns, cognitive_context) -> str:
         patterns_text = ""
@@ -87,3 +96,60 @@ Keep it actionable for a manager.
         if context.get('events'): factors.append(f"{len(context['events'])} events nearby")
         if patterns: factors.append("Historical pattern matching")
         return factors
+
+    def _heuristic_explanation(
+        self,
+        predicted: int,
+        confidence: float,
+        dt: date,
+        svc: str,
+        context: Dict,
+        patterns: List[Dict],
+    ) -> Dict:
+        """Rule-based explanation used when Claude is unavailable.
+
+        Produces a human-readable summary using only the data already in hand —
+        no LLM call required. This ensures the /predict endpoint always returns
+        an actionable reasoning block.
+        """
+        day_name = dt.strftime("%A")
+        conf_pct = int(confidence * 100)
+
+        # Pattern anchor sentence
+        if patterns:
+            best = patterns[0]
+            payload = best.get("payload", best)
+            hist_covers = payload.get("actual_covers", payload.get("covers", "?"))
+            hist_date = payload.get("date", "a similar past date")
+            pattern_note = (
+                f"Historical data shows {hist_covers} covers on {hist_date} "
+                f"under similar conditions."
+            )
+        else:
+            pattern_note = "No close historical pattern available for direct comparison."
+
+        # Context modifiers
+        weather = context.get("weather", {})
+        weather_note = ""
+        if weather.get("condition"):
+            weather_note = f" Current weather is {weather['condition']}."
+
+        events = context.get("events", [])
+        event_note = ""
+        if events:
+            event_note = f" {len(events)} nearby event(s) may drive additional demand."
+
+        occ = context.get("occupancy")
+        occ_note = f" Hotel occupancy is at {int(occ * 100)}%." if occ else ""
+
+        summary = (
+            f"Prophet forecasts {predicted} covers for {svc} on {day_name} "
+            f"with {conf_pct}% confidence. "
+            f"{pattern_note}{weather_note}{event_note}{occ_note}"
+        ).strip()
+
+        return {
+            "summary": summary,
+            "confidence_factors": self._extract_factors(context, patterns),
+            "claude_used": False,
+        }
