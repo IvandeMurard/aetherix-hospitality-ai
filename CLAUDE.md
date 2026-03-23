@@ -21,8 +21,8 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 |--------|------------|-------|
 | Backend | FastAPI + Python 3.11 | Async, Pydantic v2, OpenAPI auto-généré |
 | Base de données | Supabase (PostgreSQL) | Auth, real-time, backups gérés |
-| Patterns vectoriels | Qdrant Cloud | Patterns F&B, embeddings 1536d, Cosine — 495+ patterns |
-| Mémoire cognitive | Backboard.io | Feedback managers, insights opérationnels, learning inter-sessions (`BACKBOARD_API_KEY`) |
+| Patterns vectoriels | pgvector (Supabase) | tables `fb_patterns` + `operational_memory`, embeddings Mistral 1024d, HNSW — 495+ patterns (HOS-99) |
+| Mémoire cognitive | pgvector (Supabase) | `operational_memory` — remplace Backboard.io, feedback manager + recency scoring Python (HOS-99) |
 | Cache | Redis (Upstash) | Session state, TTL 1h |
 | IA principale | Claude Sonnet (Anthropic) | Reasoning + explainability |
 | Forecast numérique | Prophet (Meta) | Time-series covers prediction + regressors (météo, events, occupancy) |
@@ -40,7 +40,7 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 | # | Décision | Rationale | Alternatives rejetées |
 |---|---------|-----------|----------------------|
 | 1 | Claude Sonnet > Mistral | Meilleur reasoning, 200K ctx, explainability critique | Mistral trop faible, GPT-4 trop cher |
-| 2 | Qdrant > pgvector > Pinecone | Free tier généreux, <100ms, cloud-native | Pinecone $70/mo, pgvector plus lent |
+| 2 | pgvector (Supabase) > Qdrant > Pinecone | Suffisant à <50K patterns (Phase 0/1), 1 seule requête SQL vs 2-3 API hops, élimine Qdrant + Backboard, compatible MCP latency target (<500ms). Réévaluer Qdrant en Phase 3+ (>50K patterns / >50 hôtels). | Qdrant surdimensionné à Phase 0/1 ; Pinecone $70/mo ; Backboard 504 timeouts documentés |
 | 3 | Voice opt-in (pas voice-first) | Trop risqué en démo (bruit), clavier = fallback fiable | Voice-first = risque UX |
 | 4 | Reasoning collapsible par défaut | Charge cognitive, 1-ligne visible, expand pour power users | Tout afficher = clutter |
 | 5 | Pas d'auto-actions (Phase MVP) | 63% managers veulent contrôle humain, trust-building | Full automation = adoption faible |
@@ -133,16 +133,15 @@ docs/ARCHITECTURE.md           — design système complet (v0.2.0, Feb 2026)
 
 ```
 ANTHROPIC_API_KEY     — Claude API (reasoning + explainability)
-BACKBOARD_API_KEY     — Backboard.io (cognitive memory layer — Phase 3)
 LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
 LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad (équipe HOS)
 OBSIDIAN_VAULT_PATH   — C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality
 APALEO_CLIENT_ID      — OAuth2 (prioritaire)
 APALEO_CLIENT_SECRET  — OAuth2
-SUPABASE_URL          — PostgreSQL
+SUPABASE_URL          — PostgreSQL (+ pgvector pour fb_patterns et operational_memory)
 SUPABASE_KEY          — Anon key
-QDRANT_URL            — Vector DB (patterns F&B)
-QDRANT_API_KEY        — Vector DB
+DATABASE_URL          — asyncpg DSN (postgresql+asyncpg://...) pour SQLAlchemy
+MISTRAL_API_KEY       — Embeddings 1024d (mistral-embed) pour fb_patterns et operational_memory
 REDIS_URL             — Upstash (session state)
 ```
 
