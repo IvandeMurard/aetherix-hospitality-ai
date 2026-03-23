@@ -56,10 +56,12 @@ class RestaurantProfile(Base):
     latitude = Column(Float)
     longitude = Column(Float)
     
-    # Notification preferences
-    notification_channel = Column(String, default="whatsapp")
+    # Notification preferences (Story 4.1 — HOS-24)
+    preferred_channel = Column(String, default="whatsapp")   # sms / whatsapp / email
     phone_number = Column(String)
-    email_address = Column(String)
+    notification_email = Column(String)
+    gps_lat = Column(Float)
+    gps_lng = Column(Float)
 
     # ROI configuration (Story 3.3b) — overrides system defaults when set
     avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # £ per cover
