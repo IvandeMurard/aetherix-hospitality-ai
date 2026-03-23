@@ -1,6 +1,6 @@
-from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric, Text
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from datetime import datetime
 import uuid
@@ -84,6 +84,79 @@ class PMSSyncLog(Base):
     error_message = Column(String)
     
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class WeatherForecast(Base):
+    """
+    Normalized weather forecast data for a property.
+    Story 3.1: Ingest Localized Weather Data.
+    """
+    __tablename__ = "weather_forecasts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    forecast_timestamp = Column(DateTime(timezone=True), nullable=False)
+    condition_code = Column(String, nullable=False)
+    temperature_c = Column(Numeric(5, 2))
+    precipitation_prob = Column(Integer)
+    wind_speed_kmh = Column(Numeric(6, 2))
+    raw_payload = Column(JSONB)
+    ingested_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class LocalEvent(Base):
+    """
+    Normalized local event data for a property from PredictHQ.
+    Story 3.2: Ingest Localized Event Data.
+    """
+    __tablename__ = "local_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    predicthq_event_id = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+    phq_category = Column(String)
+    start_dt = Column(DateTime(timezone=True), nullable=False)
+    end_dt = Column(DateTime(timezone=True))
+    predicted_attendance = Column(Integer)
+    impact_score = Column(Numeric(5, 2))
+    rank = Column(Integer)
+    location_lat = Column(Numeric(9, 6))
+    location_lng = Column(Numeric(9, 6))
+    raw_payload = Column(JSONB)
+    ingested_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class DemandAnomaly(Base):
+    """
+    Detected demand anomaly window for a property.
+    Story 3.3a: Detect Demand Anomalies Against Baseline.
+
+    Status lifecycle:
+      'detected' -> 'roi_positive' (3.3b) -> 'ready_to_push' (3.3c) -> 'dispatched' (Epic 4)
+    """
+    __tablename__ = "demand_anomalies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    window_start = Column(DateTime(timezone=True), nullable=False)
+    window_end = Column(DateTime(timezone=True), nullable=False)
+    expected_demand = Column(Numeric(10, 2), nullable=False)
+    baseline_demand = Column(Numeric(10, 2), nullable=False)
+    deviation_pct = Column(Numeric(6, 2), nullable=False)
+    direction = Column(String, nullable=False)           # 'surge' | 'lull'
+    triggering_factors = Column(JSONB, nullable=False, default=list)
+    status = Column(String, nullable=False, default="detected")
+    detected_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    # Populated by downstream stories:
+    roi_revenue_opp = Column(Numeric(10, 2))
+    roi_labor_cost = Column(Numeric(10, 2))
+    roi_net = Column(Numeric(10, 2))
+    recommendation_text = Column(Text)
+
 
 class RecommendationCache(Base):
     """
