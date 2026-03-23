@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.error_handlers import problem_details_handler
 from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports
 from app.api.routes import anomalies, notifications
+from app.api.routes import webhook as twilio_inbound_webhook
 from app.db.models import Base
 from app.db.session import engine
 from app.workers.anomaly_scan import register_anomaly_scan_job
@@ -68,6 +69,8 @@ app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(anomalies.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
+# Story 4.3 (HOS-26): public Twilio callback — no /api/v1 or auth prefix
+app.include_router(twilio_inbound_webhook.router)
 
 
 # ---------------------------------------------------------------------------

@@ -196,11 +196,15 @@ class StaffingRecommendation(Base):
     roi_net = Column(Numeric(10, 2))
     roi_labor_cost = Column(Numeric(10, 2))
 
-    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched
+    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected
 
     # Story 4.2 (HOS-25): dispatch tracking
     dispatched_at = Column(DateTime(timezone=True), nullable=True)
     dispatch_channel = Column(String(10), nullable=True)  # whatsapp | sms | email
+
+    # Story 4.3 (HOS-26): manager action logging
+    actioned_at = Column(DateTime(timezone=True), nullable=True)
+    action = Column(String(10), nullable=True)  # accepted | rejected
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
