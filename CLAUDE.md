@@ -230,6 +230,8 @@ Chaque mode adopte un comportement, un contexte prioritaire, et des artefacts de
 **Comportement :** Documenter ce qui a été implémenté, maintenir standards de doc
 **Artefacts :** Fichiers dans `docs/`, CLAUDE.md si changement de contexte projet
 
+**Direction stratégique (Mars 2026) :** "Agent-First Distribution" — Aetherix doit être une **primitive appelable par d'autres agents** (MCP Server), pas seulement un produit SaaS avec UI. Distribution = top of call stack, pas top of funnel.
+
 ---
 
 ## Session Veille — Instructions
@@ -277,12 +279,35 @@ Résultat : ticket Linear "Veille Hebdomadaire" + note Obsidian dans `AI Reports
 
 ---
 
+## Roadmap synthétique (pour évaluer la pertinence)
+- **Phase 0 (en cours)** : Architecture FastAPI, modèles DB, intégrations de base (Apaleo, WhatsApp)
+- **Phase 0.5 (ajout — Mars 2026)** : MCP Server — exposer les capabilities core comme primitive agent-callable
+- **Phase 1** : Forecasting F&B (Prophet + LLM), alertes proactives via WhatsApp + instrumentation "Agent SEO"
+- **Phase 2** : Agent conversationnel "Receipts" — explications des recommandations
+- **Phase 3** : Multi-hotel, PMS étendu (Mews), analytics avancés
+
+**Décisions techniques ouvertes :**
+- Stratégie d'embedding pour RAG (pgvector vs Qdrant)
+- Modèle de pricing SaaS (par hôtel / par prédiction / hybrid)
+- Priorité Apaleo vs Mews pour la première intégration PMS live
+- **[MCP]** Capabilities à exposer en priorité : `forecast_occupancy`, `get_stock_alerts`, `get_fb_kpis`
+- **[Agent SEO]** Métriques machine-legible : `tool_success_rate` > 99.5%, `p95_latency` < 500ms, `schema_stability`
 ## ⚠️ Points d'attention techniques
 
 ## Protocole Dev Agent — Définition of Done par Story
 
 Chaque story est confiée à un dev agent autonome. Le protocole est :
 
+## Fichiers clés
+- `backend/app/services/` — orchestration IA et logique métier
+- `backend/app/integrations/` — Obsidian, Linear, Apaleo
+- `backend/app/mcp_server.py` — **[À créer]** MCP Server pour capabilities agent-callable
+- `backend/app/middleware/` — **[À créer]** tracking "Agent SEO" (success_rate, latency, retries)
+- `scripts/intelligence_report.py` — pipeline veille → Obsidian + Linear
+- `scripts/veille_proactive.py` — monitoring hebdomadaire automatisé
+- `docs/ARCHITECTURE.md` — design système complet
+- `docs/ROADMAP_NOW_NEXT_LATER.md` — roadmap opérationnelle
+- `.github/workflows/veille-hebdomadaire.yml` — cron lundi 8h30
 1. **Lire** le spec de la Linear issue (via MCP Linear)
 2. **Auditer** ce qui existe dans le codebase
 3. **Implémenter** la story complète (migration DB, modèle ORM, schemas, service, worker, route)
@@ -305,7 +330,7 @@ Chaque story est confiée à un dev agent autonome. Le protocole est :
 ```
 ANTHROPIC_API_KEY     — sk-ant-...
 LINEAR_API_KEY        — lin_api_...
-LINEAR_TEAM_ID        — UUID équipe Linear
+LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad
 OBSIDIAN_VAULT_PATH   — C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitality
 ```
 1. **ARCHITECTURE.md** : daté de février 2026, certaines sections (Streamlit, Render.com) correspondent à l'ancienne stack — se fier à ce CLAUDE.md pour la stack actuelle.
