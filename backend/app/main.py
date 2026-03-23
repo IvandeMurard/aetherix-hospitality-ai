@@ -18,6 +18,7 @@ from app.api.routes import anomalies, notifications
 from app.db.models import Base
 from app.db.session import engine
 from app.workers.anomaly_scan import register_anomaly_scan_job
+from app.workers.dispatch_worker import register_dispatch_job
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,7 @@ async def on_startup():
 
     # Register background cron jobs
     register_anomaly_scan_job(_scheduler)
+    register_dispatch_job(_scheduler)  # Story 4.2: dispatch alerts every 2 minutes
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
 
