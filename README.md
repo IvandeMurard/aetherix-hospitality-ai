@@ -122,7 +122,7 @@ graph TD
 | **Delivery** | Twilio, SendGrid/Postmark | Orchestrating multi-channel push notifications. |
 | **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety preventing integration bugs. |
 | **Knowledge Base** | Obsidian vault (OneDrive sync) | Runbooks, SOPs, and AI-generated operational reports — local-first, Markdown native. |
-| **Issue Tracking** | Linear GraphQL API | Maintenance requests and ops alerts created automatically by the LLM Orchestrator. |
+| **Issue Tracking** | Linear GraphQL API | Project and Roadmap Management. EPICS, Stories, Success Criteria. |
 
 ---
 
@@ -150,6 +150,6 @@ aetherix/
 ```
 
 ---
-
+Made with ❤️ for hotels, restaurants, and those who love them. Ivan de Murard
 ---
 *Aetherix - Contextual Intelligence for Hospitality Operations.* 

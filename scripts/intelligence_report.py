@@ -45,6 +45,11 @@ from pathlib import Path
 
 import httpx
 
+# Charge .env si présent (local dev + Claude Code cloud)
+sys.path.insert(0, str(Path(__file__).parent))
+from _env_loader import load_env
+load_env()
+
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 REPO_ROOT  = Path(__file__).parent.parent.resolve()
@@ -52,7 +57,21 @@ VAULT_ROOT = Path(os.environ.get(
     "OBSIDIAN_VAULT_PATH",
     r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality",
 ))
+
+# Vault path: env var overrides hardcoded Windows path (enables Linux/CI usage)
+_vault_env = os.environ.get("OBSIDIAN_VAULT_PATH", "")
+VAULT_ROOT = Path(_vault_env) if _vault_env else Path(r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality")
+# Vault path: use OBSIDIAN_VAULT_PATH env var (supports WSL, Linux, CI).
+# Fallback to the Windows path for local native dev.
+_vault_env = os.environ.get(
+    "OBSIDIAN_VAULT_PATH",
+    r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality",
+)
+VAULT_ROOT = Path(_vault_env)
 VAULT_INTEL_DIR = VAULT_ROOT / "AI Reports" / "Intelligence"
+
+# Fallback: if vault not accessible, stage notes locally in the repo
+STAGING_DIR = REPO_ROOT / "docs" / "veille-staging"
 
 LINEAR_API = "https://api.linear.app/graphql"
 
@@ -211,6 +230,16 @@ def write_obsidian_note(
 
     VAULT_INTEL_DIR.mkdir(parents=True, exist_ok=True)
     dest.write_text(content, encoding="utf-8")
+    try:
+        VAULT_INTEL_DIR.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+    except OSError:
+        # Vault inaccessible (e.g., Windows OneDrive path on Linux) → stage locally
+        staging_dest = STAGING_DIR / filename
+        STAGING_DIR.mkdir(parents=True, exist_ok=True)
+        staging_dest.write_text(content, encoding="utf-8")
+        print(f"[!] Vault inaccessible → note stagée : {staging_dest}")
+        return staging_dest
     return dest
 
 
