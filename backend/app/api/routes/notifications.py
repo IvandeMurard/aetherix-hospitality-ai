@@ -1,10 +1,12 @@
 """Notifications API routes.
 
-POST /api/v1/notifications/test — dispatch a test message via the
-requested channel (SMS, WhatsApp, or Email) and return the result.
+POST /api/v1/notifications/test    — dispatch a test message via the
+                                     requested channel (SMS, WhatsApp, or Email).
+POST /api/v1/notifications/dispatch — manually trigger the alert dispatch pipeline
+                                      (Story 4.2, HOS-25).
 
 Architecture constraints:
-- Business logic lives in the integration clients, not here (thin router).
+- Business logic lives in the integration clients / services, not here (thin router).
 - RFC 7807 Problem Details errors via the global exception handler.
 - No real messages are sent when the service credentials are absent
   (NotConfiguredError is surfaced as HTTP 503).
@@ -12,9 +14,13 @@ Architecture constraints:
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotConfiguredError
+from app.db.session import get_db
 from app.integrations.sendgrid_client import SendGridClient
 from app.integrations.twilio_client import TwilioClient
 from app.schemas.notifications import (
@@ -22,6 +28,9 @@ from app.schemas.notifications import (
     TestNotificationRequest,
     TestNotificationResponse,
 )
+from app.services.alert_dispatcher import AlertDispatcherService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -89,3 +98,33 @@ async def send_test_notification(
             status_code=500,
             detail=f"Notification delivery failed: {exc}",
         ) from exc
+
+
+@router.post(
+    "/dispatch",
+    status_code=202,
+    summary="Manually trigger the alert dispatch pipeline",
+    description=(
+        "Enqueues an immediate dispatch run for all ready_to_push staffing "
+        "recommendations. Returns 202 immediately; the actual dispatch runs "
+        "in the background. Useful for testing and on-demand delivery (Story 4.2)."
+    ),
+)
+async def trigger_dispatch(
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """POST /api/v1/notifications/dispatch
+
+    Accepts immediately (202) and dispatches all ready_to_push recommendations
+    in the background via the manager's preferred channel.
+    """
+
+    async def _run() -> None:
+        try:
+            await AlertDispatcherService().run_pending(db)
+        except Exception:
+            logger.exception("trigger_dispatch: background task failed")
+
+    background_tasks.add_task(_run)
+    return {"status": "accepted", "message": "Dispatch run triggered."}
