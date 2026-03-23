@@ -34,6 +34,7 @@ backend/data/raw/*.csv
 
 # Claude Code agent worktrees
 .claude/worktrees/
+.claire/
 
 # Stray Obsidian vault path (Windows path written literally on Linux)
 C:\\Users\\
