@@ -45,6 +45,11 @@ from pathlib import Path
 
 import httpx
 
+# Charge .env si présent (local dev + Claude Code cloud)
+sys.path.insert(0, str(Path(__file__).parent))
+from _env_loader import load_env
+load_env()
+
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 REPO_ROOT  = Path(__file__).parent.parent.resolve()
