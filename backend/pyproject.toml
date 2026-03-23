@@ -16,7 +16,6 @@ dependencies = [
     "tenacity>=8.2.0,<9",
     "apscheduler>=3.10.0,<4",
     "anthropic>=0.34.0",
-    "qdrant-client>=1.11.0",
     "mistralai>=1.0.0",
     "prophet>=1.1.5",
     "pandas>=2.2.0",
