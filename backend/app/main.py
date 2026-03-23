@@ -14,10 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.error_handlers import problem_details_handler
 from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports
-from app.api.routes import anomalies
+from app.api.routes import anomalies, notifications
+from app.api.routes import webhook as twilio_inbound_webhook
 from app.db.models import Base
 from app.db.session import engine
 from app.workers.anomaly_scan import register_anomaly_scan_job
+from app.workers.dispatch_worker import register_dispatch_job
 
 logger = logging.getLogger(__name__)
 from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather
@@ -68,6 +70,7 @@ async def on_shutdown():
 
     # Register background cron jobs
     register_anomaly_scan_job(_scheduler)
+    register_dispatch_job(_scheduler)  # Story 4.2: dispatch alerts every 2 minutes
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
 
@@ -87,6 +90,9 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(anomalies.router, prefix="/api/v1")
+app.include_router(notifications.router, prefix="/api/v1")
+# Story 4.3 (HOS-26): public Twilio callback — no /api/v1 or auth prefix
+app.include_router(twilio_inbound_webhook.router)
 app.include_router(weather.router, prefix="/api/v1")
 app.include_router(baselines.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
