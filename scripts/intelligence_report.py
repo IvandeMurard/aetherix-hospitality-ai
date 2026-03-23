@@ -48,7 +48,10 @@ import httpx
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 REPO_ROOT  = Path(__file__).parent.parent.resolve()
-VAULT_ROOT = Path(r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality")
+VAULT_ROOT = Path(os.environ.get(
+    "OBSIDIAN_VAULT_PATH",
+    r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality",
+))
 VAULT_INTEL_DIR = VAULT_ROOT / "AI Reports" / "Intelligence"
 
 LINEAR_API = "https://api.linear.app/graphql"
@@ -200,6 +203,10 @@ def write_obsidian_note(
     if dry_run:
         print(f"[dry-run] Écrirait : {dest}")
         print(content[:300] + ("..." if len(content) > 300 else ""))
+        return dest
+
+    if not VAULT_ROOT.exists():
+        print(f"[–] Obsidian vault introuvable sur ce système ({VAULT_ROOT}) — écriture ignorée.", file=sys.stderr)
         return dest
 
     VAULT_INTEL_DIR.mkdir(parents=True, exist_ok=True)
