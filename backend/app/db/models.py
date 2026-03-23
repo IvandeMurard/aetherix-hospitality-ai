@@ -1,6 +1,6 @@
-from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from datetime import datetime
 import uuid
@@ -85,6 +85,31 @@ class PMSSyncLog(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class WeatherForecast(Base):
+    """
+    Hourly weather forecast data ingested from Open-Meteo.
+    Story 3.1: Ingest Localized Weather Data (HOS-83).
+    Upsert key: (tenant_id, property_id, forecast_timestamp).
+    """
+    __tablename__ = "weather_forecasts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
+    property_id = Column(String, nullable=False)
+    forecast_timestamp = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
+
+    # Normalized weather fields (ready for Story 3.3a cross-reference)
+    condition_code = Column(Integer)        # WMO weather interpretation code
+    temperature_c = Column(Numeric(5, 2))   # degrees Celsius
+    precipitation_prob = Column(Integer)    # 0-100 %
+    wind_speed_kmh = Column(Numeric(6, 2))  # km/h
+
+    source = Column(String, nullable=False, default="open-meteo")
+    fetched_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    property = relationship("RestaurantProfile", foreign_keys=[tenant_id],
+                            primaryjoin="WeatherForecast.tenant_id == RestaurantProfile.tenant_id")
 class CaptationBaseline(Base):
     """
     Stores calculated captation rate baselines per tenant/property.
