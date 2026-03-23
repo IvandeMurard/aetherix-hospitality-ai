@@ -1,22 +1,23 @@
 """API routes for demand anomaly detection.
 
 Endpoints:
-  POST /api/v1/anomalies/scan  — trigger immediate scan for the authenticated
-                                  user's property; returns 202 Accepted.
-  GET  /api/v1/anomalies        — paginated list of anomalies for the
-                                  authenticated user's property.
+  POST /api/v1/anomalies/scan    — trigger immediate scan (Story 3.3a)
+  GET  /api/v1/anomalies          — paginated list (Story 3.3a)
+  POST /api/v1/anomalies/roi      — trigger ROI calculation (Story 3.3b)
+  POST /api/v1/anomalies/format   — trigger recommendation formatter (Story 3.3c)
 
 Architecture constraints:
 - Routes contain NO business logic — all logic lives in app/services/.
 - POST returns 202 immediately; work runs as BackgroundTask.
 - All HTTPExceptions use RFC 7807 Problem Details (registered in main.py).
 - camelCase JSON output via Pydantic alias generator.
-[Source: architecture.md#Architectural-Boundaries, story 3.3a Task 5]
+[Source: architecture.md#Architectural-Boundaries, story 3.3a Task 5,
+         story 3.3b AC 10, story 3.3c HOS-23 AC 7]
 """
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import text
@@ -30,13 +31,16 @@ from app.schemas.anomalies import (
     DemandAnomalyRead,
     ROICalculationResponse,
 )
+from app.schemas.recommendations import FormatTriggerRequest, FormatTriggerResponse
 from app.services.anomaly_detection import AnomalyDetectionService
 from app.services.roi_calculator import ROICalculatorService
+from app.services.recommendation_formatter import RecommendationFormatterService
 
 router = APIRouter(prefix="/anomalies", tags=["anomalies"])
 
 _service = AnomalyDetectionService()
 _roi_service = ROICalculatorService()
+_formatter_service = RecommendationFormatterService()
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +203,65 @@ async def _run_roi_background() -> None:
 
     async with AsyncSessionLocal() as session:
         await _roi_service.run_full_scan(session)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/anomalies/format  (Story 3.3c — HOS-23)
+# ---------------------------------------------------------------------------
+@router.post(
+    "/format",
+    status_code=202,
+    response_model=FormatTriggerResponse,
+    summary="Trigger recommendation formatting for all roi_positive anomalies",
+)
+async def trigger_format(
+    background_tasks: BackgroundTasks,
+    body: Optional[FormatTriggerRequest] = None,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> FormatTriggerResponse:
+    """Manually trigger the recommendation formatter (AC #7).
+
+    * If ``propertyId`` is provided in the request body, only that property
+      is processed.
+    * Otherwise the formatter runs across all tenants / properties.
+
+    Returns **202 Accepted** immediately.  Work runs as a BackgroundTask.
+
+    Idempotency: re-running does not duplicate recommendations — the
+    UNIQUE(anomaly_id) constraint handles this at the DB level (AC #8).
+    """
+    property_id: Optional[uuid.UUID] = body.property_id if body else None
+
+    if property_id:
+        background_tasks.add_task(
+            _run_format_background_for_property,
+            property_id,
+        )
+    else:
+        background_tasks.add_task(_run_format_background_full)
+
+    return FormatTriggerResponse(
+        accepted=True,
+        message="Recommendation formatting job accepted.",
+        property_id=property_id,
+    )
+
+
+async def _run_format_background_full() -> None:
+    """Background task: open a fresh DB session and run the full formatting scan."""
+    from app.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        await _formatter_service.run_full_scan(session)
+
+
+async def _run_format_background_for_property(property_id: uuid.UUID) -> None:
+    """Background task: format recommendations for a single property."""
+    from app.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        await _formatter_service.run_for_property(session, property_id)
 
 
 # ---------------------------------------------------------------------------

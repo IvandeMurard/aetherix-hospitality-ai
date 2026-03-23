@@ -53,6 +53,10 @@ load_env()
 # ─── Configuration ────────────────────────────────────────────────────────────
 
 REPO_ROOT  = Path(__file__).parent.parent.resolve()
+VAULT_ROOT = Path(os.environ.get(
+    "OBSIDIAN_VAULT_PATH",
+    r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality",
+))
 
 # Vault path: env var overrides hardcoded Windows path (enables Linux/CI usage)
 _vault_env = os.environ.get("OBSIDIAN_VAULT_PATH", "")
@@ -220,6 +224,12 @@ def write_obsidian_note(
         print(content[:300] + ("..." if len(content) > 300 else ""))
         return dest
 
+    if not VAULT_ROOT.exists():
+        print(f"[–] Obsidian vault introuvable sur ce système ({VAULT_ROOT}) — écriture ignorée.", file=sys.stderr)
+        return dest
+
+    VAULT_INTEL_DIR.mkdir(parents=True, exist_ok=True)
+    dest.write_text(content, encoding="utf-8")
     try:
         VAULT_INTEL_DIR.mkdir(parents=True, exist_ok=True)
         dest.write_text(content, encoding="utf-8")

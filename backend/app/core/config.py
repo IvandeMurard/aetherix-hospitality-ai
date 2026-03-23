@@ -22,3 +22,22 @@ DEFAULT_STAFF_HOURLY_RATE: float = 14.0
 #: Default captation rate — fraction of the excess demand that the property
 #: is expected to capture when fully staffed.
 DEFAULT_CAPTATION_RATE: float = 0.7
+
+# ─── Twilio (SMS + WhatsApp) ─────────────────────────────────────────────────
+import os as _os
+
+TWILIO_ACCOUNT_SID: str = _os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN: str = _os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER: str = _os.getenv("TWILIO_FROM_NUMBER", "")   # E.164 e.g. +15005550006
+TWILIO_WHATSAPP_FROM: str = _os.getenv("TWILIO_WHATSAPP_FROM", "")  # whatsapp:+14155238886
+
+# ─── SendGrid (Email) ────────────────────────────────────────────────────────
+SENDGRID_API_KEY: str = _os.getenv("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL: str = _os.getenv("SENDGRID_FROM_EMAIL", "noreply@aetherix.io")
+
+# ─── Story 4.3 (HOS-26): Twilio Inbound Webhook ──────────────────────────────
+# Set to "true" in CI / test environments to bypass HMAC-SHA1 signature
+# validation on POST /webhooks/twilio/inbound.
+TWILIO_SKIP_SIGNATURE_VALIDATION: bool = (
+    _os.getenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "false").lower() == "true"
+)
