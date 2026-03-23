@@ -1,9 +1,12 @@
-"""Twilio Inbound Webhook — Story 4.3 (HOS-26).
+"""Twilio Inbound Webhook — Story 4.3 (HOS-26) + Story 5.1 (HOS-28).
 
 Public endpoint: POST /webhooks/twilio/inbound
 
-Receives inbound SMS/WhatsApp messages forwarded by Twilio, parses the
-manager's Accept/Reject decision, and persists it via ActionLoggerService.
+Receives inbound SMS/WhatsApp messages forwarded by Twilio.
+- Accept / Reject → persisted immediately via ActionLoggerService.
+- Everything else  → acknowledged immediately; a BackgroundTask runs
+                     QueryParserService to identify the tenant context and
+                     persist a ConversationalQuery row for AI processing (FR13).
 
 Security model
 --------------
@@ -16,8 +19,9 @@ Security model
 Response
 --------
 Always returns TwiML XML with Content-Type ``application/xml``.
-Twilio requires a response within 15 s; our target is < 200 ms because
-all I/O (one DB query + one DB write) is async.
+Twilio requires a response within 15 s; our target is < 200 ms for the
+synchronous path (action logging) and < 50 ms for the async query path
+(background task).
 
 [Source: https://www.twilio.com/docs/usage/security#validating-signatures]
 """
@@ -30,13 +34,14 @@ import logging
 import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Header, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Header, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.schemas.webhook import ActionType, TwilioInboundPayload
 from app.services.action_logger import ActionLoggerService, parse_action
+from app.services.query_parser import QueryParserService
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +67,21 @@ _TWIML_UNKNOWN = (
     "<?xml version='1.0' encoding='UTF-8'?>"
     "<Response><Message>"
     "Reply ACCEPT or REJECT to action this recommendation."
+    "</Message></Response>"
+)
+
+# Story 5.1 (HOS-28): conversational query acknowledgements
+_TWIML_QUERY_ACK = (
+    "<?xml version='1.0' encoding='UTF-8'?>"
+    "<Response><Message>"
+    "Got your question, I'm looking into it... \U0001f9d0"
+    "</Message></Response>"
+)
+_TWIML_QUERY_NO_CONTEXT = (
+    "<?xml version='1.0' encoding='UTF-8'?>"
+    "<Response><Message>"
+    "Sorry, I couldn't find an active recommendation linked to your number. "
+    "Please contact your F&B manager directly."
     "</Message></Response>"
 )
 
@@ -114,6 +134,7 @@ def _validate_twilio_signature(
 @router.post("/twilio/inbound")
 async def twilio_inbound_webhook(
     request: Request,
+    background_tasks: BackgroundTasks,
     # Twilio always posts form-encoded data
     From: Annotated[str, Form()] = "",
     Body: Annotated[str, Form()] = "",
@@ -122,8 +143,9 @@ async def twilio_inbound_webhook(
     x_twilio_signature: Annotated[str | None, Header()] = None,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    """Receive an inbound SMS/WhatsApp message and log the manager decision.
+    """Receive an inbound SMS/WhatsApp message and route it appropriately.
 
+    Story 4.3 (HOS-26) — Accept / Reject path:
     AC#1  — Parses "Accept" / "Reject" (case-insensitive).
     AC#2  — Updates StaffingRecommendation status: accepted | rejected.
     AC#3  — Sets actioned_at timestamp.
@@ -132,6 +154,14 @@ async def twilio_inbound_webhook(
     AC#6  — Returns TwiML XML; Content-Type: application/xml.
     AC#7  — No get_current_user dependency (public Twilio callback).
     AC#8  — Signature check skipped when TWILIO_SKIP_SIGNATURE_VALIDATION=true.
+
+    Story 5.1 (HOS-28) — Conversational query path (FR13):
+    AC#1  — Non-action text kicks off a BackgroundTask.
+    AC#2  — BackgroundTask resolves tenant_id + recommendation from phone number.
+    AC#3  — Webhook immediately returns a TwiML acknowledgement (< 50 ms).
+    AC#4  — Query persisted in conversational_queries table.
+    AC#5  — No matching recommendation → polite TwiML response.
+    AC#6  — Idempotency: duplicate within 60 s is suppressed.
     """
     skip_validation = (
         os.getenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "false").lower() == "true"
@@ -159,12 +189,37 @@ async def twilio_inbound_webhook(
     action = parse_action(payload.Body)
 
     if action != ActionType.unknown:
+        # ---------------------------------------------------------------
+        # Story 4.3 — synchronous Accept/Reject logging
+        # ---------------------------------------------------------------
         service = ActionLoggerService()
         result = await service.log_action(payload.From_, action, db)
         logger.info("twilio_inbound: action log result=%s", result)
-    else:
-        logger.info(
-            "twilio_inbound: unknown action from %s body=%r", From, Body
-        )
+        return _xml_response(_ACTION_TWIML[action])
 
-    return _xml_response(_ACTION_TWIML[action])
+    # -------------------------------------------------------------------
+    # Story 5.1 — conversational query: acknowledge immediately, parse in bg
+    # -------------------------------------------------------------------
+    logger.info(
+        "twilio_inbound: conversational query from=%s body=%r — scheduling bg task",
+        From,
+        Body,
+    )
+    background_tasks.add_task(
+        _bg_parse_query,
+        from_number=payload.From_,
+        body=payload.Body,
+        db=db,
+    )
+    return _xml_response(_TWIML_QUERY_ACK)
+
+
+async def _bg_parse_query(
+    from_number: str,
+    body: str,
+    db: AsyncSession,
+) -> None:
+    """Background task: parse and store a conversational query (Story 5.1 AC#2)."""
+    service = QueryParserService()
+    result = await service.parse_and_store(from_number=from_number, body=body, session=db)
+    logger.info("twilio_inbound bg_parse_query: result=%s", result)

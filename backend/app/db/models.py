@@ -336,6 +336,31 @@ class StaffingRecommendation(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class ConversationalQuery(Base):
+    """
+    Inbound conversational queries from managers via Twilio webhooks.
+
+    Story 5.1 (HOS-28): Parse Conversational Inbound Queries (FR13).
+
+    Status lifecycle: pending → processing → answered
+    Idempotency: same (from_number, body) within 60 s does not create a duplicate.
+    """
+    __tablename__ = "conversational_queries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    from_number = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    recommendation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status = Column(String, nullable=False, default="pending")  # pending | processing | answered
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class RecommendationCache(Base):
     """
     Persistence for AI staffing recommendations.
