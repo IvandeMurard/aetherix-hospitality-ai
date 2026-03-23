@@ -4,6 +4,9 @@
 **Current Phase:** Phase 3 — Dashboard MVP (active)
 **Status:** Phases 1 + 2 complete. Next.js dashboard + FastAPI backend live in Docker.
 **Market context:** ITB Berlin 2026 confirmed F&B ops forecasting as an uncontested gap in the agentic AI landscape.
+**Last review:** March 22, 2026
+**Strategic direction:** Agent-First Distribution (MCP Server + Agent SEO)
+**Source:** Andrew Chen (a16z) insight — "distribution shifts from top of funnel to top of call stack"
 
 ---
 
@@ -141,6 +144,19 @@
   - Late checkouts → extended breakfast service trigger
 
 ### Multi-property & portfolio view
+**In progress (elevated from backlog → Phase 0.5):**
+- ✅ **MCP Server for agent-callable capabilities** — TAC-74 (HOS-xx pending team rename)
+  - `forecast_occupancy(hotel_id, date_range)` → F&B demand predictions
+  - `get_stock_alerts(hotel_id)` → critical inventory alerts
+  - `get_fb_kpis(hotel_id, period)` → structured F&B KPIs
+- ✅ **Agent SEO instrumentation** — TAC-75 (HOS-xx pending team rename)
+  - Middleware tracking: `tool_success_rate`, `p95_latency`, `agent_retry_rate`
+  - Target: > 99.5% success rate, < 500ms p95, 0 breaking schema changes/sprint
+
+**Backlog explorations:**
+- Anthropic Artifacts for manager dashboards
+- New Qdrant features for pattern matching
+- Hospitality-specific LLMs (if emerge)
 
 - [ ] **Portfolio dashboard** for Operations Directors
   - Aggregated accuracy metrics across properties
@@ -226,6 +242,10 @@
 **The gap:** F&B operations forecasting + proactive push + staffing directives is uncontested at product level as of March 2026.
 
 ### Key learnings
+**Architecture Decisions:**
+- ✅ Dashboard-first (not voice-first) — industry requires visual transparency
+- ✅ Agentic-first (not API-first) — aligns with Augmented Hospitality
+- ✅ Explainability critical (EU AI Act, GDPR Article 22)
 
 - Christmas edge case = credibility test for any hospitality forecasting model
 - Internal PMS data = 40% of prediction accuracy; external signals = 60%
@@ -233,6 +253,22 @@
 - Operators are self-building (Thackray signal) = product window is open, not permanent
 
 ### Decision framework for veille-driven additions
+### Strategic Pivot — Agent-First Distribution (March 2026)
+
+**Trigger :** Andrew Chen (a16z) thread on agent-native distribution — score veille 10/10.
+
+**Thesis :** Aetherix n'est pas seulement un produit agentic. Dans un monde agent-first, la distribution se passe au niveau du *call stack*, pas de l'*acquisition funnel*. Il faut être **le default callable primitive pour le F&B hôtelier**.
+
+**Conséquences sur la roadmap :**
+1. **MCP Server (Phase 0.5)** — exposer les 3-5 capabilities core via MCP avant la Phase 1
+2. **Agent SEO (Phase 1)** — instrumenter les métriques machine-legible dès le début
+3. **Schema stability** — 0 breaking changes/sprint devient une contrainte non-négociable
+4. **UI = debug layer** — le backend API/MCP est le produit réel; l'UI sert à vérifier
+
+**PM Competencies Demonstrated:**
+- Critical thinking: Identified Christmas incohérence + agent-first strategic shift
+- Domain expertise: Server background = operations understanding
+- Honest assessment: Documented limitations vs over-promising
 
 | Impact | Effort | Action |
 |---|---|---|
@@ -241,6 +277,11 @@
 | Low | Any | Reject or defer to Later |
 
 ### Pivots to watch
+**Si la veille montre :**
+- Un concurrent lance un MCP server hospitality → accélérer Phase 0.5
+- Apaleo/Mews publie un MCP officiel → évaluer partnership vs compétition
+- Regulatory updates (EU AI Act) → Adjust explainability features
+- New PMS APIs (Mews updates) → Reprioritize integration work
 
 - **Mews builds F&B module** → move fast on Apaleo Agent Hub listing; become embedded before they expand
 - **Apaleo pivots to build-in-house** → direct sales motion, emphasize property-specific RAG differentiation
