@@ -84,3 +84,18 @@ class AnomalyListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class ROICalculationResponse(BaseModel):
+    """Response body for POST /api/v1/anomalies/roi (202 Accepted).
+
+    Story 3.3b — manual trigger for ROI calculation.
+    """
+
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+    )
+
+    message: str = "ROI calculation triggered"
+    triggered_by: Optional[str] = None
