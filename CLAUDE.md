@@ -92,6 +92,27 @@ Métriques "Agent SEO" à instrumenter :
 - [ ] **Pricing model** : par hôtel / par prédiction / hybrid — non décidé
 - [ ] **PMS priorité live** : Apaleo (sandbox dispo, API-first) vs Mews (vision alignée, marketplace)
 - [ ] **MCP server** : FastAPI endpoint dédié vs sidecar process séparé
+- [ ] **Food waste tracking** : instrumenter predicted prep vs actual waste par service comme KPI produit différenciant — ~25% gaspillage moyen en hôtellerie FR (ADEME/Accor), ~115g/couvert. Opportunité : la plupart des hôtels ne mesurent pas précisément → notre modèle crée cette donnée comme sous-produit du forecasting. Décision : intégrer en Phase 4 comme feature ROI (€ gaspillés évités) ou Phase 5 avec POS data ? À trancher avec PM.
+
+---
+
+## KPI framework produit (référence)
+
+Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026) :
+
+**Niveau 1 — Product Truth (accuracy)**
+- `MAPE` sur couverts dîner, petit-déj, check-ins — cible < 15%
+- `staffing_prediction_accuracy` — % de recommandations staff alignées avec la réalité
+
+**Niveau 2 — Operational Impact (business value)**
+- `labor_cost_variance` — coût réel vs baseline (cible : -3% à -8%)
+- `understaffing_incidents` — incidents par semaine (attente check-in, délais service)
+- `food_waste_per_cover` — tendance vs baseline (à instrumenter en Phase 4)
+
+**Niveau 3 — Adoption (product health)**
+- `recommendation_acceptance_rate` — % de recommandations suivies (alerte si < 30% → problème de trust)
+- `weekly_operational_usage` — % managers consultant le forecast avant de planifier
+- `planning_time_saved` — temps économisé vs planning manuel
 
 ---
 
