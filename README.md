@@ -1,7 +1,10 @@
 
 <h1 align="center">Aetherix</h1>
 <p align="center">
-  <em>Proactive, Agentic AI for Hospitality F&B Forecasting.</em>
+  <em>The Operational Decision Engine for Hotel F&B Managers.</em>
+</p>
+<p align="center">
+  <em>We don't help you build schedules. We tell you what tomorrow will look like — and what to do about it.</em>
 </p>
 
 <p align="center">
@@ -17,29 +20,54 @@
 
 ## Overview
 
-Aetherix is an Agentic AI solution designed to solve the manual, anxiety-inducing process of Staff and Food & Beverage forecasting for hotel and restaurant managers. 
+Aetherix is an Agentic AI solution designed to solve the manual, anxiety-inducing process of Staff and Food & Beverage forecasting for hotel and restaurant managers.
 
 By transitioning from traditional, static "pull" dashboards to a proactive UI-less "push" model, Aetherix anticipates operational load.
-It synthesizes internal property data (occupancy, bookings, PMS, POS, ...) with an external semantic layer—incorporating local events, weather, and real-time social sentiment. 
+It synthesizes internal property data (occupancy, bookings, PMS, POS, ...) with an external semantic layer — incorporating local events, weather, and real-time signals.
 
-The result: Contextualized intelligence delivered directly to departmental managers when they need it, empowering them to focus on delivering exceptional customer experiences while reducing food waste and optimizing employee experience and labor costs.
+**Key insight:** Occupancy rate ≠ restaurant demand. A hotel at 87% occupancy in Paris may have a dinner capture rate of 10%, while the same occupancy at a mountain resort yields 85%. Aetherix models each property's historical capture rate and applies contextual demand modifiers — not theoretical ratios — to produce recommendations that match operational reality.
+
+The result: Contextualized intelligence delivered directly to departmental managers when they need it — reducing food waste (hotels waste ~25% of food produced), cutting unnecessary labor costs, and enabling managers to focus on delivering exceptional guest experiences.
 
 ### The Problem vs. The Aetherix Solution
 
 | Feature | The Problem (Traditional "Pull") | The Solution (Aetherix "Push") |
 | :--- | :--- | :--- |
 | **Data Interaction** | Requires manual login & dashboard checks | Proactive alerts via SMS, WhatsApp, or Email |
-| **Forecasting** | Guesswork based on static historical reports | Contextualized ML/LLM predictions |
-| **Actionability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives |
+| **Forecasting** | Guesswork based on static historical reports | Contextualized ML/LLM predictions calibrated per property |
+| **Actionability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives with risk level |
 | **Context** | Siloed PMS data | Synthesized internal + external (weather, events) data |
+| **Demand modeling** | Occupancy rate used as proxy for covers | Property-specific capture rate × contextual modifiers |
+| **Food waste** | ~25% of F&B produced is wasted (ADEME/Accor, FR) | Better demand prediction → reduced over-preparation |
 
 ---
 
 ## Key Features & Innovation
 
-*   **Semantic Reasoning Engine:** Mathematical translation of chaotic external data (weather, events, traffic) into specific, high-ROI operational directives (revenue opportunity vs. labor cost).
-*   **Conversational Receipts (Zero-Dashboard Trust):** If a manager questions a recommendation (e.g., replies "Why?"), Aetherix instantly responds with the mathematical breakdown and historical context. Trust is built via immediate, conversational Q&A, not complex dashboards.
+*   **Semantic Reasoning Engine:** Mathematical translation of chaotic external data (weather, events, traffic) into specific, high-ROI operational directives (revenue opportunity vs. labor cost). Output example: *"Dinner covers +22% tonight — concert nearby + high occupancy. Recommendation: add 1 server, prep +18% portions. Risk: High if unchanged."*
+*   **Conversational Receipts (Zero-Dashboard Trust):** If a manager questions a recommendation (e.g., replies "Why?"), Aetherix instantly responds with the mathematical breakdown and historical context. Trust is built via immediate, conversational Q&A — not complex dashboards.
+*   **Property-Calibrated Demand Modeling:** Aetherix learns each property's real capture rate (% of in-house guests who dine on-site), not a theoretical industry ratio. A property in Paris with 10% capture behaves fundamentally differently from a mountain resort at 80%. The model adapts.
 *   **Painless Pilot & 1-Way Sync:** Designed for zero-friction integration. Aetherix requires only a read-only webhook/API key from legacy or modern PMS systems (Mews, Apaleo) to begin establishing baselines.
+
+---
+
+## How Aetherix Differs from WFM Tools
+
+Existing workforce management tools (Quinyx, Legion, Actabl/Hotel Effectiveness, Unifocus, Deputy) operate on a **scheduling-first** paradigm: they help you build and manage staff schedules, with basic forecasting as an add-on. Their forecasts are typically sales-driven only — they don't incorporate weather, local events, booking pace, or property-specific capture rates.
+
+Aetherix operates on a **forecast-first** paradigm. The schedule is the manager's job. Aetherix answers the question that comes before it:
+
+> **"How busy will tomorrow actually be — and what should I adjust?"**
+
+| Dimension | WFM Tools (Quinyx, Legion, Actabl…) | Aetherix |
+| :--- | :--- | :--- |
+| **Paradigm** | Scheduling-first, forecast as add-on | Forecast-first, decision directive as output |
+| **Interface** | Dashboard / mobile app (pull) | WhatsApp / Slack / Email (push, UI-less) |
+| **Demand modeling** | Historical sales patterns | PMS + capture rate + weather + events |
+| **Output** | "Here is your schedule" | "Here is what to adjust — and why" |
+| **Explainability** | Limited (score or aggregate view) | Conversational ("Why?", "What if -10% occupancy?") |
+| **Integration model** | Full WFM platform replacement | Additive layer on top of existing tools |
+| **Target buyer** | HR / Operations Director | F&B Manager / Restaurant Manager (daily user) |
 
 ---
 

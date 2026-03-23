@@ -105,6 +105,21 @@
 - ✅ Cloudbeds integration live and tested
 - ✅ Apaleo Agent Hub application submitted
 
+### Food waste KPI tracking
+
+- [ ] **Waste reduction measurement**
+  - Instrument predicted vs actual food preparation quantities per service
+  - Track `waste_per_cover` (target: trend toward industry benchmark ~115g/couvert or below)
+  - Surface waste reduction as a measurable ROI metric for managers (€ saved vs baseline)
+  - Reference: hotels waste ~25% of food produced (ADEME/Accor estimate, France); most properties have no structured measurement — our model creates it as a byproduct of better forecasting
+
+### Phase 4 success criteria (enriched)
+
+Previous criteria maintained. Adding:
+- ✅ Recommendation acceptance rate ≥ 60% (managers follow agent directive at least 3 in 5)
+- ✅ Labor cost variance trending toward -3% to -8% vs baseline for pilot property
+- ✅ Waste reduction measurement live (predicted prep vs actual covers tracked per service)
+
 ### Potential additions from veille
 
 - Trybe (spa/wellness scheduling) partnership — same methodology, adjacent department
@@ -229,6 +244,23 @@
 
 ### Competitive positioning — updated March 2026
 
+**Two competitive zones to monitor:**
+
+#### Zone 1 — WFM / Workforce tools (scheduling-first paradigm)
+
+These are the *real* comparables when a GM or Ops Director evaluates "AI for staffing". They exist, they're credible, but they operate on a fundamentally different paradigm: scheduling-first + dashboard-centric + sales-driven forecasting only.
+
+| Player | AI/Forecast level (2026) | Push/Proactive? | Conversational explainability? | UI-less? |
+|---|---|---|---|---|
+| **Quinyx** | Strong — AI scheduling, attendance patterns, compliance | Mobile app alerts | Low | No (dashboard + app) |
+| **Legion** | Strongest — AI-native, AI Assistants, what-if, autonomous | Shift offers + alerts | High (AI Assistants) | No (WFM platform) |
+| **Actabl** (ex-Hotel Effectiveness) | Solid predictive analytics, labor forecasting, simulation | Partial real-time | Medium | No (ops platform) |
+| **Unifocus** | AI forecasting engine, departmental + granular, real-time | Push notifications | Medium | No (mobile dashboards) |
+
+**Our differentiation:** All four are **scheduling tools with forecasting bolted on**. We are a **decision copilot with no scheduling**. We answer "how busy will it be and what to adjust" — not "here is your roster". We push to WhatsApp without a login. We explain every recommendation in natural language. We learn from each property's actual capture rate, not theoretical ratios.
+
+#### Zone 2 — Hospitality AI / Agentic layer
+
 | Player | Focus | Our gap vs them |
 |---|---|---|
 | Mews + DataChat | Semantic layer, rooming lists, agentic PMS ops | They won't build F&B-specific; too broad |
@@ -239,7 +271,7 @@
 | Sirma "Vela" | Front desk + housekeeping agent | Front of house; we're F&B |
 | Self-builders (Thackray) | Claude Code + raw API duct-tape | We're the productized version of what they're building |
 
-**The gap:** F&B operations forecasting + proactive push + staffing directives is uncontested at product level as of March 2026.
+**The gap:** F&B operations forecasting + proactive push + staffing directives + conversational receipts is uncontested at product level as of March 2026. WFM tools exist but operate in a different paradigm (scheduling platform vs decision copilot).
 
 ### Key learnings
 **Architecture Decisions:**
