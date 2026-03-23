@@ -1,12 +1,15 @@
 """APScheduler background worker for anomaly detection.
 
-Runs AnomalyDetectionService.run_full_scan() every 4 hours (cron: 0 */4 * * *).
+Runs AnomalyDetectionService.run_full_scan() every 4 hours (cron: 0 */4 * * *),
+then immediately chains ROI calculation (Story 3.3b AC 9).
+
 Registered on FastAPI startup in main.py alongside weather/event sync jobs.
 
 Architecture constraints:
 - Cron job is registered on startup; no state is kept in this module.
 - Session is opened per job execution and closed cleanly on exit.
-[Source: story 3.3a Task 4, architecture.md#Infrastructure-Deployment]
+- ROI calculation is chained within the same job execution (AC 9).
+[Source: story 3.3a Task 4, story 3.3b AC 9, architecture.md#Infrastructure-Deployment]
 """
 from __future__ import annotations
 
@@ -16,18 +19,30 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.db.session import AsyncSessionLocal
 from app.services.anomaly_detection import AnomalyDetectionService
+from app.services.roi_calculator import ROICalculatorService
 
 logger = logging.getLogger(__name__)
 
 _service = AnomalyDetectionService()
+_roi_service = ROICalculatorService()
 
 
 async def _run_anomaly_scan_job() -> None:
-    """Entry point called by APScheduler every 4 hours."""
+    """Entry point called by APScheduler every 4 hours.
+
+    Phase 1 — Anomaly detection scan.
+    Phase 2 — ROI calculation chain (AC 9: auto-chain after each scan cycle).
+    """
     logger.info("anomaly_scan: starting scheduled run")
     async with AsyncSessionLocal() as db:
         await _service.run_full_scan(db)
     logger.info("anomaly_scan: scheduled run complete")
+
+    # AC 9: chain ROI calculation immediately after the scan
+    logger.info("roi_calculator: starting post-scan ROI chain")
+    async with AsyncSessionLocal() as db:
+        await _roi_service.run_full_scan(db)
+    logger.info("roi_calculator: post-scan ROI chain complete")
 
 
 def register_anomaly_scan_job(scheduler: AsyncIOScheduler) -> None:
