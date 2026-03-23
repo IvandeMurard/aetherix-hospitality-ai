@@ -1,12 +1,12 @@
-"""Twilio Inbound Webhook — Story 4.3 (HOS-26) + Story 5.1 (HOS-28).
+"""Twilio Inbound Webhook — Story 4.3 (HOS-26) + Story 5.1 (HOS-28) + Story 5.2 (HOS-29).
 
 Public endpoint: POST /webhooks/twilio/inbound
 
 Receives inbound SMS/WhatsApp messages forwarded by Twilio.
 - Accept / Reject → persisted immediately via ActionLoggerService.
 - Everything else  → acknowledged immediately; a BackgroundTask runs
-                     QueryParserService to identify the tenant context and
-                     persist a ConversationalQuery row for AI processing (FR13).
+                     QueryParserService (store query) then
+                     ExplainabilityService (Claude → Twilio reply) (FR13, FR14).
 
 Security model
 --------------
@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.schemas.webhook import ActionType, TwilioInboundPayload
 from app.services.action_logger import ActionLoggerService, parse_action
+from app.services.explainability_service import ExplainabilityService
 from app.services.query_parser import QueryParserService
 
 logger = logging.getLogger(__name__)
@@ -219,7 +220,28 @@ async def _bg_parse_query(
     body: str,
     db: AsyncSession,
 ) -> None:
-    """Background task: parse and store a conversational query (Story 5.1 AC#2)."""
-    service = QueryParserService()
-    result = await service.parse_and_store(from_number=from_number, body=body, session=db)
-    logger.info("twilio_inbound bg_parse_query: result=%s", result)
+    """Background task: parse, store, then generate & send explainability receipt.
+
+    Story 5.1 (HOS-28) AC#2 — identifies tenant + recommendation.
+    Story 5.2 (HOS-29)       — calls Claude and replies via Twilio.
+    """
+    # Step 1: store the query (Story 5.1)
+    parser = QueryParserService()
+    parse_result = await parser.parse_and_store(
+        from_number=from_number, body=body, session=db
+    )
+    logger.info("twilio_inbound bg_parse_query: parse_result=%s", parse_result)
+
+    if parse_result.get("status") not in ("stored",):
+        # duplicate or not_found — QueryParserService already logged; nothing more to do
+        return
+
+    # Step 2: generate explanation and send reply (Story 5.2)
+    query_id = parse_result.get("query_id")
+    if query_id:
+        import uuid as _uuid
+        explainer = ExplainabilityService()
+        explain_result = await explainer.generate_and_send(
+            query_id=_uuid.UUID(query_id), session=db
+        )
+        logger.info("twilio_inbound bg_parse_query: explain_result=%s", explain_result)
