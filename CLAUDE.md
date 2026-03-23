@@ -21,6 +21,8 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 |--------|------------|-------|
 | Backend | FastAPI + Python 3.11 | Async, Pydantic v2, OpenAPI auto-généré |
 | Base de données | Supabase (PostgreSQL) | Auth, real-time, backups gérés |
+| Patterns vectoriels | Qdrant Cloud | Patterns F&B, embeddings 1536d, Cosine — 495+ patterns |
+| Mémoire cognitive | pgvector `operational_memory` (Phase 0-1) → Backboard.io (Phase 3) | Feedback loop par hôtel, outcomes, apprentissage cumulatif — via interface `MemoryProvider` abstrait |
 | Patterns vectoriels | pgvector (Supabase) | tables `fb_patterns` + `operational_memory`, embeddings Mistral 1024d, HNSW — 495+ patterns (HOS-99) |
 | Mémoire cognitive | pgvector (Supabase) | `operational_memory` — remplace Backboard.io, feedback manager + recency scoring Python (HOS-99) |
 | Cache | Redis (Upstash) | Session state, TTL 1h |
@@ -46,6 +48,97 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 | 5 | Pas d'auto-actions (Phase MVP) | 63% managers veulent contrôle humain, trust-building | Full automation = adoption faible |
 | 6 | PMS-agnostic | Mews + Apaleo = 1000s hôtels, fallback si Mews refuse | Lock-in Mews = risque |
 | 7 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement | Fat frontend = duplication logique |
+| 8 | pgvector MVP → Backboard Phase 3 (via `MemoryProvider`) | Backboard = dépendance externe opaque prématurée en Phase 0. pgvector couvre le feedback loop par hôtel. Backboard s'insère en Phase 3 (multi-hôtels, insights structurés, patterns anonymisés cross-hôtels). L'interface `MemoryProvider` (`store_feedback`, `get_hotel_context`, `get_cross_hotel_patterns`) est conçue dès maintenant pour éviter toute réécriture. | Backboard dès MVP = risque de stabilité + coût non maîtrisé avant données suffisantes |
+| 9 | Multi-LLM fallback via `LLMProvider` abstrait | Les LLMs deviennent commodity — ne pas créer une dépendance hard-coded à Claude. Interface abstraite dès maintenant : swap auto Claude → Gemini → GPT selon coût/performance sans réécriture. Claude reste le provider principal (reasoning, 200K ctx, explainability) mais n'est pas la seule dépendance. Défense contre commoditisation + résilience opérationnelle. | Hard-code Claude = lock-in fournisseur + vulnérabilité si pricing Anthropic change |
+
+---
+
+## Architecture mémoire cognitive — Modèle à deux couches
+
+Objectif : passer d'un agent de "semantic search" à un agent **self-improving per-property**, dont les décisions s'améliorent en continu grâce à la preuve d'impact (recommandation suivie + outcome positif).
+
+### Couche 1 — Private Memory (par hôtel)
+- **Technologie :** pgvector `operational_memory` (Phase 0-1)
+- **Périmètre :** strictement isolé par `hotel_id`
+- **Contenu :** idiosyncrasies ultra-personnalisées — ce qui fonctionne **uniquement** pour cet hôtel (capture rate réel, préférences manager, patterns locaux non-généralisables)
+- **Signal d'apprentissage :** `recommendation_accepted` + `outcome` (covers réels vs prévus) → le modèle ajuste ses prochaines suggestions pour cet hôtel
+- **Interface :** `MemoryProvider.store_feedback()`, `MemoryProvider.get_hotel_context(hotel_id)`
+
+### Couche 2 — Hive Memory (ruche anonymisée, cross-hôtels)
+- **Technologie :** Backboard.io (Phase 3) — couche relationnelle vectorisée intégrée
+- **Périmètre :** patterns agrégés et anonymisés, groupés par tags : `quartier`, `typologie` (city/resort/airport), `clientèle` (leisure/business/MICE), `segment` (4*/5*/boutique), `taille_resto`, `saison`
+- **Contenu :** ce qui fonctionne **en général** pour des propriétés similaires — justifie et enrichit les prédictions avec des preuves d'impact inter-hôtels
+- **Signal d'apprentissage :** outcomes agrégés → renforce ou déprécie les patterns vectoriels dans Qdrant
+- **Interface :** `MemoryProvider.get_cross_hotel_patterns(tags)`, `MemoryProvider.store_hive_insight()`
+
+### Flux d'amélioration continue
+```
+Recommandation → Manager accepte/rejette → outcome mesuré (J+1)
+    ↓ Couche 1 : ajuste Private Memory de cet hôtel
+    ↓ Couche 2 : si outcome positif confirmé → contribue à la Hive (anonymisé)
+    ↓ Couche 4 (Claude) : prochaine génération enrichie des deux mémoires
+```
+
+**Résultat :** chaque hôtel bénéficie à la fois de son apprentissage propre **et** de la sagesse collective d'hôtels similaires — sans jamais exposer de données d'un hôtel à un autre.
+
+---
+
+## Positionnement stratégique — Défenses concurrentielles (Mars 2026)
+
+### 1. Complémentaire au PMS, non concurrent
+
+En 2026, Apaleo et Mews déploient des Agent Hubs avec agents "natifs" (pricing, guest messaging, corporate sales, onboarding). Les hôtels n'achèteront pas un concurrent direct à leur PMS.
+
+**Positionnement :** Aetherix est un **layer agentic spécialisé F&B/staffing** qui s'ajoute au PMS sans le concurrencer.
+- Périmètre clair : read-only PMS data + push messaging (WhatsApp/Slack) + explainability + human-in-the-loop
+- Ce que les Agent Hubs ne font pas : ops decision copilot F&B/staffing avec forecast domain-specific, reco contextualisée, self-improving memory per property
+
+**A2A Communication (Agent-to-Agent) :** MCP-ready permet d'être appelé par d'autres agents PMS.
+- Exemple : agent revenue Apaleo détecte `+18% occupancy demain` → appelle Aetherix `adjust_staffing_reco(hotel_id, delta_occupancy=+18)` → reco staffing mise à jour en live
+- C'est la valeur réseau de l'architecture MCP : Aetherix devient une **primitive appelable dans les workflows d'autres agents**, pas seulement un outil standalone
+- Issues actives : HOS-71 (MCP Server), HOS-72 (Agent SEO métriques)
+
+**Règle de positionnement :** Ne jamais implémenter de features qui concurrencent directement les modules natifs Apaleo/Mews (pricing dynamique, guest messaging génériques). Rester dans le périmètre F&B ops + staffing + forecast.
+
+---
+
+### 2. Stickiness — ROI prouvé en continu
+
+Les hôtels renouvellent quand la valeur est visible sur le P&L et difficile à internaliser.
+
+**KPIs business à publier activement (pas juste mesurer) :**
+- Labor cost reduction : cible –3% à –8% vs baseline
+- Under/overstaffing incidents : cible –30% à –50%
+- Food waste per cover : cible –15% à –25% (Phase 4)
+- Planning time saved : heures/semaine économisées vs planning manuel
+- Recommandation acceptance rate + outcome delta (delta couverts réels vs prévus)
+
+**Self-improving loop visible :**
+- Chaque hôtel voit l'évolution de la précision forecast sur 90 jours glissants
+- Affichage "€ économisés ce mois-ci" calculé à partir des outcomes mesurés
+- **Question ouverte :** via dashboard dédié (Next.js) ou intégré dans les alertes WhatsApp hebdomadaires ? → à trancher avec PM (risque : dashboard = surface de plus à maintenir dans un modèle thin-frontend)
+
+**Ce qui rend difficile l'internalisation :**
+- Private Memory par hôtel (2+ ans de données propres) → coût de migration élevé
+- Hive Memory anonymisée (patterns cross-hôtels) → impossible à reproduire sans volume
+- Chain-of-thought hospitality-specific → ne s'improvise pas avec un LLM générique
+
+---
+
+### 3. Défense contre la commoditisation des LLMs
+
+Les LLMs deviennent commodity (Claude, Gemini, Grok, GPT — moins chers chaque année). Le moat n'est pas dans le modèle brut.
+
+**Où est le vrai moat :**
+1. **Données + mémoire per-property** : Private Memory (2+ ans d'historique hôtel) + Hive Memory (patterns cross-hôtels anonymisés) — impossible à répliquer rapidement
+2. **Domain reasoning spécialisé** : prompt engineering + chain-of-thought sur hospitality ops data (patterns F&B, feedbacks managers, saisonnalité, événements locaux) → RAG avancé sur Qdrant (495+ patterns F&B)
+3. **Human oversight comme feature produit** : les overrides managers sont du signal, pas du bruit → chaque refus d'une reco améliore le modèle suivant → l'agent devient plus "safe" et non "black box" au fil du temps → complémentaire à la Hive Memory (les overrides alimentent aussi la couche 2)
+
+**Multi-LLM fallback (Décision architecturale #9) :**
+- Ne pas être lié à un seul provider LLM — switch auto entre providers selon coût + performance
+- Interface `LLMProvider` abstrait (similaire à `MemoryProvider`) : swap Claude → Gemini → GPT sans réécriture
+- Claude reste le provider principal (reasoning + 200K ctx + explainability) mais pas l'unique dépendance
+- Voir Décision #9 dans le tableau des décisions architecturales
 
 ---
 
@@ -94,13 +187,15 @@ Métriques "Agent SEO" à instrumenter :
 - [ ] **Pricing model** : par hôtel / par prédiction / hybrid — non décidé
 - [ ] **PMS priorité live** : Apaleo (sandbox dispo, API-first) vs Mews (vision alignée, marketplace)
 - [ ] **MCP server** : FastAPI endpoint dédié vs sidecar process séparé
+- [ ] **ROI dashboard vs WhatsApp** : afficher "€ économisés ce mois-ci" + évolution précision forecast 90j → via dashboard dédié (Next.js) ou via rapport WhatsApp hebdomadaire ? Dashboard = surface à maintenir (risque thin-frontend), WhatsApp = ambiant mais moins visuel. À trancher avec PM avant Phase 1.
 - [ ] **Food waste tracking** : instrumenter predicted prep vs actual waste par service comme KPI produit différenciant — ~25% gaspillage moyen en hôtellerie FR (ADEME/Accor), ~115g/couvert. Opportunité : la plupart des hôtels ne mesurent pas précisément → notre modèle crée cette donnée comme sous-produit du forecasting. Décision : intégrer en Phase 4 comme feature ROI (€ gaspillés évités) ou Phase 5 avec POS data ? À trancher avec PM.
 
 ---
 
 ## KPI framework produit (référence)
 
-Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026) :
+Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026).
+**Principe de stickiness :** ces KPIs ne sont pas seulement mesurés — ils sont publiés activement au manager (alertes WhatsApp + éventuellement dashboard) pour rendre la valeur visible sur le P&L et créer un coût de migration psychologique élevé.
 
 **Niveau 1 — Product Truth (accuracy)**
 - `MAPE` sur couverts dîner, petit-déj, check-ins — cible < 15%
