@@ -1,9 +1,8 @@
 # Roadmap: Now → Next → Later
 
-**Last review:** January 7, 2026 (Week 1)  
-**Progress:** 7/11 MVP issues complete (64%)  
-**Critical blocker:** IVA-29 (contextual patterns bug)  
-**Target:** Demo-ready backend API by January 31, 2026
+**Last review:** March 22, 2026
+**Strategic direction:** Agent-First Distribution (MCP Server + Agent SEO)
+**Source:** Andrew Chen (a16z) insight — "distribution shifts from top of funnel to top of call stack"
 
 ---
 
@@ -135,8 +134,16 @@
 
 <!-- Capture emerging technologies/features, evaluate ROI -->
 
-**Potential explorations:**
-- Claude MCP servers for PMS connectivity
+**In progress (elevated from backlog → Phase 0.5):**
+- ✅ **MCP Server for agent-callable capabilities** — TAC-74 (HOS-xx pending team rename)
+  - `forecast_occupancy(hotel_id, date_range)` → F&B demand predictions
+  - `get_stock_alerts(hotel_id)` → critical inventory alerts
+  - `get_fb_kpis(hotel_id, period)` → structured F&B KPIs
+- ✅ **Agent SEO instrumentation** — TAC-75 (HOS-xx pending team rename)
+  - Middleware tracking: `tool_success_rate`, `p95_latency`, `agent_retry_rate`
+  - Target: > 99.5% success rate, < 500ms p95, 0 breaking schema changes/sprint
+
+**Backlog explorations:**
 - Anthropic Artifacts for manager dashboards
 - New Qdrant features for pattern matching
 - Hospitality-specific LLMs (if emerge)
@@ -188,8 +195,8 @@
 ### Key Learnings (Phase 0-1)
 
 **Architecture Decisions:**
-- ✅ Dashboard-first (not voice-first) - industry requires visual transparency
-- ✅ Agentic-first (not API-first) - aligns with Augmented Hospitality
+- ✅ Dashboard-first (not voice-first) — industry requires visual transparency
+- ✅ Agentic-first (not API-first) — aligns with Augmented Hospitality
 - ✅ Explainability critical (EU AI Act, GDPR Article 22)
 
 **Product Insights:**
@@ -197,16 +204,28 @@
 - Internal context (PMS) = 40% prediction accuracy
 - Pattern variation > reasoning quality for demo impact
 
+### Strategic Pivot — Agent-First Distribution (March 2026)
+
+**Trigger :** Andrew Chen (a16z) thread on agent-native distribution — score veille 10/10.
+
+**Thesis :** Aetherix n'est pas seulement un produit agentic. Dans un monde agent-first, la distribution se passe au niveau du *call stack*, pas de l'*acquisition funnel*. Il faut être **le default callable primitive pour le F&B hôtelier**.
+
+**Conséquences sur la roadmap :**
+1. **MCP Server (Phase 0.5)** — exposer les 3-5 capabilities core via MCP avant la Phase 1
+2. **Agent SEO (Phase 1)** — instrumenter les métriques machine-legible dès le début
+3. **Schema stability** — 0 breaking changes/sprint devient une contrainte non-négociable
+4. **UI = debug layer** — le backend API/MCP est le produit réel; l'UI sert à vérifier
+
 **PM Competencies Demonstrated:**
-- Critical thinking: Identified Christmas incohérence
+- Critical thinking: Identified Christmas incohérence + agent-first strategic shift
 - Domain expertise: Server background = operations understanding
 - Honest assessment: Documented limitations vs over-promising
 
 ### Next Pivots to Consider
 
-**If Perplexity veille shows:**
-- New Claude features (MCP, tools) → Evaluate integration acceleration
-- Competitor launches (HotSchedules AI) → Emphasize differentiators
+**Si la veille montre :**
+- Un concurrent lance un MCP server hospitality → accélérer Phase 0.5
+- Apaleo/Mews publie un MCP officiel → évaluer partnership vs compétition
 - Regulatory updates (EU AI Act) → Adjust explainability features
 - New PMS APIs (Mews updates) → Reprioritize integration work
 
