@@ -22,7 +22,7 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 | Backend | FastAPI + Python 3.11 | Async, Pydantic v2, OpenAPI auto-généré |
 | Base de données | Supabase (PostgreSQL) | Auth, real-time, backups gérés |
 | Patterns vectoriels | Qdrant Cloud | Patterns F&B, embeddings 1536d, Cosine — 495+ patterns |
-| Mémoire cognitive | Backboard.io | Feedback managers, insights opérationnels, learning inter-sessions (`BACKBOARD_API_KEY`) |
+| Mémoire cognitive | pgvector `operational_memory` (Phase 0-1) → Backboard.io (Phase 3) | Feedback loop par hôtel, outcomes, apprentissage cumulatif — via interface `MemoryProvider` abstrait |
 | Cache | Redis (Upstash) | Session state, TTL 1h |
 | IA principale | Claude Sonnet (Anthropic) | Reasoning + explainability |
 | Forecast numérique | Prophet (Meta) | Time-series covers prediction + regressors (météo, events, occupancy) |
@@ -46,6 +46,7 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 | 5 | Pas d'auto-actions (Phase MVP) | 63% managers veulent contrôle humain, trust-building | Full automation = adoption faible |
 | 6 | PMS-agnostic | Mews + Apaleo = 1000s hôtels, fallback si Mews refuse | Lock-in Mews = risque |
 | 7 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement | Fat frontend = duplication logique |
+| 8 | pgvector MVP → Backboard Phase 3 (via `MemoryProvider`) | Backboard = dépendance externe opaque prématurée en Phase 0. pgvector couvre le feedback loop par hôtel. Backboard s'insère en Phase 3 (multi-hôtels, insights structurés, patterns anonymisés cross-hôtels). L'interface `MemoryProvider` (`store_feedback`, `get_hotel_context`, `get_cross_hotel_patterns`) est conçue dès maintenant pour éviter toute réécriture. | Backboard dès MVP = risque de stabilité + coût non maîtrisé avant données suffisantes |
 
 ---
 

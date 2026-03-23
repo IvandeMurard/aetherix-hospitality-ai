@@ -104,7 +104,7 @@ graph TD
     subgraph DATA["🗄️ Intelligence Layers"]
         DB[("Supabase PostgreSQL\nOperational data")]
         Vector[("Qdrant Cloud\nF&B patterns · 495+")]
-        Memory[("Backboard.io\nCognitive memory")]
+        Memory[("pgvector · operational_memory\nPer-hotel feedback loop\n→ Backboard.io (Phase 3)")]
     end
 
     subgraph DELIVERY["🚀 Delivery & UI"]
@@ -142,7 +142,7 @@ graph TD
 | :--- | :--- | :--- |
 | **1. Numerical Forecast** | Prophet (time-series) | Predicts covers volume from PMS + occupancy + regressors |
 | **2. Semantic Patterns** | Qdrant Cloud (495+ vectors) | Matches current context against similar historical service scenarios |
-| **3. Cognitive Memory** | Backboard.io | Persists manager feedback, operational insights; learns from rejected recommendations |
+| **3. Cognitive Memory** | pgvector `operational_memory` (Phase 0–1) | Persists per-hotel feedback and outcomes; scores patterns by past acceptance. Abstracted behind a `MemoryProvider` interface — Backboard.io slots in at Phase 3 for structured cross-hotel insights and anonymized pattern generalization. |
 | **4. Reasoning & Explanation** | Claude Sonnet (Anthropic) | Synthesizes the three layers into a directive + natural-language explanation |
 
 ### Tech Stack Breakdown
@@ -153,7 +153,7 @@ graph TD
 | **Backend (AI/Logic)** | Python, FastAPI, APScheduler | LLM orchestration, async jobs, push dispatch |
 | **Operational DB** | Supabase (PostgreSQL) + RLS | Multi-tenant data isolation, actuals tracking |
 | **Pattern Store** | Qdrant Cloud | Vector similarity search for F&B scenario patterns |
-| **Cognitive Memory** | Backboard.io | Cross-session memory: manager preferences, feedback learning |
+| **Cognitive Memory** | pgvector `operational_memory` → Backboard.io (Ph. 3) | Phase 0–1: per-hotel feedback loop via `MemoryProvider` interface. Phase 3: Backboard adds structured insights + anonymized cross-hotel pattern generalization (by segment, location, clientele type). |
 | **Delivery** | Twilio (WhatsApp/SMS), SendGrid | UI-less push notifications; inbound "Why?" reply handling |
 | **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety |
 
