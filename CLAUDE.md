@@ -21,11 +21,13 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 |--------|------------|-------|
 | Backend | FastAPI + Python 3.11 | Async, Pydantic v2, OpenAPI auto-généré |
 | Base de données | Supabase (PostgreSQL) | Auth, real-time, backups gérés |
-| Vecteurs | Qdrant Cloud | Patterns F&B, embeddings 1536d, Cosine |
+| Patterns vectoriels | Qdrant Cloud | Patterns F&B, embeddings 1536d, Cosine — 495+ patterns |
+| Mémoire cognitive | Backboard.io | Feedback managers, insights opérationnels, learning inter-sessions (`BACKBOARD_API_KEY`) |
 | Cache | Redis (Upstash) | Session state, TTL 1h |
-| IA principale | Claude Sonnet (Anthropic) | Reasoning + embeddings |
-| Frontend | Next.js (App Router) + shadcn/ui | Dashboard manager |
-| Alertes | WhatsApp via Twilio | Delivery ambiant |
+| IA principale | Claude Sonnet (Anthropic) | Reasoning + explainability |
+| Forecast numérique | Prophet (Meta) | Time-series covers prediction + regressors (météo, events, occupancy) |
+| Frontend | Next.js (App Router) + shadcn/ui | Couche vérification (thin) — pas le canal principal |
+| Alertes | WhatsApp via Twilio | Delivery ambiant (push-first, UI-less) |
 | PMS principal | Apaleo (prioritaire) | OAuth2, sandbox dispo |
 | PMS secondaire | Mews | Webhook, marketplace |
 | Knowledge | Obsidian vault | `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality` |
@@ -130,7 +132,8 @@ docs/ARCHITECTURE.md           — design système complet (v0.2.0, Feb 2026)
 ## Variables d'environnement requises
 
 ```
-ANTHROPIC_API_KEY     — Claude API (reasoning + embeddings)
+ANTHROPIC_API_KEY     — Claude API (reasoning + explainability)
+BACKBOARD_API_KEY     — Backboard.io (cognitive memory layer — Phase 3)
 LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
 LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad (équipe HOS)
 OBSIDIAN_VAULT_PATH   — C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality
@@ -138,7 +141,7 @@ APALEO_CLIENT_ID      — OAuth2 (prioritaire)
 APALEO_CLIENT_SECRET  — OAuth2
 SUPABASE_URL          — PostgreSQL
 SUPABASE_KEY          — Anon key
-QDRANT_URL            — Vector DB
+QDRANT_URL            — Vector DB (patterns F&B)
 QDRANT_API_KEY        — Vector DB
 REDIS_URL             — Upstash (session state)
 ```
