@@ -152,4 +152,4 @@ aetherix/
 ---
 
 ---
-*Aetherix - Contextual Intelligence for Hospitality.* 
+*Aetherix - Contextual Intelligence for Hospitality Operations.* 
