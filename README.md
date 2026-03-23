@@ -4,7 +4,7 @@
   <em>The Operational Decision Engine for Hotel F&B Managers.</em>
 </p>
 <p align="center">
-  <em>We don't help you build schedules. We tell you what tomorrow will look like — and what to do about it.</em>
+  <em>We don't help you build schedules. We tell you what tomorrow will look like, and what to do about it.</em>
 </p>
 
 <p align="center">
@@ -44,10 +44,10 @@ The result: Contextualized intelligence delivered directly to departmental manag
 
 ## Key Features & Innovation
 
-*   **Semantic Reasoning Engine:** Mathematical translation of chaotic external data (weather, events, traffic) into specific, high-ROI operational directives (revenue opportunity vs. labor cost). Output example: *"Dinner covers +22% tonight — concert nearby + high occupancy. Recommendation: add 1 server, prep +18% portions. Risk: High if unchanged."*
-*   **Conversational Receipts (Zero-Dashboard Trust):** If a manager questions a recommendation (e.g., replies "Why?"), Aetherix instantly responds with the mathematical breakdown and historical context. Trust is built via immediate, conversational Q&A — not complex dashboards.
+*   **Semantic Reasoning Engine:** Mathematical translation of chaotic external data (weather, events, real-time social sentiment) into specific, high-ROI operational directives (revenue opportunity vs. labor cost). Output example: *"Dinner covers +22% tonight - concert nearby + high occupancy. Recommendation: add 1 server, prep +18% portions. Risk: High if unchanged."*
+*   **Conversational Receipts (Zero-Dashboard Trust):** If a manager questions a recommendation (e.g., replies "Why?"), Aetherix responds instantly with a clear and immediately scannable breakdown with historical context. Trust is built by clearly explaining contextualised business decisions in an adapted language.
 *   **Property-Calibrated Demand Modeling:** Aetherix learns each property's real capture rate (% of in-house guests who dine on-site), not a theoretical industry ratio. A property in Paris with 10% capture behaves fundamentally differently from a mountain resort at 80%. The model adapts.
-*   **Painless Pilot & 1-Way Sync:** Designed for zero-friction integration. Aetherix requires only a read-only webhook/API key from legacy or modern PMS systems (Mews, Apaleo) to begin establishing baselines.
+*   **Painless Pilot & 1-Way Sync:** Designed for zero-friction integration. Aetherix requires only a read-only webhook/API key from legacy or modern PMS systems (Mews, Apaleo, etc.) to begin establishing baselines.
 
 ---
 
