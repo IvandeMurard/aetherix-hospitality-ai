@@ -104,7 +104,7 @@ graph TD
     subgraph DATA["🗄️ Intelligence Layers"]
         DB[("Supabase PostgreSQL\nOperational data")]
         Vector[("Qdrant Cloud\nF&B patterns · 495+")]
-        Memory[("Backboard.io\nCognitive memory")]
+        Memory[("pgvector · operational_memory\nPer-hotel feedback loop\n→ Backboard.io (Phase 3)")]
     end
 
     subgraph DELIVERY["🚀 Delivery & UI"]
@@ -142,7 +142,7 @@ graph TD
 | :--- | :--- | :--- |
 | **1. Numerical Forecast** | Prophet (time-series) | Predicts covers volume from PMS + occupancy + regressors |
 | **2. Semantic Patterns** | Qdrant Cloud (495+ vectors) | Matches current context against similar historical service scenarios |
-| **3. Cognitive Memory** | Backboard.io | Persists manager feedback, operational insights; learns from rejected recommendations |
+| **3. Cognitive Memory** | pgvector → Backboard.io (Ph. 3) | Two-layer design. **Private Memory** (per hotel, Phase 0–1): ultra-specific idiosyncrasies — what works *only* for this property (real capture rate, manager preferences, non-generalizable local patterns). **Hive Memory** (anonymized cross-hotel, Phase 3 via Backboard): patterns grouped by tags (city/resort/airport, clientele type, segment, restaurant size) — enriches predictions with cross-property proof of impact. Each hotel benefits from its own learning *and* collective wisdom, never sharing raw data. |
 | **4. Reasoning & Explanation** | Claude Sonnet (Anthropic) | Synthesizes the three layers into a directive + natural-language explanation |
 
 ### Tech Stack Breakdown
@@ -153,7 +153,7 @@ graph TD
 | **Backend (AI/Logic)** | Python, FastAPI, APScheduler | LLM orchestration, async jobs, push dispatch |
 | **Operational DB** | Supabase (PostgreSQL) + RLS | Multi-tenant data isolation, actuals tracking |
 | **Pattern Store** | Qdrant Cloud | Vector similarity search for F&B scenario patterns |
-| **Cognitive Memory** | Backboard.io | Cross-session memory: manager preferences, feedback learning |
+| **Cognitive Memory** | pgvector `operational_memory` → Backboard.io (Ph. 3) | Phase 0–1: per-hotel feedback loop via `MemoryProvider` interface. Phase 3: Backboard adds structured insights + anonymized cross-hotel pattern generalization (by segment, location, clientele type). |
 | **Delivery** | Twilio (WhatsApp/SMS), SendGrid | UI-less push notifications; inbound "Why?" reply handling |
 | **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety |
 
