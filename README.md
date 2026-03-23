@@ -19,7 +19,8 @@
 
 Aetherix is an Agentic AI solution designed to solve the manual, anxiety-inducing process of Staff and Food & Beverage forecasting for hotel and restaurant managers. 
 
-By transitioning from traditional, static "pull" dashboards to a proactive "push" model, Aetherix anticipates operational load. It synthesizes internal property data (occupancy, bookings, PMS, POS, ...) with an external semantic layer—incorporating local events, weather, and real-time social sentiment. 
+By transitioning from traditional, static "pull" dashboards to a proactive UI-less "push" model, Aetherix anticipates operational load.
+It synthesizes internal property data (occupancy, bookings, PMS, POS, ...) with an external semantic layer—incorporating local events, weather, and real-time social sentiment. 
 
 The result: Contextualized intelligence delivered directly to departmental managers when they need it, empowering them to focus on delivering exceptional customer experiences while reducing food waste and optimizing employee experience and labor costs.
 
