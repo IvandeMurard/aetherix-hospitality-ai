@@ -16,6 +16,11 @@ from app.db.session import engine
 from app.workers.weather_sync import create_weather_scheduler
 
 _weather_scheduler = create_weather_scheduler()
+from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather, baselines, events
+from app.db.models import Base
+from app.db.session import engine
+from app.workers.weather_sync import start_weather_scheduler, stop_weather_scheduler
+from app.workers.event_sync import start_event_scheduler, stop_event_scheduler
 
 app = FastAPI(
     title="Aetherix API",
@@ -37,11 +42,15 @@ async def on_startup():
         await conn.run_sync(Base.metadata.create_all)
     # Start 12h weather sync scheduler
     _weather_scheduler.start()
+    start_weather_scheduler()
+    start_event_scheduler()
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
     _weather_scheduler.shutdown(wait=False)
+    stop_weather_scheduler()
+    stop_event_scheduler()
 
 # Include routers
 app.include_router(pms.router, prefix="/api/v1")
@@ -51,6 +60,8 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(weather.router, prefix="/api/v1")
+app.include_router(baselines.router, prefix="/api/v1")
+app.include_router(events.router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
