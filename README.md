@@ -142,7 +142,7 @@ graph TD
 | :--- | :--- | :--- |
 | **1. Numerical Forecast** | Prophet (time-series) | Predicts covers volume from PMS + occupancy + regressors |
 | **2. Semantic Patterns** | Qdrant Cloud (495+ vectors) | Matches current context against similar historical service scenarios |
-| **3. Cognitive Memory** | pgvector `operational_memory` (Phase 0–1) | Persists per-hotel feedback and outcomes; scores patterns by past acceptance. Abstracted behind a `MemoryProvider` interface — Backboard.io slots in at Phase 3 for structured cross-hotel insights and anonymized pattern generalization. |
+| **3. Cognitive Memory** | pgvector → Backboard.io (Ph. 3) | Two-layer design. **Private Memory** (per hotel, Phase 0–1): ultra-specific idiosyncrasies — what works *only* for this property (real capture rate, manager preferences, non-generalizable local patterns). **Hive Memory** (anonymized cross-hotel, Phase 3 via Backboard): patterns grouped by tags (city/resort/airport, clientele type, segment, restaurant size) — enriches predictions with cross-property proof of impact. Each hotel benefits from its own learning *and* collective wisdom, never sharing raw data. |
 | **4. Reasoning & Explanation** | Claude Sonnet (Anthropic) | Synthesizes the three layers into a directive + natural-language explanation |
 
 ### Tech Stack Breakdown
