@@ -59,6 +59,8 @@ development_status:
 
   # ── Epic 3: The Semantic Anomaly Engine ────────────────────────────────────
   epic-3: in-progress
+  3-1-ingest-localized-weather-data: ready-for-dev
+  3-2-ingest-localized-event-data-from-predicthq: backlog
   3-1-ingest-localized-weather-data: done
   3-2-ingest-localized-event-data-from-predicthq: ready-for-dev
   3-3a-detect-demand-anomalies-against-baseline: backlog
