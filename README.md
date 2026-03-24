@@ -3,9 +3,6 @@
 <p align="center">
   <em>The Operational Decision Engine for Hotel F&B Managers.</em>
 </p>
-<p align="center">
-  <em>We tell you what tomorrow will look like, and how to plan for it.</em>
-</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.12" />
