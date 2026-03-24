@@ -4,7 +4,7 @@
   <em>The Operational Decision Engine for Hotel F&B Managers.</em>
 </p>
 <p align="center">
-  <em>We don't help you build schedules. We tell you what tomorrow will look like, and what to do about it.</em>
+  <em>We tell you what tomorrow will look like, and how to plan for it.</em>
 </p>
 
 <p align="center">
