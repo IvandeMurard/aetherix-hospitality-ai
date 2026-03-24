@@ -79,6 +79,7 @@ Aetherix was conceived, structured, and validated using the rigorous **BMAD (Bus
 *   **Domain Compliance:** Explicit architectural decisions to handle GDPR (anonymized PII) and European Labor Laws (calculating penalty pay into recommendations).
 *   **Traceable Architecture:** Documented logic separating business requirements from technical implementation layers.
 
+Roadmap hosted on [Linear](https://linear.app/hospitalityagent/team/HOS/all)
 ---
 
 ## Architecture & Technical Strategy
@@ -145,7 +146,7 @@ graph TD
 | **3. Cognitive Memory** | pgvector → Backboard.io (Ph. 3) | Two-layer design. **1. Private Memory** (per hotel, Phase 0–1): ultra-specific idiosyncrasies - what works *only* for this property (real capture rate, manager preferences, non-generalizable local patterns). **2. Hive Memory** (anonymized cross-hotel, Phase 3 via Backboard): patterns grouped by tags (city/resort/airport, clientele type, segment, restaurant size) - enriches predictions with cross-property proof of impact. Each hotel benefits from its own learning *and* collective wisdom, never sharing raw data. |
 | **4. Reasoning & Explanation** | Claude Sonnet (Anthropic) | Synthesizes the three layers into a directive with natural-language explanation |
 
-### Tech Stack Breakdown
+### Tech Stack
 
 | Layer | Technologies | Purpose |
 | :--- | :--- | :--- |
