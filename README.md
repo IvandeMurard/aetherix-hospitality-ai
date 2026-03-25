@@ -28,11 +28,11 @@ The result: Contextualized intelligence, helping reduce food waste (hotels waste
 
 ### The Problem vs. The Aetherix Solution
 
-| Feature | The Problem (Traditional "Pull") | The Solution (Proactive "Push") |
+| Feature | Traditional "Pull" | Aetherix (Proactive "Push") |
 | :--- | :--- | :--- |
 | **Data Interaction** | Requires manual login & dashboard checks | Proactive alerts via Slack, WhatsApp, or Email |
 | **Forecasting** | Guesswork based on static historical reports | Contextualized ML/LLM predictions calibrated per property |
-| **Explainability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives with risk level + Conversational ("Why?", "What if -10% occupancy?")|
+| **Explainability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives with risk level + Conversational ("Why?", "What if -10% occupancy?") explainability|
 | **Context** | Siloed PMS data | Synthesized internal (PMS + capture rate) + external (weather, events) data |
 | **Demand modeling** | Occupancy rate used as proxy for covers | Property-specific capture rate × contextual modifiers |
 | **Integration model** | Full WFM platform replacement | Additive layer on top of existing tools |
