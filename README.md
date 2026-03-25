@@ -1,7 +1,7 @@
 
 <h1 align="center">Aetherix</h1>
 <p align="center">
-  <em>The Operational Decision Engine for Hotel F&B Managers.</em>
+  <em>Helping Hotel F&B Managers predict their hotel's operationnal needs.</em>
 </p>
 
 <p align="center">
@@ -17,20 +17,20 @@
 
 ## Overview
 
-Aetherix is an Agentic AI solution designed to automate and reduce anxiety associated with manual staff and Food & Beverage forecasting for hotel and restaurant managers.
+Aetherix is an Agentic AI solution designed to copilot staff and Food & Beverage forecasting for hotel and restaurant managers.
 
-By transitioning from traditional, static "pull" dashboards to a proactive UI-less "push" model, Aetherix delivers the right insights at the right time.
+The tool is designed to adapt to the client's IT stack, leverage a proactive UI-less "push" model, and deliver the right insights at the right time.
 It synthesizes internal context and property data (occupancy, bookings, PMS, POS, ...) with an external semantic layer, incorporating local events, weather, and reputation.
 
-**Key insight:** The agent models each property's historical capture rate and applies contextual demand modifiers to generate recommendations that align with each property's operational reality.
+**Key insight:** The agent models each property's historical capture rate and applies contextual demand to generate recommendations that align with each property's reality.
 
-The result: Contextualized intelligence delivered directly to departmental managers when needed. It helps reduce food waste (hotels waste ~25% of food produced), labor costs, and mostly, it empowers managers to focus on delivering exceptional guest experiences.
+The result: A contextualized intelligence delivered when needed, helping reduce food waste (hotels waste ~25% of food produced), labor costs, and mostly, empowering managers to focus on their customers.
 
 ### The Problem vs. The Aetherix Solution
 
-| Feature | The Problem (Traditional "Pull") | The Solution (Aetherix "Push") |
+| Feature | The Problem (Traditional "Pull") | The Solution (Proactive "Push") |
 | :--- | :--- | :--- |
-| **Data Interaction** | Requires manual login & dashboard checks | Proactive alerts via SMS, WhatsApp, or Email |
+| **Data Interaction** | Requires manual login & dashboard checks | Proactive alerts via Slack, WhatsApp, or Email |
 | **Forecasting** | Guesswork based on static historical reports | Contextualized ML/LLM predictions calibrated per property |
 | **Actionability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives with risk level |
 | **Context** | Siloed PMS data | Synthesized internal + external (weather, events) data |
