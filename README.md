@@ -1,7 +1,7 @@
 
 <h1 align="center">Aetherix</h1>
 <p align="center">
-  <em>Helping Hotel F&B Managers predict their hotel's operationnal needs.</em>
+  <em>Helping Hotel Managers predict their property's operational needs.</em>
 </p>
 
 <p align="center">
@@ -19,12 +19,12 @@
 
 Aetherix is an Agentic AI solution designed to copilot staff and Food & Beverage forecasting for hotel and restaurant managers.
 
-The tool is designed to adapt to the client's IT stack, leverage a proactive UI-less "push" model, and deliver the right insights at the right time.
+The tool adapts to the client's IT stack, uses a proactive, UI-less "push" model, and delivers the right insights at the right time.
 It synthesizes internal context and property data (occupancy, bookings, PMS, POS, ...) with an external semantic layer, incorporating local events, weather, and reputation.
 
 **Key insight:** The agent models each property's historical capture rate and applies contextual demand to generate recommendations that align with each property's reality.
 
-The result: A contextualized intelligence delivered when needed, helping reduce food waste (hotels waste ~25% of food produced), labor costs, and mostly, empowering managers to focus on their customers.
+The result: Contextualized intelligence, helping reduce food waste (hotels waste ~25% of food produced), labor costs, and, most importantly, giving more time to managers to focus on their customers.
 
 ### The Problem vs. The Aetherix Solution
 
@@ -32,10 +32,10 @@ The result: A contextualized intelligence delivered when needed, helping reduce 
 | :--- | :--- | :--- |
 | **Data Interaction** | Requires manual login & dashboard checks | Proactive alerts via Slack, WhatsApp, or Email |
 | **Forecasting** | Guesswork based on static historical reports | Contextualized ML/LLM predictions calibrated per property |
-| **Actionability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives with risk level |
-| **Context** | Siloed PMS data | Synthesized internal + external (weather, events) data |
+| **Explainability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives with risk level + Conversational ("Why?", "What if -10% occupancy?")|
+| **Context** | Siloed PMS data | Synthesized internal (PMS + capture rate) + external (weather, events) data |
 | **Demand modeling** | Occupancy rate used as proxy for covers | Property-specific capture rate × contextual modifiers |
-| **Food waste** | ~25% of F&B produced is wasted (ADEME/Accor, FR) | Better demand prediction → reduced over-preparation |
+| **Integration model** | Full WFM platform replacement | Additive layer on top of existing tools |
 
 ---
 
@@ -50,21 +50,9 @@ The result: A contextualized intelligence delivered when needed, helping reduce 
 
 ## How Aetherix Differs from WFM Tools
 
-Existing workforce management tools (Quinyx, Legion, Actabl/Hotel Effectiveness, Unifocus, Deputy) operate on a **scheduling-first** paradigm: they help you build and manage staff schedules, with basic forecasting as an add-on..
-
 Aetherix operates on a **forecast-first** paradigm. The schedule is the manager's job. Aetherix answers the question that comes before:
 
-> **"How busy will (...) actually be, and what should be adjusted?"**
-
-| Dimension | WFM Tools (Quinyx, Legion, Actabl…) | Aetherix |
-| :--- | :--- | :--- |
-| **Paradigm** | Scheduling-first, forecast as add-on | Forecast-first, decision directive as output |
-| **Interface** | Dashboard / mobile app (pull) | WhatsApp / Slack / Email (push, UI-less) |
-| **Demand modeling** | Historical sales patterns | PMS + capture rate + weather + events |
-| **Output** | "Here is your schedule" | "Here is what to adjust, and why" |
-| **Explainability** | Limited (score or aggregate view) | Conversational ("Why?", "What if -10% occupancy?") |
-| **Integration model** | Full WFM platform replacement | Additive layer on top of existing tools |
-| **Target buyer** | HR / Operations Director | F&B Manager / Restaurant Manager (daily user) |
+> **"How busy will (...) actually be, what should be adjusted, and why?"**
 
 ---
 
