@@ -21,10 +21,8 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 |--------|------------|-------|
 | Backend | FastAPI + Python 3.11 | Async, Pydantic v2, OpenAPI auto-généré |
 | Base de données | Supabase (PostgreSQL) | Auth, real-time, backups gérés |
-| Patterns vectoriels | Qdrant Cloud | Patterns F&B, embeddings 1536d, Cosine — 495+ patterns |
-| Mémoire cognitive | pgvector `operational_memory` (Phase 0-1) → Backboard.io (Phase 3) | Feedback loop par hôtel, outcomes, apprentissage cumulatif — via interface `MemoryProvider` abstrait |
 | Patterns vectoriels | pgvector (Supabase) | tables `fb_patterns` + `operational_memory`, embeddings Mistral 1024d, HNSW — 495+ patterns (HOS-99) |
-| Mémoire cognitive | pgvector (Supabase) | `operational_memory` — remplace Backboard.io, feedback manager + recency scoring Python (HOS-99) |
+| Mémoire cognitive | pgvector (Supabase) | `operational_memory` — feedback manager + recency scoring Python. Backboard.io à réévaluer Phase 3+ (HOS-99) |
 | Cache | Redis (Upstash) | Session state, TTL 1h |
 | IA principale | Claude Sonnet (Anthropic) | Reasoning + explainability |
 | Forecast numérique | Prophet (Meta) | Time-series covers prediction + regressors (météo, events, occupancy) |
@@ -48,7 +46,7 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 | 5 | Pas d'auto-actions (Phase MVP) | 63% managers veulent contrôle humain, trust-building | Full automation = adoption faible |
 | 6 | PMS-agnostic | Mews + Apaleo = 1000s hôtels, fallback si Mews refuse | Lock-in Mews = risque |
 | 7 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement | Fat frontend = duplication logique |
-| 8 | pgvector MVP → Backboard Phase 3 (via `MemoryProvider`) | Backboard = dépendance externe opaque prématurée en Phase 0. pgvector couvre le feedback loop par hôtel. Backboard s'insère en Phase 3 (multi-hôtels, insights structurés, patterns anonymisés cross-hôtels). L'interface `MemoryProvider` (`store_feedback`, `get_hotel_context`, `get_cross_hotel_patterns`) est conçue dès maintenant pour éviter toute réécriture. | Backboard dès MVP = risque de stabilité + coût non maîtrisé avant données suffisantes |
+| 8 | pgvector couvre les deux couches mémoire (Phase 0-2) — Backboard à réévaluer Phase 3+ | pgvector suffit pour Private Memory (par hôtel) et Hive Memory (cross-hôtels anonymisé) jusqu'en Phase 2. L'interface `MemoryProvider` (`store_feedback`, `get_hotel_context`, `get_cross_hotel_patterns`) est abstraite dès maintenant pour permettre l'insertion de Backboard en Phase 3+ sans réécriture, si le volume multi-hôtels le justifie. | Backboard dès MVP = dépendance externe opaque + coût non maîtrisé + 504 timeouts documentés |
 | 9 | Multi-LLM fallback via `LLMProvider` abstrait | Les LLMs deviennent commodity — ne pas créer une dépendance hard-coded à Claude. Interface abstraite dès maintenant : swap auto Claude → Gemini → GPT selon coût/performance sans réécriture. Claude reste le provider principal (reasoning, 200K ctx, explainability) mais n'est pas la seule dépendance. Défense contre commoditisation + résilience opérationnelle. | Hard-code Claude = lock-in fournisseur + vulnérabilité si pricing Anthropic change |
 
 ---
@@ -65,10 +63,10 @@ Objectif : passer d'un agent de "semantic search" à un agent **self-improving p
 - **Interface :** `MemoryProvider.store_feedback()`, `MemoryProvider.get_hotel_context(hotel_id)`
 
 ### Couche 2 — Hive Memory (ruche anonymisée, cross-hôtels)
-- **Technologie :** Backboard.io (Phase 3) — couche relationnelle vectorisée intégrée
+- **Technologie :** pgvector (Supabase) — tables agrégées anonymisées (Phase 0-2). Backboard.io à réévaluer en Phase 3+ si volume multi-hôtels le justifie.
 - **Périmètre :** patterns agrégés et anonymisés, groupés par tags : `quartier`, `typologie` (city/resort/airport), `clientèle` (leisure/business/MICE), `segment` (4*/5*/boutique), `taille_resto`, `saison`
 - **Contenu :** ce qui fonctionne **en général** pour des propriétés similaires — justifie et enrichit les prédictions avec des preuves d'impact inter-hôtels
-- **Signal d'apprentissage :** outcomes agrégés → renforce ou déprécie les patterns vectoriels dans Qdrant
+- **Signal d'apprentissage :** outcomes agrégés → renforce ou déprécie les patterns vectoriels (`fb_patterns`)
 - **Interface :** `MemoryProvider.get_cross_hotel_patterns(tags)`, `MemoryProvider.store_hive_insight()`
 
 ### Flux d'amélioration continue
@@ -131,7 +129,7 @@ Les LLMs deviennent commodity (Claude, Gemini, Grok, GPT — moins chers chaque 
 
 **Où est le vrai moat :**
 1. **Données + mémoire per-property** : Private Memory (2+ ans d'historique hôtel) + Hive Memory (patterns cross-hôtels anonymisés) — impossible à répliquer rapidement
-2. **Domain reasoning spécialisé** : prompt engineering + chain-of-thought sur hospitality ops data (patterns F&B, feedbacks managers, saisonnalité, événements locaux) → RAG avancé sur Qdrant (495+ patterns F&B)
+2. **Domain reasoning spécialisé** : prompt engineering + chain-of-thought sur hospitality ops data (patterns F&B, feedbacks managers, saisonnalité, événements locaux) → RAG avancé sur pgvector `fb_patterns` (495+ patterns F&B)
 3. **Human oversight comme feature produit** : les overrides managers sont du signal, pas du bruit → chaque refus d'une reco améliore le modèle suivant → l'agent devient plus "safe" et non "black box" au fil du temps → complémentaire à la Hive Memory (les overrides alimentent aussi la couche 2)
 
 **Multi-LLM fallback (Décision architecturale #9) :**
