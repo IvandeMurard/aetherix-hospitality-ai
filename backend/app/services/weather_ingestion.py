@@ -174,12 +174,12 @@ class WeatherIngestionService:
         stmt = text(
             """
             INSERT INTO weather_forecasts (
-                id, tenant_id, property_id, forecast_timestamp,
+                tenant_id, property_id, forecast_timestamp,
                 condition_code, temperature_c, precipitation_prob,
                 wind_speed_kmh, source, fetched_at, created_at
             )
             VALUES (
-                gen_random_uuid(), :tenant_id, :property_id, :forecast_timestamp,
+                :tenant_id, :property_id, :forecast_timestamp,
                 :condition_code, :temperature_c, :precipitation_prob,
                 :wind_speed_kmh, :source, :fetched_at, NOW()
             )
