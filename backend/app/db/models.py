@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric, Text
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON as JSONB  # JSON is dialect-agnostic (works with SQLite in tests)
 from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
@@ -94,42 +95,6 @@ class PMSSyncLog(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
-class WeatherForecast(Base):
-    """
-    Normalized weather forecast data for a property.
-    Story 3.1: Ingest Localized Weather Data.
-    Hourly weather forecast data ingested from Open-Meteo.
-    Story 3.1: Ingest Localized Weather Data (HOS-83).
-    Upsert key: (tenant_id, property_id, forecast_timestamp).
-    """
-    __tablename__ = "weather_forecasts"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    forecast_timestamp = Column(DateTime(timezone=True), nullable=False)
-    condition_code = Column(String, nullable=False)
-    temperature_c = Column(Numeric(5, 2))
-    precipitation_prob = Column(Integer)
-    wind_speed_kmh = Column(Numeric(6, 2))
-    raw_payload = Column(JSONB)
-    ingested_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
-    property_id = Column(String, nullable=False)
-    forecast_timestamp = Column(TIMESTAMP(timezone=True), nullable=False, index=True)
-
-    # Normalized weather fields (ready for Story 3.3a cross-reference)
-    condition_code = Column(Integer)        # WMO weather interpretation code
-    temperature_c = Column(Numeric(5, 2))   # degrees Celsius
-    precipitation_prob = Column(Integer)    # 0-100 %
-    wind_speed_kmh = Column(Numeric(6, 2))  # km/h
-
-    source = Column(String, nullable=False, default="open-meteo")
-    fetched_at = Column(TIMESTAMP(timezone=True), nullable=False, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    property = relationship("RestaurantProfile", foreign_keys=[tenant_id],
-                            primaryjoin="WeatherForecast.tenant_id == RestaurantProfile.tenant_id")
 class CaptationBaseline(Base):
     """
     Stores calculated captation rate baselines per tenant/property.
@@ -183,6 +148,7 @@ class WeatherForecast(Base):
     precipitation_prob = Column(Integer)      # 0-100 %
     wind_speed_kmh = Column(Float)
     forecast_timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+    source = Column(String, nullable=False, default="open-meteo")
 
     fetched_at = Column(DateTime(timezone=True), default=datetime.utcnow)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
@@ -194,31 +160,6 @@ class WeatherForecast(Base):
             name="uq_weather_forecast",
         ),
     )
-
-
-class LocalEvent(Base):
-    """
-    Normalized local event data for a property from PredictHQ.
-    Story 3.2: Ingest Localized Event Data.
-    """
-    __tablename__ = "local_events"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
-    predicthq_event_id = Column(String, nullable=False)
-    title = Column(String, nullable=False)
-    category = Column(String, nullable=False)
-    phq_category = Column(String)
-    start_dt = Column(DateTime(timezone=True), nullable=False)
-    end_dt = Column(DateTime(timezone=True))
-    predicted_attendance = Column(Integer)
-    impact_score = Column(Numeric(5, 2))
-    rank = Column(Integer)
-    location_lat = Column(Numeric(9, 6))
-    location_lng = Column(Numeric(9, 6))
-    raw_payload = Column(JSONB)
-    ingested_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
 class DemandAnomaly(Base):
@@ -248,6 +189,10 @@ class DemandAnomaly(Base):
     roi_labor_cost = Column(Numeric(10, 2))
     roi_net = Column(Numeric(10, 2))
     recommendation_text = Column(Text)
+
+
+class LocalEvent(Base):
+    """
     Localized event data ingested from PredictHQ.
     Story 3.2: one row per (tenant_id, event_id).
     Unique constraint on (tenant_id, event_id) enforces idempotent upserts.
