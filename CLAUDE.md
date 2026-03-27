@@ -38,7 +38,7 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 | # | Décision | Rationale | Alternatives rejetées |
 |---|---------|-----------|----------------------|
 | 1 | Claude Sonnet > Mistral | Meilleur reasoning, 200K ctx, explainability critique | Mistral trop faible, GPT-4 trop cher |
-| 2 | Qdrant > pgvector > Pinecone | Free tier généreux, <100ms, cloud-native | Pinecone $70/mo, pgvector plus lent |
+| 2 | pgvector (Supabase) > Qdrant > Pinecone | **Révisé HOS-99 (27/03/2026)** — pgvector suffisant pour Phase 0/1 (<50K patterns, <50 hôtels). Élimine Qdrant Cloud + Backboard.io. Retrieval hybride en 1 seule requête SQL <200ms. Réévaluer Qdrant si >50K patterns (Phase 3+). | Qdrant surdimensionné pour 495 patterns. Backboard.io : 504 timeouts, 4 retries, pas de filtres SQL. |
 | 3 | Voice opt-in (pas voice-first) | Trop risqué en démo (bruit), clavier = fallback fiable | Voice-first = risque UX |
 | 4 | Reasoning collapsible par défaut | Charge cognitive, 1-ligne visible, expand pour power users | Tout afficher = clutter |
 | 5 | Pas d'auto-actions (Phase MVP) | 63% managers veulent contrôle humain, trust-building | Full automation = adoption faible |
@@ -109,17 +109,16 @@ docs/ARCHITECTURE.md           — design système complet (v0.2.0, Feb 2026)
 ## Variables d'environnement requises
 
 ```
-ANTHROPIC_API_KEY     — Claude API (reasoning + embeddings)
+ANTHROPIC_API_KEY     — Claude API (reasoning)
 LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
 LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad (équipe HOS)
 OBSIDIAN_VAULT_PATH   — C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality
 APALEO_CLIENT_ID      — OAuth2 (prioritaire)
 APALEO_CLIENT_SECRET  — OAuth2
-SUPABASE_URL          — PostgreSQL
+SUPABASE_URL          — PostgreSQL + pgvector (remplace Qdrant depuis HOS-99)
 SUPABASE_KEY          — Anon key
-QDRANT_URL            — Vector DB
-QDRANT_API_KEY        — Vector DB
 REDIS_URL             — Upstash (session state)
+# Supprimées (HOS-99): QDRANT_URL, QDRANT_API_KEY, BACKBOARD_API_KEY, MISTRAL_API_KEY
 ```
 
 ---
