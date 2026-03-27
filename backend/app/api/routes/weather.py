@@ -2,7 +2,7 @@
 
 POST /api/v1/weather/sync
   - 202 Accepted immediately (BackgroundTasks pattern)
-  - Background task calls WeatherIngestionService.sync_for_tenant
+  - Background task calls WeatherIngestionService.sync_property
 
 Architecture constraints:
 - Fat Backend: no weather calls from Next.js.
@@ -11,16 +11,15 @@ Architecture constraints:
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.security import get_current_user
 from app.db.models import RestaurantProfile
-from app.db.session import get_db
 from app.db.session import AsyncSessionLocal, get_db
 from app.schemas.weather import WeatherSyncRequest, WeatherSyncResponse
 from app.services.weather_ingestion import WeatherIngestionService
@@ -28,22 +27,6 @@ from app.services.weather_ingestion import WeatherIngestionService
 router = APIRouter(prefix="/weather", tags=["weather"])
 
 _service = WeatherIngestionService()
-
-async def _background_sync(tenant_id: str) -> None:
-    """Run weather sync in a fire-and-forget background task."""
-    service = WeatherIngestionService()
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(RestaurantProfile).where(RestaurantProfile.tenant_id == tenant_id)
-        )
-        profile = result.scalars().first()
-        if profile is None:
-            return
-        try:
-            await service.sync_for_tenant(session, profile)
-        except Exception:  # noqa: BLE001
-            # Logged inside service; do not propagate out of background task
-            pass
 
 
 @router.post(
@@ -113,13 +96,10 @@ async def trigger_weather_sync(
 
 async def _run_sync(property_id: str) -> None:
     """Background coroutine: open a fresh DB session and run the sync."""
-    from app.db.session import AsyncSessionLocal
-
     try:
         async with AsyncSessionLocal() as db:
             await _service.sync_property(property_id, db)
     except Exception as exc:  # noqa: BLE001
-        import logging
         logging.getLogger(__name__).error(
             "Background weather sync failed — property=%s error=%s",
             property_id,
