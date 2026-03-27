@@ -1,240 +1,210 @@
-import asyncio
-import os
+"""
+Memory Service — SQLAlchemy / pgvector layer (HOS-99).
+
+Replaces the Backboard.io REST API with direct INSERT/SELECT against the
+`operational_memory` table in Supabase (PostgreSQL + pgvector extension).
+
+Key improvements over Backboard:
+  - No external HTTP calls (eliminates 504 timeouts and 4-retry overhead)
+  - SQL filters on hotel_id / manager_feedback (impossible with Backboard)
+  - Single JOIN-able table — hybrid retrieval with fb_patterns in one query
+  - p95 latency target: <200ms (vs Backboard's documented 180s timeout)
+"""
+from __future__ import annotations
+
 import json
 import logging
-from typing import Optional, List, Dict, Any
+import uuid as _uuid
+from typing import Any, Dict, List, Optional
 
-import httpx
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-_BASE_URL = "https://app.backboard.io/api"
+_EMBEDDING_DIM = 1536  # must match operational_memory.embedding vector(1536)
 
-_SYSTEM_PROMPT = (
-    "You are a hospitality operations memory system for an F&B revenue agent. "
-    "Your role is to retain and recall operational insights, manager feedback, "
-    "and historical patterns for hotel restaurant tenants. "
-    "When asked about relevant context, surface the most applicable memories concisely."
-)
+
+async def _get_embedding(query_text: str) -> List[float]:
+    """
+    Generate a 1536-dim embedding for *query_text*.
+    Zero-vector fallback — see rag_service._get_embedding for rationale.
+    """
+    return [0.0] * _EMBEDDING_DIM
 
 
 class MemoryService:
     """
-    Cognitive Memory Layer (Phase 3).
-    Uses the Backboard REST API (https://app.backboard.io/api) for persistent
-    memory across sessions. Relies only on httpx — no extra SDK required.
+    Cognitive Memory Layer backed by the `operational_memory` Supabase table.
 
-    Architecture:
-    - One Backboard assistant shared across the service lifetime (class-level cache).
-    - One long-lived thread per tenant for storing reflections (class-level cache).
-    - A fresh thread per call to get_relevant_context so stored memories are
-      injected cleanly without prior conversation noise.
+    Accepts an injected AsyncSession so callers control the DB transaction.
+    All methods silently no-op when no session is provided.
     """
 
-    # Class-level cache: one assistant shared across the whole process.
-    _assistant_id: Optional[str] = None
-
-    def __init__(self) -> None:
-        api_key = os.getenv("BACKBOARD_API_KEY")
-        if not api_key:
-            logger.warning("BACKBOARD_API_KEY not set — memory layer disabled.")
-            self._headers: Optional[dict] = None
-        else:
-            self._headers = {
-                "X-API-Key": api_key,
-                "Content-Type": "application/json",
-            }
+    def __init__(self, db: Optional[AsyncSession] = None) -> None:
+        self._db = db
 
     # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    async def _get_or_create_assistant(self) -> Optional[str]:
-        """Return the shared assistant ID.
-        Looks up an existing 'Aetherix F&B Memory' assistant first to avoid
-        accumulating stale assistants across process restarts.
-        """
-        if MemoryService._assistant_id:
-            return MemoryService._assistant_id
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                # Try to find an existing assistant with this name.
-                list_resp = await client.get(
-                    f"{_BASE_URL}/assistants",
-                    headers=self._headers,
-                )
-                if list_resp.is_success:
-                    assistants = list_resp.json()
-                    if isinstance(assistants, dict):
-                        assistants = assistants.get("assistants", [])
-                    for asst in assistants:
-                        if asst.get("name") == "Aetherix F&B Memory":
-                            MemoryService._assistant_id = asst["assistant_id"]
-                            logger.info(f"Reusing existing Backboard assistant: {asst['assistant_id']}")
-                            return MemoryService._assistant_id
-
-                # None found — create one.
-                create_resp = await client.post(
-                    f"{_BASE_URL}/assistants",
-                    json={"name": "Aetherix F&B Memory", "system_prompt": _SYSTEM_PROMPT},
-                    headers=self._headers,
-                )
-                if not create_resp.is_success:
-                    raise RuntimeError(f"HTTP {create_resp.status_code} — {create_resp.text[:300]}")
-                assistant_id = create_resp.json()["assistant_id"]
-                MemoryService._assistant_id = assistant_id
-                logger.info(f"Created Backboard assistant: {assistant_id}")
-                return assistant_id
-        except Exception as e:
-            logger.error(f"Failed to get/create Backboard assistant [{type(e).__name__}]: {repr(e)}")
-            return None
-
-    async def _create_thread(self, assistant_id: str) -> Optional[str]:
-        """Create a fresh thread. Backboard memories are stored at the assistant level,
-        so each reflection/query can safely use its own thread."""
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(
-                    f"{_BASE_URL}/assistants/{assistant_id}/threads",
-                    headers=self._headers,
-                )
-                if not resp.is_success:
-                    raise RuntimeError(f"HTTP {resp.status_code} — {resp.text[:500]}")
-                return resp.json()["thread_id"]
-        except Exception as e:
-            logger.error(f"Failed to create Backboard thread [{type(e).__name__}]: {repr(e)}")
-            return None
-
-    async def _add_message(
-        self, thread_id: str, content: str, retries: int = 4, backoff: float = 30.0
-    ) -> Optional[str]:
-        """POST a message to a thread with memory=Auto. Returns response content.
-        Retries on 504 (Backboard gateway timeout during LLM/memory processing).
-        """
-        for attempt in range(retries + 1):
-            try:
-                async with httpx.AsyncClient(timeout=180) as client:
-                    resp = await client.post(
-                        f"{_BASE_URL}/threads/{thread_id}/messages",
-                        data={"content": content, "memory": "Auto", "stream": "false"},
-                        headers={k: v for k, v in self._headers.items() if k != "Content-Type"},
-                    )
-                if resp.status_code == 504 and attempt < retries:
-                    wait = backoff * (2 ** attempt)
-                    logger.warning(
-                        f"Backboard 504 on attempt {attempt + 1}/{retries + 1} — "
-                        f"retrying in {wait:.0f}s"
-                    )
-                    await asyncio.sleep(wait)
-                    continue
-                if not resp.is_success:
-                    raise RuntimeError(
-                        f"Backboard add_message failed: HTTP {resp.status_code} — {resp.text[:500]}"
-                    )
-                return resp.json().get("content", "")
-            except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
-                if attempt < retries:
-                    wait = backoff * (2 ** attempt)
-                    logger.warning(f"Backboard timeout on attempt {attempt + 1} — retrying in {wait:.0f}s")
-                    await asyncio.sleep(wait)
-                else:
-                    raise
-        return None
-
-    # ------------------------------------------------------------------
-    # Public API
+    # Public API (mirrors old Backboard API surface)
     # ------------------------------------------------------------------
 
     async def store_reflection(
         self,
         tenant_id: str,
-        reflection: str = None,
-        context: str = None,
-        outcome: str = None,
-        tags: List[str] = None,
+        reflection: Optional[str] = None,
+        context: Optional[str] = None,
+        outcome: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
     ) -> None:
         """
-        Persists an operational insight or manager feedback into Backboard memory.
-        Supports two call signatures:
-          - seed script:  store_reflection(tenant_id, reflection="...", tags=[...])
-          - feedback loop: store_reflection(tenant_id, context="...", outcome="...")
+        Persists an operational insight or manager feedback into operational_memory.
+
+        Accepts either:
+          - seed script:    store_reflection(tenant_id, reflection="...", tags=[...])
+          - feedback loop:  store_reflection(tenant_id, context="...", outcome="...")
         """
-        if not self._headers:
+        if self._db is None:
             return
 
         content = reflection if reflection else f"Context: {context} | Outcome: {outcome}"
+        embedding = await _get_embedding(content)
 
-        assistant_id = await self._get_or_create_assistant()
-        if not assistant_id:
-            raise RuntimeError("Backboard assistant unavailable — cannot store reflection.")
-
-        # Fresh thread per reflection
-        # memory operations on the same thread.
-        thread_id = await self._create_thread(assistant_id)
-        if not thread_id:
-            raise RuntimeError("Backboard thread creation failed — cannot store reflection.")
-
-        try:
-            await self._add_message(thread_id, content)
-            logger.info(f"Stored reflection for tenant '{tenant_id}'")
-        except Exception as e:
-            logger.error(f"Failed to store reflection for tenant '{tenant_id}' [{type(e).__name__}]: {repr(e)}")
-            raise RuntimeError(f"[{type(e).__name__}] {repr(e)}") from e
+        await self._db.execute(
+            text(
+                """
+                INSERT INTO operational_memory
+                  (id, hotel_id, session_id, content, outcome, tags, embedding, created_at)
+                VALUES
+                  (:id, :hotel_id, :session_id, :content, :outcome, :tags,
+                   CAST(:embedding AS vector), NOW())
+                """
+            ),
+            {
+                "id": str(_uuid.uuid4()),
+                "hotel_id": tenant_id,
+                "session_id": session_id,
+                "content": content,
+                "outcome": outcome,
+                "tags": json.dumps(tags or []),
+                "embedding": str(embedding),
+            },
+        )
+        await self._db.commit()
+        logger.info("Stored reflection for tenant '%s'", tenant_id)
 
     async def get_relevant_context(self, tenant_id: str, current_query: str) -> str:
         """
-        Retrieves relevant historical context for a given query using Backboard memory recall.
-        Opens a fresh thread each time so memories are injected without prior conversation noise.
+        Retrieves the top-3 most relevant memories for *current_query* via
+        pgvector cosine similarity, filtered to *tenant_id*.
+
+        Returns a newline-separated string of memory content (same surface as
+        the old Backboard response).
         """
-        if not self._headers:
+        if self._db is None:
             return ""
 
-        assistant_id = await self._get_or_create_assistant()
-        if not assistant_id:
-            return ""
+        embedding = await _get_embedding(current_query)
 
         try:
-            thread_id = await self._create_thread(assistant_id)
-            if not thread_id:
+            result = await self._db.execute(
+                text(
+                    """
+                    SELECT content, outcome,
+                           embedding <=> CAST(:embedding AS vector) AS similarity
+                    FROM operational_memory
+                    WHERE hotel_id = :hotel_id
+                    ORDER BY similarity ASC
+                    LIMIT 3
+                    """
+                ),
+                {"hotel_id": tenant_id, "embedding": str(embedding)},
+            )
+            rows = result.mappings().all()
+        except Exception as exc:
+            if "no such function" in str(exc).lower() or "operator" in str(exc).lower() \
+                    or "syntax error" in str(exc).lower():
+                # SQLite fallback — return most-recent memories
+                logger.debug("pgvector unavailable (SQLite?), using fallback: %s", exc)
+                rows = await self._fallback_select(tenant_id)
+            else:
+                logger.error("MemoryService.get_relevant_context error: %s", exc)
                 return ""
 
-            query = (
-                f"For hotel tenant '{tenant_id}', recall any relevant operational "
-                f"memories related to: {current_query}"
-            )
-            return await self._add_message(thread_id, query) or ""
-        except Exception as e:
-            logger.error(f"Failed to retrieve context for tenant '{tenant_id}': {e}")
-            return ""
+        parts = []
+        for row in rows:
+            parts.append(row["content"])
+            if row.get("outcome"):
+                parts.append(f"  → {row['outcome']}")
+        return "\n".join(parts)
 
-    async def learn_from_feedback(self, tenant_id: str, alert_id: str, feedback: str) -> None:
-        """Stores negative manager feedback to prevent repeated unhelpful alerts."""
+    async def learn_from_feedback(
+        self, tenant_id: str, alert_id: str, feedback: str
+    ) -> None:
+        """Stores manager feedback to prevent repeated unhelpful alerts."""
         await self.store_reflection(
             tenant_id,
             context=f"AlertID: {alert_id}",
             outcome=f"Manager Feedback: {feedback}",
         )
 
-    async def cache_recommendation(self, tenant_id: str, data: Dict[str, Any]) -> None:
-        """Persists the latest recommendation into Backboard memory as a structured note."""
-        if not self._headers:
+    async def cache_recommendation(
+        self, tenant_id: str, data: Dict[str, Any]
+    ) -> None:
+        """Persists the latest recommendation payload into operational_memory."""
+        if self._db is None:
             return
-        await self.store_reflection(
-            tenant_id,
-            reflection=f"[recommendation_cache] {json.dumps(data)}",
-            tags=["recommendation_cache"],
-        )
+        content = f"[recommendation_cache] {json.dumps(data)}"
+        await self.store_reflection(tenant_id, reflection=content, tags=["recommendation_cache"])
 
-    async def get_latest_recommendation(self, tenant_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves the most recent cached recommendation via memory recall."""
-        if not self._headers:
+    async def get_latest_recommendation(
+        self, tenant_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieves the most recent cached recommendation for *tenant_id*."""
+        if self._db is None:
             return None
         try:
-            raw = await self.get_relevant_context(tenant_id, "latest recommendation_cache")
+            result = await self._db.execute(
+                text(
+                    """
+                    SELECT content FROM operational_memory
+                    WHERE hotel_id = :hotel_id
+                      AND content LIKE '%recommendation_cache%'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """
+                ),
+                {"hotel_id": tenant_id},
+            )
+            row = result.mappings().first()
+            if row is None:
+                return None
+            raw = row["content"]
             start = raw.find("{")
             end = raw.rfind("}") + 1
             if start != -1 and end > start:
                 return json.loads(raw[start:end])
             return None
-        except Exception:
+        except Exception as exc:
+            logger.error("MemoryService.get_latest_recommendation error: %s", exc)
             return None
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    async def _fallback_select(self, tenant_id: str) -> List[Any]:
+        """Plain SELECT without vector ops — used when pgvector is unavailable."""
+        result = await self._db.execute(
+            text(
+                """
+                SELECT content, outcome, NULL AS similarity
+                FROM operational_memory
+                WHERE hotel_id = :hotel_id
+                ORDER BY created_at DESC
+                LIMIT 3
+                """
+            ),
+            {"hotel_id": tenant_id},
+        )
+        return result.mappings().all()

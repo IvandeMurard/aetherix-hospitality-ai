@@ -1,13 +1,18 @@
-from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric, Text
-from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import JSON as JSONB  # JSON is dialect-agnostic (works with SQLite in tests)
-from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric
+from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+from sqlalchemy import JSON as JSONB  # JSON is dialect-agnostic (works with SQLite in tests)
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from datetime import datetime
 import uuid
+
+# pgvector: use real Vector type on PostgreSQL, fall back to JSON for SQLite tests
+try:
+    from pgvector.sqlalchemy import Vector as _PgVector
+    _VECTOR_1536 = _PgVector(1536)
+except ImportError:  # pragma: no cover
+    from sqlalchemy import JSON as _PgVector  # type: ignore[assignment]
+    _VECTOR_1536 = JSON
 
 Base = declarative_base()
 
@@ -325,3 +330,59 @@ class RecommendationCache(Base):
     pushed_at = Column(DateTime)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FBPattern(Base):
+    """
+    F&B operational patterns stored as embeddings.
+
+    HOS-99 (T2): replaces Qdrant `fb_patterns` collection.
+    Enables pgvector cosine similarity search with SQL filters.
+
+    In production (Supabase): column type is vector(1536) with HNSW index.
+    In test (SQLite): falls back to JSON (no vector ops, mocked in tests).
+    """
+    __tablename__ = "fb_patterns"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=True, index=True)  # null = global pattern
+
+    # Rich metadata filters (replaces Qdrant payload filters)
+    service_type = Column(String, nullable=False, index=True)   # breakfast|lunch|dinner|room_service
+    occupancy_band = Column(String, nullable=True)              # low|medium|high|full
+    day_of_week = Column(String, nullable=True)                 # Mon-Sun
+    weather_condition = Column(String, nullable=True)
+    feedback_status = Column(String, nullable=False, default="neutral")  # followed|rejected|neutral
+
+    # Pattern payload
+    pattern_text = Column(Text, nullable=False)
+    outcome_description = Column(Text, nullable=True)
+    embedding = Column(_VECTOR_1536, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class OperationalMemory(Base):
+    """
+    Per-hotel operational memory: manager decisions, reflections, feedback.
+
+    HOS-99 (T3): replaces Backboard.io API.
+    Enables hybrid retrieval (vector similarity + SQL filters) in a single query.
+    """
+    __tablename__ = "operational_memory"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    hotel_id = Column(String, nullable=False, index=True)   # maps to tenant_id
+    session_id = Column(String, nullable=True, index=True)
+
+    # Stored content
+    content = Column(Text, nullable=False)       # reflection / feedback / context string
+    reco_json = Column(JSON, nullable=True)      # cached recommendation payload
+    manager_feedback = Column(String, nullable=True)  # followed|rejected|neutral
+    outcome = Column(Text, nullable=True)        # free-text outcome description
+    tags = Column(JSON, nullable=True)           # list of string tags
+
+    embedding = Column(_VECTOR_1536, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
