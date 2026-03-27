@@ -253,14 +253,29 @@ def test_webhook_reject_returns_twiml_reject_message(webhook_client):
     assert "No action will be taken" in resp.text or "rejected" in resp.text.lower()
 
 
-def test_webhook_unknown_returns_help_message(webhook_client):
-    """AC#4: Unknown input → help message, no error."""
-    resp = webhook_client.post(
-        "/webhooks/twilio/inbound",
-        data={"From": "+33600000001", "Body": "maybe", "To": "+14155238886"},
-    )
+def test_webhook_unknown_returns_query_ack(webhook_client):
+    """Story 5.1: Unknown input (non-ACCEPT/REJECT) → conversational query-ack TwiML.
+
+    Since Story 5.1, unknown messages are treated as conversational queries and
+    receive a query-acknowledgement reply, not a help-message prompt.
+    """
+    with patch("app.api.routes.webhook.QueryParserService") as MockParser, \
+         patch("app.api.routes.webhook.ExplainabilityService") as MockExplainer:
+        mock_parser_instance = AsyncMock()
+        mock_parser_instance.parse_and_store = AsyncMock(
+            return_value={"status": "stored", "query_id": str(__import__("uuid").uuid4())}
+        )
+        MockParser.return_value = mock_parser_instance
+        mock_explainer_instance = AsyncMock()
+        mock_explainer_instance.generate_and_send = AsyncMock(return_value={"status": "sent"})
+        MockExplainer.return_value = mock_explainer_instance
+
+        resp = webhook_client.post(
+            "/webhooks/twilio/inbound",
+            data={"From": "+33600000001", "Body": "maybe", "To": "+14155238886"},
+        )
     assert resp.status_code == 200
-    assert "ACCEPT" in resp.text or "REJECT" in resp.text
+    assert "looking into it" in resp.text or "Got your question" in resp.text
 
 
 def test_webhook_returns_xml_content_type(webhook_client):
@@ -308,7 +323,7 @@ def test_webhook_signature_validation_skipped_in_test_mode(monkeypatch):
 
 
 def test_webhook_unknown_does_not_call_log_action(monkeypatch):
-    """AC#4: Unknown action → log_action is never called (no DB write)."""
+    """Story 5.1 + AC#4: Unknown action routes to conversational path; log_action NOT called."""
     monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
 
     from app.db.session import get_db
@@ -317,7 +332,16 @@ def test_webhook_unknown_does_not_call_log_action(monkeypatch):
     app.dependency_overrides[get_db] = _fake_db
 
     mock_log = AsyncMock()
-    with patch("app.api.routes.webhook.ActionLoggerService.log_action", mock_log):
+    mock_parser_instance = AsyncMock()
+    mock_parser_instance.parse_and_store = AsyncMock(
+        return_value={"status": "stored", "query_id": str(__import__("uuid").uuid4())}
+    )
+    mock_explainer_instance = AsyncMock()
+    mock_explainer_instance.generate_and_send = AsyncMock(return_value={"status": "sent"})
+
+    with patch("app.api.routes.webhook.ActionLoggerService.log_action", mock_log), \
+         patch("app.api.routes.webhook.QueryParserService", return_value=mock_parser_instance), \
+         patch("app.api.routes.webhook.ExplainabilityService", return_value=mock_explainer_instance):
         with TestClient(app) as client:
             resp = client.post(
                 "/webhooks/twilio/inbound",
