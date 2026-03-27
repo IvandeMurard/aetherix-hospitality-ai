@@ -22,14 +22,6 @@ Usage (in main.py):
     @app.on_event("shutdown")
     async def on_shutdown():
         scheduler.shutdown(wait=False)
-"""APScheduler background worker — weather sync every 12 hours (HOS-83 Story 3.1).
-
-The scheduler is started on FastAPI startup and stopped on shutdown.
-Each job iteration:
-  1. Fetches all RestaurantProfile rows that have GPS coordinates.
-  2. Calls WeatherIngestionService.sync_for_tenant for each profile.
-  3. Logs per-tenant success / failure; a per-tenant failure does NOT
-     abort the remaining tenants (SC #6).
 """
 from __future__ import annotations
 
@@ -42,32 +34,49 @@ from sqlalchemy.future import select
 from app.db.models import RestaurantProfile
 from app.db.session import AsyncSessionLocal
 from apscheduler.triggers.interval import IntervalTrigger
-from sqlalchemy.future import select
-
-from app.db.session import AsyncSessionLocal
-from app.db.models import RestaurantProfile
 from app.services.weather_ingestion import WeatherIngestionService
 
 logger = logging.getLogger(__name__)
 
 _service = WeatherIngestionService()
+_scheduler = AsyncIOScheduler()
 
 
 async def run_weather_sync_all_tenants() -> None:
     """Sync weather forecasts for every property with GPS coordinates.
 
-    This coroutine is invoked by APScheduler every 12 hours.
-    Errors for individual tenants are isolated — they do not abort the loop.
+    Invoked by APScheduler every 12 hours.
+    Errors for individual tenants are isolated and do not abort the loop.
     """
-    logger.info("Weather sync job started")
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(RestaurantProfile).where(
+                RestaurantProfile.latitude.isnot(None),
+                RestaurantProfile.longitude.isnot(None),
+            )
+        )
+        profiles = result.scalars().all()
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-_scheduler = AsyncIOScheduler()
+    logger.info("Weather sync: %d properties to process", len(profiles))
+
+    for profile in profiles:
+        try:
+            async with AsyncSessionLocal() as db:
+                count = await _service.sync_property(profile.tenant_id, db)
+            logger.info("Weather sync OK  tenant=%s  rows=%d", profile.tenant_id, count)
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Weather sync FAILED  tenant=%s  error=%s",
+                profile.tenant_id,
+                exc,
+                exc_info=True,
+            )
+
+    logger.info("Weather sync job finished")
 
 
 async def _run_weather_sync_for_all_tenants() -> None:
-    """Iterate every property with GPS coords and sync weather."""
+    """Iterate every property with GPS coords and sync weather (interval scheduler)."""
     service = WeatherIngestionService()
 
     async with AsyncSessionLocal() as session:
@@ -84,22 +93,9 @@ async def _run_weather_sync_for_all_tenants() -> None:
     for profile in profiles:
         try:
             async with AsyncSessionLocal() as db:
-                count = await _service.sync_property(profile.tenant_id, db)
-                logger.info(
-                    "Weather sync OK — tenant=%s rows=%d", profile.tenant_id, count
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "Weather sync FAILED — tenant=%s error=%s",
-    logger.info("Weather sync job started — %d properties with GPS", len(profiles))
-
-    for profile in profiles:
-        try:
-            async with AsyncSessionLocal() as session:
-                rows = await service.sync_for_tenant(session, profile)
+                rows = await service.sync_for_tenant(db, profile)
             logger.info("Weather synced  tenant=%s  new_rows=%d", profile.tenant_id, rows)
         except Exception as exc:  # noqa: BLE001
-            # Per-tenant failure must NOT affect other tenants (SC #6)
             logger.error(
                 "Weather sync FAILED  tenant=%s  error=%s",
                 profile.tenant_id,
