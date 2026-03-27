@@ -9,14 +9,7 @@ Responsibilities:
 
 Architecture constraints:
 - Fat Backend: all HTTP calls stay in this service, not in routes.
-- No side effects on normalise() — pure function, testable in isolation.
-"""WeatherIngestionService — HOS-83 Story 3.1.
-
-Fetches hourly weather forecasts from Open-Meteo (free tier, no API key)
-and upserts normalized records into the ``weather_forecasts`` table.
-
-Design constraints followed:
-- Fat Backend: no weather API calls from Next.js (architecture constraint).
+- No side effects on normalise() -- pure function, testable in isolation.
 - Tenacity retry: max 3 attempts, exponential back-off (SC #6).
 - Idempotency: ON CONFLICT DO NOTHING on (tenant_id, property_id, forecast_timestamp) (SC #7).
 - Tenant isolation: every row carries tenant_id; RLS enforced at DB level (SC #5).
@@ -207,15 +200,6 @@ class WeatherIngestionService:
         wait=wait_exponential(multiplier=1, min=2, max=16),
         reraise=True,
     )
-    async def _fetch_forecast(self, latitude: float, longitude: float) -> dict[str, Any]:
-        """Call Open-Meteo with exponential backoff (max 3 attempts)."""
-        params = {
-            "latitude": latitude,
-            "longitude": longitude,
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
-        reraise=True,
-    )
     async def _fetch_forecast(self, lat: float, lng: float) -> dict:
         """GET Open-Meteo with tenacity retry (SC #6)."""
         params = {
@@ -226,7 +210,6 @@ class WeatherIngestionService:
             "timezone": "auto",
         }
 
-        if self._client:
         if self._client is not None:
             resp = await self._client.get(_OPEN_METEO_URL, params=params, timeout=15)
         else:
