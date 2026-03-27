@@ -1,24 +1,73 @@
 """
-Memory Service — SQLAlchemy / pgvector layer (HOS-99).
+Memory Service — two-layer architecture (HOS-99).
 
-Replaces the Backboard.io REST API with direct INSERT/SELECT against the
-`operational_memory` table in Supabase (PostgreSQL + pgvector extension).
+## Layer 1 — Private Memory (Phase 0-1, this module)
+Per-hotel operational memory backed by pgvector `operational_memory` table.
+Captures idiosyncrasies that are NOT generalisable across hotels:
+  - Real capture rates for this property
+  - Manager decision preferences
+  - Local non-repeatable patterns
 
-Key improvements over Backboard:
-  - No external HTTP calls (eliminates 504 timeouts and 4-retry overhead)
+Key improvements over the old Backboard-only approach:
+  - No external HTTP calls (eliminates 504 timeouts, 4-retry overhead)
   - SQL filters on hotel_id / manager_feedback (impossible with Backboard)
-  - Single JOIN-able table — hybrid retrieval with fb_patterns in one query
-  - p95 latency target: <200ms (vs Backboard's documented 180s timeout)
+  - JOIN-able with fb_patterns — hybrid retrieval in one query
+  - p95 latency target: <200ms
+
+## Layer 2 — Hive Memory (Phase 3, additive, NOT implemented here)
+Anonymised cross-hotel collective intelligence, grouped by property tags
+(city/resort/airport, clientele segment, outlet size).  Each hotel benefits
+from its own learning PLUS collective wisdom — without sharing raw data.
+Implementation: `HiveMemoryService` (Backboard.io or equivalent), also
+implementing the `MemoryProvider` protocol below.
+
+## Extension contract
+Both layers implement `MemoryProvider`.  Callers receive a `MemoryProvider`
+instance — swapping in or layering `HiveMemoryService` in Phase 3 requires
+zero changes to callers.
 """
 from __future__ import annotations
 
 import json
 import logging
 import uuid as _uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+# ---------------------------------------------------------------------------
+# MemoryProvider protocol — the stable interface both layers must implement
+# ---------------------------------------------------------------------------
+
+@runtime_checkable
+class MemoryProvider(Protocol):
+    """
+    Common interface for Private Memory (Phase 0-1) and Hive Memory (Phase 3).
+
+    Callers depend only on this protocol — they never import a concrete class.
+    """
+
+    async def store_reflection(
+        self,
+        tenant_id: str,
+        reflection: Optional[str] = None,
+        context: Optional[str] = None,
+        outcome: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
+    ) -> None: ...
+
+    async def get_relevant_context(self, tenant_id: str, current_query: str) -> str: ...
+
+    async def learn_from_feedback(
+        self, tenant_id: str, alert_id: str, feedback: str
+    ) -> None: ...
+
+    async def cache_recommendation(self, tenant_id: str, data: Dict[str, Any]) -> None: ...
+
+    async def get_latest_recommendation(self, tenant_id: str) -> Optional[Dict[str, Any]]: ...
 
 logger = logging.getLogger(__name__)
 
