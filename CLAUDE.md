@@ -40,6 +40,7 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 | # | Décision | Rationale | Alternatives rejetées |
 |---|---------|-----------|----------------------|
 | 1 | Claude Sonnet > Mistral | Meilleur reasoning, 200K ctx, explainability critique | Mistral trop faible, GPT-4 trop cher |
+| 2 | Architecture mémoire deux couches (HOS-99, 27/03/2026) | **Couche 1 — Private Memory (Phase 0-1)** : pgvector `operational_memory` par hôtel — idiosyncrasies non-généralisables (capture rate réel, préférences manager, patterns locaux). **Couche 2 — Hive Memory (Phase 3, additif)** : Backboard.io ou équivalent, anonymisé cross-hotel, groupé par tags (city/resort/airport, segment, taille). Chaque hôtel bénéficie de sa propre mémoire + sagesse collective, sans partage de données brutes. Extension non-breaking via `MemoryProvider` protocol. Qdrant éliminé définitivement. | Qdrant surdimensionné pour 495 patterns. Architecture mono-couche : mélange private + hive = risque de contamination cross-tenant. |
 | 2 | pgvector (Supabase) > Qdrant > Pinecone | Suffisant à <50K patterns (Phase 0/1), 1 seule requête SQL vs 2-3 API hops, élimine Qdrant + Backboard, compatible MCP latency target (<500ms). Réévaluer Qdrant en Phase 3+ (>50K patterns / >50 hôtels). | Qdrant surdimensionné à Phase 0/1 ; Pinecone $70/mo ; Backboard 504 timeouts documentés |
 | 3 | Voice opt-in (pas voice-first) | Trop risqué en démo (bruit), clavier = fallback fiable | Voice-first = risque UX |
 | 4 | Reasoning collapsible par défaut | Charge cognitive, 1-ligne visible, expand pour power users | Tout afficher = clutter |
@@ -225,17 +226,21 @@ docs/ARCHITECTURE.md           — design système complet (v0.2.0, Feb 2026)
 ## Variables d'environnement requises
 
 ```
+ANTHROPIC_API_KEY     — Claude API (reasoning)
 ANTHROPIC_API_KEY     — Claude API (reasoning + explainability)
 LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
 LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad (équipe HOS)
 OBSIDIAN_VAULT_PATH   — C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality
 APALEO_CLIENT_ID      — OAuth2 (prioritaire)
 APALEO_CLIENT_SECRET  — OAuth2
+SUPABASE_URL          — PostgreSQL + pgvector (remplace Qdrant depuis HOS-99)
+SUPABASE_KEY          — Anon key
 SUPABASE_URL          — PostgreSQL (+ pgvector pour fb_patterns et operational_memory)
 SUPABASE_KEY          — Anon key
 DATABASE_URL          — asyncpg DSN (postgresql+asyncpg://...) pour SQLAlchemy
 MISTRAL_API_KEY       — Embeddings 1024d (mistral-embed) pour fb_patterns et operational_memory
 REDIS_URL             — Upstash (session state)
+# Supprimées (HOS-99): QDRANT_URL, QDRANT_API_KEY, BACKBOARD_API_KEY, MISTRAL_API_KEY
 ```
 
 ---
