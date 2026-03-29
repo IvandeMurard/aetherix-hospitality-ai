@@ -23,9 +23,13 @@ CREATE TABLE IF NOT EXISTS weather_forecasts (
     id                  BIGSERIAL PRIMARY KEY,
 
     -- Tenant scoping
-    tenant_id           TEXT        NOT NULL
-                            REFERENCES restaurant_profiles(tenant_id)
-                            ON DELETE CASCADE,
+    -- FK to restaurant_profiles(tenant_id) intentionally omitted here:
+    -- restaurant_profiles may not exist yet at migration time.
+    -- Add the FK manually once restaurant_profiles is created:
+    --   ALTER TABLE weather_forecasts
+    --     ADD CONSTRAINT fk_weather_tenant
+    --     FOREIGN KEY (tenant_id) REFERENCES restaurant_profiles(tenant_id) ON DELETE CASCADE;
+    tenant_id           TEXT        NOT NULL,
     property_id         TEXT        NOT NULL,
 
     -- Normalized Open-Meteo fields (SC #4)
