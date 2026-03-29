@@ -3,6 +3,7 @@ from datetime import date
 from typing import Optional, Dict, Any
 from app.services.pms_sync import PMSSyncService, MockPMSAdapter
 from app.services.apaleo_adapter import ApaleoPMSAdapter
+from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.db.models import RestaurantProfile
@@ -38,43 +39,51 @@ async def trigger_pms_sync(
     background_tasks: BackgroundTasks,
     target_date: Optional[date] = None,
     use_mock: bool = Query(True, description="Whether to use the Mock adapter for pilot verification"),
+    use_mcp: bool = Query(False, description="Use Apaleo MCP Server instead of raw REST API (HOS-101)"),
     current_user: Dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Triggers a data sync from the PMS for a specific property and date.
     Guarded by 'get_current_user' to ensure tenant-only access.
+
+    Adapter priority: mock > mcp > raw API.
     """
     sync_date = target_date or date.today()
-    
+
     # Initialize appropriate adapter
     if use_mock:
         adapter = MockPMSAdapter()
+        adapter_label = "mock"
+    elif use_mcp:
+        adapter = ApaleoMCPAdapter()
+        adapter_label = "apaleo_mcp"
     else:
         adapter = ApaleoPMSAdapter()
-    
+        adapter_label = "apaleo_raw"
+
     # Fetch property for this user
     result = await db.execute(
         select(RestaurantProfile).where(RestaurantProfile.owner_id == current_user["id"])
     )
     profile = result.scalars().first()
-    
+
     if not profile:
         raise HTTPException(status_code=404, detail="No restaurant profile linked to this user.")
 
     # Use the linked property ID
     property_id = profile.tenant_id
-    
+
     service = PMSSyncService(adapter)
-    
+
     # Run sync in background (includes DB persistence)
     background_tasks.add_task(service.sync_daily_data, property_id, sync_date)
-    
+
     return {
         "message": "PMS sync triggered successfully in background",
         "property_id": property_id,
         "property_name": profile.property_name,
         "date": sync_date.isoformat(),
-        "adapter": "mock" if use_mock else "apaleo",
+        "adapter": adapter_label,
         "triggered_by": current_user.get("email")
     }
