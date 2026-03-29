@@ -20,7 +20,9 @@ Mission : transformer la gestion proactive du F&B en hôtellerie via des agents 
 **Apaleo MCP Server — implications directes :**
 - Le MCP Server Apaleo couvre l'intégralité de la plateforme et ses API → **l'intégration Apaleo Phase 0 peut se faire via MCP directement** (pas d'API raw custom nécessaire)
 - Use cases couverts par Apaleo : réservations, CRM, housekeeping, paiements. **F&B forecasting/alertes = absent = niche ouverte confirmée**
-- **Agent Hub Apaleo** (première marketplace d'agents IA hôteliers, déjà live) = canal de distribution potentiel pour Aetherix comme agent F&B spécialisé (2 000+ propriétés, 30+ pays)
+- **Compatible avec les clients MCP d'Anthropic (plug-and-play)** — Aetherix, construit sur Claude, peut appeler le MCP Server Apaleo directement comme source d'outils, sans code d'intégration custom
+- Architecture MACH (Microservices, API-first, Cloud-native, Headless) — flux temps réel, automatisation workflows
+- **Agent Hub Apaleo** (première marketplace d'agents IA hôteliers, déjà live) = canal de distribution potentiel pour Aetherix comme agent F&B spécialisé (2 000+ propriétés, 30+ pays) — **trop tôt pour Phase 0, à cibler Phase 1**
 - **MCP Alpha Group Apaleo** = à rejoindre maintenant (community.apaleo.com) — accès early + visibilité équipe Apaleo
 
 ---
