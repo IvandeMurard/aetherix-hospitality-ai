@@ -12,8 +12,10 @@ dependencies = [
     "fastapi-mail>=1.4.1,<2",
     "fastapi-pagination==0.13.3",
     "httpx>=0.27.0",
+    "tenacity>=8.3.0,<9",
+    "apscheduler>=3.10.0,<4",
     "anthropic>=0.34.0",
-    "qdrant-client>=1.11.0",
+    "pgvector>=0.3.0",
     "mistralai>=1.0.0",
     "prophet>=1.1.5",
     "pandas>=2.2.0",
@@ -27,6 +29,7 @@ dev = [
     "pytest>=8.3.3,<9",
     "pytest-mock>=3.14.0,<4",
     "pytest-asyncio>=0.24.0,<0.25",
+    "aiosqlite>=0.20.0",
 ]
 
 [tool.uv]
