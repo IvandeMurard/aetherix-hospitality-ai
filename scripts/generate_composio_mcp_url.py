@@ -39,7 +39,16 @@ import sys
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Try backend/.env first (primary), then project-root .env as fallback
+_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_backend_env = os.path.join(_root, "backend", ".env")
+_root_env = os.path.join(_root, ".env")
+if os.path.exists(_backend_env):
+    load_dotenv(_backend_env)
+elif os.path.exists(_root_env):
+    load_dotenv(_root_env)
+else:
+    load_dotenv()  # fallback: search from CWD
 
 COMPOSIO_API_KEY = os.getenv("COMPOSIO_API_KEY", "")
 COMPOSIO_USER_ID = os.getenv("COMPOSIO_USER_ID", "aetherix-default")
@@ -76,8 +85,8 @@ cmd = (
 )
 print(f"\nAdd to Claude Code:\n  {cmd}")
 
-# Optionally persist to .env
-env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+# Optionally persist to .env (backend/.env preferred, then root .env)
+env_path = _backend_env if os.path.exists(_backend_env) else _root_env
 if os.path.exists(env_path):
     with open(env_path) as f:
         content = f.read()
