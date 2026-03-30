@@ -73,7 +73,8 @@ class ApaleoMCPClient:
 
     Auth modes
     ----------
-    ``"apikey"``  — Composio Tool Router. Header: ``X-API-Key``.
+    ``"apikey"``  — Composio. Auth embedded in URL query params
+                    (``?api_key=...&user_id=...``). No extra header needed.
                     Exposes Inventory API tools (properties / units).
     ``"bearer"``  — Apaleo direct alpha. OAuth2 client-credentials token.
                     Exposes full Core API (occupancy, revenue, reservations).
@@ -108,17 +109,25 @@ class ApaleoMCPClient:
 
     @property
     def is_configured(self) -> bool:
-        """True when server URL and the relevant credentials are all present."""
+        """True when server URL and the relevant credentials are all present.
+
+        Composio (apikey): auth is embedded in the URL; we just check the URL
+        is set and contains ``api_key`` (set by generate_composio_mcp_url.py).
+        """
         if not self.server_url:
             return False
         if self.auth_mode == "apikey":
-            return bool(self.composio_api_key)
+            return "api_key=" in self.server_url or bool(self.composio_api_key)
         return bool(self.client_id and self.client_secret)
 
     async def _auth_headers(self) -> dict[str, str]:
-        """Return the appropriate auth header for the configured mode."""
+        """Return auth headers for the configured mode.
+
+        Composio (apikey): auth is embedded in the URL query params
+        (``?api_key=...&user_id=...``) — no extra header required.
+        """
         if self.auth_mode == "apikey":
-            return {"X-API-Key": self.composio_api_key}
+            return {}  # auth already in URL — see generate_composio_mcp_url.py
 
         # bearer — fetch/refresh OAuth2 token
         if not (self._bearer_token and time.time() < self._token_expiry - 30):
