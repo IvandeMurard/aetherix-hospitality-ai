@@ -1,490 +1,440 @@
+#!/usr/bin/env python3
 """
-scripts/veille_proactive.py
-Veille hebdomadaire automatisée — hotel tech, agentique IA, Apaleo/Mews, YC, hospitalitynet.
+Veille proactive Aetherix
+━━━━━━━━━━━━━━━━━━━━━━━━
+Scrape → Score (Claude Haiku) → Draft → [human approval] → Push Linear
 
-Modes :
-  python scripts/veille_proactive.py              # rapport complet → Linear + repo
-  python scripts/veille_proactive.py --dry-run    # simulation, pas d'écriture
-  python scripts/veille_proactive.py --no-linear  # rapport sans ticket Linear
-
-Sources surveillées :
-  - hospitalitynet.org (RSS)
-  - Apaleo blog / changelog
-  - Mews blog
-  - Y Combinator (W/S batches — filtre hospitality/F&B/forecasting)
-  - Hacker News / recherche web hotel tech + agentique
-
-Prérequis :
-  ANTHROPIC_API_KEY  — pour l'analyse et la synthèse
-  LINEAR_API_KEY     — lin_api_...
-  LINEAR_TEAM_ID     — UUID équipe
+Usage:
+  python scripts/veille_proactive.py [--min-score N] [--dry-run]
+  python scripts/veille_proactive.py --push-linear docs/veille/draft-YYYY-MM-DD.json
 """
 
-from __future__ import annotations
-
+import argparse
+import datetime
 import json
 import os
-import re
 import sys
-import textwrap
-from datetime import datetime, timedelta, timezone
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import TypedDict
 
-import httpx
+# Charge .env si présent (local dev + Claude Code cloud)
+sys.path.insert(0, str(Path(__file__).parent))
+from _env_loader import load_env
+load_env()
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-REPO_ROOT = Path(__file__).parent.parent.resolve()
-VEILLE_OUTPUT_DIR = REPO_ROOT / "docs" / "veille"
-MAX_AGE_DAYS = 7
+# ─── Sources ─────────────────────────────────────────────────────────────────
 
-LINEAR_API = "https://api.linear.app/graphql"
-
-# Sources RSS/Atom
-RSS_SOURCES = [
+SOURCES = [
     {
         "name": "Hospitalitynet",
-        "url": "https://www.hospitalitynet.org/rss/all.xml",
-        "tags": ["hospitalitynet", "hotel-industrie"],
-    },
-    {
-        "name": "Apaleo Blog",
-        "url": "https://apaleo.com/blog/feed",
-        "tags": ["apaleo", "pms"],
+        "type": "rss",
+        "url": "https://www.hospitalitynet.org/rss/rss.xml",
+        "category": "hotel-tech",
     },
     {
         "name": "Mews Blog",
+        "type": "rss",
         "url": "https://www.mews.com/en/blog/rss.xml",
-        "tags": ["mews", "pms"],
+        "category": "pms",
+    },
+    {
+        "name": "Apaleo Blog",
+        "type": "rss",
+        "url": "https://apaleo.com/blog/feed",
+        "category": "pms",
+    },
+    {
+        "name": "Hacker News — hotel AI",
+        "type": "hn",
+        "query": "hotel restaurant AI forecast",
+        "category": "tech",
+    },
+    {
+        "name": "Hacker News — MCP agents",
+        "type": "hn",
+        "query": "MCP agent tool calling hospitality",
+        "category": "agent-first",
     },
 ]
 
-# Requêtes de recherche web (fallback si RSS indisponible)
-SEARCH_QUERIES = [
-    "hotel tech AI agentic 2025 2026",
-    "agentic AI hospitality operations",
-    "Apaleo news 2026",
-    "Mews hospitality news 2026",
-    "Y Combinator hotel restaurant food forecasting startup",
-    "hospitality F&B AI forecasting SaaS",
-]
+# ─── Scoring prompt ───────────────────────────────────────────────────────────
 
-# Mots-clés de pertinence projet
-RELEVANCE_KEYWORDS = [
-    "agentic", "agentique", "forecasting", "F&B", "food and beverage",
-    "hotel operations", "PMS", "apaleo", "mews", "hospitality AI",
-    "revenue management", "demand prediction", "restaurant AI",
-    "Y Combinator", "YC", "guac", "hotel tech", "proptech hospitality",
-    "whatsapp hotel", "chatbot hotel",
-]
+SYSTEM_PROMPT = """Tu es un analyste stratégique pour Aetherix, une plateforme IA agentique B2B pour les opérations F&B hôtelières.
+
+Contexte projet Aetherix :
+- Mission : anticiper, alerter et recommander sur les opérations F&B (couverts, staffing, inventaire)
+- Stack : FastAPI + Python + Supabase (PostgreSQL) + Qdrant (vecteurs) + Next.js + Claude (Anthropic)
+- Intégrations PMS : Apaleo (prioritaire, OAuth2), Mews (secondaire, webhooks)
+- Delivery : WhatsApp (Twilio), dashboard manager
+- Pivot stratégique actuel : exposer Aetherix comme primitive agent-callable via MCP Server
+- Phase en cours : Phase 0 (architecture + intégrations base), bientôt Phase 1 (forecasting F&B Prophet + LLM)
+
+Critères de pertinence (score sur 10) :
+  +3 : Impacte directement la roadmap ou une décision technique (MCP, PMS, forecasting, IA agentique)
+  +3 : Révèle un concurrent direct ou une opportunité de marché hôtelier
+  +2 : Information actionnable → justifie une nouvelle story Linear
+  +1 : Contenu récent (moins de 7 jours)
+  +1 : Source fiable (hospitalitynet.org, YC, Apaleo/Mews officiel, a16z, arXiv)
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après."""
+
+USER_PROMPT_TEMPLATE = """Analyse cet article pour Aetherix :
+
+Titre : {title}
+Source : {source}
+Date : {date}
+Résumé : {content}
+
+Réponds en JSON strict :
+{{
+  "score": <entier 0-10>,
+  "pourquoi": "<1 phrase : pourquoi ce score>",
+  "lien_projet": "<1 phrase : lien concret avec Aetherix>",
+  "action": "<titre de story Linear proposée, ou null si aucune action>",
+  "tags": ["<tag1>", "<tag2>"]
+}}"""
 
 
-# ─── Types ────────────────────────────────────────────────────────────────────
+# ─── HTTP helper ──────────────────────────────────────────────────────────────
 
-class Article(TypedDict):
-    title: str
-    url: str
-    summary: str
-    source: str
-    published: str  # ISO date string
-    tags: list[str]
-    relevance_score: int  # 0-10
+def http_get(url: str, timeout: int = 15) -> str | None:
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Aetherix-Veille/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except Exception as e:
+        print(f"  ⚠️  HTTP error [{url[:70]}]: {e}", file=sys.stderr)
+        return None
 
 
 # ─── Fetchers ─────────────────────────────────────────────────────────────────
 
-def _parse_rss_date(date_str: str) -> datetime | None:
-    """Parse RSS date formats."""
-    formats = [
-        "%a, %d %b %Y %H:%M:%S %z",
-        "%a, %d %b %Y %H:%M:%S GMT",
-        "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%dT%H:%M:%SZ",
+def fetch_rss(url: str) -> list[dict]:
+    raw = http_get(url)
+    if not raw:
+        return []
+    try:
+        root = ET.fromstring(raw)
+        items = []
+        for item in root.findall(".//item")[:10]:
+            title = (item.findtext("title") or "").strip()
+            link = (item.findtext("link") or "").strip()
+            desc = (item.findtext("description") or "").strip()[:600]
+            pub = (item.findtext("pubDate") or "").strip()
+            if title and link:
+                items.append({"title": title, "url": link, "content": desc, "date": pub})
+        return items
+    except ET.ParseError as e:
+        print(f"  ⚠️  RSS parse error: {e}", file=sys.stderr)
+        return []
+
+
+def fetch_hn(query: str) -> list[dict]:
+    encoded = urllib.parse.quote(query)
+    url = f"https://hn.algolia.com/api/v1/search?query={encoded}&tags=story&hitsPerPage=10"
+    raw = http_get(url)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        items = []
+        for hit in data.get("hits", []):
+            title = hit.get("title", "").strip()
+            link = hit.get("url") or f"https://news.ycombinator.com/item?id={hit.get('objectID')}"
+            created = hit.get("created_at", "")
+            if title:
+                items.append({
+                    "title": title,
+                    "url": link,
+                    "content": f"HN — {hit.get('points', 0)} points, {hit.get('num_comments', 0)} comments",
+                    "date": created,
+                })
+        return items
+    except (json.JSONDecodeError, KeyError) as e:
+        print(f"  ⚠️  HN parse error: {e}", file=sys.stderr)
+        return []
+
+
+# ─── Scoring ──────────────────────────────────────────────────────────────────
+
+def score_article(article: dict, source_name: str, api_key: str) -> dict:
+    payload = json.dumps({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 350,
+        "system": SYSTEM_PROMPT,
+        "messages": [{
+            "role": "user",
+            "content": USER_PROMPT_TEMPLATE.format(
+                title=article["title"],
+                source=source_name,
+                date=article["date"][:30],
+                content=article["content"][:500],
+            ),
+        }],
+    }).encode()
+
+    try:
+        request = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=payload,
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=20) as resp:
+            body = json.loads(resp.read())
+
+        text = body["content"][0]["text"].strip()
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+
+        return json.loads(text)
+
+    except Exception as e:
+        print(f"  ⚠️  Scoring error '{article['title'][:50]}': {e}", file=sys.stderr)
+        return {"score": 0, "pourquoi": f"Erreur: {e}", "lien_projet": "", "action": None, "tags": []}
+
+
+# ─── Report generation ────────────────────────────────────────────────────────
+
+def build_report(date_str: str, results: list[dict], min_score: int) -> str:
+    actionable = [r for r in results if r["analysis"].get("action")]
+    informational = [r for r in results if not r["analysis"].get("action")]
+
+    lines = [
+        "---",
+        f"date: {date_str}",
+        "type: draft-veille",
+        f"articles_retenus: {len(results)}",
+        f"min_score: {min_score}",
+        "---",
+        "",
+        f"# Veille Aetherix — {date_str}",
+        "",
+        f"**{len(results)} articles retenus** (seuil : {min_score}/10) · "
+        f"{len(actionable)} actions Linear · {len(informational)} informationnels",
+        "",
+        "---",
+        "",
     ]
-    for fmt in formats:
-        try:
-            return datetime.strptime(date_str.strip(), fmt)
-        except ValueError:
-            continue
+
+    if actionable:
+        lines += ["## ✅ Actions recommandées (→ Linear)", ""]
+        for i, item in enumerate(actionable, 1):
+            a = item["analysis"]
+            lines += [
+                f"### {i}. {item['article']['title']}",
+                f"**Source :** {item['source_name']} | **Score :** {a['score']}/10 | **Date :** {item['article']['date'][:25]}",
+                f"**URL :** {item['article']['url']}",
+                "",
+                f"**Pourquoi :** {a['pourquoi']}",
+                f"**Lien projet :** {a['lien_projet']}",
+                f"**Action Linear :** `{a['action']}`",
+                f"**Tags :** {' '.join(f'`{t}`' for t in a.get('tags', []))}",
+                "",
+            ]
+
+    if informational:
+        lines += ["## 📰 Articles retenus (informationnels)", ""]
+        for i, item in enumerate(informational, 1):
+            a = item["analysis"]
+            lines += [
+                f"### {i}. {item['article']['title']}",
+                f"**Source :** {item['source_name']} | **Score :** {a['score']}/10 | **Date :** {item['article']['date'][:25]}",
+                f"**URL :** {item['article']['url']}",
+                "",
+                f"**Pourquoi :** {a['pourquoi']}",
+                f"**Lien projet :** {a['lien_projet']}",
+                f"**Tags :** {' '.join(f'`{t}`' for t in a.get('tags', []))}",
+                "",
+            ]
+
+    return "\n".join(lines)
+
+
+# ─── Linear push ──────────────────────────────────────────────────────────────
+
+def push_to_linear(api_key: str, team_id: str, item: dict) -> str | None:
+    a = item["analysis"]
+    title = f"[Veille] {a['action']}"
+    description = (
+        f"# Veille Aetherix — {item.get('date_str', '')}\n\n"
+        f"**Source :** {item['source_name']}\n"
+        f"**Article :** [{item['article']['title']}]({item['article']['url']})\n"
+        f"**Score de pertinence :** {a['score']}/10\n\n"
+        f"## Pourquoi c'est important\n{a['pourquoi']}\n\n"
+        f"## Lien avec Aetherix\n{a['lien_projet']}\n\n"
+        f"**Tags :** {' '.join(f'`{t}`' for t in a.get('tags', []))}\n"
+    )
+
+    mutation = (
+        "mutation CreateIssue($title: String!, $description: String!, "
+        "$teamId: String!, $priority: Int!) {"
+        "  issueCreate(input: {title: $title, description: $description, "
+        "teamId: $teamId, priority: $priority}) {"
+        "    success issue { id identifier url } } }"
+    )
+
+    payload = json.dumps({
+        "query": mutation,
+        "variables": {"title": title, "description": description, "teamId": team_id, "priority": 3},
+    }).encode()
+
+    try:
+        request = urllib.request.Request(
+            "https://api.linear.app/graphql",
+            data=payload,
+            headers={"Authorization": api_key, "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=15) as resp:
+            data = json.loads(resp.read())
+        issue = data.get("data", {}).get("issueCreate", {}).get("issue")
+        if issue:
+            return issue["url"]
+        if errors := data.get("errors"):
+            print(f"  ⚠️  Linear API: {errors}", file=sys.stderr)
+    except Exception as e:
+        print(f"  ⚠️  Linear push error: {e}", file=sys.stderr)
     return None
 
 
-def fetch_rss(source: dict, cutoff: datetime, client: httpx.Client) -> list[Article]:
-    """Fetch and parse RSS feed, return articles newer than cutoff."""
-    articles: list[Article] = []
-    try:
-        resp = client.get(source["url"], timeout=15, follow_redirects=True)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"  [!] RSS {source['name']} inaccessible : {e}", file=sys.stderr)
-        return articles
+# ─── Commands ─────────────────────────────────────────────────────────────────
 
-    content = resp.text
+def cmd_generate(args):
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("❌ ANTHROPIC_API_KEY manquant", file=sys.stderr)
+        sys.exit(1)
 
-    # Simple XML parsing without external deps
-    items = re.findall(r"<item>(.*?)</item>", content, re.DOTALL)
-    if not items:
-        # Try <entry> for Atom feeds
-        items = re.findall(r"<entry>(.*?)</entry>", content, re.DOTALL)
+    date_str = datetime.date.today().isoformat()
+    output_dir = Path("docs/veille")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    draft_md = output_dir / f"draft-{date_str}.md"
+    draft_json = output_dir / f"draft-{date_str}.json"
 
-    for item in items:
-        title_m = re.search(r"<title[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", item, re.DOTALL)
-        link_m = re.search(r"<link[^>]*>(?:<!\[CDATA\[)?(https?://[^<]+?)(?:\]\]>)?</link>", item, re.DOTALL)
-        if not link_m:
-            link_m = re.search(r'<link[^>]+href=["\']([^"\']+)["\']', item)
-        desc_m = re.search(r"<description[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</description>", item, re.DOTALL)
-        if not desc_m:
-            desc_m = re.search(r"<summary[^>]*>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</summary>", item, re.DOTALL)
-        date_m = re.search(r"<pubDate[^>]*>(.*?)</pubDate>", item, re.DOTALL)
-        if not date_m:
-            date_m = re.search(r"<published[^>]*>(.*?)</published>", item, re.DOTALL)
-        if not date_m:
-            date_m = re.search(r"<updated[^>]*>(.*?)</updated>", item, re.DOTALL)
+    print(f"🔍 Veille Aetherix — {date_str}")
+    print(f"   Seuil : {args.min_score}/10 | Mode : {'dry-run' if args.dry_run else 'live'}\n")
 
-        if not title_m or not link_m:
-            continue
+    seen_urls: set = set()
+    all_results = []
 
-        title = re.sub(r"<[^>]+>", "", title_m.group(1)).strip()
-        url = link_m.group(1).strip()
-        summary = re.sub(r"<[^>]+>", "", desc_m.group(1) if desc_m else "").strip()[:500]
-
-        pub_date = None
-        if date_m:
-            pub_date = _parse_rss_date(date_m.group(1))
-
-        # Filter by age
-        if pub_date:
-            pub_aware = pub_date if pub_date.tzinfo else pub_date.replace(tzinfo=timezone.utc)
-            if pub_aware < cutoff:
-                continue
-            pub_str = pub_aware.strftime("%Y-%m-%d")
-        else:
-            pub_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-        articles.append({
-            "title": title,
-            "url": url,
-            "summary": summary,
-            "source": source["name"],
-            "published": pub_str,
-            "tags": source["tags"].copy(),
-            "relevance_score": 0,  # scored later by Claude
-        })
-
-    return articles
-
-
-def score_articles_with_claude(articles: list[Article], api_key: str) -> list[Article]:
-    """
-    Use Claude API to score each article's relevance (0-10) for the Aetherix project.
-    Articles with score >= 5 are kept; others are filtered out.
-    """
-    if not articles:
-        return articles
-
-    # Build batch prompt
-    articles_text = "\n\n".join(
-        f"[{i+1}] Source: {a['source']}\nTitre: {a['title']}\nRésumé: {a['summary'][:300]}"
-        for i, a in enumerate(articles)
-    )
-
-    project_context = textwrap.dedent("""
-        Projet : Aetherix — IA agentique pour opérations F&B hôtelières.
-        - Prédiction de la demande F&B (restaurant d'hôtel)
-        - Intégrations PMS : Apaleo (prioritaire), Mews
-        - Alertes proactives via WhatsApp
-        - Stack : FastAPI, Claude AI, pgvector
-        - Concurrents/références : Guac.com (YC), Mews Agents
-        - Phase actuelle : construction architecture + intégrations de base
-    """)
-
-    prompt = textwrap.dedent(f"""
-        Tu es un analyste de veille stratégique pour une startup hospitality tech.
-
-        {project_context}
-
-        Pour chaque article ci-dessous, attribue un score de pertinence de 0 à 10 :
-        - 8-10 : Directement actionnable pour le projet (nouveau concurrent, technologie clé, opportunité marché)
-        - 6-7 : Pertinent, apporte du contexte utile
-        - 3-5 : Informatif mais peu d'impact direct
-        - 0-2 : Non pertinent
-
-        Articles :
-        {articles_text}
-
-        Réponds UNIQUEMENT en JSON valide, tableau de {len(articles)} objets :
-        [{{"index": 1, "score": X, "raison": "..."}}]
-        Pas de markdown, pas d'explication hors JSON.
-    """)
-
-    try:
-        resp = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 1024,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=30,
+    for source in SOURCES:
+        print(f"📡 {source['name']}...")
+        articles = (
+            fetch_rss(source["url"]) if source["type"] == "rss"
+            else fetch_hn(source.get("query", ""))
         )
-        resp.raise_for_status()
-        raw = resp.json()["content"][0]["text"].strip()
-        # Strip markdown fences if present
-        raw = re.sub(r"```(?:json)?", "", raw).strip().rstrip("```").strip()
-        scores = json.loads(raw)
-        for item in scores:
-            idx = item["index"] - 1
-            if 0 <= idx < len(articles):
-                articles[idx]["relevance_score"] = item["score"]
-                if item.get("raison"):
-                    articles[idx]["summary"] += f"\n\n_Pertinence : {item['raison']}_"
-    except Exception as e:
-        print(f"  [!] Scoring Claude échoué : {e}", file=sys.stderr)
-        # Fallback : keyword scoring
+        print(f"   {len(articles)} articles récupérés")
+
         for article in articles:
-            text = (article["title"] + " " + article["summary"]).lower()
-            score = sum(1 for kw in RELEVANCE_KEYWORDS if kw.lower() in text)
-            article["relevance_score"] = min(score * 2, 10)
+            url = article["url"]
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
 
-    return articles
+            analysis = score_article(article, source["name"], api_key)
+            score = analysis.get("score", 0)
 
+            if score >= args.min_score:
+                print(f"   ✅ {score}/10 — {article['title'][:65]}")
+                all_results.append({
+                    "source_name": source["name"],
+                    "source_category": source["category"],
+                    "article": article,
+                    "analysis": analysis,
+                    "date_str": date_str,
+                })
+            else:
+                print(f"   ⬜ {score}/10 — {article['title'][:65]}")
 
-def synthesize_report(articles: list[Article], api_key: str) -> str:
-    """Use Claude to generate a structured weekly intelligence brief."""
-    if not articles:
-        return "_Aucun contenu pertinent trouvé cette semaine._"
+    print(f"\n📊 {len(all_results)} articles retenus (score ≥ {args.min_score})")
 
-    articles_text = "\n\n".join(
-        f"**[{a['relevance_score']}/10]** {a['source']} — {a['published']}\n"
-        f"**{a['title']}**\n{a['summary'][:400]}\n{a['url']}"
-        for a in sorted(articles, key=lambda x: x["relevance_score"], reverse=True)
-    )
-
-    prompt = textwrap.dedent(f"""
-        Tu es un analyste de veille stratégique pour Aetherix (IA agentique F&B hôtelier).
-
-        Synthétise ces articles en un rapport hebdomadaire structuré en français.
-        Format souhaité :
-
-        ## Faits marquants
-        (2-3 insights les plus importants, avec implication pour Aetherix)
-
-        ## Articles sélectionnés
-        (Liste structurée, triée par pertinence décroissante)
-
-        ## Signaux à surveiller
-        (Tendances émergentes, concurrents, technologies)
-
-        ## Actions recommandées
-        (1-3 actions concrètes pour l'équipe Aetherix)
-
-        Articles cette semaine :
-        {articles_text}
-
-        Sois concis et orienté action. Si un article justifie une story Linear, indique-le explicitement.
-    """)
-
-    try:
-        resp = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 2048,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            timeout=60,
-        )
-        resp.raise_for_status()
-        return resp.json()["content"][0]["text"].strip()
-    except Exception as e:
-        print(f"  [!] Synthèse Claude échouée : {e}", file=sys.stderr)
-        # Fallback : liste brute
-        lines = [f"- [{a['relevance_score']}/10] **{a['title']}** ({a['source']})\n  {a['url']}" for a in articles]
-        return "\n".join(lines)
-
-
-# ─── Linear ───────────────────────────────────────────────────────────────────
-
-def create_linear_issue(title: str, description: str, api_key: str, team_id: str) -> dict:
-    """Crée un ticket Linear et retourne {identifier, url}."""
-    # Get Strategic Intelligence label
-    label_resp = httpx.post(
-        LINEAR_API,
-        headers={"Authorization": api_key, "Content-Type": "application/json"},
-        json={
-            "query": "query Labels($t: String!) { team(id: $t) { labels { nodes { id name } } } }",
-            "variables": {"t": team_id},
-        },
-        timeout=15,
-    )
-    label_resp.raise_for_status()
-    nodes = label_resp.json().get("data", {}).get("team", {}).get("labels", {}).get("nodes", [])
-    label_id = next((n["id"] for n in nodes if "intelligence" in n["name"].lower()), None)
-
-    create_resp = httpx.post(
-        LINEAR_API,
-        headers={"Authorization": api_key, "Content-Type": "application/json"},
-        json={
-            "query": """
-                mutation CI($t: String!, $ti: String!, $d: String!, $l: [String!], $p: Int) {
-                  issueCreate(input: {teamId: $t, title: $ti, description: $d, labelIds: $l, priority: $p}) {
-                    success
-                    issue { id identifier url title }
-                  }
-                }
-            """,
-            "variables": {
-                "t": team_id,
-                "ti": title,
-                "d": description,
-                "l": [label_id] if label_id else [],
-                "p": 3,  # medium
-            },
-        },
-        timeout=15,
-    )
-    create_resp.raise_for_status()
-    issue = create_resp.json().get("data", {}).get("issueCreate", {}).get("issue", {})
-    if not issue:
-        raise RuntimeError(f"Linear error: {create_resp.json()}")
-    return issue
-
-
-# ─── Output ───────────────────────────────────────────────────────────────────
-
-def save_report_to_repo(title: str, body: str, dry_run: bool) -> Path:
-    """Sauvegarde le rapport dans docs/veille/ pour sync Obsidian via git."""
-    VEILLE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    slug = re.sub(r"[^\w]+", "-", title.lower())[:50]
-    dest = VEILLE_OUTPUT_DIR / f"{date_str}-{slug}.md"
-
-    front_matter = textwrap.dedent(f"""\
-        ---
-        title: "{title}"
-        date: {date_str}
-        type: veille-hebdomadaire
-        tags: [veille, intelligence, hotel-tech, automatique]
-        source: github-actions
-        ---
-    """)
-    content = f"{front_matter}\n# {title}\n\n{body}\n"
-
-    if dry_run:
-        print(f"[dry-run] Écrirait : {dest}")
-        print(content[:400] + "...")
-        return dest
-
-    dest.write_text(content, encoding="utf-8")
-    return dest
-
-
-# ─── Main ─────────────────────────────────────────────────────────────────────
-
-def main() -> None:
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Veille hebdomadaire automatisée — Aetherix")
-    parser.add_argument("--dry-run",   action="store_true", help="Simulation sans écriture ni Linear")
-    parser.add_argument("--no-linear", action="store_true", help="Rapport sans ticket Linear")
-    parser.add_argument("--min-score", type=int, default=5, help="Score min pour inclure un article (défaut: 5)")
-    args = parser.parse_args()
-
-    print(f"\n{'─'*60}")
-    print(f"  Veille Hebdomadaire Aetherix  |  {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"{'─'*60}\n")
-
-    api_key     = os.environ.get("ANTHROPIC_API_KEY", "")
-    linear_key  = os.environ.get("LINEAR_API_KEY", "")
-    linear_team = os.environ.get("LINEAR_TEAM_ID", "")
-
-    cutoff = datetime.now(timezone.utc) - timedelta(days=MAX_AGE_DAYS)
-    print(f"Période couverte : {cutoff.strftime('%Y-%m-%d')} → aujourd'hui\n")
-
-    # 1. Collecter les articles RSS
-    all_articles: list[Article] = []
-    with httpx.Client(headers={"User-Agent": "Aetherix-Veille/1.0"}) as client:
-        for source in RSS_SOURCES:
-            print(f"[+] Fetching {source['name']}...")
-            arts = fetch_rss(source, cutoff, client)
-            print(f"    → {len(arts)} articles récents")
-            all_articles.extend(arts)
-
-    if not all_articles:
-        print("[!] Aucun article collecté (sources RSS indisponibles ?)")
-        print("    Pour un rapport manuel, utiliser intelligence_report.py")
+    if not all_results:
+        msg = f"Aucun article pertinent cette semaine (seuil : {args.min_score}/10).\n"
+        if not args.dry_run:
+            draft_md.write_text(
+                f"---\ndate: {date_str}\ntype: draft-veille\narticles_retenus: 0\n---\n\n"
+                f"# Veille {date_str}\n\n{msg}", encoding="utf-8"
+            )
+            draft_json.write_text("[]", encoding="utf-8")
+        else:
+            print(f"📝 [DRY-RUN] {msg}")
         return
 
-    print(f"\n{len(all_articles)} articles collectés au total\n")
+    report_md = build_report(date_str, all_results, args.min_score)
 
-    # 2. Scorer avec Claude
-    if api_key:
-        print("[+] Scoring avec Claude...")
-        all_articles = score_articles_with_claude(all_articles, api_key)
-    else:
-        print("[!] ANTHROPIC_API_KEY absente — scoring par mots-clés uniquement")
-        for article in all_articles:
-            text = (article["title"] + " " + article["summary"]).lower()
-            score = sum(1 for kw in RELEVANCE_KEYWORDS if kw.lower() in text)
-            article["relevance_score"] = min(score * 2, 10)
+    if args.dry_run:
+        print("\n📝 [DRY-RUN] Rapport :\n")
+        print(report_md)
+        return
 
-    # 3. Filtrer par score minimum
-    relevant = [a for a in all_articles if a["relevance_score"] >= args.min_score]
-    print(f"→ {len(relevant)}/{len(all_articles)} articles retenus (score >= {args.min_score})\n")
+    draft_md.write_text(report_md, encoding="utf-8")
+    draft_json.write_text(json.dumps(all_results, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"\n📝 Brouillons sauvegardés :")
+    print(f"   Markdown : {draft_md}  ← lisible pour validation")
+    print(f"   JSON     : {draft_json}  ← utilisé par --push-linear")
+    print("\n✅ Phase 1 terminée. En attente de validation humaine.")
 
-    if not relevant:
-        print("[i] Aucun article suffisamment pertinent cette semaine.")
-        title = f"Veille Hebdomadaire — {datetime.now().strftime('%d %B %Y')} (rien de notable)"
-        body = "_Aucun article pertinent cette semaine pour Aetherix._"
-    else:
-        # 4. Synthèse Claude
-        print("[+] Synthèse du rapport...")
-        if api_key:
-            body = synthesize_report(relevant, api_key)
+
+def cmd_push_linear(args):
+    api_key = os.environ.get("LINEAR_API_KEY")
+    team_id = os.environ.get("LINEAR_TEAM_ID")
+
+    if not api_key or not team_id:
+        print("❌ LINEAR_API_KEY ou LINEAR_TEAM_ID manquant", file=sys.stderr)
+        sys.exit(1)
+
+    # Accept .md or .json — always load the .json sibling
+    draft_path = Path(args.push_linear)
+    json_path = draft_path.with_suffix(".json")
+    if not json_path.exists():
+        print(f"❌ Fichier JSON introuvable : {json_path}", file=sys.stderr)
+        sys.exit(1)
+
+    results = json.loads(json_path.read_text(encoding="utf-8"))
+    actionable = [r for r in results if r["analysis"].get("action")]
+
+    print(f"📤 Push Linear depuis : {json_path}")
+    print(f"   {len(actionable)} actions à pousser\n")
+
+    pushed = 0
+    for item in actionable:
+        url = push_to_linear(api_key, team_id, item)
+        if url:
+            print(f"   ✅ {item['analysis']['action'][:60]} → {url}")
+            pushed += 1
         else:
-            lines = [
-                f"- [{a['relevance_score']}/10] **{a['title']}** ({a['source']} — {a['published']})\n  {a['url']}"
-                for a in sorted(relevant, key=lambda x: x["relevance_score"], reverse=True)
-            ]
-            body = "\n".join(lines)
-        title = f"Veille Hebdomadaire — {datetime.now().strftime('%d %B %Y')}"
+            print(f"   ❌ Échec : {item['analysis']['action']}")
 
-    # 5. Sauvegarder dans le repo (pour sync Obsidian via git pull)
-    report_path = save_report_to_repo(title, body, dry_run=args.dry_run)
-    if not args.dry_run:
-        print(f"[✓] Rapport sauvegardé : {report_path.relative_to(REPO_ROOT)}")
+    print(f"\n✅ {pushed}/{len(actionable)} issues Linear créées.")
 
-    # 6. Créer ticket Linear (si articles pertinents et clés disponibles)
-    if relevant and not args.no_linear and not args.dry_run:
-        if linear_key and linear_team:
-            try:
-                linear_desc = f"{body}\n\n---\n\n_Rapport généré automatiquement par GitHub Actions._\n_Fichier : `{report_path.relative_to(REPO_ROOT)}`_"
-                issue = create_linear_issue(
-                    title=f"[Veille] {title}",
-                    description=linear_desc[:10000],
-                    api_key=linear_key,
-                    team_id=linear_team,
-                )
-                print(f"[✓] Linear : {issue.get('identifier')} — {issue.get('url')}")
-            except Exception as e:
-                print(f"[!] Linear ignoré : {e}", file=sys.stderr)
-        else:
-            print("[!] LINEAR_API_KEY ou LINEAR_TEAM_ID absentes — Linear ignoré")
-    elif args.dry_run:
-        print(f"[dry-run] Créerait Linear : '{title}'")
 
-    print(f"\n{'─'*60}\n")
+def main():
+    parser = argparse.ArgumentParser(description="Veille proactive Aetherix")
+    parser.add_argument("--min-score", type=int, default=7, metavar="N",
+                        help="Score minimum de pertinence (défaut : 7)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Simulation sans écriture ni push")
+    parser.add_argument("--push-linear", metavar="PATH",
+                        help="Chemin vers draft-YYYY-MM-DD.json — pousse vers Linear sans re-scraper")
+    args = parser.parse_args()
+
+    if args.push_linear:
+        cmd_push_linear(args)
+    else:
+        cmd_generate(args)
 
 
 if __name__ == "__main__":
