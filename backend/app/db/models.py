@@ -1,9 +1,18 @@
-from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean
+from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+from sqlalchemy import JSON as JSONB  # JSON is dialect-agnostic (works with SQLite in tests)
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from datetime import datetime
 import uuid
+
+# pgvector: use real Vector type on PostgreSQL, fall back to JSON for SQLite tests
+try:
+    from pgvector.sqlalchemy import Vector as _PgVector
+    _VECTOR_1536 = _PgVector(1536)
+except ImportError:  # pragma: no cover
+    from sqlalchemy import JSON as _PgVector  # type: ignore[assignment]
+    _VECTOR_1536 = JSON
 
 Base = declarative_base()
 
@@ -56,11 +65,17 @@ class RestaurantProfile(Base):
     latitude = Column(Float)
     longitude = Column(Float)
     
-    # Notification preferences
-    notification_channel = Column(String, default="whatsapp")
+    # Notification preferences (Story 4.1 — HOS-24)
+    preferred_channel = Column(String, default="whatsapp")   # sms / whatsapp / email
     phone_number = Column(String)
-    email_address = Column(String)
-    
+    notification_email = Column(String)
+    gps_lat = Column(Float)
+    gps_lng = Column(Float)
+
+    # ROI configuration (Story 3.3b) — overrides system defaults when set
+    avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # £ per cover
+    staff_hourly_rate = Column(Numeric(8, 2), nullable=True)     # £ per staff/hour
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -85,6 +100,217 @@ class PMSSyncLog(Base):
     
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class CaptationBaseline(Base):
+    """
+    Stores calculated captation rate baselines per tenant/property.
+    Story 2.4: Calculate Baseline Captation Rates (FR3).
+
+    Captation rate = F&B revenue per occupied room.
+    Adjustment factors normalise the baseline by day-of-week and month
+    so that Story 3.3a can detect anomalies relative to the expected pattern.
+    """
+    __tablename__ = "captation_baselines"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
+
+    # Date range of PMSSyncLog data used for this computation
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+
+    # Core metric: average F&B revenue per occupied room across all data
+    avg_fb_revenue_per_room = Column(Float, nullable=False)
+
+    # Day-of-week factors (JSON): {"0": 1.05, "1": 0.98, ...} (0=Monday … 6=Sunday)
+    # Each value is the ratio of that weekday's avg captation rate to the overall avg.
+    dow_factors = Column(JSON, nullable=False)
+
+    # Monthly factors (JSON): {"1": 0.90, "2": 0.85, ..., "12": 1.10}
+    # Each value is the ratio of that month's avg captation rate to the overall avg.
+    monthly_factors = Column(JSON, nullable=False)
+
+    # Number of non-zero occupancy records used in the computation
+    data_points_count = Column(Integer, nullable=False)
+
+    computed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class WeatherForecast(Base):
+    """
+    Normalized weather forecast records ingested from Open-Meteo.
+    Story 3.1: one row per (tenant_id, property_id, forecast_timestamp).
+    Unique constraint enforces idempotent upserts (SC #7).
+    """
+    __tablename__ = "weather_forecasts"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
+    property_id = Column(String, nullable=False)
+
+    # Normalized weather fields (SC #4)
+    condition_code = Column(Integer)          # WMO weather interpretation code
+    temperature_c = Column(Float)
+    precipitation_prob = Column(Integer)      # 0-100 %
+    wind_speed_kmh = Column(Float)
+    forecast_timestamp = Column(DateTime(timezone=True), nullable=False, index=True)
+    source = Column(String, nullable=False, default="open-meteo")
+
+    fetched_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        # Idempotency: upsert on this composite key (SC #7)
+        __import__("sqlalchemy").UniqueConstraint(
+            "tenant_id", "property_id", "forecast_timestamp",
+            name="uq_weather_forecast",
+        ),
+    )
+
+
+class DemandAnomaly(Base):
+    """
+    Detected demand anomaly window for a property.
+    Story 3.3a: Detect Demand Anomalies Against Baseline.
+
+    Status lifecycle:
+      'detected' -> 'roi_positive' (3.3b) -> 'ready_to_push' (3.3c) -> 'dispatched' (Epic 4)
+    """
+    __tablename__ = "demand_anomalies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    window_start = Column(DateTime(timezone=True), nullable=False)
+    window_end = Column(DateTime(timezone=True), nullable=False)
+    expected_demand = Column(Numeric(10, 2), nullable=False)
+    baseline_demand = Column(Numeric(10, 2), nullable=False)
+    deviation_pct = Column(Numeric(6, 2), nullable=False)
+    direction = Column(String, nullable=False)           # 'surge' | 'lull'
+    triggering_factors = Column(JSONB, nullable=False, default=list)
+    status = Column(String, nullable=False, default="detected")
+    detected_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    # Populated by downstream stories:
+    roi_revenue_opp = Column(Numeric(10, 2))
+    roi_labor_cost = Column(Numeric(10, 2))
+    roi_net = Column(Numeric(10, 2))
+    recommendation_text = Column(Text)
+
+
+class LocalEvent(Base):
+    """
+    Localized event data ingested from PredictHQ.
+    Story 3.2: one row per (tenant_id, event_id).
+    Unique constraint on (tenant_id, event_id) enforces idempotent upserts.
+    """
+    __tablename__ = "local_events"
+
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
+
+    # PredictHQ event identifier (stable across re-syncs)
+    event_id = Column(String, nullable=False)
+
+    # Event metadata
+    title = Column(String, nullable=False)
+    category = Column(String, nullable=False)   # e.g. "conferences", "concerts", "sports"
+    rank = Column(Integer)                       # PredictHQ rank (0-100)
+    local_rank = Column(Integer)                 # Local rank within radius
+    phq_attendance = Column(Integer)             # Predicted attendance
+
+    # Temporal data
+    start_dt = Column(DateTime(timezone=True), nullable=False, index=True)
+    end_dt = Column(DateTime(timezone=True))
+
+    # Location (centroid of the event)
+    latitude = Column(Float)
+    longitude = Column(Float)
+
+    # Raw payload for auditing / future feature extraction
+    raw_labels = Column(JSON)
+
+    fetched_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        # Idempotency: upsert on (tenant_id, event_id)
+        __import__("sqlalchemy").UniqueConstraint(
+            "tenant_id", "event_id",
+            name="uq_local_event",
+        ),
+    )
+
+
+class StaffingRecommendation(Base):
+    """
+    Ready-to-dispatch staffing recommendations produced by the
+    RecommendationFormatterService from ROI-positive demand anomalies.
+
+    Story 3.3c (HOS-23): Format Staffing Recommendations for Dispatch.
+
+    Status lifecycle:  ready_to_push → dispatched
+    Idempotency: UNIQUE constraint on anomaly_id prevents duplicates.
+    """
+    __tablename__ = "staffing_recommendations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    anomaly_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("demand_anomalies.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,  # idempotency: one recommendation per anomaly
+    )
+
+    message_text = Column(Text, nullable=False)
+    triggering_factor = Column(Text)
+    recommended_headcount = Column(Integer)
+
+    window_start = Column(DateTime(timezone=True), nullable=False)
+    window_end = Column(DateTime(timezone=True), nullable=False)
+
+    roi_net = Column(Numeric(10, 2))
+    roi_labor_cost = Column(Numeric(10, 2))
+
+    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected
+
+    # Story 4.2 (HOS-25): dispatch tracking
+    dispatched_at = Column(DateTime(timezone=True), nullable=True)
+    dispatch_channel = Column(String(10), nullable=True)  # whatsapp | sms | email
+
+    # Story 4.3 (HOS-26): manager action logging
+    actioned_at = Column(DateTime(timezone=True), nullable=True)
+    action = Column(String(10), nullable=True)  # accepted | rejected
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class ConversationalQuery(Base):
+    """
+    Inbound conversational queries from managers via Twilio webhooks.
+
+    Story 5.1 (HOS-28): Parse Conversational Inbound Queries (FR13).
+
+    Status lifecycle: pending → processing → answered
+    Idempotency: same (from_number, body) within 60 s does not create a duplicate.
+    """
+    __tablename__ = "conversational_queries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    from_number = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    recommendation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    status = Column(String, nullable=False, default="pending")  # pending | processing | answered
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class RecommendationCache(Base):
     """
     Persistence for AI staffing recommendations.
@@ -95,12 +321,68 @@ class RecommendationCache(Base):
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
     target_date = Column(Date, index=True, nullable=False)
-    
+
     prediction_data = Column(JSON)
     reasoning_summary = Column(String)
     staffing_recommendation = Column(JSON)
-    
+
     is_pushed = Column(Boolean, default=False)
     pushed_at = Column(DateTime)
-    
+
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FBPattern(Base):
+    """
+    F&B operational patterns stored as embeddings.
+
+    HOS-99 (T2): replaces Qdrant `fb_patterns` collection.
+    Enables pgvector cosine similarity search with SQL filters.
+
+    In production (Supabase): column type is vector(1536) with HNSW index.
+    In test (SQLite): falls back to JSON (no vector ops, mocked in tests).
+    """
+    __tablename__ = "fb_patterns"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=True, index=True)  # null = global pattern
+
+    # Rich metadata filters (replaces Qdrant payload filters)
+    service_type = Column(String, nullable=False, index=True)   # breakfast|lunch|dinner|room_service
+    occupancy_band = Column(String, nullable=True)              # low|medium|high|full
+    day_of_week = Column(String, nullable=True)                 # Mon-Sun
+    weather_condition = Column(String, nullable=True)
+    feedback_status = Column(String, nullable=False, default="neutral")  # followed|rejected|neutral
+
+    # Pattern payload
+    pattern_text = Column(Text, nullable=False)
+    outcome_description = Column(Text, nullable=True)
+    embedding = Column(_VECTOR_1536, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class OperationalMemory(Base):
+    """
+    Per-hotel operational memory: manager decisions, reflections, feedback.
+
+    HOS-99 (T3): replaces Backboard.io API.
+    Enables hybrid retrieval (vector similarity + SQL filters) in a single query.
+    """
+    __tablename__ = "operational_memory"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    hotel_id = Column(String, nullable=False, index=True)   # maps to tenant_id
+    session_id = Column(String, nullable=True, index=True)
+
+    # Stored content
+    content = Column(Text, nullable=False)       # reflection / feedback / context string
+    reco_json = Column(JSON, nullable=True)      # cached recommendation payload
+    manager_feedback = Column(String, nullable=True)  # followed|rejected|neutral
+    outcome = Column(Text, nullable=True)        # free-text outcome description
+    tags = Column(JSON, nullable=True)           # list of string tags
+
+    embedding = Column(_VECTOR_1536, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
