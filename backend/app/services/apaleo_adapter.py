@@ -1,4 +1,9 @@
 from app.services.pms_sync import PMSAdapter
+from app.integrations.apaleo_logger import (
+    ApaleoAgentLogger,
+    ApaleoWriteBlockedError,
+    is_readonly_mode,
+)
 from typing import List, Dict, Any, Optional
 import os
 import logging
@@ -7,6 +12,7 @@ import httpx
 from datetime import date, datetime
 
 logger = logging.getLogger(__name__)
+_agent_logger = ApaleoAgentLogger()
 
 class ApaleoPMSAdapter(PMSAdapter):
     """
@@ -64,27 +70,32 @@ class ApaleoPMSAdapter(PMSAdapter):
         """
         if not self.access_token:
             await self._authenticate()
-            
-        params = {
-            "date": target_date.isoformat(),
-            "propertyId": property_id
-        }
-        
+
+        tool = "REST_GET_OCCUPANCY"
+        params = {"date": target_date.isoformat(), "propertyId": property_id}
         headers = {"Authorization": f"Bearer {self.access_token}"}
         url = f"{self.api_base_url}/booking/v1/metrics/occupancy"
-        
+        t0 = time.monotonic()
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, params=params, headers=headers)
+                duration_ms = (time.monotonic() - t0) * 1000
                 if response.status_code == 200:
                     data = response.json()
-                    # Real parsing for Apaleo occupancy metrics
-                    return int(data.get("occupancy") or 85)
+                    result = int(data.get("occupancy") or 85)
+                    _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
+                                      result_summary=str(result))
+                    return result
                 else:
                     logger.warning(f"Apaleo Occupancy fetch failed ({response.status_code}).")
+                    _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
+                                      error=f"HTTP {response.status_code}")
                     return 85
         except Exception as e:
+            duration_ms = (time.monotonic() - t0) * 1000
             logger.error(f"Apaleo API error: {str(e)}")
+            _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(e))
             return 80
 
     async def get_revenue(self, property_id: str, target_date: date, category: str = "Total") -> float:
@@ -93,26 +104,36 @@ class ApaleoPMSAdapter(PMSAdapter):
         """
         if not self.access_token:
             await self._authenticate()
-            
-        url = f"{self.api_base_url}/finance/v1/metrics/revenue"
+
+        tool = "REST_GET_REVENUE"
         params = {
             "from": target_date.isoformat(),
             "to": target_date.isoformat(),
-            "propertyId": property_id
+            "propertyId": property_id,
+            "category": category,
         }
+        url = f"{self.api_base_url}/finance/v1/metrics/revenue"
         headers = {"Authorization": f"Bearer {self.access_token}"}
-        
+        t0 = time.monotonic()
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, params=params, headers=headers)
+                duration_ms = (time.monotonic() - t0) * 1000
                 if response.status_code == 200:
                     data = response.json()
-                    # Logic: Sum up F&B categories if available, else total
                     revenue_list = data.get("revenue", [])
                     fb_revenue = sum(item.get("amount", 0.0) for item in revenue_list if category.lower() in item.get("category", "").lower())
-                    return fb_revenue if fb_revenue > 0 else sum(item.get("amount", 0.0) for item in revenue_list)
+                    result = fb_revenue if fb_revenue > 0 else sum(item.get("amount", 0.0) for item in revenue_list)
+                    _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
+                                      result_summary=str(result))
+                    return result
+                _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
+                                  error=f"HTTP {response.status_code}")
                 return 0.0
-        except Exception:
+        except Exception as e:
+            duration_ms = (time.monotonic() - t0) * 1000
+            _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(e))
             return 0.0
 
     async def get_historical_data(self, property_id: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
@@ -122,51 +143,94 @@ class ApaleoPMSAdapter(PMSAdapter):
         """
         if not self.access_token:
             await self._authenticate()
-            
-        url = f"{self.api_base_url}/reports/v1/stay-records"
+
+        tool = "REST_GET_HISTORICAL_DATA"
         params = {
             "from": start_date.isoformat(),
             "to": end_date.isoformat(),
-            "propertyId": property_id
+            "propertyId": property_id,
         }
+        url = f"{self.api_base_url}/reports/v1/stay-records"
         headers = {"Authorization": f"Bearer {self.access_token}"}
-        
+        t0 = time.monotonic()
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(url, params=params, headers=headers)
+                duration_ms = (time.monotonic() - t0) * 1000
                 if response.status_code == 200:
-                    return response.json() # Returns list of stay records
+                    data = response.json()
+                    _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
+                                      result_summary=f"{len(data)} records")
+                    return data
                 logger.warning(f"Failed to fetch historical data: {response.status_code}")
+                _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
+                                  error=f"HTTP {response.status_code}")
                 return []
         except Exception as e:
+            duration_ms = (time.monotonic() - t0) * 1000
             logger.error(f"Apaleo Historical fetch error: {str(e)}")
+            _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(e))
             return []
 
     async def update_staffing_in_pms(self, property_id: str, target_date: date, staffing_deltas: Dict[str, int]) -> bool:
         """
         Writes staffing recommendations back to Apaleo Schedules/Operations.
+
+        Write-guard (HOS-107)
+        ---------------------
+        Raises ``ApaleoWriteBlockedError`` when ``APALEO_READONLY`` is not
+        explicitly set to ``"false"``.  The blocked attempt is logged at
+        WARNING level before the exception is raised.
+
         Note: Target endpoint is exploratory based on 'Schedules' project requirement.
         """
-        if not self.access_token:
-            await self._authenticate()
-            
-        url = f"{self.api_base_url}/operations/v1/schedules"
-        payload = {
+        tool = "REST_UPDATE_STAFFING"
+        params = {
             "propertyId": property_id,
             "date": target_date.isoformat(),
             "deltas": staffing_deltas,
-            "source": "Aetherix-AI"
         }
+
+        # ── Write-guard ────────────────────────────────────────────────────
+        if is_readonly_mode():
+            _agent_logger.log(
+                tool,
+                params,
+                mode="blocked",
+                error="read-only mode active (Phase 0) — set APALEO_READONLY=false to enable writes",
+            )
+            raise ApaleoWriteBlockedError(
+                "ApaleoPMSAdapter.update_staffing_in_pms blocked — "
+                "Apaleo is in read-only mode (Phase 0). "
+                "Set APALEO_READONLY=false to enable writes."
+            )
+
+        if not self.access_token:
+            await self._authenticate()
+
+        url = f"{self.api_base_url}/operations/v1/schedules"
+        payload = {**params, "source": "Aetherix-AI"}
         headers = {"Authorization": f"Bearer {self.access_token}"}
-        
+        t0 = time.monotonic()
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=payload, headers=headers)
+                duration_ms = (time.monotonic() - t0) * 1000
                 if response.status_code in [200, 201, 204]:
                     logger.info(f"Successfully pushed staffing to Apaleo for {property_id}")
+                    _agent_logger.log(tool, params, mode="write", duration_ms=duration_ms,
+                                      result_summary=f"HTTP {response.status_code}")
                     return True
                 logger.error(f"Apaleo Push Failed ({response.status_code}): {response.text}")
+                _agent_logger.log(tool, params, mode="write", duration_ms=duration_ms,
+                                  error=f"HTTP {response.status_code}")
                 return False
+        except ApaleoWriteBlockedError:
+            raise
         except Exception as e:
+            duration_ms = (time.monotonic() - t0) * 1000
             logger.error(f"Apaleo Push Exception: {str(e)}")
+            _agent_logger.log(tool, params, mode="write", duration_ms=duration_ms, error=str(e))
             return False
