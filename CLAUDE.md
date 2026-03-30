@@ -353,6 +353,16 @@ Chaque mode adopte un comportement, un contexte prioritaire, et des artefacts de
 
 **Direction stratégique (Mars 2026) :** "Agent-First Distribution" — Aetherix doit être une **primitive appelable par d'autres agents** (MCP Server), pas seulement un produit SaaS avec UI. Distribution = top of call stack, pas top of funnel.
 
+**Contexte concurrent (Mars 2026) :** Apaleo a lancé son propre AI Copilot (A2A, SOPs uploadables) + un MCP Server officiel (sept. 2025). Aetherix doit se positionner comme **agent F&B spécialisé complémentaire** au Copilot Apaleo, pas comme alternative généraliste. MCP est devenu le standard (Lighthouse, OpenAI, Google, MS l'ont adopté).
+
+**Apaleo MCP Server — implications directes :**
+- Le MCP Server Apaleo couvre l'intégralité de la plateforme et ses API → **l'intégration Apaleo Phase 0 peut se faire via MCP directement** (pas d'API raw custom nécessaire)
+- Use cases couverts par Apaleo : réservations, CRM, housekeeping, paiements. **F&B forecasting/alertes = absent = niche ouverte confirmée**
+- **Compatible avec les clients MCP d'Anthropic (plug-and-play)** — Aetherix, construit sur Claude, peut appeler le MCP Server Apaleo directement comme source d'outils, sans code d'intégration custom
+- Architecture MACH (Microservices, API-first, Cloud-native, Headless) — flux temps réel, automatisation workflows
+- **Agent Hub Apaleo** (première marketplace d'agents IA hôteliers, déjà live) = canal de distribution potentiel pour Aetherix comme agent F&B spécialisé (2 000+ propriétés, 30+ pays) — **trop tôt pour Phase 0, à cibler Phase 1**
+- **MCP Alpha Group Apaleo** = à rejoindre maintenant (community.apaleo.com) — accès early + visibilité équipe Apaleo
+
 ---
 
 ## Session Veille — Instructions
@@ -392,11 +402,17 @@ Résultat : ticket Linear "Veille Hebdomadaire" + note Obsidian dans `AI Reports
 
 1. **Hotel tech & agentique IA** — nouvelles solutions, startups, acquisitions
 2. **IA dans l'hôtellerie** — cas d'usage F&B, forecasting, automatisation ops
-3. **Apaleo** — nouveautés API, partenaires, blog officiel
+3. **Apaleo** — nouveautés API, partenaires, blog officiel — **⚠️ surveiller l'expansion du Copilot vers le F&B**
 4. **Mews** — features, positionnement, acquisitions
 5. **Y Combinator** — nouvelles références liées à l'hospitality/F&B/forecasting
 6. **hospitalitynet.org** — articles pertinents publiés dans les 7 derniers jours
 7. **Agent-first / MCP ecosystem** — outils, frameworks, distribution patterns
+
+**Acteurs à surveiller (ajout Mars 2026) :**
+- **DialogShift** (Olga Heuser) — 95%+ automation chat/email/tel hôtels, auteure du WP Agentic AI, avance sur MCP
+- **Lighthouse / Connect AI** — premier booking direct dans ChatGPT via MCP, concurrent indirect sur la distribution
+- **IDeaS / Duetto** — RMS enterprise (Marriott, Accor), room-only, hors segment PME Aetherix
+- **Canary Technologies** — guest management (check-in, upsell), 20K hôtels, adjacent mais pas F&B ops
 
 ---
 
@@ -413,6 +429,20 @@ Résultat : ticket Linear "Veille Hebdomadaire" + note Obsidian dans `AI Reports
 - Priorité Apaleo vs Mews pour la première intégration PMS live
 - **[MCP]** Capabilities à exposer en priorité : `forecast_occupancy`, `get_stock_alerts`, `get_fb_kpis`
 - **[Agent SEO]** Métriques machine-legible : `tool_success_rate` > 99.5%, `p95_latency` < 500ms, `schema_stability`
+- **[URGENT]** Évaluer compatibilité A2A avec Apaleo Copilot avant de finaliser Phase 0.5
+- **[DÉCISION OUVERTE]** Intégration Apaleo : MCP direct vs API raw ? (MCP probable car déjà disponible — analyser les tools exposés)
+
+**Décisions architecturales prises (Mars 2026) :**
+- **Apaleo read-only par défaut en Phase 0** — pas d'écriture sur les réservations tant que l'outil n'est pas mature. Loguer toutes les actions agent. (source : WP Toedt/Heuser HOS-107)
+- **Feature set forecasting contextuel** — inclure `arrival_time`, `origin_country`, `party_size`, `LOS` comme features de premier ordre, pas juste des métadonnées. (source : EHL Cindy Heo HOS-106)
+- **Feedback loop WhatsApp** — prévoir dès Phase 1 un mécanisme thumbs up/down sur les alertes → données d'entraînement. (source : HOS-106)
+- **Alertes = recommandations, jamais décisions automatiques en Phase 0** — pour éviter la liability floue. (source : HOS-107)
+
+**Référence architecture :**
+- `linq-team/linq-resy-agent` (MIT) — pattern Claude tool-use + webhook + conversation state, à adapter pour Aetherix. (HOS-100)
+
+**Distribution prioritaire (ajout Mars 2026) :**
+- **Agent Hub Apaleo** — cibler une entrée comme agent F&B spécialisé dès Phase 1. Rejoindre le MCP Alpha Group maintenant pour préparer cette entrée. (HOS-101)
 ## ⚠️ Points d'attention techniques
 
 ## Protocole Dev Agent — Définition of Done par Story
