@@ -38,6 +38,7 @@ import logging
 from datetime import date
 from typing import Any
 
+from app.integrations.apaleo_logger import ApaleoWriteBlockedError
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
 from app.services.pms_sync import PMSAdapter
 
@@ -196,6 +197,10 @@ class ApaleoMCPAdapter(PMSAdapter):
                 property_id, target_date, success,
             )
             return success
+        except ApaleoWriteBlockedError:
+            # Write-guard (HOS-107): re-raise so callers are explicitly aware
+            # that writes are disabled in Phase 0 — do not silently return False.
+            raise
         except Exception as exc:
             logger.error("ApaleoMCPAdapter.update_staffing_in_pms failed: %s", exc)
             return False
