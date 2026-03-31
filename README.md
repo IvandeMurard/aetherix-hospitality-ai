@@ -169,6 +169,23 @@ aetherix/
 ```
 
 ---
+
+## Security
+
+Aetherix is designed with security and data isolation as first-class constraints — not afterthoughts. This is particularly important given the multi-tenant nature of the platform and its integration with live PMS systems.
+
+| Area | Approach |
+| :--- | :--- |
+| **Multi-tenant isolation** | Each hotel's data is strictly scoped by `hotel_id` at every layer: Supabase Row-Level Security (RLS), service-layer enforcement, and vector store namespace separation. No cross-hotel data access by design. |
+| **Read-only PMS access** | Aetherix operates in read-only mode against PMS systems (Apaleo, Mews). The agent never writes to or modifies reservation or guest data. This is an architectural constraint, not just a convention. |
+| **Agent action logging** | Every AI-driven action is logged with full context (hotel, model invocation, tool calls, outcomes). Human-in-the-loop by default — the agent recommends, the manager decides. |
+| **Credential management** | API keys and secrets are managed via environment variables, never hardcoded. OAuth2 flows follow provider standards (Apaleo OAuth2). Webhook endpoints validate inbound signatures (Twilio, PMS providers). |
+| **LLM input scoping** | Claude prompts are scoped to the requesting hotel's context. Recommendations are generated per-property and never cross-contaminate tenant data. Manager replies passed to the LLM are sanitized against prompt injection. |
+| **GDPR / data minimization** | Hotel operational data is stored in Supabase (EU-compatible infrastructure). Hive Memory (Phase 3) aggregates patterns in anonymized, non-attributable form — no raw hotel data is ever shared across tenants. PII is minimized by design. |
+
+> A formal security review will be conducted before any live deployment with real property data, and before any Apaleo Agent Hub listing.
+
+---
 Made with ❤️ for hotels, restaurants, and those who love them. Ivan de Murard
 ---
-*Aetherix - Contextual Intelligence for Hospitality Operations.* 
+*Aetherix - Contextual Intelligence for Hospitality Operations.*
