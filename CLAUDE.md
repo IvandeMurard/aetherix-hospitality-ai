@@ -186,7 +186,7 @@ Métriques "Agent SEO" à instrumenter :
 - [ ] **Pricing model** : par hôtel / par prédiction / hybrid — non décidé
 - [ ] **PMS priorité live** : Apaleo (sandbox dispo, API-first) vs Mews (vision alignée, marketplace)
 - [ ] **MCP server** : FastAPI endpoint dédié vs sidecar process séparé
-- [ ] **Apaleo MCP direct (30/03/2026)** : `ApaleoMCPClient` + `ApaleoMCPAdapter` implémentés, en attente de l'URL Apaleo alpha. Auth OAuth2 bearer (même credentials que raw API). Une fois `APALEO_MCP_SERVER_URL` fourni par Apaleo → activer via `POST /pms/sync?use_mcp=true`. Composio écarté (proxy inutile, scope inventory uniquement).
+- [x] **Apaleo MCP direct (31/03/2026 — RÉSOLU)** : URL confirmée `https://mcp.apaleo.com/mcp/`, transport HTTP Streamable (SSE déprécié — notre `streamablehttp_client` est correct). Scope MCP activé sur le compte (code IIQJ). Auth OAuth2 bearer identique à la raw API. Activer via `POST /pms/sync?use_mcp=true` + `APALEO_MCP_SERVER_URL=https://mcp.apaleo.com/mcp/` dans `.env`.
 - [ ] **ROI dashboard vs WhatsApp** : afficher "€ économisés ce mois-ci" + évolution précision forecast 90j → via dashboard dédié (Next.js) ou via rapport WhatsApp hebdomadaire ? Dashboard = surface à maintenir (risque thin-frontend), WhatsApp = ambiant mais moins visuel. À trancher avec PM avant Phase 1.
 - [ ] **Food waste tracking** : instrumenter predicted prep vs actual waste par service comme KPI produit différenciant — ~25% gaspillage moyen en hôtellerie FR (ADEME/Accor), ~115g/couvert. Opportunité : la plupart des hôtels ne mesurent pas précisément → notre modèle crée cette donnée comme sous-produit du forecasting. Décision : intégrer en Phase 4 comme feature ROI (€ gaspillés évités) ou Phase 5 avec POS data ? À trancher avec PM.
 
