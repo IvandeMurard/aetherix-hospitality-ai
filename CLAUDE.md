@@ -1,7 +1,8 @@
 # CLAUDE.md — Aetherix
 
 > Source de vérité partagée. Chargé automatiquement à chaque session.
-> Mettre à jour après chaque décision architecturale importante.
+> **Règle :** ce fichier = facts de session uniquement (stack, décisions, fichiers, env vars, protocoles). Tout contexte narratif → `docs/context/`. Ne jamais dépasser ~150 lignes.
+> Mettre à jour après chaque décision architecturale : ajouter une ligne dans §Décisions architecturales, déplacer le détail dans `docs/context/` si > 2 lignes.
 > Contexte détaillé → `docs/context/`
 
 ---
