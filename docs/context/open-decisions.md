@@ -1,6 +1,6 @@
 # Décisions ouvertes
 
-> Mettre à jour quand une décision est tranchée — déplacer dans CLAUDE.md §Décisions architecturales.
+> **Mettre à jour :** ajouter toute nouvelle décision ouverte ici (pas dans CLAUDE.md). Quand une décision est tranchée, déplacer dans CLAUDE.md §Décisions architecturales et supprimer d'ici.
 > Les décisions tranchées ne doivent pas rester ici.
 
 ---
