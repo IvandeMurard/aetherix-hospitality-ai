@@ -143,6 +143,8 @@ Déclare le mode en début de conversation. Chaque agent charge son propre fichi
 **Gate de merge :** CI vert → merge manuel SM (sans revue de code).
 **Gates supérieurs :** Fin d'Epic → revue d'architecture. Pré-pilote → QA sign-off propriété hôtelière réelle.
 
+**Règle de contexte :** toute décision, contrainte ou blocage découvert pendant l'implémentation → commenter sur la Linear issue. Si la décision devient une contrainte permanente cross-cutting → promouvoir en une ligne dans §Décisions architecturales ci-dessus. Ne pas écrire de contexte story-specific dans CLAUDE.md ou docs/context/.
+
 ---
 
 ## Points d'attention
