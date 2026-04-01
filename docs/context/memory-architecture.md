@@ -1,6 +1,7 @@
 # Architecture mémoire cognitive — Modèle à deux couches
 
 > Chargé par les sessions Architect, Dev, et Veille quand pertinent.
+> **Mettre à jour :** quand une décision sur la mémoire (pgvector, Backboard, MemoryProvider) est prise ou révisée.
 
 Objectif : passer d'un agent de "semantic search" à un agent **self-improving per-property**, dont les décisions s'améliorent en continu grâce à la preuve d'impact (recommandation suivie + outcome positif).
 

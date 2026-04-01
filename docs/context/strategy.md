@@ -1,6 +1,7 @@
 # Positionnement stratégique & Pivot Agent-First
 
 > Chargé par les sessions Veille, PM, Analyst, et Architect quand pertinent.
+> **Mettre à jour :** après chaque session Veille avec score ≥ 7, changement de positionnement, ou décision sur MCP/distribution.
 > Dernière mise à jour : Mars 2026
 
 ---

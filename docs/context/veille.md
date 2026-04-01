@@ -1,6 +1,7 @@
 # Session Veille — Instructions & Thématiques
 
 > Chargé en mode Veille uniquement.
+> **Mettre à jour :** si de nouveaux acteurs émergent dans §Acteurs à surveiller, ou si le protocole de scoring change.
 
 ---
 
