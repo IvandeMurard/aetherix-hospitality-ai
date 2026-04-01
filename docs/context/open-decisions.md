@@ -1,7 +1,7 @@
 # Décisions ouvertes
 
-> **Mettre à jour :** ajouter toute nouvelle décision ouverte ici (pas dans CLAUDE.md). Quand une décision est tranchée, déplacer dans CLAUDE.md §Décisions architecturales et supprimer d'ici.
-> Les décisions tranchées ne doivent pas rester ici.
+> **Périmètre :** décisions ouvertes *cross-cutting* sans issue Linear active. Si une décision est liée à une story spécifique, elle vit sur la Linear issue (pas ici).
+> **Mettre à jour :** ajouter ici uniquement si la décision n'a pas encore de home issue. Quand une décision est tranchée → une ligne dans CLAUDE.md §Décisions architecturales, supprimer d'ici. Quand une issue Linear est créée → migrer le contexte sur l'issue, supprimer d'ici.
 
 ---
 
