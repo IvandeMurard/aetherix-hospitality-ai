@@ -1,17 +1,21 @@
-from anthropic import AsyncAnthropic
+from __future__ import annotations
+
 import os
 from typing import Dict, List, Optional
 from datetime import date
+
+from app.providers.base import LLMProvider
+from app.providers.factory import get_llm_provider
+
 
 class ReasoningService:
     """
     Service for generating explainable AI reasoning using Claude.
     Explains Prophet's numerical forecast using RAG patterns and external context.
     """
-    
-    def __init__(self):
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.claude = AsyncAnthropic(api_key=api_key) if api_key else None
+
+    def __init__(self, llm: LLMProvider | None = None) -> None:
+        self._llm: LLMProvider = llm or get_llm_provider()
 
     async def generate_explanation(
         self,
@@ -23,34 +27,32 @@ class ReasoningService:
         similar_patterns: List[Dict],
         cognitive_context: Optional[str] = None
     ) -> Dict:
-        """Calls Claude to explain the prediction rationale."""
-        if not self.claude:
-            return self._heuristic_explanation(
-                predicted_covers, confidence, target_date, service_type, context, similar_patterns
-            )
-
+        """Calls the LLM provider to explain the prediction rationale."""
         prompt = self._build_prompt(predicted_covers, confidence, target_date, service_type, context, similar_patterns, cognitive_context)
-        
+
         try:
-            message = await self.claude.messages.create(
-                model="claude-sonnet-4-6",
+            explanation = await self._llm.complete(
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=300,
                 temperature=0.3,
-                messages=[{"role": "user", "content": prompt}]
             )
-            explanation = message.content[0].text.strip()
             return {
-                "summary": explanation,
+                "summary": explanation.strip(),
                 "confidence_factors": self._extract_factors(context, similar_patterns),
                 "claude_used": True,
             }
+        except RuntimeError:
+            # API key not configured — silent heuristic fallback, no alarm
+            return self._heuristic_explanation(
+                predicted_covers, confidence, target_date, service_type, context, similar_patterns
+            )
         except Exception as e:
             import asyncio
             from app.services.ops_dispatcher import dispatch_error
             asyncio.ensure_future(dispatch_error(
-                title="Reasoning service failure — Claude API error",
+                title="Reasoning service failure — LLM provider error",
                 detail=f"Exception: {e}\nDate: {target_date} | Service: {service_type} | Covers: {predicted_covers}",
-                tags=["claude", "reasoning"],
+                tags=["llm", "reasoning"],
             ))
             return {
                 **self._heuristic_explanation(

@@ -4,28 +4,21 @@ RAG Service — pgvector retrieval layer (HOS-99).
 Replaces the old Qdrant + Mistral stack with a single SQL query against
 the `fb_patterns` table in Supabase (PostgreSQL + pgvector extension).
 
-Embedding generation uses Anthropic's claude-sonnet model via a text
-summary → zero-vector fallback when no API key is configured (dev mode).
+Embedding generation is delegated to an injected ``EmbeddingProvider``.
+Zero-vector fallback is preserved via ``MistralEmbeddingProvider`` when no
+API key is configured (dev mode).
 """
 from __future__ import annotations
 
 import logging
-import os
 from datetime import date
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-logger = logging.getLogger(__name__)
-
-# Dimension must match the vector(1536) column in fb_patterns.
-_EMBEDDING_DIM = 1536
-
-
-async def _get_embedding(query_text: str) -> List[float]:
-    """
-    Generate a 1536-dim embedding for *query_text*.
+from app.providers.base import EmbeddingProvider
+from app.providers.factory import get_embedding_provider
 
     Currently returns a zero vector as a graceful fallback — pgvector cosine
     distance on zero vectors returns 1.0 (maximum distance) for all rows,
@@ -59,8 +52,13 @@ class RAGService:
     Falls back gracefully when no DB session is provided (returns empty list).
     """
 
-    def __init__(self, db: Optional[AsyncSession] = None) -> None:
+    def __init__(
+        self,
+        db: Optional[AsyncSession] = None,
+        embedding: EmbeddingProvider | None = None,
+    ) -> None:
         self._db = db
+        self._embedding: EmbeddingProvider = embedding or get_embedding_provider()
 
     # ------------------------------------------------------------------
     # Public API
@@ -114,7 +112,7 @@ class RAGService:
         if self._db is None:
             return []
 
-        embedding = await _get_embedding(query_text)
+        embedding = await self._embedding.embed(query_text)
 
         try:
             # Build the cosine-distance ORDER BY.  pgvector registers the <=>
