@@ -139,32 +139,19 @@ class TestMistralProviderZeroVectorFallback:
 # ---------------------------------------------------------------------------
 
 class TestGetEmbeddingProviderFactory:
-    def test_default_backend_returns_mistral_provider(self, monkeypatch):
-        monkeypatch.delenv("EMBEDDING_BACKEND", raising=False)
+    def test_factory_returns_mistral_provider(self):
         provider = get_embedding_provider()
         assert isinstance(provider, EmbeddingProvider)
         assert isinstance(provider, MistralEmbeddingProvider)
 
-    def test_explicit_mistral_backend(self, monkeypatch):
-        monkeypatch.setenv("EMBEDDING_BACKEND", "mistral")
-        provider = get_embedding_provider()
-        assert isinstance(provider, MistralEmbeddingProvider)
-
-    def test_factory_dimensions_are_1024(self, monkeypatch):
-        monkeypatch.setenv("EMBEDDING_BACKEND", "mistral")
+    def test_factory_dimensions_are_1024(self):
         provider = get_embedding_provider()
         assert provider.dimensions == 1024
 
     def test_factory_uses_embedding_model_env_var(self, monkeypatch):
-        monkeypatch.setenv("EMBEDDING_BACKEND", "mistral")
         monkeypatch.setenv("EMBEDDING_MODEL", "mistral-embed")
         provider = get_embedding_provider()
         assert isinstance(provider, MistralEmbeddingProvider)
-
-    def test_unknown_backend_raises(self, monkeypatch):
-        monkeypatch.setenv("EMBEDDING_BACKEND", "openai-future")
-        with pytest.raises(NotImplementedError, match="openai-future"):
-            get_embedding_provider()
 
 
 # ---------------------------------------------------------------------------

@@ -4,8 +4,7 @@ Coverage:
 - AC1: LLMProvider protocol definition
 - AC2: ClaudeProvider happy path (mocked AsyncAnthropic)
 - AC3: Lazy key validation — no raise at instantiation, raises at complete()
-- AC4: Factory returns LLMProvider instance for LLM_BACKEND=claude
-- AC5: Factory raises NotImplementedError for unsupported backend
+- AC4: Factory always returns FallbackLLMProvider with ClaudeProvider as primary
 - Additional: system prompt routing, model_id property
 """
 from __future__ import annotations
@@ -172,48 +171,31 @@ class TestClaudeProviderLazyKeyValidation:
 
 
 # ---------------------------------------------------------------------------
-# AC4 — Factory returns correct type
+# AC4 — Factory always returns FallbackLLMProvider with Claude as primary
 # ---------------------------------------------------------------------------
 
 class TestGetLlmProviderFactory:
-    def test_default_backend_returns_claude_provider(self, monkeypatch):
-        """Default (LLM_BACKEND unset) returns a ClaudeProvider."""
-        monkeypatch.delenv("LLM_BACKEND", raising=False)
+    def test_factory_returns_fallback_provider(self):
+        """get_llm_provider() always returns a FallbackLLMProvider."""
+        from app.providers.fallback_provider import FallbackLLMProvider
         provider = get_llm_provider()
+        assert isinstance(provider, FallbackLLMProvider)
         assert isinstance(provider, LLMProvider)
-        assert isinstance(provider, ClaudeProvider)
 
-    def test_explicit_claude_backend(self, monkeypatch):
-        """LLM_BACKEND=claude returns ClaudeProvider."""
-        monkeypatch.setenv("LLM_BACKEND", "claude")
+    def test_primary_is_claude(self):
+        """Primary provider inside FallbackLLMProvider is ClaudeProvider."""
+        from app.providers.fallback_provider import FallbackLLMProvider
         provider = get_llm_provider()
-        assert isinstance(provider, ClaudeProvider)
+        assert isinstance(provider, FallbackLLMProvider)
+        assert isinstance(provider._primary, ClaudeProvider)
 
     def test_factory_uses_llm_model_env_var(self, monkeypatch):
-        """LLM_MODEL env var is forwarded to ClaudeProvider."""
-        monkeypatch.setenv("LLM_BACKEND", "claude")
+        """LLM_MODEL env var is forwarded to the Claude primary."""
+        from app.providers.fallback_provider import FallbackLLMProvider
         monkeypatch.setenv("LLM_MODEL", "claude-opus-4-6")
         provider = get_llm_provider()
-        assert isinstance(provider, ClaudeProvider)
-        assert provider.model_id == "claude/claude-opus-4-6"
-
-
-# ---------------------------------------------------------------------------
-# AC5 — Unknown backend raises NotImplementedError
-# ---------------------------------------------------------------------------
-
-class TestGetLlmProviderUnknownBackend:
-    def test_unknown_backend_raises(self, monkeypatch):
-        """NotImplementedError raised with the backend name in the message."""
-        monkeypatch.setenv("LLM_BACKEND", "gpt-9000")
-        with pytest.raises(NotImplementedError, match="gpt-9000"):
-            get_llm_provider()
-
-    def test_empty_backend_raises(self, monkeypatch):
-        """Empty string backend raises NotImplementedError."""
-        monkeypatch.setenv("LLM_BACKEND", "")
-        with pytest.raises(NotImplementedError):
-            get_llm_provider()
+        assert isinstance(provider, FallbackLLMProvider)
+        assert provider._primary.model_id == "claude/claude-opus-4-6"
 
 
 # ---------------------------------------------------------------------------
