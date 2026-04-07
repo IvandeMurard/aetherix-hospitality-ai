@@ -26,7 +26,15 @@ from typing import Any
 
 import httpx
 
+from app.integrations.apaleo_logger import (
+    ApaleoAgentLogger,
+    ApaleoWriteBlockedError,
+    is_readonly_mode,
+    is_write_tool,
+)
+
 logger = logging.getLogger(__name__)
+_agent_logger = ApaleoAgentLogger()
 
 _APALEO_TOKEN_URL = "https://identity.apaleo.com/connect/token"
 
@@ -80,18 +88,39 @@ class ApaleoMCPClient:
         logger.debug("Apaleo MCP token refreshed (expires in %ss)", data.get("expires_in", 3600))
         return self._token  # type: ignore[return-value]
 
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+    async def call_tool(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        user: str | None = None,
+    ) -> Any:
         """
         Call an Apaleo MCP tool and return its decoded result.
 
         Args:
             tool_name:  MCP tool name (e.g. ``"APALEO_GET_OCCUPANCY_METRICS"``).
+        Opens a short-lived MCP session per call (streamable-HTTP transport).
+
+        Write-guard (HOS-107)
+        ---------------------
+        When ``APALEO_READONLY`` is not explicitly set to ``"false"``,
+        any call to a known write tool raises ``ApaleoWriteBlockedError``
+        before opening a network connection.  The blocked attempt is logged
+        at WARNING level.
+
+        Args:
+            tool_name:  MCP tool name.
+                        Composio mode  → ``"APALEO_GET_A_PROPERTIES_LIST"`` etc.
+                        Direct mode    → ``"APALEO_GET_OCCUPANCY_METRICS"`` etc.
             arguments:  JSON-serialisable tool input dict.
+            user:       Optional caller identity for the agent action log.
 
         Returns:
             Parsed JSON dict/list, or raw text if response is not JSON.
 
         Raises:
+            ApaleoWriteBlockedError: write operation attempted in read-only mode.
             RuntimeError: credentials not configured.
             httpx.HTTPStatusError: OAuth2 / transport failure.
             mcp.McpError: MCP protocol error.
@@ -100,6 +129,22 @@ class ApaleoMCPClient:
             raise RuntimeError(
                 "ApaleoMCPClient: not configured. "
                 "Set APALEO_CLIENT_ID, APALEO_CLIENT_SECRET, APALEO_MCP_SERVER_URL."
+            )
+
+        # ── Write-guard ────────────────────────────────────────────────────
+        write = is_write_tool(tool_name)
+        if write and is_readonly_mode():
+            _agent_logger.log(
+                tool_name,
+                arguments,
+                user=user,
+                mode="blocked",
+                error="read-only mode active (Phase 0) — set APALEO_READONLY=false to enable writes",
+            )
+            raise ApaleoWriteBlockedError(
+                f"ApaleoMCPClient: write operation '{tool_name}' blocked — "
+                "Apaleo is in read-only mode (Phase 0). "
+                "Set APALEO_READONLY=false to enable writes."
             )
 
         from mcp import ClientSession  # noqa: PLC0415
@@ -124,3 +169,57 @@ class ApaleoMCPClient:
                 return raw
 
         return result
+        headers = await self._auth_headers()
+        mode = "write" if write else "read"
+        t0 = time.monotonic()
+
+        try:
+            async with streamablehttp_client(self.server_url, headers=headers) as (
+                read_stream,
+                write_stream,
+                _,
+            ):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    logger.debug(
+                        "ApaleoMCPClient (%s) calling %r with %r",
+                        self.auth_mode,
+                        tool_name,
+                        arguments,
+                    )
+                    result = await session.call_tool(tool_name, arguments)
+
+            duration_ms = (time.monotonic() - t0) * 1000
+
+            if result.content and result.content[0].type == "text":
+                raw = result.content[0].text
+                try:
+                    decoded = json.loads(raw)
+                except json.JSONDecodeError:
+                    decoded = raw
+            else:
+                decoded = result
+
+            _agent_logger.log(
+                tool_name,
+                arguments,
+                user=user,
+                mode=mode,
+                duration_ms=duration_ms,
+                result_summary=str(decoded)[:200],
+            )
+            return decoded
+
+        except ApaleoWriteBlockedError:
+            raise
+        except Exception as exc:
+            duration_ms = (time.monotonic() - t0) * 1000
+            _agent_logger.log(
+                tool_name,
+                arguments,
+                user=user,
+                mode=mode,
+                duration_ms=duration_ms,
+                error=str(exc),
+            )
+            raise
