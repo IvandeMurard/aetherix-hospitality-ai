@@ -6,7 +6,7 @@ Coverage:
 - AC3: system param routes to system_instruction in GenerateContentConfig
 - AC4: max_tokens → max_output_tokens, temperature passed correctly
 - AC5: Lazy key validation — no raise at init, RuntimeError at complete()
-- AC6: factory returns GeminiProvider for LLM_BACKEND=gemini
+- AC6: factory uses GeminiProvider as automatic fallback
 - AC7: message role "assistant" maps to Gemini "model" role
 """
 from __future__ import annotations
@@ -177,26 +177,24 @@ class TestGeminiProviderLazyKeyValidation:
 
 
 # ---------------------------------------------------------------------------
-# AC6 — Factory
+# AC6 — Factory uses Gemini as automatic fallback
 # ---------------------------------------------------------------------------
 
 class TestGetLlmProviderGemini:
-    def test_gemini_backend_returns_gemini_provider(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "gemini")
+    def test_gemini_is_fallback_in_factory(self):
+        """Factory always sets GeminiProvider as the fallback."""
+        from app.providers.fallback_provider import FallbackLLMProvider
         provider = get_llm_provider()
-        assert isinstance(provider, GeminiProvider)
-        assert isinstance(provider, LLMProvider)
+        assert isinstance(provider, FallbackLLMProvider)
+        assert isinstance(provider._fallback, GeminiProvider)
 
-    def test_gemini_uses_llm_model_env_var(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "gemini")
-        monkeypatch.setenv("LLM_MODEL", "gemini-2.0-flash")
+    def test_factory_uses_llm_fallback_model_env_var(self, monkeypatch):
+        """LLM_FALLBACK_MODEL env var is forwarded to the Gemini fallback."""
+        from app.providers.fallback_provider import FallbackLLMProvider
+        monkeypatch.setenv("LLM_FALLBACK_MODEL", "gemini-2.0-flash")
         provider = get_llm_provider()
-        assert provider.model_id == "gemini/gemini-2.0-flash"
-
-    def test_error_message_lists_gemini(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "unknown-future-model")
-        with pytest.raises(NotImplementedError, match="gemini"):
-            get_llm_provider()
+        assert isinstance(provider, FallbackLLMProvider)
+        assert provider._fallback.model_id == "gemini/gemini-2.0-flash"
 
 
 # ---------------------------------------------------------------------------
