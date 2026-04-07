@@ -49,12 +49,10 @@ class TestExplainabilityServiceDI:
         service = ExplainabilityService(llm=llm)
         assert service._llm is llm
 
-    def test_default_uses_factory(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "claude")
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
-        from app.providers.claude_provider import ClaudeProvider
+    def test_default_uses_factory(self):
+        from app.providers.fallback_provider import FallbackLLMProvider
         service = ExplainabilityService()
-        assert isinstance(service._llm, ClaudeProvider)
+        assert isinstance(service._llm, FallbackLLMProvider)
 
 
 # ---------------------------------------------------------------------------

@@ -8,9 +8,7 @@ Coverage:
 - AC5: Propagates fallback exception if both providers fail
 - AC6: Logs a WARNING when primary fails
 - AC7: model_id shows primary→fallback composite identifier
-- AC8: Factory wraps in FallbackLLMProvider when LLM_FALLBACK_BACKEND is set
-- AC9: Factory returns plain provider when LLM_FALLBACK_BACKEND is unset
-- AC10: Factory ignores fallback when primary == fallback backend
+- AC8: Factory always returns FallbackLLMProvider (Claude primary, Gemini fallback)
 """
 from __future__ import annotations
 
@@ -205,50 +203,21 @@ class TestFallbackProviderModelId:
 
 
 # ---------------------------------------------------------------------------
-# AC8 — Factory wires fallback automatically
+# AC8 — Factory always wires FallbackLLMProvider (Claude → Gemini)
 # ---------------------------------------------------------------------------
 
 class TestFactoryFallbackWiring:
-    def test_factory_returns_fallback_provider_when_env_set(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "claude")
-        monkeypatch.setenv("LLM_FALLBACK_BACKEND", "gemini")
+    def test_factory_always_returns_fallback_provider(self):
+        """Failover is always on — no env var needed."""
+        from app.providers.claude_provider import ClaudeProvider
+        from app.providers.gemini_provider import GeminiProvider
         provider = get_llm_provider()
         assert isinstance(provider, FallbackLLMProvider)
+        assert isinstance(provider._primary, ClaudeProvider)
+        assert isinstance(provider._fallback, GeminiProvider)
+
+    def test_model_id_shows_both_providers(self):
+        provider = get_llm_provider()
         assert "claude" in provider.model_id
         assert "gemini" in provider.model_id
-
-    def test_fallback_model_id_shows_both_providers(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "claude")
-        monkeypatch.setenv("LLM_FALLBACK_BACKEND", "gemini")
-        provider = get_llm_provider()
         assert "→" in provider.model_id
-
-
-# ---------------------------------------------------------------------------
-# AC9 — Factory without fallback env var returns plain provider
-# ---------------------------------------------------------------------------
-
-class TestFactoryNoFallback:
-    def test_no_fallback_env_returns_plain_provider(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "claude")
-        monkeypatch.delenv("LLM_FALLBACK_BACKEND", raising=False)
-        provider = get_llm_provider()
-        assert not isinstance(provider, FallbackLLMProvider)
-
-    def test_empty_fallback_env_returns_plain_provider(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "claude")
-        monkeypatch.setenv("LLM_FALLBACK_BACKEND", "")
-        provider = get_llm_provider()
-        assert not isinstance(provider, FallbackLLMProvider)
-
-
-# ---------------------------------------------------------------------------
-# AC10 — Same primary and fallback backend is ignored
-# ---------------------------------------------------------------------------
-
-class TestFactorySameBackend:
-    def test_same_backend_does_not_wrap(self, monkeypatch):
-        monkeypatch.setenv("LLM_BACKEND", "claude")
-        monkeypatch.setenv("LLM_FALLBACK_BACKEND", "claude")
-        provider = get_llm_provider()
-        assert not isinstance(provider, FallbackLLMProvider)
