@@ -23,11 +23,12 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from anthropic import AsyncAnthropic
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ConversationalQuery, DemandAnomaly, StaffingRecommendation
+from app.providers.base import LLMProvider
+from app.providers.factory import get_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -166,9 +167,8 @@ class ExplainabilityService:
     async. Designed to be called from a FastAPI BackgroundTask.
     """
 
-    def __init__(self) -> None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        self._claude = AsyncAnthropic(api_key=api_key) if api_key else None
+    def __init__(self, llm: LLMProvider | None = None) -> None:
+        self._llm: LLMProvider = llm or get_llm_provider()
 
     async def generate_and_send(
         self,
@@ -265,24 +265,22 @@ class ExplainabilityService:
         recommendation: StaffingRecommendation,
         anomaly: DemandAnomaly | None,
     ) -> str:
-        """Call Claude Sonnet and return the plain-text explanation.
+        """Call the LLM provider and return the plain-text explanation.
 
         Falls back to a static message if the API key is absent or the call fails.
         """
-        if not self._claude:
-            logger.warning("explainability_service: ANTHROPIC_API_KEY not set — using fallback")
-            return _FALLBACK_REPLY
-
         prompt = _build_prompt(query_body, recommendation, anomaly)
 
         try:
-            message = await self._claude.messages.create(
-                model="claude-sonnet-4-6",
+            result = await self._llm.complete(
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=400,
                 temperature=0.3,
-                messages=[{"role": "user", "content": prompt}],
             )
-            return message.content[0].text.strip()
+            return result.strip()
+        except RuntimeError:
+            logger.warning("explainability_service: ANTHROPIC_API_KEY not set — using fallback")
+            return _FALLBACK_REPLY
         except Exception as exc:
-            logger.error("explainability_service: Claude API error: %s", exc)
+            logger.error("explainability_service: LLM provider error: %s", exc)
             return _FALLBACK_REPLY
