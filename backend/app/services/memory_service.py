@@ -50,6 +50,9 @@ logger = logging.getLogger(__name__)
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.providers.base import EmbeddingProvider
+from app.providers.factory import get_embedding_provider
+
 
 # ---------------------------------------------------------------------------
 # MemoryProvider protocol — the stable interface both layers must implement
@@ -100,16 +103,6 @@ class MemoryProvider(Protocol):
 
 logger = logging.getLogger(__name__)
 
-_EMBEDDING_DIM = 1536  # must match operational_memory.embedding vector(1536)
-
-
-async def _get_embedding(query_text: str) -> List[float]:
-    """
-    Generate a 1536-dim embedding for *query_text*.
-    Zero-vector fallback — see rag_service._get_embedding for rationale.
-    """
-    return [0.0] * _EMBEDDING_DIM
-
 
 class MemoryService:
     """
@@ -119,8 +112,13 @@ class MemoryService:
     All methods silently no-op when no session is provided.
     """
 
-    def __init__(self, db: Optional[AsyncSession] = None) -> None:
+    def __init__(
+        self,
+        db: Optional[AsyncSession] = None,
+        embedding: EmbeddingProvider | None = None,
+    ) -> None:
         self._db = db
+        self._embedding: EmbeddingProvider = embedding or get_embedding_provider()
     async def _get_embedding(self, text_: str) -> List[float]:
         if not self._mistral:
             return [0.0] * 1024
@@ -159,7 +157,7 @@ class MemoryService:
             return
 
         content = reflection if reflection else f"Context: {context} | Outcome: {outcome}"
-        embedding = await _get_embedding(content)
+        embedding = await self._embedding.embed(content)
 
         await self._db.execute(
             text(
@@ -229,7 +227,7 @@ class MemoryService:
         if self._db is None:
             return ""
 
-        embedding = await _get_embedding(current_query)
+        embedding = await self._embedding.embed(current_query)
 
         try:
             result = await self._db.execute(

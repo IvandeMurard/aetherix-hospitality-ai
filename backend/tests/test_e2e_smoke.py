@@ -216,14 +216,12 @@ class TestReasoningService:
     async def test_claude_path_returns_claude_used_true(self):
         from app.services.reasoning_service import ReasoningService
 
-        mock_message = MagicMock()
-        mock_message.content = [MagicMock(text="Great forecast due to the tech conference nearby.")]
+        mock_llm = MagicMock()
+        mock_llm.complete = AsyncMock(
+            return_value="Great forecast due to the tech conference nearby."
+        )
 
-        mock_client = AsyncMock()
-        mock_client.messages.create = AsyncMock(return_value=mock_message)
-
-        svc = ReasoningService.__new__(ReasoningService)
-        svc.claude = mock_client
+        svc = ReasoningService(llm=mock_llm)
 
         result = await svc.generate_explanation(
             predicted_covers=60,
@@ -241,11 +239,10 @@ class TestReasoningService:
     async def test_claude_api_error_falls_back_to_heuristic(self):
         from app.services.reasoning_service import ReasoningService
 
-        mock_client = AsyncMock()
-        mock_client.messages.create = AsyncMock(side_effect=RuntimeError("API timeout"))
+        mock_llm = MagicMock()
+        mock_llm.complete = AsyncMock(side_effect=ValueError("API timeout"))
 
-        svc = ReasoningService.__new__(ReasoningService)
-        svc.claude = mock_client
+        svc = ReasoningService(llm=mock_llm)
 
         result = await svc.generate_explanation(
             predicted_covers=40,
@@ -484,9 +481,7 @@ class TestTwilioClientSmoke:
 
         with pytest.raises(NotConfiguredError):
             import asyncio
-            asyncio.get_event_loop().run_until_complete(
-                client.send_sms(to="+33600000001", body="test")
-            )
+            asyncio.run(client.send_sms(to="+33600000001", body="test"))
 
     @pytest.mark.asyncio
     async def test_send_whatsapp_adds_prefix(self):
