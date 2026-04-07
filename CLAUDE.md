@@ -1,179 +1,60 @@
-# CLAUDE.md — Aetherix · Second Brain
+# CLAUDE.md — Aetherix
 
-> Ce fichier est la source de vérité partagée entre toutes les sessions (Claude Code, Claude Desktop, BMad).
-> Il est chargé automatiquement à chaque session. Mettre à jour après chaque décision importante.
+> Source de vérité partagée. Chargé automatiquement à chaque session.
+> **Règle :** ce fichier = facts de session uniquement (stack, décisions, fichiers, env vars, protocoles). Tout contexte narratif → `docs/context/`. Ne jamais dépasser ~150 lignes.
+> Mettre à jour après chaque décision architecturale : ajouter une ligne dans §Décisions architecturales, déplacer le détail dans `docs/context/` si > 2 lignes.
+> Contexte détaillé → `docs/context/`
 
 ---
 
 ## Projet
 
 **Aetherix** — Plateforme IA agentique pour la gestion des opérations F&B hôtelières.
-Mission : transformer la gestion proactive du F&B en hôtellerie via des agents IA qui anticipent, alertent et recommandent.
-
-**Philosophie :** "Thin Frontend / Fat Backend" — la logique métier et l'orchestration IA vivent dans le backend.
-**Paradigme :** Agentic-first (UX) + API-first (infrastructure) + Human-in-the-loop (confiance).
+**Philosophie :** "Thin Frontend / Fat Backend" — logique métier et orchestration IA dans le backend.
+**Paradigme :** Agentic-first (UX) + API-first (infra) + Human-in-the-loop (confiance).
 
 ---
 
-## Stack principale
+## Stack
 
 | Couche | Technologie | Notes |
 |--------|------------|-------|
-| Backend | FastAPI + Python 3.11 | Async, Pydantic v2, OpenAPI auto-généré |
-| Base de données | Supabase (PostgreSQL) | Auth, real-time, backups gérés |
-| Patterns vectoriels | pgvector (Supabase) | tables `fb_patterns` + `operational_memory`, embeddings Mistral 1024d, HNSW — 495+ patterns (HOS-99) |
-| Mémoire cognitive | pgvector (Supabase) | `operational_memory` — feedback manager + recency scoring Python. Backboard.io à réévaluer Phase 3+ (HOS-99) |
+| Backend | FastAPI + Python 3.11 | Async, Pydantic v2 |
+| Base de données | Supabase (PostgreSQL) | Auth, real-time |
+| Vecteurs | pgvector (Supabase) | `fb_patterns` + `operational_memory`, Mistral 1024d, HNSW |
 | Cache | Redis (Upstash) | Session state, TTL 1h |
-| IA principale | Claude Sonnet (Anthropic) | Reasoning + explainability |
-| Forecast numérique | Prophet (Meta) | Time-series covers prediction + regressors (météo, events, occupancy) |
-| Frontend | Next.js (App Router) + shadcn/ui | Couche vérification (thin) — pas le canal principal |
-| Alertes | WhatsApp via Twilio | Delivery ambiant (push-first, UI-less) |
-| PMS principal | Apaleo (prioritaire) | OAuth2, sandbox dispo |
+| IA principale | Claude Sonnet | Reasoning + explainability. Multi-LLM via `LLMProvider` (Décision #9) |
+| Forecast | Prophet (Meta) | Time-series covers + regressors (météo, events, occupancy) |
+| Frontend | Next.js (App Router) + shadcn/ui | Thin — vérification uniquement |
+| Alertes | WhatsApp via Twilio | Push-first, UI-less |
+| PMS principal | Apaleo | OAuth2 + MCP Server officiel |
 | PMS secondaire | Mews | Webhook, marketplace |
-| Knowledge | Obsidian vault | `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality` |
-| Issues | Linear HOS | Workspace Hospitalityagent |
 
 ---
 
-## Décisions architecturales prises (ne pas remettre en question sans raison)
+## Décisions architecturales (ne pas remettre en question sans raison)
 
-| # | Décision | Rationale | Alternatives rejetées |
-|---|---------|-----------|----------------------|
-| 1 | Claude Sonnet > Mistral | Meilleur reasoning, 200K ctx, explainability critique | Mistral trop faible, GPT-4 trop cher |
-| 2 | Architecture mémoire deux couches (HOS-99, 27/03/2026) | **Couche 1 — Private Memory (Phase 0-1)** : pgvector `operational_memory` par hôtel — idiosyncrasies non-généralisables (capture rate réel, préférences manager, patterns locaux). **Couche 2 — Hive Memory (Phase 3, additif)** : Backboard.io ou équivalent, anonymisé cross-hotel, groupé par tags (city/resort/airport, segment, taille). Chaque hôtel bénéficie de sa propre mémoire + sagesse collective, sans partage de données brutes. Extension non-breaking via `MemoryProvider` protocol. Qdrant éliminé définitivement. | Qdrant surdimensionné pour 495 patterns. Architecture mono-couche : mélange private + hive = risque de contamination cross-tenant. |
-| 2 | pgvector (Supabase) > Qdrant > Pinecone | Suffisant à <50K patterns (Phase 0/1), 1 seule requête SQL vs 2-3 API hops, élimine Qdrant + Backboard, compatible MCP latency target (<500ms). Réévaluer Qdrant en Phase 3+ (>50K patterns / >50 hôtels). | Qdrant surdimensionné à Phase 0/1 ; Pinecone $70/mo ; Backboard 504 timeouts documentés |
-| 3 | Voice opt-in (pas voice-first) | Trop risqué en démo (bruit), clavier = fallback fiable | Voice-first = risque UX |
-| 4 | Reasoning collapsible par défaut | Charge cognitive, 1-ligne visible, expand pour power users | Tout afficher = clutter |
-| 5 | Pas d'auto-actions (Phase MVP) | 63% managers veulent contrôle humain, trust-building | Full automation = adoption faible |
-| 6 | PMS-agnostic | Mews + Apaleo = 1000s hôtels, fallback si Mews refuse | Lock-in Mews = risque |
-| 7 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement | Fat frontend = duplication logique |
-| 8 | pgvector couvre les deux couches mémoire (Phase 0-2) — Backboard à réévaluer Phase 3+ | pgvector suffit pour Private Memory (par hôtel) et Hive Memory (cross-hôtels anonymisé) jusqu'en Phase 2. L'interface `MemoryProvider` (`store_feedback`, `get_hotel_context`, `get_cross_hotel_patterns`) est abstraite dès maintenant pour permettre l'insertion de Backboard en Phase 3+ sans réécriture, si le volume multi-hôtels le justifie. | Backboard dès MVP = dépendance externe opaque + coût non maîtrisé + 504 timeouts documentés |
-| 9 | Multi-LLM fallback via `LLMProvider` abstrait | Les LLMs deviennent commodity — ne pas créer une dépendance hard-coded à Claude. Interface abstraite dès maintenant : swap auto Claude → Gemini → GPT selon coût/performance sans réécriture. Claude reste le provider principal (reasoning, 200K ctx, explainability) mais n'est pas la seule dépendance. Défense contre commoditisation + résilience opérationnelle. | Hard-code Claude = lock-in fournisseur + vulnérabilité si pricing Anthropic change |
-
----
-
-## Architecture mémoire cognitive — Modèle à deux couches
-
-Objectif : passer d'un agent de "semantic search" à un agent **self-improving per-property**, dont les décisions s'améliorent en continu grâce à la preuve d'impact (recommandation suivie + outcome positif).
-
-### Couche 1 — Private Memory (par hôtel)
-- **Technologie :** pgvector `operational_memory` (Phase 0-1)
-- **Périmètre :** strictement isolé par `hotel_id`
-- **Contenu :** idiosyncrasies ultra-personnalisées — ce qui fonctionne **uniquement** pour cet hôtel (capture rate réel, préférences manager, patterns locaux non-généralisables)
-- **Signal d'apprentissage :** `recommendation_accepted` + `outcome` (covers réels vs prévus) → le modèle ajuste ses prochaines suggestions pour cet hôtel
-- **Interface :** `MemoryProvider.store_feedback()`, `MemoryProvider.get_hotel_context(hotel_id)`
-
-### Couche 2 — Hive Memory (ruche anonymisée, cross-hôtels)
-- **Technologie :** pgvector (Supabase) — tables agrégées anonymisées (Phase 0-2). Backboard.io à réévaluer en Phase 3+ si volume multi-hôtels le justifie.
-- **Périmètre :** patterns agrégés et anonymisés, groupés par tags : `quartier`, `typologie` (city/resort/airport), `clientèle` (leisure/business/MICE), `segment` (4*/5*/boutique), `taille_resto`, `saison`
-- **Contenu :** ce qui fonctionne **en général** pour des propriétés similaires — justifie et enrichit les prédictions avec des preuves d'impact inter-hôtels
-- **Signal d'apprentissage :** outcomes agrégés → renforce ou déprécie les patterns vectoriels (`fb_patterns`)
-- **Interface :** `MemoryProvider.get_cross_hotel_patterns(tags)`, `MemoryProvider.store_hive_insight()`
-
-### Flux d'amélioration continue
-```
-Recommandation → Manager accepte/rejette → outcome mesuré (J+1)
-    ↓ Couche 1 : ajuste Private Memory de cet hôtel
-    ↓ Couche 2 : si outcome positif confirmé → contribue à la Hive (anonymisé)
-    ↓ Couche 4 (Claude) : prochaine génération enrichie des deux mémoires
-```
-
-**Résultat :** chaque hôtel bénéficie à la fois de son apprentissage propre **et** de la sagesse collective d'hôtels similaires — sans jamais exposer de données d'un hôtel à un autre.
+| # | Décision | Résumé |
+|---|---------|--------|
+| 1 | Claude Sonnet > Mistral/GPT | Meilleur reasoning, 200K ctx, explainability critique |
+| 2 | Architecture mémoire 2 couches | Private Memory (pgvector/hôtel) + Hive Memory (cross-hôtels anonymisé). Backboard réévaluer Phase 3+. Détail → `docs/context/memory-architecture.md` |
+| 3 | pgvector > Qdrant > Pinecone | Suffisant <50K patterns, 1 requête SQL, compatible latency MCP <500ms |
+| 4 | Voice opt-in (pas voice-first) | Trop risqué en démo, clavier = fallback fiable |
+| 5 | Reasoning collapsible par défaut | Réduction charge cognitive |
+| 6 | Pas d'auto-actions (Phase MVP) | 63% managers veulent contrôle humain |
+| 7 | Apaleo read-only Phase 0 | Pas d'écriture sur réservations tant que l'outil n'est pas mature. Loguer toutes les actions agent |
+| 8 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement |
+| 9 | Multi-LLM via `LLMProvider` abstrait | Swap Claude → Gemini → GPT sans réécriture. Claude reste provider principal |
 
 ---
 
-## Positionnement stratégique — Défenses concurrentielles (Mars 2026)
-
-### 1. Complémentaire au PMS, non concurrent
-
-En 2026, Apaleo et Mews déploient des Agent Hubs avec agents "natifs" (pricing, guest messaging, corporate sales, onboarding). Les hôtels n'achèteront pas un concurrent direct à leur PMS.
-
-**Positionnement :** Aetherix est un **layer agentic spécialisé F&B/staffing** qui s'ajoute au PMS sans le concurrencer.
-- Périmètre clair : read-only PMS data + push messaging (WhatsApp/Slack) + explainability + human-in-the-loop
-- Ce que les Agent Hubs ne font pas : ops decision copilot F&B/staffing avec forecast domain-specific, reco contextualisée, self-improving memory per property
-
-**A2A Communication (Agent-to-Agent) :** MCP-ready permet d'être appelé par d'autres agents PMS.
-- Exemple : agent revenue Apaleo détecte `+18% occupancy demain` → appelle Aetherix `adjust_staffing_reco(hotel_id, delta_occupancy=+18)` → reco staffing mise à jour en live
-- C'est la valeur réseau de l'architecture MCP : Aetherix devient une **primitive appelable dans les workflows d'autres agents**, pas seulement un outil standalone
-- Issues actives : HOS-71 (MCP Server), HOS-72 (Agent SEO métriques)
-
-**Règle de positionnement :** Ne jamais implémenter de features qui concurrencent directement les modules natifs Apaleo/Mews (pricing dynamique, guest messaging génériques). Rester dans le périmètre F&B ops + staffing + forecast.
-
----
-
-### 2. Stickiness — ROI prouvé en continu
-
-Les hôtels renouvellent quand la valeur est visible sur le P&L et difficile à internaliser.
-
-**KPIs business à publier activement (pas juste mesurer) :**
-- Labor cost reduction : cible –3% à –8% vs baseline
-- Under/overstaffing incidents : cible –30% à –50%
-- Food waste per cover : cible –15% à –25% (Phase 4)
-- Planning time saved : heures/semaine économisées vs planning manuel
-- Recommandation acceptance rate + outcome delta (delta couverts réels vs prévus)
-
-**Self-improving loop visible :**
-- Chaque hôtel voit l'évolution de la précision forecast sur 90 jours glissants
-- Affichage "€ économisés ce mois-ci" calculé à partir des outcomes mesurés
-- **Question ouverte :** via dashboard dédié (Next.js) ou intégré dans les alertes WhatsApp hebdomadaires ? → à trancher avec PM (risque : dashboard = surface de plus à maintenir dans un modèle thin-frontend)
-
-**Ce qui rend difficile l'internalisation :**
-- Private Memory par hôtel (2+ ans de données propres) → coût de migration élevé
-- Hive Memory anonymisée (patterns cross-hôtels) → impossible à reproduire sans volume
-- Chain-of-thought hospitality-specific → ne s'improvise pas avec un LLM générique
-
----
-
-### 3. Défense contre la commoditisation des LLMs
-
-Les LLMs deviennent commodity (Claude, Gemini, Grok, GPT — moins chers chaque année). Le moat n'est pas dans le modèle brut.
-
-**Où est le vrai moat :**
-1. **Données + mémoire per-property** : Private Memory (2+ ans d'historique hôtel) + Hive Memory (patterns cross-hôtels anonymisés) — impossible à répliquer rapidement
-2. **Domain reasoning spécialisé** : prompt engineering + chain-of-thought sur hospitality ops data (patterns F&B, feedbacks managers, saisonnalité, événements locaux) → RAG avancé sur pgvector `fb_patterns` (495+ patterns F&B)
-3. **Human oversight comme feature produit** : les overrides managers sont du signal, pas du bruit → chaque refus d'une reco améliore le modèle suivant → l'agent devient plus "safe" et non "black box" au fil du temps → complémentaire à la Hive Memory (les overrides alimentent aussi la couche 2)
-
-**Multi-LLM fallback (Décision architecturale #9) :**
-- Ne pas être lié à un seul provider LLM — switch auto entre providers selon coût + performance
-- Interface `LLMProvider` abstrait (similaire à `MemoryProvider`) : swap Claude → Gemini → GPT sans réécriture
-- Claude reste le provider principal (reasoning + 200K ctx + explainability) mais pas l'unique dépendance
-- Voir Décision #9 dans le tableau des décisions architecturales
-
----
-
-## Pivot stratégique (Mars 2026) — Agent-First
-
-Nouvelle orientation issue de la veille Andrew Chen (a16z) :
-
-> "Distribution shifts from top of funnel to top of call stack."
-> "Agent SEO where ranking factors are success rate across thousands of agent runs."
-
-**Implication :** Aetherix doit être callable par des agents IA (Claude, Codex, Cursor) via MCP, pas seulement accessible via dashboard.
-
-Issues actives dans HOS :
-- **HOS-71** — Exposer Aetherix comme primitive agent-callable (MCP Server) — High, Backlog
-- **HOS-72** — Roadmap "Agent SEO" — métriques machine-legible — High, Backlog
-
-Capabilities MCP candidates :
-- `forecast_occupancy(hotel_id, date_range)` → prévisions F&B
-- `get_stock_alerts(hotel_id)` → alertes inventaire
-- `recommend_menu(hotel_id, context)` → recommandations adaptatives
-- `get_fb_kpis(hotel_id, period)` → KPIs structurés
-
-Métriques "Agent SEO" à instrumenter :
-- `tool_success_rate` > 99.5%
-- `p95_latency` < 500ms
-- `schema_stability` = 0 breaking changes par sprint
-- `agent_retry_rate` < 1%
-
----
-
-## Roadmap phases
+## Roadmap
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
-| Phase 0 | En cours | Architecture FastAPI, modèles DB, intégrations base (Apaleo, WhatsApp) |
-| Phase 1 | Planifié | Forecasting F&B (Prophet + LLM), alertes proactives WhatsApp |
+| Phase 0 | En cours | Architecture FastAPI, modèles DB, Apaleo, WhatsApp |
+| Phase 0.5 | Planifié | MCP Server — capabilities agent-callable (HOS-71) |
+| Phase 1 | Planifié | Forecasting F&B (Prophet + LLM), alertes WhatsApp, Agent SEO (HOS-72) |
 | Phase 2 | Planifié | Agent conversationnel "Receipts" — explications recommandations |
 | Phase 3 | Planifié | Multi-hotel, Mews, analytics avancés |
 | Phase MCP | Nouveau | Exposer capabilities via MCP Server (HOS-71) |
@@ -218,243 +99,90 @@ Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026
 ```
 backend/app/services/          — orchestration IA et logique métier
 backend/app/integrations/      — Obsidian, Linear, Apaleo
-docs/ARCHITECTURE.md           — design système complet (v0.2.0, Feb 2026)
+backend/app/mcp_server.py      — [À créer] MCP Server capabilities
+backend/app/middleware/        — [À créer] tracking Agent SEO
+scripts/veille_proactive.py    — monitoring hebdomadaire automatisé
+docs/ARCHITECTURE.md           — design système (v0.2.0 — certaines sections obsolètes, se fier à ce fichier)
+docs/ROADMAP_NOW_NEXT_LATER.md — roadmap opérationnelle
+docs/context/                  — contexte détaillé par domaine
 .github/workflows/veille-hebdomadaire.yml — cron lundi 8h30
 ```
 
 ---
 
-## Variables d'environnement requises
+## Variables d'environnement
 
 ```
-ANTHROPIC_API_KEY     — Claude API (reasoning)
-ANTHROPIC_API_KEY     — Claude API (reasoning + explainability)
+ANTHROPIC_API_KEY     — Claude API
 LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
-LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad (équipe HOS)
-OBSIDIAN_VAULT_PATH   — C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality
-APALEO_CLIENT_ID      — OAuth2 (prioritaire)
-APALEO_CLIENT_SECRET  — OAuth2
-SUPABASE_URL          — PostgreSQL + pgvector (remplace Qdrant depuis HOS-99)
-SUPABASE_KEY          — Anon key
-SUPABASE_URL          — PostgreSQL (+ pgvector pour fb_patterns et operational_memory)
-SUPABASE_KEY          — Anon key
-DATABASE_URL          — asyncpg DSN (postgresql+asyncpg://...) pour SQLAlchemy
-MISTRAL_API_KEY       — Embeddings 1024d (mistral-embed) pour fb_patterns et operational_memory
-REDIS_URL             — Upstash (session state)
-# Supprimées (HOS-99): QDRANT_URL, QDRANT_API_KEY, BACKBOARD_API_KEY, MISTRAL_API_KEY
-```
-
----
-
-## Linear — Source de vérité
-
-**Workspace :** Hospitalityagent (`linear.app/hospitalityagent`)
-**Team :** HOS (`id: 2f6bb5e2-d735-4769-9377-11fe186aa0ad`)
-
-Toutes les issues vivent dans HOS. Ne jamais créer dans ivanportfolio/Tacet.
-
-**Connecteur MCP :** `claude_ai_Linear` (remote, compte claude.ai)
-- Si `list_teams` retourne "Tacet" → reconnecter dans claude.ai → Settings → Integrations → Hospitalityagent
-- Après reconnexion : redémarrer Claude Desktop
-
-**Vérification rapide début de session :**
-```
-list_teams → doit retourner "Hospitalityagent"
-```
-
----
-
-## Obsidian — Knowledge base
-
-**Vault :** `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality`
-
-**MCP configuré sur :**
-- Claude Desktop : `claude_desktop_config.json` (corrigé 22/03/2026)
-- Claude Code : `~/.claude.json` (ajouté 22/03/2026, scope user)
-
-Notes importantes dans le vault :
-- `AI Reports/Intelligence/` — rapports veille hebdomadaire automatisés
-- Synchronisation via `scripts/obsidian_sync.py`
-
----
-
-## Sessions — Modes BMad
-
-Déclare le type de session en début de conversation (ou réponds au menu SessionStart).
-Chaque mode adopte un comportement, un contexte prioritaire, et des artefacts de sortie différents.
-
----
-
-### 🔍 Veille — Intelligence stratégique
-**Activer :** "Veille" ou partager un lien/contenu directement
-**Contexte prioritaire :** Dernières notes Obsidian `AI Reports/Intelligence/` + décisions ouvertes CLAUDE.md
-**Comportement :** Scorer la pertinence (0-10), ne créer d'artefact que si ≥ 7
-**Artefacts :** Issue Linear HOS + note Obsidian + proposition edit CLAUDE.md si décision stratégique
-**Voir section :** [Session Veille — Instructions] ci-dessous
-
----
-
-### 🏃 SM — Bob, Scrum Master
-**Activer :** "SM", "Scrum", ou charger `docs/bmad/_bmad/bmm/agents/sm.md`
-**Contexte prioritaire :** Issues HOS ouvertes par priorité + sprint en cours
-**Comportement :** Crisp, checklist-driven. Préparer stories, planifier sprint, gérer backlog
-**Artefacts :** Issues Linear HOS mises à jour, story files dans `docs/bmad/_bmad-output/implementation-artifacts/`
-**Commandes BMad :** SP (Sprint Planning), CS (Create Story), ER (Epic Retrospective), CC (Course Correction)
-**Vérification début de session :** `list_issues team=HOS state=Todo,InProgress` → afficher top 5
-
----
-
-### 💻 Dev — Amelia, Developer
-**Activer :** "Dev", "Développement", ou charger `docs/bmad/_bmad/bmm/agents/dev.md`
-**Contexte prioritaire :** Story file assignée (`docs/bmad/_bmad-output/implementation-artifacts/`) + décisions techniques CLAUDE.md
-**Comportement :** Exécuter les tasks/subtasks dans l'ordre, TDD strict, jamais skip de tests
-**Artefacts :** Code committé, story file mise à jour (Dev Agent Record + File List), branche `ivandemurard/hos-XX-...`
-**Règle :** Toujours travailler sur une branche Linear (`git checkout -b ivandemurard/hos-XX-...`)
-**Vérification début de session :** Lire la story file assignée avant toute implémentation
-
----
-
-### 🏗️ Architect
-**Activer :** "Architect", "Architecture", ou charger `docs/bmad/_bmad/bmm/agents/architect.md`
-**Contexte prioritaire :** `docs/bmad/_bmad-output/planning-artifacts/architecture.md` + décisions ouvertes CLAUDE.md
-**Comportement :** Décisions techniques structurées avec rationale, alternatives rejetées, trade-offs
-**Artefacts :** Mise à jour CLAUDE.md §Décisions architecturales + `docs/bmad/_bmad-output/planning-artifacts/architecture.md`
-
----
-
-### 📋 PM — Product Manager
-**Activer :** "PM", "Product", ou charger `docs/bmad/_bmad/bmm/agents/pm.md`
-**Contexte prioritaire :** `docs/bmad/_bmad-output/planning-artifacts/prd.md` + roadmap CLAUDE.md + issues HOS Backlog
-**Comportement :** Priorisation backlog, validation scope, alignement PRD ↔ Linear
-**Artefacts :** PRD mis à jour, issues HOS créées/repriorisées, roadmap CLAUDE.md
-
----
-
-### 📊 Analyst — Mary, Business Analyst
-**Activer :** "Analyst", "Analyse", ou charger `docs/bmad/_bmad/bmm/agents/analyst.md`
-**Contexte prioritaire :** `docs/bmad/_bmad-output/planning-artifacts/product-brief-*.md` + notes Obsidian veille
-**Comportement :** Recherche marché, analyse concurrentielle, élicitation des besoins
-**Artefacts :** Notes Obsidian `AI Reports/`, product brief mis à jour
-
----
-
-### 🔬 QA
-**Activer :** "QA", "Tests", ou charger `docs/bmad/_bmad/bmm/agents/qa.md`
-**Contexte prioritaire :** Issues HOS `In Progress`/`In Review` + story files récentes
-**Comportement :** Validation critères d'acceptance, revue de code, identification edge cases
-**Artefacts :** Commentaires sur issues Linear, bugs créés comme nouvelles issues HOS
-
----
-
-### ✍️ Tech Writer
-**Activer :** "Tech Writer", "Doc", ou charger `docs/bmad/_bmad/bmm/agents/tech-writer/tech-writer.md`
-**Contexte prioritaire :** `docs/bmad/_bmad_memory/tech-writer-sidecar/documentation-standards.md` + story files complétées
-**Comportement :** Documenter ce qui a été implémenté, maintenir standards de doc
-**Artefacts :** Fichiers dans `docs/`, CLAUDE.md si changement de contexte projet
-
-**Direction stratégique (Mars 2026) :** "Agent-First Distribution" — Aetherix doit être une **primitive appelable par d'autres agents** (MCP Server), pas seulement un produit SaaS avec UI. Distribution = top of call stack, pas top of funnel.
-
----
-
-## Session Veille — Instructions
-
-### Mode Réactif (à la demande)
-Quand l'utilisateur partage un lien, un document, ou du contenu :
-1. Analyser le contenu en profondeur
-2. Confronter avec le contexte projet (stack, roadmap, positionnement)
-3. **Scorer la pertinence (0-10)** selon les critères ci-dessous
-4. **Ne pousser vers Linear et Obsidian QUE si score >= 7/10**
-5. Si score < 7 : livrer l'analyse uniquement, sans créer d'artefact
-
-**Critères de pertinence :**
-- Impacte directement la roadmap ou les décisions techniques (score +3)
-- Révèle un concurrent direct ou une opportunité de marché (score +3)
-- Apporte une information actionnable (justifie une nouvelle story) (score +2)
-- Contenu récent (< 7 jours) (score +1)
-- Source fiable (hospitalitynet.org, YC, Apaleo/Mews official, etc.) (score +1)
-
-**Format de sortie si pertinent (>= 7/10) :**
-```
-## [Titre]
-**Score de pertinence : X/10**
-**Pourquoi c'est important :** ...
-**Lien avec le projet :** ...
-**Action recommandée :** [story Linear proposée]
-**Tags :** #hotel-tech #agentique #concurrent etc.
-```
-
-### Mode Proactif (automatique, lundi 8h30)
-Rapport hebdomadaire généré par GitHub Actions via `scripts/veille_proactive.py`.
-Résultat : ticket Linear "Veille Hebdomadaire" + note Obsidian dans `AI Reports/Intelligence/`.
-
----
-
-## Thématiques de veille
-
-1. **Hotel tech & agentique IA** — nouvelles solutions, startups, acquisitions
-2. **IA dans l'hôtellerie** — cas d'usage F&B, forecasting, automatisation ops
-3. **Apaleo** — nouveautés API, partenaires, blog officiel
-4. **Mews** — features, positionnement, acquisitions
-5. **Y Combinator** — nouvelles références liées à l'hospitality/F&B/forecasting
-6. **hospitalitynet.org** — articles pertinents publiés dans les 7 derniers jours
-7. **Agent-first / MCP ecosystem** — outils, frameworks, distribution patterns
-
----
-
-## Roadmap synthétique (pour évaluer la pertinence)
-- **Phase 0 (en cours)** : Architecture FastAPI, modèles DB, intégrations de base (Apaleo, WhatsApp)
-- **Phase 0.5 (ajout — Mars 2026)** : MCP Server — exposer les capabilities core comme primitive agent-callable
-- **Phase 1** : Forecasting F&B (Prophet + LLM), alertes proactives via WhatsApp + instrumentation "Agent SEO"
-- **Phase 2** : Agent conversationnel "Receipts" — explications des recommandations
-- **Phase 3** : Multi-hotel, PMS étendu (Mews), analytics avancés
-
-**Décisions techniques ouvertes :**
-- Stratégie d'embedding pour RAG (pgvector vs Qdrant)
-- Modèle de pricing SaaS (par hôtel / par prédiction / hybrid)
-- Priorité Apaleo vs Mews pour la première intégration PMS live
-- **[MCP]** Capabilities à exposer en priorité : `forecast_occupancy`, `get_stock_alerts`, `get_fb_kpis`
-- **[Agent SEO]** Métriques machine-legible : `tool_success_rate` > 99.5%, `p95_latency` < 500ms, `schema_stability`
-## ⚠️ Points d'attention techniques
-
-## Protocole Dev Agent — Définition of Done par Story
-
-Chaque story est confiée à un dev agent autonome. Le protocole est :
-
-## Fichiers clés
-- `backend/app/services/` — orchestration IA et logique métier
-- `backend/app/integrations/` — Obsidian, Linear, Apaleo
-- `backend/app/mcp_server.py` — **[À créer]** MCP Server pour capabilities agent-callable
-- `backend/app/middleware/` — **[À créer]** tracking "Agent SEO" (success_rate, latency, retries)
-- `scripts/intelligence_report.py` — pipeline veille → Obsidian + Linear
-- `scripts/veille_proactive.py` — monitoring hebdomadaire automatisé
-- `docs/ARCHITECTURE.md` — design système complet
-- `docs/ROADMAP_NOW_NEXT_LATER.md` — roadmap opérationnelle
-- `.github/workflows/veille-hebdomadaire.yml` — cron lundi 8h30
-1. **Lire** le spec de la Linear issue (via MCP Linear)
-2. **Auditer** ce qui existe dans le codebase
-3. **Implémenter** la story complète (migration DB, modèle ORM, schemas, service, worker, route)
-4. **Tests** — tous les tests doivent passer (CI green)
-5. **Commit + Push** sur la branche désignée (`claude/<story-suffix>`)
-6. **Ouvrir une PR** contre `main`
-7. **Marquer la Linear issue → Done** et poster l'URL de la PR en commentaire
-
-**Gate de merge :** CI vert → merge manuel par le Scrum Master (sans revue de code).
-
-**Gates de qualité supérieurs (hors périmètre dev agent) :**
-- Fin d'Epic → revue d'architecture
-- Pré-pilote → QA sign-off avec une vraie propriété hôtelière
-
-**Session Scrum Master** (cette session) : dédiée aux sujets de pilotage (backlog, priorités, blockers, process). Ne pas utiliser pour implémenter des stories.
-
----
-
-## Variables d'environnement requises
-```
-ANTHROPIC_API_KEY     — sk-ant-...
-LINEAR_API_KEY        — lin_api_...
 LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad
 OBSIDIAN_VAULT_PATH   — C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitality
+APALEO_CLIENT_ID      — OAuth2
+APALEO_CLIENT_SECRET  — OAuth2
+COMPOSIO_API_KEY      — Apaleo MCP via Composio (Inventory API uniquement)
+COMPOSIO_USER_ID      —
+COMPOSIO_MCP_URL      —
+SUPABASE_URL          — PostgreSQL + pgvector
+SUPABASE_KEY          — Anon key
+DATABASE_URL          — asyncpg DSN (postgresql+asyncpg://...)
+MISTRAL_API_KEY       — Embeddings 1024d (mistral-embed)
+REDIS_URL             — Upstash (session state)
 ```
-1. **ARCHITECTURE.md** : daté de février 2026, certaines sections (Streamlit, Render.com) correspondent à l'ancienne stack — se fier à ce CLAUDE.md pour la stack actuelle.
-2. **`.env.example` racine** : appartient à l'ancien backend (`archive/legacy-backend`).
-3. **Hébergement** : tout est local Windows ou GitHub. Aucun serveur Linux, aucun Render/Railway.
+
+---
+
+## Linear
+
+**Workspace :** Hospitalityagent — toutes les issues dans HOS, jamais dans ivanportfolio/Tacet.
+**Team ID :** `2f6bb5e2-d735-4769-9377-11fe186aa0ad`
+**Vérification session :** `list_teams` → doit retourner "Hospitalityagent". Si "Tacet" → reconnecter dans claude.ai Settings → Integrations → redémarrer Claude Desktop.
+
+---
+
+## Obsidian
+
+**Vault :** `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality`
+**MCP :** Claude Desktop (`claude_desktop_config.json`) + Claude Code (`~/.claude.json`)
+**Reports :** `AI Reports/Intelligence/` — rapports veille automatisés
+
+---
+
+## BMad — Modes de session
+
+Déclare le mode en début de conversation. Chaque agent charge son propre fichier de contexte.
+
+| Mode | Activer avec | Agent file |
+|------|-------------|-----------|
+| Veille | "Veille" ou partager un lien | `docs/context/veille.md` |
+| SM (Bob) | "SM", "Scrum" | `docs/bmad/_bmad/bmm/agents/sm.md` |
+| Dev (Amelia) | "Dev", "Développement" | `docs/bmad/_bmad/bmm/agents/dev.md` |
+| Architect | "Architect", "Architecture" | `docs/bmad/_bmad/bmm/agents/architect.md` |
+| PM | "PM", "Product" | `docs/bmad/_bmad/bmm/agents/pm.md` |
+| Analyst (Mary) | "Analyst", "Analyse" | `docs/bmad/_bmad/bmm/agents/analyst.md` |
+| QA | "QA", "Tests" | `docs/bmad/_bmad/bmm/agents/qa.md` |
+| Tech Writer | "Tech Writer", "Doc" | `docs/bmad/_bmad/bmm/agents/tech-writer/tech-writer.md` |
+
+---
+
+## Dev Agent — Definition of Done
+
+1. Lire le spec de la Linear issue (MCP Linear)
+2. Auditer ce qui existe dans le codebase
+3. Implémenter la story (migration DB, ORM, schemas, service, worker, route)
+4. Tests — CI green
+5. Commit + Push sur la branche désignée (`claude/<story-suffix>`)
+6. Ouvrir une PR contre `main`
+7. Marquer la Linear issue → Done + poster l'URL PR en commentaire
+
+**Gate de merge :** CI vert → merge manuel SM (sans revue de code).
+**Gates supérieurs :** Fin d'Epic → revue d'architecture. Pré-pilote → QA sign-off propriété hôtelière réelle.
+
+**Règle de contexte :** toute décision, contrainte ou blocage découvert pendant l'implémentation → commenter sur la Linear issue. Si la décision devient une contrainte permanente cross-cutting → promouvoir en une ligne dans §Décisions architecturales ci-dessus. Ne pas écrire de contexte story-specific dans CLAUDE.md ou docs/context/.
+
+---
+
+## Points d'attention
+
+1. `docs/ARCHITECTURE.md` daté fév. 2026 — sections Streamlit/Render.com = ancienne stack. Se fier à ce CLAUDE.md.
+2. `.env.example` racine = ancien backend (`archive/legacy-backend`).
+3. Hébergement = local Windows ou GitHub. Aucun serveur Linux, Render, Railway.
