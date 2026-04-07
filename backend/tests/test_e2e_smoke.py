@@ -481,9 +481,7 @@ class TestTwilioClientSmoke:
 
         with pytest.raises(NotConfiguredError):
             import asyncio
-            asyncio.get_event_loop().run_until_complete(
-                client.send_sms(to="+33600000001", body="test")
-            )
+            asyncio.run(client.send_sms(to="+33600000001", body="test"))
 
     @pytest.mark.asyncio
     async def test_send_whatsapp_adds_prefix(self):
