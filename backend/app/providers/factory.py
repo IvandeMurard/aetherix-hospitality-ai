@@ -2,13 +2,15 @@
 
 Environment variables
 ---------------------
-LLM_BACKEND       : "claude" (default)  |  future: "gemini", "openai"
-LLM_MODEL         : model name passed to the provider (default: "claude-sonnet-4-6")
+LLM_BACKEND       : "claude" (default)  |  "gemini"  |  future: "openai"
+LLM_MODEL         : model name passed to the provider
+                    claude default: "claude-sonnet-4-6"
+                    gemini default: "gemini-2.0-flash"
 EMBEDDING_BACKEND : "mistral" (default) |  future: "openai"
 EMBEDDING_MODEL   : model name passed to the provider (default: "mistral-embed")
 
 Adding a new provider requires:
-  1. A new file in ``app/providers/`` (e.g. ``gemini_provider.py``)
+  1. A new file in ``app/providers/`` (e.g. ``openai_provider.py``)
   2. A new ``elif`` branch below
   3. Zero changes to ``app/services/``
 """
@@ -35,9 +37,17 @@ def get_llm_provider() -> LLMProvider:
             model=os.getenv("LLM_MODEL", "claude-sonnet-4-6"),
         )
 
+    if backend == "gemini":
+        from app.providers.gemini_provider import GeminiProvider
+
+        return GeminiProvider(
+            api_key=os.getenv("GEMINI_API_KEY", ""),
+            model=os.getenv("LLM_MODEL", "gemini-2.0-flash"),
+        )
+
     raise NotImplementedError(
         f"LLM backend '{backend}' is not implemented. "
-        "Supported values: 'claude'. "
+        "Supported values: 'claude', 'gemini'. "
         "Add a new provider file and branch in app/providers/factory.py."
     )
 
