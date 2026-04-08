@@ -10,16 +10,22 @@ import logging
 import time
 import httpx
 from datetime import date, datetime
+from tenacity import retry, retry_if_exception_type, wait_exponential, stop_after_attempt
 
 logger = logging.getLogger(__name__)
 _agent_logger = ApaleoAgentLogger()
+
+
+class ApaleoSyncError(Exception):
+    """Raised when the Apaleo API returns an error response during sync."""
+
 
 class ApaleoPMSAdapter(PMSAdapter):
     """
     Adapter for the Apaleo PMS API.
     Implementation of Story 2.1 (Establish PMS API Connection & Auth).
     """
-    
+
     def __init__(self, client_id: Optional[str] = None, client_secret: Optional[str] = None):
         self.api_base_url = "https://api.apaleo.com"
         self.client_id = client_id or os.getenv("APALEO_CLIENT_ID")
@@ -27,46 +33,44 @@ class ApaleoPMSAdapter(PMSAdapter):
         self.access_token: Optional[str] = None
         self.token_expiry: float = 0
 
+    @retry(
+        retry=retry_if_exception_type(httpx.HTTPStatusError),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        stop=stop_after_attempt(3),
+    )
     async def _authenticate(self):
-        """Fetch/Refresh OAuth2 token for Apaleo."""
+        """Fetch/Refresh OAuth2 token for Apaleo (retries up to 3x on HTTPStatusError)."""
         # Check if token is still valid (with 60s buffer)
         if self.access_token and time.time() < self.token_expiry - 60:
             return
 
         if not self.client_id or not self.client_secret:
             raise ValueError("Apaleo credentials missing in environment.")
-        
+
         token_url = "https://identity.apaleo.com/connect/token"
-        
+
         async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    token_url,
-                    data={
-                        "grant_type": "client_credentials",
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                        "scope": "offline_access openid profile read:occupancy read:revenue write:schedules"
-                    }
-                )
-                
-                if response.status_code == 200:
-                    token_data = response.json()
-                    self.access_token = token_data.get("access_token")
-                    expires_in = token_data.get("expires_in", 3600)
-                    self.token_expiry = time.time() + expires_in
-                    logger.info("Successfully authenticated with Apaleo")
-                else:
-                    logger.error(f"Apaleo Auth Error: {response.text}")
-                    raise Exception(f"Failed to authenticate with Apaleo: {response.status_code}")
-                    
-            except Exception as e:
-                logger.error(f"Apaleo Auth Exception: {str(e)}")
-                raise
+            response = await client.post(
+                token_url,
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "scope": "offline_access openid profile read:occupancy read:revenue write:schedules"
+                }
+            )
+            response.raise_for_status()
+
+        token_data = response.json()
+        self.access_token = token_data.get("access_token")
+        expires_in = token_data.get("expires_in", 3600)
+        self.token_expiry = time.time() + expires_in
+        logger.info("Successfully authenticated with Apaleo")
 
     async def get_occupancy(self, property_id: str, target_date: date) -> int:
         """
         Fetches occupancy metrics for a given date.
+        Raises ApaleoSyncError on non-200 responses.
         """
         if not self.access_token:
             await self._authenticate()
@@ -88,19 +92,21 @@ class ApaleoPMSAdapter(PMSAdapter):
                                       result_summary=str(result))
                     return result
                 else:
-                    logger.warning(f"Apaleo Occupancy fetch failed ({response.status_code}).")
                     _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
                                       error=f"HTTP {response.status_code}")
-                    return 85
+                    raise ApaleoSyncError(f"HTTP {response.status_code}")
+        except ApaleoSyncError:
+            raise
         except Exception as e:
             duration_ms = (time.monotonic() - t0) * 1000
             logger.error(f"Apaleo API error: {str(e)}")
             _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(e))
-            return 80
+            raise
 
     async def get_revenue(self, property_id: str, target_date: date, category: str = "Total") -> float:
         """
         Fetches revenue metrics.
+        Raises ApaleoSyncError on non-200 responses.
         """
         if not self.access_token:
             await self._authenticate()
@@ -130,22 +136,24 @@ class ApaleoPMSAdapter(PMSAdapter):
                     return result
                 _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
                                   error=f"HTTP {response.status_code}")
-                return 0.0
+                raise ApaleoSyncError(f"HTTP {response.status_code}")
+        except ApaleoSyncError:
+            raise
         except Exception as e:
             duration_ms = (time.monotonic() - t0) * 1000
             _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(e))
-            return 0.0
+            raise
 
     async def get_historical_data(self, property_id: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         """
-        Fetches bulk historical data from Apaleo Stay API.
-        Implementation for Story 2.2.
+        Fetches bulk historical data from Apaleo Stay API with full pagination.
+        Raises ApaleoSyncError on non-200 responses.
         """
         if not self.access_token:
             await self._authenticate()
 
         tool = "REST_GET_HISTORICAL_DATA"
-        params = {
+        base_params = {
             "from": start_date.isoformat(),
             "to": end_date.isoformat(),
             "propertyId": property_id,
@@ -153,25 +161,52 @@ class ApaleoPMSAdapter(PMSAdapter):
         url = f"{self.api_base_url}/reports/v1/stay-records"
         headers = {"Authorization": f"Bearer {self.access_token}"}
         t0 = time.monotonic()
+        all_records: List[Dict[str, Any]] = []
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, headers=headers)
-                duration_ms = (time.monotonic() - t0) * 1000
-                if response.status_code == 200:
+                params = dict(base_params)
+                while True:
+                    response = await client.get(url, params=params, headers=headers)
+                    if response.status_code != 200:
+                        duration_ms = (time.monotonic() - t0) * 1000
+                        logger.warning(f"Failed to fetch historical data: {response.status_code}")
+                        _agent_logger.log(tool, base_params, mode="read", duration_ms=duration_ms,
+                                          error=f"HTTP {response.status_code}")
+                        raise ApaleoSyncError(f"HTTP {response.status_code}")
+
                     data = response.json()
-                    _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
-                                      result_summary=f"{len(data)} records")
-                    return data
-                logger.warning(f"Failed to fetch historical data: {response.status_code}")
-                _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
-                                  error=f"HTTP {response.status_code}")
-                return []
+                    # Support both list response (legacy) and paginated object response
+                    if isinstance(data, list):
+                        all_records.extend(data)
+                        break
+                    else:
+                        page_records = data.get("stayRecords", [])
+                        all_records.extend(page_records)
+                        page_info = data.get("pageInfo", {})
+                        if not page_info.get("hasNext", False):
+                            break
+                        next_token = page_info.get("nextPageToken")
+                        if not next_token:
+                            break
+                        params = {**base_params, "pageToken": next_token}
+
+            duration_ms = (time.monotonic() - t0) * 1000
+            logger.info(
+                "Apaleo historical data: fetched %d total records for %s (%s→%s)",
+                len(all_records), property_id, start_date, end_date,
+            )
+            _agent_logger.log(tool, base_params, mode="read", duration_ms=duration_ms,
+                              result_summary=f"{len(all_records)} records")
+            return all_records
+
+        except ApaleoSyncError:
+            raise
         except Exception as e:
             duration_ms = (time.monotonic() - t0) * 1000
             logger.error(f"Apaleo Historical fetch error: {str(e)}")
-            _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(e))
-            return []
+            _agent_logger.log(tool, base_params, mode="read", duration_ms=duration_ms, error=str(e))
+            raise
 
     async def update_staffing_in_pms(self, property_id: str, target_date: date, staffing_deltas: Dict[str, int]) -> bool:
         """

@@ -193,7 +193,6 @@ class TestApaleoMCPClientWriteGuard:
     def configured_client(self) -> ApaleoMCPClient:
         return ApaleoMCPClient(
             server_url="https://mcp.example.com",
-            auth_mode="bearer",
             client_id="id",
             client_secret="secret",
         )
@@ -263,7 +262,7 @@ class TestApaleoMCPClientWriteGuard:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("APALEO_READONLY", "true")
-        client = ApaleoMCPClient(server_url="", auth_mode="bearer")
+        client = ApaleoMCPClient(server_url="")
         with pytest.raises(RuntimeError, match="not configured"):
             await client.call_tool("APALEO_UPDATE_SCHEDULE", {})
 
