@@ -169,7 +169,6 @@ class RecommendationFormatterService:
             if did_create:
                 created += 1
 
-        await db.commit()
         logger.info(
             "recommendation_formatter: created %d recommendations for "
             "property %s",
@@ -216,7 +215,6 @@ class RecommendationFormatterService:
             if did_create:
                 created += 1
 
-        await db.commit()
         logger.info(
             "recommendation_formatter: full scan complete — %d recommendations created",
             created,
@@ -261,20 +259,10 @@ class RecommendationFormatterService:
             )
             return False
 
-        # Idempotency check: skip if recommendation already exists
-        existing = await db.execute(
-            text(
-                "SELECT id FROM staffing_recommendations WHERE anomaly_id = :anomaly_id LIMIT 1"
-            ),
-            {"anomaly_id": str(anomaly_id)},
-        )
-        if existing.fetchone():
-            logger.debug(
-                "recommendation_formatter: recommendation already exists for "
-                "anomaly %s — skipping",
-                anomaly_id,
-            )
-            return False
+        # Idempotency guard: if recommendation already exists AND the anomaly has
+        # already transitioned beyond roi_positive, there is nothing to do.
+        # (Crash-recovery case: anomaly still roi_positive + recommendation exists →
+        #  fall through so ON CONFLICT DO UPDATE self-heals the anomaly transition.)
 
         # Derive values
         # triggering_factors may be a Python list (asyncpg) or a JSON string
@@ -312,53 +300,60 @@ class RecommendationFormatterService:
         rec_id = str(uuid.uuid4())
         now = datetime.now(tz=timezone.utc)
 
-        # Insert recommendation
-        await db.execute(
-            text(
-                """
-                INSERT INTO staffing_recommendations
-                    (id, tenant_id, property_id, anomaly_id,
-                     message_text, triggering_factor, recommended_headcount,
-                     window_start, window_end,
-                     roi_net, roi_labor_cost,
-                     status, created_at, updated_at)
-                VALUES
-                    (:id, :tenant_id, :property_id, :anomaly_id,
-                     :message_text, :triggering_factor, :recommended_headcount,
-                     :window_start, :window_end,
-                     :roi_net, :roi_labor_cost,
-                     'ready_to_push', :now, :now)
-                ON CONFLICT (anomaly_id) DO NOTHING
-                """
-            ),
-            {
-                "id": rec_id,
-                "tenant_id": str(tenant_id),
-                "property_id": str(property_id),
-                "anomaly_id": str(anomaly_id),
-                "message_text": message,
-                "triggering_factor": factor,
-                "recommended_headcount": headcount,
-                "window_start": ws.isoformat(),
-                "window_end": we.isoformat(),
-                "roi_net": roi_net_f,
-                "roi_labor_cost": labor_cost_f,
-                "now": now.isoformat(),
-            },
-        )
+        # Atomically INSERT recommendation + UPDATE anomaly status in one transaction.
+        # ON CONFLICT DO UPDATE ensures crash-recovery self-healing: if the recommendation
+        # already exists (crash after INSERT, before UPDATE on previous run) the status is
+        # reset to 'ready_to_push' and the anomaly UPDATE runs again in the same txn.
+        async with db.begin_nested():
+            await db.execute(
+                text(
+                    """
+                    INSERT INTO staffing_recommendations
+                        (id, tenant_id, property_id, anomaly_id,
+                         message_text, triggering_factor, recommended_headcount,
+                         window_start, window_end,
+                         roi_net, roi_labor_cost,
+                         status, created_at, updated_at)
+                    VALUES
+                        (:id, :tenant_id, :property_id, :anomaly_id,
+                         :message_text, :triggering_factor, :recommended_headcount,
+                         :window_start, :window_end,
+                         :roi_net, :roi_labor_cost,
+                         'ready_to_push', :now, :now)
+                    ON CONFLICT (anomaly_id) DO UPDATE SET
+                        status = 'ready_to_push',
+                        message_text = EXCLUDED.message_text,
+                        updated_at = EXCLUDED.updated_at
+                    """
+                ),
+                {
+                    "id": rec_id,
+                    "tenant_id": str(tenant_id),
+                    "property_id": str(property_id),
+                    "anomaly_id": str(anomaly_id),
+                    "message_text": message,
+                    "triggering_factor": factor,
+                    "recommended_headcount": headcount,
+                    "window_start": ws.isoformat(),
+                    "window_end": we.isoformat(),
+                    "roi_net": roi_net_f,
+                    "roi_labor_cost": labor_cost_f,
+                    "now": now.isoformat(),
+                },
+            )
 
-        # Transition anomaly status: roi_positive → ready_to_push (AC #5)
-        await db.execute(
-            text(
-                """
-                UPDATE demand_anomalies
-                SET status = 'ready_to_push',
-                    recommendation_text = :message_text
-                WHERE id = :anomaly_id
-                """
-            ),
-            {"message_text": message, "anomaly_id": str(anomaly_id)},
-        )
+            # Transition anomaly status: roi_positive → ready_to_push (AC #5)
+            await db.execute(
+                text(
+                    """
+                    UPDATE demand_anomalies
+                    SET status = 'ready_to_push',
+                        recommendation_text = :message_text
+                    WHERE id = :anomaly_id
+                    """
+                ),
+                {"message_text": message, "anomaly_id": str(anomaly_id)},
+            )
 
         logger.info(
             "recommendation_formatter: formatted recommendation for anomaly %s "

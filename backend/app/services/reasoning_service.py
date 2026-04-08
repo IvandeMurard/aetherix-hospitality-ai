@@ -25,10 +25,14 @@ class ReasoningService:
         service_type: str,
         context: Dict,
         similar_patterns: List[Dict],
-        cognitive_context: Optional[str] = None
+        cognitive_context: Optional[str] = None,
+        is_mock: bool = False,
     ) -> Dict:
         """Calls the LLM provider to explain the prediction rationale."""
-        prompt = self._build_prompt(predicted_covers, confidence, target_date, service_type, context, similar_patterns, cognitive_context)
+        prompt = self._build_prompt(
+            predicted_covers, confidence, target_date, service_type, context,
+            similar_patterns, cognitive_context, is_mock=is_mock,
+        )
 
         try:
             explanation = await self._llm.complete(
@@ -62,7 +66,7 @@ class ReasoningService:
                 "fallback_reason": str(e),
             }
 
-    def _build_prompt(self, predicted, confidence, dt, svc, context, patterns, cognitive_context) -> str:
+    def _build_prompt(self, predicted, confidence, dt, svc, context, patterns, cognitive_context, is_mock: bool = False) -> str:
         patterns_text = ""
         for p in patterns:
             # Handle different pattern structures (Qdrant payload vs mock)
@@ -76,8 +80,12 @@ class ReasoningService:
             patterns_text = "No similar historical patterns found."
         
         cognition_text = f"\nLEARNINGS FROM PAST INTERACTIONS:\n{cognitive_context}\n" if cognitive_context else ""
-        
-        return f"""You are an expert restaurant operations assistant. 
+        mock_warning = (
+            "\n⚠️ WARNING: The Prophet model has not been trained yet. "
+            "This prediction is a placeholder mock value and should NOT be acted upon.\n"
+        ) if is_mock else ""
+
+        return f"""You are an expert restaurant operations assistant.{mock_warning}
 Prophet (ML model) predicted {predicted} covers for {dt.strftime('%A, %B %d')} ({svc}) with {int(confidence*100)}% confidence.
 
 SIMILAR PATTERNS:
