@@ -22,9 +22,11 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional, Tuple
 
+import sqlalchemy.exc
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import AnomalyDetectionError
 from app.db.models import DemandAnomaly, LocalEvent, WeatherForecast
 from app.services.demand_modifiers import event_modifier, weather_modifier
 
@@ -186,8 +188,35 @@ class AnomalyDetectionService:
             return []
 
         # 7. Bulk upsert — idempotent via ON CONFLICT (AC 7)
-        upserted = await self._bulk_upsert(db, anomalies_to_upsert)
-        return upserted
+        upserted_ids = await self._bulk_upsert(db, anomalies_to_upsert)
+
+        # Return ORM instances without an extra round-trip: reconstruct from the
+        # already-computed data (R3 — fix return type List[str] → List[DemandAnomaly]).
+        # On conflict the RETURNING clause gives the existing row's ID which may differ
+        # from anomalies_to_upsert[i]["id"]; fall back to a bare instance with id only.
+        if not upserted_ids:
+            return []
+        id_to_data = {a["id"]: a for a in anomalies_to_upsert}
+        orm_result: List[DemandAnomaly] = []
+        for uid in upserted_ids:
+            data = id_to_data.get(uid)
+            da = DemandAnomaly()
+            if data:
+                da.id = data["id"]
+                da.tenant_id = data["tenant_id"]
+                da.property_id = data["property_id"]
+                da.window_start = data["window_start"]
+                da.window_end = data["window_end"]
+                da.expected_demand = data["expected_demand"]
+                da.baseline_demand = data["baseline_demand"]
+                da.deviation_pct = data["deviation_pct"]
+                da.direction = data["direction"]
+                da.triggering_factors = data["triggering_factors"]
+                da.status = data["status"]
+            else:
+                da.id = uid  # existing row ID from conflict resolution
+            orm_result.append(da)
+        return orm_result
 
     # ------------------------------------------------------------------
     # Full cross-tenant scan (NFR5)
@@ -212,7 +241,7 @@ class AnomalyDetectionService:
                 )
             )
             properties = result.fetchall()
-        except Exception:
+        except sqlalchemy.exc.SQLAlchemyError:
             logger.exception("Failed to fetch active properties for anomaly scan")
             return
 
@@ -239,8 +268,14 @@ class AnomalyDetectionService:
                 error_count,
                 len(tasks),
             )
-        for exc in results:
-            if isinstance(exc, Exception):
+        for i, exc in enumerate(results):
+            if isinstance(exc, AnomalyDetectionError):
+                logger.error(
+                    "anomaly_scan: AnomalyDetectionError for property %s — skipping: %s",
+                    properties[i][0] if i < len(properties) else "unknown",
+                    exc,
+                )
+            elif isinstance(exc, Exception):
                 logger.error("anomaly_scan property error: %s", exc)
 
         if elapsed > 4.5:
@@ -297,11 +332,19 @@ class AnomalyDetectionService:
             row = result.fetchone()
             if row and row[0] is not None:
                 return Decimal(str(row[0]))
-        except Exception:
-            # Table may not exist in test environments; log and fall back
+        except sqlalchemy.exc.ProgrammingError:
+            # Table does not exist (dev/test environment) — use fallback silently
             logger.debug(
-                "captation_rates lookup failed for property %s — using fallback",
+                "captation_rates table not found for property %s — using fallback",
                 property_id,
+            )
+        except sqlalchemy.exc.SQLAlchemyError:
+            logger.error(
+                "captation_rates lookup failed for property %s — DB error, raising",
+                property_id,
+            )
+            raise AnomalyDetectionError(
+                f"DB error during baseline lookup for property {property_id}"
             )
 
         return Decimal("1000.00")
@@ -338,7 +381,7 @@ class AnomalyDetectionService:
                 wf.id = row[0]
                 wf.condition_code = row[1]
                 return wf
-        except Exception:
+        except sqlalchemy.exc.SQLAlchemyError:
             logger.debug(
                 "weather_forecasts lookup failed for property %s", property_id
             )
@@ -380,7 +423,7 @@ class AnomalyDetectionService:
                 e.impact_score = row[3]
                 events.append(e)
             return events
-        except Exception:
+        except sqlalchemy.exc.SQLAlchemyError:
             logger.debug(
                 "local_events lookup failed for property %s", property_id
             )
@@ -390,11 +433,14 @@ class AnomalyDetectionService:
         self,
         db: AsyncSession,
         anomalies: List[dict],
-    ) -> List[DemandAnomaly]:
+    ) -> List[str]:
         """Bulk upsert anomalies using INSERT ... ON CONFLICT DO UPDATE.
 
         Idempotent: duplicate (tenant_id, property_id, window_start) rows are
         updated in place rather than inserted again (AC 7).
+
+        Returns:
+            List of UUID strings for the upserted rows (from RETURNING id).
         """
         import json
 

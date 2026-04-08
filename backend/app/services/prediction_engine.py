@@ -16,21 +16,24 @@ class PredictionResult:
         lower: int,
         upper: int,
         confidence: float,
-        date: str
+        date: str,
+        is_mock: bool = False,
     ):
         self.predicted = predicted
         self.lower = lower
         self.upper = upper
         self.confidence = confidence
         self.date = date
-    
+        self.is_mock = is_mock
+
     def to_dict(self) -> dict:
         return {
             "predicted_covers": self.predicted,
             "range_min": self.lower,
             "range_max": self.upper,
             "confidence": self.confidence,
-            "date": self.date
+            "date": self.date,
+            "is_mock": self.is_mock,
         }
 
 class PredictionEngine:
@@ -93,7 +96,8 @@ class PredictionEngine:
                 lower=38,
                 upper=52,
                 confidence=0.85,
-                date=target_date.isoformat()
+                date=target_date.isoformat(),
+                is_mock=True,
             )
         
         date_str = target_date.isoformat()
