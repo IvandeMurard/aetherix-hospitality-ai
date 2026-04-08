@@ -151,42 +151,17 @@ class ApaleoMCPClient:
         from mcp.client.streamable_http import streamablehttp_client  # noqa: PLC0415
 
         token = await self._get_token()
-
-        async with streamablehttp_client(
-            self.server_url,
-            headers={"Authorization": f"Bearer {token}"},
-        ) as (read_stream, write_stream, _):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                logger.debug("Calling Apaleo MCP tool %r with args %r", tool_name, arguments)
-                result = await session.call_tool(tool_name, arguments)
-
-        if result.content and result.content[0].type == "text":
-            raw = result.content[0].text
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                return raw
-
-        return result
-        headers = await self._auth_headers()
         mode = "write" if write else "read"
         t0 = time.monotonic()
 
         try:
-            async with streamablehttp_client(self.server_url, headers=headers) as (
-                read_stream,
-                write_stream,
-                _,
-            ):
+            async with streamablehttp_client(
+                self.server_url,
+                headers={"Authorization": f"Bearer {token}"},
+            ) as (read_stream, write_stream, _):
                 async with ClientSession(read_stream, write_stream) as session:
                     await session.initialize()
-                    logger.debug(
-                        "ApaleoMCPClient (%s) calling %r with %r",
-                        self.auth_mode,
-                        tool_name,
-                        arguments,
-                    )
+                    logger.debug("Calling Apaleo MCP tool %r with args %r", tool_name, arguments)
                     result = await session.call_tool(tool_name, arguments)
 
             duration_ms = (time.monotonic() - t0) * 1000
