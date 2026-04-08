@@ -40,6 +40,7 @@ class PredictResponse(BaseModel):
     confidence: float
     range_min: int
     range_max: int
+    is_mock: bool
     reasoning_summary: str
     confidence_factors: list
     claude_used: bool
@@ -123,6 +124,7 @@ async def predict(body: PredictRequest):
         confidence=pred.get("confidence", 0.0),
         range_min=pred.get("interval", [pred.get("covers", 0), pred.get("covers", 0)])[0],
         range_max=pred.get("interval", [pred.get("covers", 0), pred.get("covers", 0)])[1],
+        is_mock=pred.get("is_mock", False),
         reasoning_summary=summary,
         confidence_factors=confidence_factors,
         claude_used=claude_used,
