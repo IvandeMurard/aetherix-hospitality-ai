@@ -6,33 +6,69 @@ Architecture constraints:
 - OpenAPI schema is served at /api/openapi.json for the typed client generator.
 [Source: architecture.md#Process-Patterns, architecture.md#Architectural-Boundaries]
 """
+from __future__ import annotations
+
 import logging
+from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.error_handlers import problem_details_handler
-from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports
-from app.api.routes import anomalies, notifications
+from app.api.routes import (
+    anomalies,
+    auth,
+    baselines,
+    dashboard,
+    events,
+    notifications,
+    pms,
+    predictions,
+    reports,
+    webhooks,
+    weather,
+)
 from app.api.routes import webhook as twilio_inbound_webhook
+from app.core.error_handlers import problem_details_handler
 from app.db.models import Base
 from app.db.session import engine
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
+from app.workers.event_sync import start_event_scheduler, stop_event_scheduler
+from app.workers.weather_sync import start_weather_scheduler, stop_weather_scheduler
 
 logger = logging.getLogger(__name__)
-from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather
-from app.db.models import Base
-from app.db.session import engine
-from app.workers.weather_sync import create_weather_scheduler
 
-_weather_scheduler = create_weather_scheduler()
-from app.api.routes import pms, webhooks, auth, dashboard, predictions, reports, weather, baselines, events
-from app.db.models import Base
-from app.db.session import engine
-from app.workers.weather_sync import start_weather_scheduler, stop_weather_scheduler
-from app.workers.event_sync import start_event_scheduler, stop_event_scheduler
+# APScheduler instance — shared across all registered cron jobs
+_scheduler = AsyncIOScheduler()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --------------- startup ---------------
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Register and start background cron jobs (anomaly scan + alert dispatch)
+    register_anomaly_scan_job(_scheduler)
+    register_dispatch_job(_scheduler)  # Story 4.2: dispatch alerts every 2 minutes
+    _scheduler.start()
+    logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
+
+    # Start periodic sync schedulers (weather + events)
+    start_weather_scheduler()
+    start_event_scheduler()
+
+    yield
+
+    # --------------- shutdown ---------------
+    stop_weather_scheduler()
+    stop_event_scheduler()
+
+    if _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        logger.info("APScheduler stopped")
+
 
 app = FastAPI(
     title="Aetherix API",
@@ -42,47 +78,21 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-# ... (middleware and exception handlers)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Tighten to specific origins via env var before production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_exception_handler(HTTPException, problem_details_handler)
 
-# APScheduler instance — shared across all registered cron jobs
-_scheduler = AsyncIOScheduler()
-
-
-@app.on_event("startup")
-async def on_startup():
-    async with engine.begin() as conn:
-        # Create tables
-        await conn.run_sync(Base.metadata.create_all)
-    # Start 12h weather sync scheduler
-    _weather_scheduler.start()
-    start_weather_scheduler()
-    start_event_scheduler()
-
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    _weather_scheduler.shutdown(wait=False)
-    stop_weather_scheduler()
-    stop_event_scheduler()
-
-    # Register background cron jobs
-    register_anomaly_scan_job(_scheduler)
-    register_dispatch_job(_scheduler)  # Story 4.2: dispatch alerts every 2 minutes
-    _scheduler.start()
-    logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
-
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    if _scheduler.running:
-        _scheduler.shutdown(wait=False)
-        logger.info("APScheduler stopped")
-
-
-# Include routers
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
 app.include_router(pms.router, prefix="/api/v1")
 app.include_router(predictions.router, prefix="/api/v1")
 app.include_router(webhooks.router, prefix="/api/v1")
@@ -91,11 +101,11 @@ app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(anomalies.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
-# Story 4.3 (HOS-26): public Twilio callback — no /api/v1 or auth prefix
-app.include_router(twilio_inbound_webhook.router)
 app.include_router(weather.router, prefix="/api/v1")
 app.include_router(baselines.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
+# Story 4.3 (HOS-26): public Twilio callback — no /api/v1 or auth prefix
+app.include_router(twilio_inbound_webhook.router)
 
 
 # ---------------------------------------------------------------------------

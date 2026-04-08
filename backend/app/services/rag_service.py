@@ -4,6 +4,12 @@ RAG Service — pgvector retrieval layer (HOS-99).
 Replaces the old Qdrant + Mistral stack with a single SQL query against
 the `fb_patterns` table in Supabase (PostgreSQL + pgvector extension).
 
+A single SQL query with the pgvector cosine-distance operator (<=>)
+replaces the two-hop Qdrant → embedding round-trip, keeping p95 latency
+well within the 500 ms MCP target.
+"""
+from __future__ import annotations
+
 Embedding generation is delegated to an injected ``EmbeddingProvider``.
 Zero-vector fallback is preserved via ``MistralEmbeddingProvider`` when no
 API key is configured (dev mode).
@@ -34,7 +40,7 @@ import asyncio
 import logging
 import os
 from datetime import date
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from mistralai import Mistral
 from sqlalchemy import text
@@ -43,13 +49,11 @@ from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
+# Dimension must match the vector(1024) column in fb_patterns.
+_EMBEDDING_DIM = 1024
+
 
 class RAGService:
-    """
-    Retrieves similar F&B patterns from the `fb_patterns` pgvector table.
-
-    Accepts an injected AsyncSession so callers control the DB transaction.
-    Falls back gracefully when no DB session is provided (returns empty list).
     """
 
     def __init__(
@@ -65,10 +69,10 @@ class RAGService:
     # ------------------------------------------------------------------
     RAG Service for pattern retrieval from pgvector (Supabase).
 
-    Replaces the previous Qdrant-based implementation. A single SQL query
-    with the pgvector cosine-distance operator (<=>)  replaces the two-hop
-    Qdrant → embedding round-trip, keeping p95 latency well within the
-    500 ms MCP target.
+    Retrieves similar F&B patterns from the `fb_patterns` pgvector table.
+    Falls back gracefully to a zero-vector when MISTRAL_API_KEY is absent
+    (dev/test mode) — pgvector cosine distance on zero vectors degrades to
+    unordered results rather than crashing.
     """
 
     def __init__(self) -> None:
@@ -78,7 +82,7 @@ class RAGService:
     async def get_embedding(self, text_: str) -> List[float]:
         """Return a 1024-dimensional Mistral embedding, or zeros in dev/test."""
         if not self._mistral:
-            return [0.0] * 1024
+            return [0.0] * _EMBEDDING_DIM
         response = await asyncio.to_thread(
             self._mistral.embeddings.create,
             model="mistral-embed",
