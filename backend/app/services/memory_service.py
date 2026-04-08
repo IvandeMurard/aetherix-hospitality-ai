@@ -42,6 +42,12 @@ from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.providers.base import EmbeddingProvider
+from app.providers.factory import get_embedding_provider
+
 
 # ---------------------------------------------------------------------------
 # MemoryProvider protocol — the stable interface both layers must implement
@@ -100,6 +106,13 @@ class MemoryService:
         mistral_key = os.getenv("MISTRAL_API_KEY")
         self._mistral = Mistral(api_key=mistral_key) if mistral_key else None
 
+    def __init__(
+        self,
+        db: Optional[AsyncSession] = None,
+        embedding: EmbeddingProvider | None = None,
+    ) -> None:
+        self._db = db
+        self._embedding: EmbeddingProvider = embedding or get_embedding_provider()
     async def _get_embedding(self, text_: str) -> List[float]:
         """Return a 1024-dimensional Mistral embedding, or zeros in dev/test."""
         if not self._mistral:
@@ -127,6 +140,41 @@ class MemoryService:
         outcome: Optional[str] = None,
         tags: Optional[List[str]] = None,
         session_id: Optional[str] = None,
+    ) -> None:
+        """
+        Persists an operational insight or manager feedback into operational_memory.
+
+        Accepts either:
+          - seed script:    store_reflection(tenant_id, reflection="...", tags=[...])
+          - feedback loop:  store_reflection(tenant_id, context="...", outcome="...")
+        """
+        if self._db is None:
+            return
+
+        content = reflection if reflection else f"Context: {context} | Outcome: {outcome}"
+        embedding = await self._embedding.embed(content)
+
+        await self._db.execute(
+            text(
+                """
+                INSERT INTO operational_memory
+                  (id, hotel_id, session_id, content, outcome, tags, embedding, created_at)
+                VALUES
+                  (:id, :hotel_id, :session_id, :content, :outcome, :tags,
+                   CAST(:embedding AS vector), NOW())
+                """
+            ),
+            {
+                "id": str(_uuid.uuid4()),
+                "hotel_id": tenant_id,
+                "session_id": session_id,
+                "content": content,
+                "outcome": outcome,
+                "tags": json.dumps(tags or []),
+                "embedding": str(embedding),
+            },
+        )
+        await self._db.commit()
         manager_feedback: Optional[str] = None,
     ) -> None:
         """
@@ -165,6 +213,47 @@ class MemoryService:
 
     async def get_relevant_context(self, tenant_id: str, current_query: str) -> str:
         """
+        Retrieves the top-3 most relevant memories for *current_query* via
+        pgvector cosine similarity, filtered to *tenant_id*.
+
+        Returns a newline-separated string of memory content (same surface as
+        the old Backboard response).
+        """
+        if self._db is None:
+            return ""
+
+        embedding = await self._embedding.embed(current_query)
+
+        try:
+            result = await self._db.execute(
+                text(
+                    """
+                    SELECT content, outcome,
+                           embedding <=> CAST(:embedding AS vector) AS similarity
+                    FROM operational_memory
+                    WHERE hotel_id = :hotel_id
+                    ORDER BY similarity ASC
+                    LIMIT 3
+                    """
+                ),
+                {"hotel_id": tenant_id, "embedding": str(embedding)},
+            )
+            rows = result.mappings().all()
+        except Exception as exc:
+            if "no such function" in str(exc).lower() or "operator" in str(exc).lower() \
+                    or "syntax error" in str(exc).lower():
+                # SQLite fallback — return most-recent memories
+                logger.debug("pgvector unavailable (SQLite?), using fallback: %s", exc)
+                rows = await self._fallback_select(tenant_id)
+            else:
+                logger.error("MemoryService.get_relevant_context error: %s", exc)
+                return ""
+
+        parts = []
+        for row in rows:
+            parts.append(row["content"])
+            if row.get("outcome"):
+                parts.append(f"  → {row['outcome']}")
         Retrieve relevant historical context for a given query using
         pgvector semantic similarity search.
 
