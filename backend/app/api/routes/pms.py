@@ -1,17 +1,35 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Depends
-from datetime import date
-from typing import Optional, Dict, Any
-from app.services.pms_sync import PMSSyncService, MockPMSAdapter
-from app.services.apaleo_adapter import ApaleoPMSAdapter
-from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
-from app.core.security import get_current_user
-from app.db.session import get_db
-from app.db.models import RestaurantProfile
-from sqlalchemy.future import select
-from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 import os
+from datetime import date
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+
+from app.core.security import get_current_user
+from app.db.models import RestaurantProfile
+from app.db.session import get_db
+from app.services.apaleo_adapter import ApaleoSyncError, ApaleoPMSAdapter
+from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
+from app.services.pms_sync import MockPMSAdapter, PMSSyncService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pms", tags=["pms"])
+
+
+async def _sync_task(service: PMSSyncService, property_id: str, sync_date: date) -> None:
+    """Background task wrapper that catches ApaleoSyncError and logs without DB write."""
+    try:
+        await service.sync_daily_data(property_id, sync_date)
+    except ApaleoSyncError as exc:
+        logger.error(
+            "PMS sync failed for property %s on %s — Apaleo error: %s",
+            property_id,
+            sync_date,
+            exc,
+        )
 
 @router.get("/status")
 async def get_pms_status(
@@ -77,7 +95,7 @@ async def trigger_pms_sync(
     service = PMSSyncService(adapter)
 
     # Run sync in background (includes DB persistence)
-    background_tasks.add_task(service.sync_daily_data, property_id, sync_date)
+    background_tasks.add_task(_sync_task, service, property_id, sync_date)
 
     return {
         "message": "PMS sync triggered successfully in background",
