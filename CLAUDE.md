@@ -45,6 +45,7 @@
 | 7 | Apaleo read-only Phase 0 | Pas d'écriture sur réservations tant que l'outil n'est pas mature. Loguer toutes les actions agent |
 | 8 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement |
 | 9 | Multi-LLM via `LLMProvider` abstrait | Swap Claude → Gemini → GPT sans réécriture. Claude reste provider principal |
+| 10 | Provider singleton via `lifespan` FastAPI | `LLMProvider` + `EmbeddingProvider` instanciés une fois au démarrage, stockés dans `app.state`. Factory = construction uniquement. Providers closés proprement (`aclose()`) au shutdown. Détail → `docs/bmad/_bmad-output/planning-artifacts/architecture.md` |
 
 ---
 
@@ -97,6 +98,7 @@ Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026
 ## Fichiers clés
 
 ```
+backend/app/providers/         — abstraction LLM + Embedding (Epic 0) — [À créer]
 backend/app/services/          — orchestration IA et logique métier
 backend/app/integrations/      — Obsidian, Linear, Apaleo
 backend/app/mcp_server.py      — [À créer] MCP Server capabilities
@@ -126,6 +128,10 @@ SUPABASE_URL          — PostgreSQL + pgvector
 SUPABASE_KEY          — Anon key
 DATABASE_URL          — asyncpg DSN (postgresql+asyncpg://...)
 MISTRAL_API_KEY       — Embeddings 1024d (mistral-embed)
+LLM_BACKEND           — "claude" (défaut) | "gemini" | "openai"
+LLM_MODEL             — "claude-sonnet-4-6" (défaut)
+EMBEDDING_BACKEND     — "mistral" (défaut) | "openai"
+EMBEDDING_MODEL       — "mistral-embed" (défaut)
 REDIS_URL             — Upstash (session state)
 ```
 
