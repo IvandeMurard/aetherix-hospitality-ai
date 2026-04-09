@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from datetime import date
 from typing import Any, Dict, Optional
 
@@ -7,9 +8,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
 from app.core.security import get_current_user
 from app.db.models import RestaurantProfile
 from app.db.session import get_db
+from app.integrations.apaleo_mcp_client import ApaleoMCPClient
 from app.services.apaleo_adapter import ApaleoSyncError, ApaleoPMSAdapter
 from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
 from app.services.pms_sync import MockPMSAdapter, PMSSyncService
@@ -30,6 +35,73 @@ async def _sync_task(service: PMSSyncService, property_id: str, sync_date: date)
             sync_date,
             exc,
         )
+
+@router.get("/mcp/probe")
+async def probe_mcp_connection(
+    current_user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """
+    Synchronous health-check for the Apaleo MCP connection.
+
+    Validates:
+    1. Required env vars are present (APALEO_CLIENT_ID, APALEO_CLIENT_SECRET,
+       APALEO_MCP_SERVER_URL).
+    2. OAuth2 client-credentials token can be acquired.
+    3. MCP session can be initialised (streamable-HTTP, list_tools handshake).
+
+    Returns a JSON payload with connection status and latency — no DB writes,
+    no background tasks, safe to call as a readiness probe.
+    """
+    client = ApaleoMCPClient()
+
+    if not client.is_configured:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "misconfigured",
+                "missing": [
+                    v for v in ("APALEO_CLIENT_ID", "APALEO_CLIENT_SECRET", "APALEO_MCP_SERVER_URL")
+                    if not os.getenv(v)
+                ],
+                "hint": "Set the missing env vars and restart the server.",
+            },
+        )
+
+    t0 = time.monotonic()
+    try:
+        token = await client._get_token()  # noqa: SLF001 — internal probe only
+        token_ms = round((time.monotonic() - t0) * 1000, 1)
+
+        t1 = time.monotonic()
+        async with streamablehttp_client(
+            client.server_url,
+            headers={"Authorization": f"Bearer {token}"},
+        ) as (read_stream, write_stream, _):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                tools_result = await session.list_tools()
+                tool_names = [t.name for t in (tools_result.tools or [])]
+        mcp_ms = round((time.monotonic() - t1) * 1000, 1)
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unreachable",
+                "error": str(exc),
+                "server_url": client.server_url,
+            },
+        ) from exc
+
+    return {
+        "status": "ok",
+        "server_url": client.server_url,
+        "token_latency_ms": token_ms,
+        "mcp_latency_ms": mcp_ms,
+        "tools_available": len(tool_names),
+        "tools": tool_names[:20],  # cap to avoid oversized responses
+    }
+
 
 @router.get("/status")
 async def get_pms_status(
