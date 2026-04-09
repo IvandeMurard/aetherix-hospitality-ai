@@ -25,6 +25,8 @@ import time
 from typing import Any
 
 import httpx
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
 
 from app.integrations.apaleo_logger import (
     ApaleoAgentLogger,
@@ -146,9 +148,6 @@ class ApaleoMCPClient:
                 "Apaleo is in read-only mode (Phase 0). "
                 "Set APALEO_READONLY=false to enable writes."
             )
-
-        from mcp import ClientSession  # noqa: PLC0415
-        from mcp.client.streamable_http import streamablehttp_client  # noqa: PLC0415
 
         token = await self._get_token()
         mode = "write" if write else "read"
