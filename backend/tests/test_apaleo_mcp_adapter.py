@@ -61,7 +61,7 @@ class TestApaleoMCPClientIsConfigured:
 class TestApaleoMCPClientCallTool:
     async def test_raises_when_not_configured(self) -> None:
         client = ApaleoMCPClient("", "", "")
-        with pytest.raises(RuntimeError, match="credentials not configured"):
+        with pytest.raises(RuntimeError, match="not configured"):
             await client.call_tool("some_tool", {})
 
     async def test_json_response_is_parsed(self) -> None:
@@ -76,7 +76,7 @@ class TestApaleoMCPClientCallTool:
         fake_result.content = [fake_content]
 
         with (
-            patch("app.integrations.apaleo_mcp_client.ApaleoMCPClient._refresh_token",
+            patch("app.integrations.apaleo_mcp_client.ApaleoMCPClient._get_token",
                   new_callable=AsyncMock, return_value="tok"),
             patch("app.integrations.apaleo_mcp_client.streamablehttp_client") as mock_transport,
             patch("app.integrations.apaleo_mcp_client.ClientSession") as mock_session_cls,
@@ -111,7 +111,7 @@ class TestGetOccupancy:
         result = await adapter.get_occupancy("MUC", date(2026, 3, 29))
         assert result == 75
         mock_mcp_client.call_tool.assert_awaited_once_with(
-            "apaleo_get_occupancy_metrics",
+            "APALEO_GET_OCCUPANCY_METRICS",
             {"propertyId": "MUC", "date": "2026-03-29"},
         )
 
@@ -223,7 +223,7 @@ class TestUpdateStaffingInPms:
         )
         assert result is True
         mock_mcp_client.call_tool.assert_awaited_once_with(
-            "apaleo_update_schedule",
+            "APALEO_UPDATE_SCHEDULE",
             {
                 "propertyId": "MUC",
                 "date": "2026-03-29",
