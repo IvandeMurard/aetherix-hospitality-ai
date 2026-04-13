@@ -50,8 +50,7 @@ Aetherix delivers **contextual, explainable recommendations** directly via Whats
 | **Integration model** | Additive layer on top of existing tools |
 | **Feedback-loop** | Self-improving idiosyncratic intelligence |
 
-****Built with real hospitality constraints in mind: high uncertainty, human decisions, and a need for trust.****
----
+Built with real hospitality constraints in mind: high uncertainty, human decisions, and a need for trust.
 
 ## Key Features & Innovation
 
