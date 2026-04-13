@@ -15,6 +15,8 @@
   <img src="https://img.shields.io/badge/License-MIT-22C55E?style=flat" alt="License MIT" />
 </p>
 
+---
+
 ## Overview
 
 **Aetherix is a proactive Agentic Layer for Hospitality Operations.**
@@ -22,6 +24,8 @@
 
 Aetherix quickly adapts to a client's IT stack, uses a proactive, UI-less "push" model, and delivers the right insights at the right time.
 It synthesizes internal context and property data (occupancy, capture rate, bookings, PMS, POS, ...) with external context (events, weather, social media reputation) using a semantic layer.
+
+---
 
 ### Why Aetherix exists
 
@@ -31,6 +35,8 @@ Aetherix delivers **contextual, explainable recommendations** directly via Whats
 **Key insight:** The agent models each property's historical capture rate and applies contextual demand to generate recommendations that align with each property's reality.
 
 **The result:** Contextualized intelligence, helping reduce food waste (hotels waste ~25% of food produced), labor costs, and, most importantly, giving more time to managers to focus on their customers.
+
+---
 
 ### Core Value Proposition
 
@@ -55,7 +61,7 @@ Built with real hospitality constraints in mind: high uncertainty, human decisio
 
 ---
 
-## Built with the BMAD Methodology
+## Building with the BMAD Methodology
 
 Aetherix is conceived, structured, and validated using the rigorous **BMAD (Business, Market, Architecture, Design)** methodology.
 This ensures the project is not just a technical proof-of-concept, but a viable Agentic AI product.
@@ -67,6 +73,15 @@ This ensures the project is not just a technical proof-of-concept, but a viable 
 Roadmap hosted on [Linear](https://linear.app/hospitalityagent/team/HOS/all)
 ---
 
+### Current Status (April 2026)
+
+- Native Apaleo integration (OAuth + MCP-compatible read-only access)
+- End-to-end agentic pipeline: Prophet forecasting + pgvector retrieval + Backboard memory + Claude reasoning
+- Daily push recommendations (F&B covers + staffing + prep)
+- Conversational feedback loop ("Why?", "What if?", outcomes)
+- Self-improving per-hotel intelligence
+
+---
 ## Architecture & Technical Strategy
 
 The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy. The intelligence stack has four distinct layers working in sequence to produce a single actionable recommendation.
