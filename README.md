@@ -44,12 +44,13 @@ Aetherix delivers **contextual, explainable recommendations** directly via Whats
 | :--- | :--- |
 | **Push-first & UI-less** | Proactive alerts via Slack, WhatsApp, or else |
 | **Forecasting** | Contextualized ML/LLM predictions calibrated per property |
-| **Conversational Explainability** | Delivers clear and structured operational directives with risk level|
-| **Context** | Synthesized internal (PMS + capture rate) + external (weather, events, social sentiment) data |
+| **Conversational Explainability** | Delivers clear and structured operational directives|
+| **Context** | Synthesizes internal + external data |
 | **Demand modeling** | Property-specific capture rate + anonymized cross-property patterns (hive) |
 | **Integration model** | Additive layer on top of existing tools |
+| **Feedback-loop** | Self-improving idiosyncratic intelligence |
 
-Built with real hospitality constraints in mind: high uncertainty, human decisions, and a need for trust.
+****Built with real hospitality constraints in mind: high uncertainty, human decisions, and a need for trust.****
 ---
 
 ## Key Features & Innovation
