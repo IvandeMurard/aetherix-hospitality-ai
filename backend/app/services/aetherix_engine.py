@@ -28,29 +28,32 @@ class AetherixEngine:
         forecast = self.forecaster.predict(target_date, features=context.get('regressors'))
         predicted_covers = forecast.predicted
         confidence = forecast.confidence
-        
+        is_mock = forecast.is_mock
+
         # 2. RAG (Historical Patterns)
         context_query = self.rag.build_context_string(target_date, service_type, context)
         patterns = await self.rag.find_similar_patterns(context_query, service_type)
-        
+
         # 3. Memory Retrieval (Interaction History)
         memory_context = await self.memory.get_relevant_context(tenant_id, context_query)
-        
+
         # 4. Reasoning (Claude)
         reasoning = await self.reasoner.generate_explanation(
-            predicted_covers, confidence, target_date, service_type, context, patterns, memory_context
+            predicted_covers, confidence, target_date, service_type, context, patterns,
+            memory_context, is_mock=is_mock,
         )
-        
+
         # 5. Staffing Recommendation
-        staffing = self.staffer.calculate_recommendation(predicted_covers)
-        
+        staffing = await self.staffer.calculate_recommendation(predicted_covers)
+
         result = {
             "tenant_id": tenant_id,
             "date": target_date.isoformat(),
             "service_type": service_type,
             "prediction": {
                 "covers": predicted_covers,
-                "confidence": confidence
+                "confidence": confidence,
+                "is_mock": is_mock,
             },
             # reasoning["summary"] kept for backward compat (WhatsApp service etc.)
             "reasoning": reasoning["summary"],

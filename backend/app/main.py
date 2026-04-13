@@ -9,7 +9,6 @@ Architecture constraints:
 from __future__ import annotations
 
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -23,8 +22,8 @@ from app.api.routes import (
     dashboard,
     events,
     notifications,
-    predictions,
     pms,
+    predictions,
     reports,
     webhooks,
     weather,
@@ -41,15 +40,17 @@ from app.workers.weather_sync import start_weather_scheduler, stop_weather_sched
 
 logger = logging.getLogger(__name__)
 
+# APScheduler instance — shared across all registered cron jobs
+_scheduler = AsyncIOScheduler()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Startup ───────────────────────────────────────────────────────────────
+    # --------------- startup ---------------
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Shared APScheduler: anomaly scan (every 4h) + dispatch (every 2min)
-    _scheduler = AsyncIOScheduler()
+    # Register and start background cron jobs (anomaly scan + alert dispatch)
     register_anomaly_scan_job(_scheduler)
     register_dispatch_job(_scheduler)
     _scheduler.start()
@@ -60,13 +61,16 @@ async def lifespan(app: FastAPI):
     start_weather_scheduler()
     start_event_scheduler()
 
-    # Provider singletons — shared across services via app.state
-    app.state.llm = get_llm_provider()
-    app.state.embedding = get_embedding_provider()
+    # Start periodic sync schedulers (weather + events)
+    start_weather_scheduler()
+    start_event_scheduler()
 
     yield
 
-    # ── Shutdown ──────────────────────────────────────────────────────────────
+    # --------------- shutdown ---------------
+    stop_weather_scheduler()
+    stop_event_scheduler()
+
     if _scheduler.running:
         _scheduler.shutdown(wait=False)
         logger.info("APScheduler stopped")
@@ -94,7 +98,29 @@ app.add_middleware(
 )
 app.add_exception_handler(HTTPException, problem_details_handler)
 
-# Include routers
+app = FastAPI(
+    title="Aetherix API",
+    description="Aetherix F&B Operations Agent backend",
+    version="0.1.0",
+    # AC #3 & #5: OpenAPI schema at /api/openapi.json; Swagger UI at /docs
+    openapi_url="/api/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Tighten to specific origins via env var before production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_exception_handler(HTTPException, problem_details_handler)
+
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
 app.include_router(pms.router, prefix="/api/v1")
 app.include_router(predictions.router, prefix="/api/v1")
 app.include_router(webhooks.router, prefix="/api/v1")

@@ -186,7 +186,7 @@ async def test_dispatch_one_sets_dispatched_at():
 
 @pytest.mark.asyncio
 async def test_dispatch_one_not_configured_skips_gracefully():
-    """NotConfiguredError must log a warning and return False — no status change."""
+    """NotConfiguredError must log a warning, set status to config_error, and return False."""
     from app.core.exceptions import NotConfiguredError
 
     rec = _make_rec(channel="whatsapp")
@@ -200,8 +200,8 @@ async def test_dispatch_one_not_configured_skips_gracefully():
         result = await AlertDispatcherService().dispatch_one(rec, session)
 
     assert result is False
-    assert rec.status == "ready_to_push"  # status unchanged
-    session.commit.assert_not_awaited()
+    assert rec.status == "config_error"  # permanently broken config
+    session.commit.assert_awaited()
 
 
 @pytest.mark.asyncio

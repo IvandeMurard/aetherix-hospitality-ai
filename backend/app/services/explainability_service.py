@@ -41,12 +41,15 @@ _TWILIO_MSG_URL = (
 )
 
 
-async def _send_twilio_reply(to: str, body: str) -> None:
+async def _send_twilio_reply(to: str, body: str) -> bool:
     """Send a Twilio SMS/WhatsApp reply back to the manager.
 
     Normalises the ``to`` number: if the original came in as bare E.164 we
     try whatsapp-prefix first (matching the property's preferred channel).
     If TWILIO_WHATSAPP_NUMBER is not set, falls back to plain SMS From.
+
+    Returns:
+        True on successful 2xx response, False on error or misconfiguration.
     """
     account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
     auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
@@ -54,7 +57,7 @@ async def _send_twilio_reply(to: str, body: str) -> None:
 
     if not account_sid or not auth_token or not from_number:
         logger.warning("explainability_service: Twilio env vars not set — skipping send")
-        return
+        return False
 
     # Mirror the channel: if manager used whatsapp prefix, reply on whatsapp
     if not to.startswith("whatsapp:") and from_number.startswith("whatsapp:"):
@@ -74,10 +77,12 @@ async def _send_twilio_reply(to: str, body: str) -> None:
                     resp.status_code,
                     resp.text[:200],
                 )
-            else:
-                logger.info("explainability_service: reply sent to=%s", to)
+                return False
+            logger.info("explainability_service: reply sent to=%s", to)
+            return True
         except Exception as exc:
             logger.error("explainability_service: failed to send Twilio reply: %s", exc)
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -220,9 +225,15 @@ class ExplainabilityService:
                 "explainability_service: no recommendation linked to query id=%s — sending fallback",
                 query_id,
             )
-            await _send_twilio_reply(cq.from_number, _FALLBACK_REPLY)
-            cq.status = "answered"
-            await session.commit()
+            ok = await _send_twilio_reply(cq.from_number, _FALLBACK_REPLY)
+            if ok:
+                cq.status = "answered"
+                await session.commit()
+            else:
+                logger.error(
+                    "explainability_service: fallback Twilio send failed for query id=%s",
+                    query_id,
+                )
             return {"status": "sent_fallback", "query_id": str(query_id)}
 
         # ------------------------------------------------------------------
@@ -244,19 +255,25 @@ class ExplainabilityService:
         # ------------------------------------------------------------------
         # 5. Send Twilio reply
         # ------------------------------------------------------------------
-        await _send_twilio_reply(cq.from_number, explanation)
+        ok = await _send_twilio_reply(cq.from_number, explanation)
 
         # ------------------------------------------------------------------
-        # 6. Mark query as answered
+        # 6. Mark query as answered only if Twilio confirmed delivery
         # ------------------------------------------------------------------
-        cq.status = "answered"
-        await session.commit()
+        if ok:
+            cq.status = "answered"
+            await session.commit()
+            logger.info(
+                "explainability_service: answered query id=%s chars=%d",
+                query_id,
+                len(explanation),
+            )
+        else:
+            logger.error(
+                "explainability_service: Twilio send failed for query id=%s — status NOT updated",
+                query_id,
+            )
 
-        logger.info(
-            "explainability_service: answered query id=%s chars=%d",
-            query_id,
-            len(explanation),
-        )
         return {"status": "sent", "query_id": str(query_id), "chars": len(explanation)}
 
     async def _call_claude(
