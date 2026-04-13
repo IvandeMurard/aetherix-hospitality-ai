@@ -17,40 +17,48 @@
 
 ## Overview
 
-Aetherix is an Agentic AI solution designed to copilot staff and Food & Beverage forecasting for hotel and restaurant managers.
+**Aetherix is a proactive Agentic Layer for Hospitality Operations.**
+*An intelligent, push-first and UI-less copilot that helps F&B and Operations Managers in hotels make better daily staffing and demand decisions — without another dashboard.*
 
-The tool adapts to the client's IT stack, uses a proactive, UI-less "push" model, and delivers the right insights at the right time.
-It synthesizes internal context and property data (occupancy, bookings, PMS, POS, ...) with an external semantic layer, incorporating local events, weather, and reputation.
+Aetherix quickly adapts to a client's IT stack, uses a proactive, UI-less "push" model, and delivers the right insights at the right time.
+It synthesizes internal context and property data (occupancy, capture rate, bookings, PMS, POS, ...) with external context (events, weather, social media reputation) using a semantic layer.
+
+### Why Aetherix exists
+
+Hotels waste ~25% of food produced and labor costs represent 30-45% of operating expenses. F&B and Staff prediction remains a complex and repetitive process.
+Aetherix delivers **contextual, explainable recommendations** directly via WhatsApp at the right moment, learns from each property’s reality, and improves over time.
 
 **Key insight:** The agent models each property's historical capture rate and applies contextual demand to generate recommendations that align with each property's reality.
 
-The result: Contextualized intelligence, helping reduce food waste (hotels waste ~25% of food produced), labor costs, and, most importantly, giving more time to managers to focus on their customers.
+**The result:** Contextualized intelligence, helping reduce food waste (hotels waste ~25% of food produced), labor costs, and, most importantly, giving more time to managers to focus on their customers.
 
-### The Problem vs. The Aetherix Solution
+### Core Value Proposition
 
-| Feature | Traditional "Pull" | Aetherix (Proactive "Push") |
-| :--- | :--- | :--- |
-| **Data Interaction** | Requires manual login & dashboard checks | Proactive alerts via Slack, WhatsApp, or Email |
-| **Forecasting** | Guesswork based on static historical reports | Contextualized ML/LLM predictions calibrated per property |
-| **Explainability** | Leaves manager to decipher the "So What?" | Delivers clear, high-ROI operational directives with risk level + Conversational ("Why?", "What if -10% occupancy?") explainability|
-| **Context** | Siloed PMS data | Synthesized internal (PMS + capture rate) + external (weather, events) data |
-| **Demand modeling** | Occupancy rate used as proxy for covers | Property-specific capture rate × contextual modifiers |
-| **Integration model** | Full WFM platform replacement | Additive layer on top of existing tools |
+| Feature | Aetherix (Proactive "Push") |
+| :--- | :--- |
+| **Data Interaction** | Proactive alerts via Slack, WhatsApp, or Email |
+| **Forecasting** | Contextualized ML/LLM predictions calibrated per property |
+| **Explainability** | Delivers clear, high-ROI operational directives with risk level + Conversational ("Why?", "What if -10% occupancy?") explainability|
+| **Context** | Synthesized internal (PMS + capture rate) + external (weather, events) data |
+| **Demand modeling** | Property-specific capture rate × contextual modifiers |
+| **Integration model** | Additive layer on top of existing tools |
 
+Built with real hospitality constraints in mind: high uncertainty, human decisions, and a need for trust.
 ---
 
 ## Key Features & Innovation
 
-*   **Semantic Reasoning Engine:** Mathematical translation of chaotic external data (weather, events, real-time social sentiment) into specific, high-ROI operational directives (revenue opportunity vs. labor cost). Output example: *"Dinner covers +22% tonight - concert nearby + high occupancy. Recommendation: add 1 server, prep +18% portions. Risk: High if unchanged."*
-*   **Conversational Receipts (Zero-Dashboard Trust):** If a manager questions a recommendation (e.g., replies "Why?"), Aetherix responds instantly with a clear and immediately scannable breakdown with historical context. Trust is built by clearly explaining contextualised business decisions in an adapted language.
-*   **Property-Calibrated Demand Modeling:** Aetherix learns each property's real capture rate (% of in-house guests who dine on-site), not a theoretical industry ratio. A property in Paris with 10% capture behaves fundamentally differently from a mountain resort at 80%. The model adapts.
-*   **Painless Pilot & 1-Way Sync:** Designed for zero-friction integration. Aetherix requires only a read-only webhook/API key from legacy or modern PMS systems (Mews, Apaleo, etc.) to begin establishing baselines.
+*   **Semantic Reasoning Engine:** Translation of external data into specific, high-ROI operational directives (revenue opportunity vs. labor cost). 
+*   **Conversational Receipts:** If a manager questions a recommendation, Aetherix responds instantly with a clear and immediately scannable data-driven breakdown. Trust is built by clearly explaining contextualised business decisions in an adapted user language.
+*   **Property-Calibrated Demand Modeling:** Aetherix learns each property's real capture rate (% of in-house guests who dine on-site), not a theoretical industry ratio. The model adapts over time.
+*   **Painless Pilot & 1-Way Sync:** Designed for zero-friction integration. Aetherix requires only a read-only webhook/API key from legacy or modern PMS systems (Mews, Apaleo, etc.) to establish baselines.
 
 ---
 
 ## Built with the BMAD Methodology
 
-Aetherix was conceived, structured, and validated using the rigorous **BMAD (Business, Market, Architecture, Design)** methodology. This ensures the project is not just a technical proof-of-concept, but a viable SaaS product.
+Aetherix is conceived, structured, and validated using the rigorous **BMAD (Business, Market, Architecture, Design)** methodology.
+This ensures the project is not just a technical proof-of-concept, but a viable Agentic AI product.
 
 *   **Business Justification:** Clear financial ROI and metrics for success (e.g., Target MAPE < 15%, Labor Cost reduction).
 *   **Domain Compliance:** Explicit architectural decisions to handle GDPR (anonymized PII) and European Labor Laws (calculating penalty pay into recommendations).
