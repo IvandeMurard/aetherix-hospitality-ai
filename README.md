@@ -36,10 +36,10 @@ Aetherix delivers **contextual, explainable recommendations** directly via Whats
 
 | Feature | Aetherix (Proactive "Push") |
 | :--- | :--- |
-| **Data Interaction** | Proactive alerts via Slack, WhatsApp, or Email |
+| **Push-first & UI-less** | Proactive alerts via Slack, WhatsApp, or else |
 | **Forecasting** | Contextualized ML/LLM predictions calibrated per property |
-| **Explainability** | Delivers clear, high-ROI operational directives with risk level + Conversational ("Why?", "What if -10% occupancy?") explainability|
-| **Context** | Synthesized internal (PMS + capture rate) + external (weather, events) data |
+| **Conversational Explainability** | Delivers clear and structured operational directives with risk level|
+| **Context** | Synthesized internal (PMS + capture rate) + external (weather, events, social sentiment) data |
 | **Demand modeling** | Property-specific capture rate × contextual modifiers |
 | **Integration model** | Additive layer on top of existing tools |
 
