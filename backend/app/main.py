@@ -32,6 +32,7 @@ from app.api.routes import webhook as twilio_inbound_webhook
 from app.core.error_handlers import problem_details_handler
 from app.db.models import Base
 from app.db.session import engine
+from app.providers.factory import get_embedding_provider, get_llm_provider
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.event_sync import start_event_scheduler, stop_event_scheduler
@@ -51,9 +52,14 @@ async def lifespan(app: FastAPI):
 
     # Register and start background cron jobs (anomaly scan + alert dispatch)
     register_anomaly_scan_job(_scheduler)
-    register_dispatch_job(_scheduler)  # Story 4.2: dispatch alerts every 2 minutes
+    register_dispatch_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
+    app.state.scheduler = _scheduler
+
+    # Weather sync (12h cron) and event sync (daily 06:00 UTC)
+    start_weather_scheduler()
+    start_event_scheduler()
 
     # Start periodic sync schedulers (weather + events)
     start_weather_scheduler()
@@ -69,6 +75,28 @@ async def lifespan(app: FastAPI):
         _scheduler.shutdown(wait=False)
         logger.info("APScheduler stopped")
 
+    stop_weather_scheduler()
+    stop_event_scheduler()
+
+
+app = FastAPI(
+    title="Aetherix API",
+    description="Aetherix F&B Operations Agent backend",
+    version="0.1.0",
+    openapi_url="/api/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_exception_handler(HTTPException, problem_details_handler)
 
 app = FastAPI(
     title="Aetherix API",
