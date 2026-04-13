@@ -18,7 +18,7 @@
 ## Overview
 
 **Aetherix is a proactive Agentic Layer for Hospitality Operations.**
-*An intelligent, push-first and UI-less copilot that helps F&B and Operations Managers in hotels make better daily staffing and demand decisions — without another dashboard.*
+*An intelligent, push-first and UI-less copilot that helps F&B and Operations Managers in hotels make better decisions, without another dashboard.*
 
 Aetherix quickly adapts to a client's IT stack, uses a proactive, UI-less "push" model, and delivers the right insights at the right time.
 It synthesizes internal context and property data (occupancy, capture rate, bookings, PMS, POS, ...) with external context (events, weather, social media reputation) using a semantic layer.
