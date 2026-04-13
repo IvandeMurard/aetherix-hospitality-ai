@@ -44,7 +44,7 @@ Aetherix delivers **contextual, explainable recommendations** directly via Whats
 | :--- | :--- |
 | **Push-first & UI-less** | Proactive alerts via Slack, WhatsApp, or else |
 | **Forecasting** | Contextualized ML/LLM predictions calibrated per property |
-| **Conversational Explainability** | Delivers clear and structured operational directives|
+| **Conversational Explainability** | Delivers clear and structured operational recommandations|
 | **Context** | Synthesizes internal + external data |
 | **Demand modeling** | Property-specific capture rate + anonymized cross-property patterns (hive) |
 | **Integration model** | Additive layer on top of existing tools |
