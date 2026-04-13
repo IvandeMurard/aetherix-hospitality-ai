@@ -40,7 +40,7 @@ Aetherix delivers **contextual, explainable recommendations** directly via Whats
 | **Forecasting** | Contextualized ML/LLM predictions calibrated per property |
 | **Conversational Explainability** | Delivers clear and structured operational directives with risk level|
 | **Context** | Synthesized internal (PMS + capture rate) + external (weather, events, social sentiment) data |
-| **Demand modeling** | Property-specific capture rate × contextual modifiers |
+| **Demand modeling** | Property-specific capture rate + anonymized cross-property patterns (hive) |
 | **Integration model** | Additive layer on top of existing tools |
 
 Built with real hospitality constraints in mind: high uncertainty, human decisions, and a need for trust.
