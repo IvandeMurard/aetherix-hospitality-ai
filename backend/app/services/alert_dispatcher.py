@@ -32,6 +32,11 @@ from app.integrations.twilio_client import TwilioClient
 logger = logging.getLogger(__name__)
 
 
+def _validate_phone(number: str) -> bool:
+    """Return True if number is a non-empty E.164 string (starts with '+', length >= 8)."""
+    return bool(number and number.startswith("+") and len(number) >= 8)
+
+
 def _format_message(rec: StaffingRecommendation) -> str:
     """Build the final dispatch message from recommendation fields."""
     parts = [rec.message_text]
@@ -88,6 +93,8 @@ class AlertDispatcherService:
                 recommendation.id,
                 exc,
             )
+            recommendation.status = "config_error"
+            await session.commit()
             return False
         except Exception:
             logger.exception(
@@ -116,6 +123,8 @@ class AlertDispatcherService:
         result = await session.execute(
             select(StaffingRecommendation).where(
                 StaffingRecommendation.status == "ready_to_push"
+                # config_error status is excluded — these have a permanent configuration
+                # problem and must not be retried automatically
             )
         )
         pending = result.scalars().all()
@@ -143,13 +152,21 @@ class AlertDispatcherService:
         self, channel: str, profile: RestaurantProfile, message: str
     ) -> None:
         if channel == "whatsapp":
-            client = TwilioClient()
             to = profile.phone_number or ""
+            if not _validate_phone(to):
+                raise NotConfiguredError(
+                    f"Invalid or missing phone_number for profile {profile.id}"
+                )
+            client = TwilioClient()
             await client.send_whatsapp(to=to, body=message)
 
         elif channel == "sms":
-            client = TwilioClient()
             to = profile.phone_number or ""
+            if not _validate_phone(to):
+                raise NotConfiguredError(
+                    f"Invalid or missing phone_number for profile {profile.id}"
+                )
+            client = TwilioClient()
             await client.send_sms(to=to, body=message)
 
         elif channel == "email":
@@ -162,6 +179,10 @@ class AlertDispatcherService:
             logger.warning(
                 "Unknown notification channel %r — falling back to WhatsApp.", channel
             )
-            client = TwilioClient()
             to = profile.phone_number or ""
+            if not _validate_phone(to):
+                raise NotConfiguredError(
+                    f"Invalid or missing phone_number for profile {profile.id}"
+                )
+            client = TwilioClient()
             await client.send_whatsapp(to=to, body=message)

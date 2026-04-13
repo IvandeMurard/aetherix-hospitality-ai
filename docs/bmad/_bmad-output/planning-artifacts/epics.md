@@ -96,6 +96,11 @@ Allow managers to reply "Why?" to any alert and instantly receive the mathematic
 Aggregate actioned vs. unactioned recommendations across multiple tenant properties to provide Directors of Operations with weekly financial impact reports.
 **FRs covered:** FR17, FR18, FR21
 
+### Epic 7: Security & Trust Foundation (Cross-Cutting)
+Harden the full stack against data leakage, webhook spoofing, API abuse, prompt injection, and credential exposure. Required before any live data handling and before any Apaleo Agent Hub listing.
+**NFRs covered:** NFR3 (GDPR/PII), NFR4 (credentials at rest)
+**GitHub Epic:** [#46](https://github.com/IvandeMurard/aetherix-hospitality-ai/issues/46)
+
 <!-- Repeat for each epic in epics_list (N = 1, 2, 3...) -->
 
 ## Epic 1: Workspace & Identity (The Foundation)
@@ -396,6 +401,106 @@ So that I can provide an objective ROI metric for the week (FR17).
 **Then** it calculates the estimated labor cost saved (or revenue captured) for "Actioned" alerts
 **And** it calculates the "Missed Opportunity" cost for "Ignored" alerts
 **And** it generates a summary report formatted for email delivery
+
+## Epic 7: Security & Trust Foundation (Cross-Cutting)
+
+Harden the full stack against data leakage, webhook spoofing, API abuse, LLM prompt injection, and credential exposure. This is a cross-cutting epic — not tied to a single phase but to specific phase gates (see priorities below).
+
+**GitHub Epic:** [#46](https://github.com/IvandeMurard/aetherix-hospitality-ai/issues/46)
+
+### Story 7.1: Supabase RLS Audit — Verify hotel_id Isolation on All Tables
+
+As a System Administrator,
+I want a verified audit confirming every Supabase table enforces `hotel_id`/`tenant_id` Row-Level Security,
+So that no hotel property can ever query another property's data, even if the application layer has a bug.
+
+**Priority:** 🔴 Critical — before any live data
+**GitHub:** [#47](https://github.com/IvandeMurard/aetherix-hospitality-ai/issues/47)
+
+**Acceptance Criteria:**
+- **Given** the Supabase instance, **When** the audit runs, **Then** every operational table has RLS enabled and enforces `hotel_id` scoping.
+- **Given** two test tenants, **When** Hotel A queries Hotel B's data, **Then** zero rows returned. `pytest` cross-tenant penetration test remains green.
+- **Given** any FastAPI service query, **Then** `hotel_id` is also filtered at the service layer (defense-in-depth).
+- **Given** pgvector tables, **Then** vector queries are scoped to the requesting hotel's namespace.
+
+### Story 7.2: Webhook Signature Validation — HMAC Verification for Twilio + Apaleo/Mews
+
+As the FastAPI backend,
+I want to cryptographically verify the signature of every inbound webhook request,
+So that spoofed or replayed webhook calls cannot trigger AI recommendations or execute unauthorized operations.
+
+**Priority:** 🔴 Critical — before any live integration
+**GitHub:** [#48](https://github.com/IvandeMurard/aetherix-hospitality-ai/issues/48)
+
+**Acceptance Criteria:**
+- **Given** any Twilio webhook, **When** `X-Twilio-Signature` is invalid or missing, **Then** HTTP 403 returned before any business logic runs.
+- **Given** any Apaleo webhook, **When** HMAC signature fails validation, **Then** HTTP 403 returned. Secret stored in env var only.
+- **Given** a valid webhook replayed after 5 minutes, **Then** rejected (replay attack prevention). Configurable window.
+- `pytest` suite covers: valid → 200, invalid signature → 403, missing → 403, replayed → 403.
+
+### Story 7.3: API Hardening — Rate Limiting, CORS Policy, Security Headers
+
+As the FastAPI backend,
+I want all public-facing routes to be rate-limited, CORS-restricted, and to emit standard security headers,
+So that the API surface is hardened against abuse, enumeration, and browser-based attacks.
+
+**Priority:** 🟠 High — before customer-facing deploy
+**GitHub:** [#49](https://github.com/IvandeMurard/aetherix-hospitality-ai/issues/49)
+
+**Acceptance Criteria:**
+- Rate limiting via Redis (Upstash): `auth` (10/min), `webhooks` (120/min), `general` (60/min). HTTP 429 + `Retry-After` on breach.
+- CORS policy restricted to `CORS_ALLOWED_ORIGINS` env var. `allow_credentials` only on auth routes.
+- Security headers on all responses: `X-Content-Type-Options`, `X-Frame-Options`, `HSTS`, `Referrer-Policy`, `X-Request-ID`.
+- Request body limit enforced (HTTP 413 above `MAX_REQUEST_BODY_KB`).
+
+### Story 7.4: Prompt Injection Defense — Sanitize WhatsApp Replies Before LLM Processing
+
+As the Reasoning Engine,
+I want all inbound WhatsApp/SMS text to be sanitized and structurally scoped before reaching Claude,
+So that a malicious actor cannot hijack the LLM via a crafted message (OWASP LLM01:2023).
+
+**Priority:** 🟠 High — before Phase 1 WhatsApp feedback loop
+**GitHub:** [#50](https://github.com/IvandeMurard/aetherix-hospitality-ai/issues/50)
+
+**Acceptance Criteria:**
+- Pattern-based sanitization on all manager inputs before LLM processing. Configurable pattern list. Flagged inputs return polite fallback (no leak of detection).
+- Manager input always placed in `<user_query>` XML tags. System prompt explicitly instructs Claude to treat it as plain text only.
+- `pytest` adversarial suite: ≥10 injection prompts tested. None cause data leakage, cross-hotel access, or prompt revelation.
+- Audit log: timestamp, `hotel_id`, sender SHA-256 hash, matched pattern, action taken.
+
+### Story 7.5: GDPR Data Inventory + Anonymization Audit
+
+As the Data Controller,
+I want a complete inventory of all personal data processed by the system with verified technical controls,
+So that Aetherix can legally handle EU hotel data and demonstrate GDPR compliance to partners.
+
+**Priority:** 🟡 Medium — before Phase 2 multi-hotel / any EU live data
+**GitHub:** [#51](https://github.com/IvandeMurard/aetherix-hospitality-ai/issues/51)
+
+**Acceptance Criteria:**
+- `docs/GDPR-DATA-INVENTORY.md` created with full data category mapping, legal basis, retention periods.
+- `pytest` test: synthetic PMS payload with PII → zero PII in resulting DB record (NFR3 verification).
+- Manager phone numbers stored as SHA-256 hashes only in all logs and DB records.
+- Hive Memory anonymization model documented (k-anonymity, min 5 hotels, opt-out per hotel).
+- Data retention cron job implemented. Data subject rights procedure documented.
+
+### Story 7.6: Secrets Management Runbook — Key Rotation for All Providers
+
+As a System Administrator,
+I want a documented, tested runbook for rotating every API key and secret,
+So that a credential leak can be contained within 30 minutes without service interruption.
+
+**Priority:** 🟡 Medium — before first external pilot
+**GitHub:** [#52](https://github.com/IvandeMurard/aetherix-hospitality-ai/issues/52)
+
+**Acceptance Criteria:**
+- `docs/SECRETS-RUNBOOK.md` created: full inventory of all 8+ secrets, per-provider rotation steps, estimated downtime per key.
+- Zero-downtime rotation tested in staging for Anthropic API key and Twilio auth token.
+- "Incident Response" section: revoke → scan git history → 30-min containment target.
+- `detect-secrets` pre-commit hook installed. Setup documented in README.
+- AES-256 encryption verified for all PMS credentials (not just Apaleo from Story 2.1).
+
+---
 
 ### Story 6.3: Automated Report Delivery
 
