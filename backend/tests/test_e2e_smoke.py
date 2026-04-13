@@ -532,6 +532,46 @@ class TestTwilioClientSmoke:
 # 7. Linear integration — GraphQL seam
 # ===========================================================================
 
+# ===========================================================================
+# 8. APScheduler — startup wiring (HOS-135)
+# ===========================================================================
+
+class TestSchedulerStartupWiring:
+    """Verify both background jobs are registered in startup, not shutdown."""
+
+    def test_anomaly_scan_job_registered(self):
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from app.workers.anomaly_scan import register_anomaly_scan_job
+
+        scheduler = AsyncIOScheduler()
+        register_anomaly_scan_job(scheduler)
+        assert any(j.id == "anomaly_scan" for j in scheduler.get_jobs())
+
+    def test_dispatch_job_registered(self):
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from app.workers.dispatch_worker import register_dispatch_job
+
+        scheduler = AsyncIOScheduler()
+        register_dispatch_job(scheduler)
+        assert any(j.id == "dispatch_worker" for j in scheduler.get_jobs())
+
+    def test_scheduler_running_flag_after_start(self):
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from app.workers.anomaly_scan import register_anomaly_scan_job
+        from app.workers.dispatch_worker import register_dispatch_job
+        import asyncio
+
+        scheduler = AsyncIOScheduler()
+        register_anomaly_scan_job(scheduler)
+        register_dispatch_job(scheduler)
+
+        async def _run():
+            scheduler.start()
+            assert scheduler.running is True
+            scheduler.shutdown(wait=False)
+
+        asyncio.run(_run())
+
 class TestLinearIntegrationSmoke:
     """create_issue and list_issues hit the correct GraphQL endpoint."""
 
