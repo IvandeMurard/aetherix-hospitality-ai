@@ -22,22 +22,20 @@ class WhatsAppService:
     """
 
     def __init__(self):
-        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-        whatsapp_number = os.getenv("TWILIO_WHATSAPP_NUMBER")
-
-        if not account_sid:
-            raise NotConfiguredError("TWILIO_ACCOUNT_SID is not set")
-        if not auth_token:
-            raise NotConfiguredError("TWILIO_AUTH_TOKEN is not set")
-        if not whatsapp_number:
-            raise NotConfiguredError("TWILIO_WHATSAPP_NUMBER is not set")
-
-        self.account_sid = account_sid
-        self.auth_token = auth_token
-        self.whatsapp_from = whatsapp_number
+        self.account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        self.whatsapp_from = os.getenv("TWILIO_WHATSAPP_NUMBER")
         self.engine = AetherixEngine()
         self.memory = MemoryService()
+
+    def _assert_configured(self) -> None:
+        """Raise NotConfiguredError if Twilio credentials are missing."""
+        if not self.account_sid:
+            raise NotConfiguredError("TWILIO_ACCOUNT_SID is not set")
+        if not self.auth_token:
+            raise NotConfiguredError("TWILIO_AUTH_TOKEN is not set")
+        if not self.whatsapp_from:
+            raise NotConfiguredError("TWILIO_WHATSAPP_NUMBER is not set")
 
     async def _resolve_tenant(self, sender: str) -> Optional[RestaurantProfile]:
         """Look up the RestaurantProfile matching the sender's phone number.
@@ -125,7 +123,7 @@ class WhatsAppService:
         # 2. Staffing Recommendation Intent
         if any(w in query for w in ["staff", "staffing", "reco"]):
             forecast = await self.engine.get_forecast(tenant_id, date.today(), "dinner", {})
-            s = forecast["staffing"]
+            s = forecast["staffing_recommendation"]
             d = s["deltas"]
 
             delta_str = (
@@ -156,6 +154,7 @@ class WhatsAppService:
 
     async def send_message(self, to: str, body: str):
         """Sends a WhatsApp message via Twilio API."""
+        self._assert_configured()
         url = f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Messages.json"
 
         auth = (self.account_sid, self.auth_token)
