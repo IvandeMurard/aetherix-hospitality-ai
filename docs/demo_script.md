@@ -160,8 +160,11 @@ Résultat attendu (is_mock=false après training) :
 Le service WhatsApp envoie automatiquement les alertes via Twilio. Pour tester manuellement :
 
 ```bash
+# Prérequis : ajouter TWILIO_SKIP_SIGNATURE_VALIDATION=true dans .env
+# (évite le rejet 403 sans signature HMAC Twilio réelle)
+
 # Simuler un webhook Twilio inbound (message "forecast" du manager)
-curl -X POST http://localhost:8000/twilio/inbound \
+curl -X POST http://localhost:8000/api/v1/webhooks/twilio/whatsapp \
   -d "From=whatsapp%3A%2B33612345678&Body=forecast"
 ```
 
@@ -224,9 +227,10 @@ PredictionEngine (Prophet) ─────────────────�
 - [ ] `docker compose up` → health OK
 - [ ] `GET /health → 200`
 - [ ] `POST /predictions/train` → `rows_trained: 365`
-- [ ] `POST /predictions/predict` → `is_mock: false`
+- [ ] `POST /predictions/predict` → `is_mock: false` (**ne pas redémarrer Docker entre étape 3 et 4**)
 - [ ] `GET /pms/mcp/probe` → (optionnel, nécessite credentials Apaleo sandbox)
 - [ ] Swagger accessible : http://localhost:8000/docs
+- [ ] `TWILIO_SKIP_SIGNATURE_VALIDATION=true` dans `.env` si simulation étape 5
 
 ---
 
@@ -236,13 +240,17 @@ PredictionEngine (Prophet) ─────────────────�
 # .env (minimum viable)
 DEMO_MODE=true
 ANTHROPIC_API_KEY=sk-ant-...
+MISTRAL_API_KEY=...                        # requis pour RAG / mémoire vectorielle
+
+# Simulation webhook WhatsApp (étape 5 sans Twilio réel)
+TWILIO_SKIP_SIGNATURE_VALIDATION=true
 
 # Optionnel — Apaleo MCP live
 APALEO_CLIENT_ID=...
 APALEO_CLIENT_SECRET=...
 APALEO_MCP_SERVER_URL=https://mcp.apaleo.com/mcp/
 
-# Optionnel — WhatsApp push
+# Optionnel — WhatsApp push réel
 TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
 TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
