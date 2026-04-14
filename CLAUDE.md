@@ -46,6 +46,9 @@
 | 8 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement |
 | 9 | Multi-LLM via `LLMProvider` abstrait | Swap Claude → Gemini → GPT sans réécriture. Claude reste provider principal |
 | 10 | Provider singleton via `lifespan` FastAPI | `LLMProvider` + `EmbeddingProvider` instanciés une fois au démarrage, stockés dans `app.state`. Factory = construction uniquement. Providers closés proprement (`aclose()`) au shutdown. Détail → `docs/bmad/_bmad-output/planning-artifacts/architecture.md` |
+| 11 | Démo — stratégie données hybride | Apaleo sandbox pour appels MCP live (probe + occupancy). Dataset synthétique 365j pour training Prophet (DEMO_MODE=true). Script `scripts/generate_demo_data.py` → `demo_data/prophet_training.json`. Détail → `docs/context/demo-apaleo.md` |
+| 12 | MCP Server Apaleo — probe suffisant pour candidature | `GET /pms/mcp/probe` (endpoint existant) prouve la connexion MCP native — suffit pour la démo Apaleo. HOS-71 (Aetherix MCP Server complet) = Phase 0.5, post-candidature. |
+| 13 | Pipeline Prophet — gap training identifié | `ApaleoMCPAdapter.get_historical_data()` → `DataTransformer.stay_records_to_prophet()` → `PredictionEngine.train()` : briques existent, orchestrateur manquant. Débloquer via `POST /api/v1/predictions/train` ou worker de démarrage. |
 
 ---
 
