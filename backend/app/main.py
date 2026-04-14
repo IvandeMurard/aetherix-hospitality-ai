@@ -9,6 +9,7 @@ Architecture constraints:
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -61,10 +62,6 @@ async def lifespan(app: FastAPI):
     start_weather_scheduler()
     start_event_scheduler()
 
-    # Start periodic sync schedulers (weather + events)
-    start_weather_scheduler()
-    start_event_scheduler()
-
     yield
 
     # --------------- shutdown ---------------
@@ -74,9 +71,6 @@ async def lifespan(app: FastAPI):
     if _scheduler.running:
         _scheduler.shutdown(wait=False)
         logger.info("APScheduler stopped")
-
-    stop_weather_scheduler()
-    stop_event_scheduler()
 
 
 app = FastAPI(
@@ -92,26 +86,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_exception_handler(HTTPException, problem_details_handler)
-
-app = FastAPI(
-    title="Aetherix API",
-    description="Aetherix F&B Operations Agent backend",
-    version="0.1.0",
-    # AC #3 & #5: OpenAPI schema at /api/openapi.json; Swagger UI at /docs
-    openapi_url="/api/openapi.json",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Tighten to specific origins via env var before production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
