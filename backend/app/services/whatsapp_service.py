@@ -91,9 +91,11 @@ class WhatsAppService:
             )
             response_text = "Thank you for the feedback. I've noted this for future forecasts."
         elif body.lower() == "push":
-            # 2. 2-Way Sync Action
-            result = await self.engine.push_staffing(tenant_id)
-            response_text = result["message"]
+            # 2-Way Sync — Apaleo write not yet active (Decision #7: read-only Phase 0)
+            response_text = (
+                "⚠️ Apaleo staffing sync is not yet active in this phase.\n"
+                "Your latest recommendation is ready — reply 'staffing' to review it."
+            )
         else:
             # 3. General logic: Determine if it's a forecast request or general query
             response_text = await self._generate_response(body, tenant_id)
