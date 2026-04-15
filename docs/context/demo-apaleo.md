@@ -538,3 +538,158 @@ This triggers `MemoryService.learn_from_feedback()` — the capture rate profile
 | Inject constitution into WhatsApp | `services/whatsapp_service.py` — `_generate_response()` | Replace keyword matching with LLM intent |
 
 These stories are independent of the demo and can be delivered separately.
+
+---
+
+## §5 — Architecture diagram and Loom setup
+
+### 5.1 Role of the diagram
+
+The diagram is not a product UI. It is a developer-facing observability tool built for the recording only — it makes the pipeline visible in real time, node by node, as each step completes. For a technical audience such as an AI Engineer at Apaleo, this is more legible than terminal logs alone and more honest than a polished dashboard.
+
+It is implemented as a single static HTML file. It is not shipped as part of the product.
+
+---
+
+### 5.2 Node topology and visual states
+
+```
+[Cron] ──> [MCP Probe] ──> [Apaleo MCP Server]
+                                   |
+                             [PMS Sync]
+                        (occupancy / arrivals /
+                          reservations)
+                                   |
+         [PredictHQ] ────> [Context Assembly]
+         [WeatherAPI] ───>         |
+                             [pgvector RAG]
+                             (fb_patterns)
+                                   |
+                        [Prophet + Capture Rate]
+                                   |
+                          [Claude Sonnet]
+                          (ReasoningService)
+                                   |
+                         [Staffing Service]
+                                   |
+                       [WhatsApp / Twilio]
+                                   |
+                         [Sophie — F&B Kleber]
+```
+
+**Node visual states:**
+
+| State | Colour | Meaning |
+|-------|--------|---------|
+| Inactive | Grey | Not yet called |
+| In progress | Blue | Call in flight |
+| Done | Green | Result received |
+| Fallback | Orange | Degraded mode (e.g. MCP → raw REST) |
+| Error | Red | Unrecovered failure |
+
+All nodes start grey. They light up in sequence as each pipeline step fires.
+
+---
+
+### 5.3 Technical implementation
+
+**Backend — SSE endpoint**
+
+New file: `backend/app/api/routes/demo.py`
+
+```
+GET /demo/stream
+```
+
+Server-sent events stream. Each pipeline step calls a lightweight helper:
+
+```python
+await demo_emit("mcp_probe")       # ApaleoMCPClient
+await demo_emit("pms_sync")        # PMSSyncService
+await demo_emit("predicthq")       # EventIngestion
+await demo_emit("rag")             # RAGService
+await demo_emit("prophet")         # PredictionEngine
+await demo_emit("claude")          # ReasoningService
+await demo_emit("staffing")        # StaffingService
+await demo_emit("whatsapp")        # WhatsAppService
+```
+
+`demo_emit()` is a no-op when `DEMO_MODE=false` — zero impact in production.
+
+Each call emits two events: `{stage}` (in progress) and `{stage}_done` (complete), allowing the diagram to animate the transition through blue to green.
+
+**Frontend — `scripts/demo_board.html`**
+
+Single file. Inline SVG diagram, EventSource JavaScript. Approximately 80 lines total. No framework, no build step.
+
+```javascript
+const source = new EventSource('/demo/stream');
+
+source.addEventListener('mcp_probe', () =>
+    highlight('mcp_probe', 'in-progress'));
+source.addEventListener('mcp_probe_done', () =>
+    highlight('mcp_probe', 'done'));
+// same pattern for each stage
+
+function highlight(nodeId, state) {
+    document.getElementById(nodeId)
+            .setAttribute('data-state', state);
+}
+```
+
+CSS handles colour transitions by `data-state` attribute. The diagram resets to all-grey on page reload.
+
+**Also required:** one line added to `ReasoningService._build_prompt()`:
+
+```python
+logger.debug("Claude reasoning: %s", explanation[:200])
+```
+
+This makes Claude's chain-of-thought visible in the terminal during the recording.
+
+---
+
+### 5.4 Loom screen layout
+
+**Recommended resolution:** 1920x1080 minimum.
+
+```
+|<------- 35% ------->|<------- 35% ------->|<---- 30% ---->|
+|                     |                     |               |
+|  Terminal           |  demo_board.html    |  WhatsApp     |
+|  uvicorn logs       |  architecture SVG   |  phone screen |
+|  dark background    |  browser, no bar    |               |
+|  font >= 16pt       |  all nodes grey     |  empty conv.  |
+|                     |  at start           |  contact:     |
+|                     |                     |  Sophie —     |
+|                     |                     |  F&B Kleber   |
+```
+
+WhatsApp display options (in order of preference):
+1. Phone screenshare via QuickTime (Mac) or scrcpy (Android) — shows a real device
+2. Twilio sandbox in a resized browser window — simpler, sufficient
+
+The browser showing `demo_board.html` must be in full-screen mode with the address bar hidden.
+
+---
+
+### 5.5 Pre-recording checklist
+
+**Environment**
+- [ ] `APALEO_MCP_SERVER_URL=https://mcp.apaleo.com/mcp/` set in `.env`
+- [ ] `DEMO_MODE=true` set in `.env`
+- [ ] `GET /pms/mcp/probe` returns `{"status": "ok"}`
+- [ ] ngrok tunnel active for Twilio inbound webhook
+- [ ] `demo_board.html` SSE tested end-to-end — all nodes light up in sequence
+
+**Pipeline**
+- [ ] `logger.debug` line added to `ReasoningService._build_prompt()`
+- [ ] Apaleo sandbox data loaded or realistic mock in place: occupancy 81%, 31 reservations, PSG-Bayern event
+- [ ] 3 CL patterns seeded in `fb_patterns` (pgvector), scores > 0.78
+
+**Recording**
+- [ ] Terminal font >= 16pt, dark background, high contrast
+- [ ] WhatsApp contact set to "Sophie — F&B Kleber"
+- [ ] Loom: 1920x1080, HD quality
+- [ ] Voice-over script rehearsed — target delivery under 90 seconds
+- [ ] Full dry run completed before final take
