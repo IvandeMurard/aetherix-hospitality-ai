@@ -213,3 +213,135 @@ Response: "Without the match: 52 covers estimated.
            Capture rate: 18% (no event modifier).
            Staff: 4 is sufficient. Delta vs. tonight's plan: -2 servers."
 ```
+
+---
+
+## §3 — Loom script (90 seconds)
+
+### Screen setup (before recording)
+
+Three panels, side by side:
+
+```
+|<------ 35% ------->|<------ 35% ------->|<--- 30% --->|
+|                    |                    |             |
+|  Terminal          |  demo_board.html   |  WhatsApp   |
+|  (uvicorn logs)    |  (architecture     |  (phone     |
+|  dark background   |   diagram, SVG)    |   screen)   |
+|  font >= 16pt      |  browser, no bar   |             |
+```
+
+All nodes on the architecture diagram are greyed out before the pipeline fires.
+
+---
+
+### Beat 1 — Value hook (0:00–0:15)
+
+*Voice-over. Nothing active on screen yet.*
+
+> "Sophie manages F&B at a 4-star independent hotel in Paris. Tomorrow night: PSG versus Bayern Munich, Champions League semi-final, 2.1 kilometres away. She has scheduled 5 servers for a normal Wednesday. Aetherix has more data."
+
+**Screen:** full architecture diagram, all nodes grey. The pipeline has not run yet.
+
+---
+
+### Beat 2 — MCP connection (0:15–0:25)
+
+*A log line appears on its own — no command is typed:*
+
+```
+INFO  cron      : daily_forecast triggered — Kleber, 14:00
+INFO  mcp_probe : status=ok provider=apaleo-mcp tools=42 latency_ms=203
+```
+
+*Voice-over:*
+> "Direct connection to the Apaleo MCP Server. OAuth2, streamable-HTTP, 42 tools available."
+
+**Diagram:** `[Cron]` → `[MCP Probe]` → `[Apaleo MCP Server]` light up green.
+
+---
+
+### Beat 3 — Pipeline (0:25–0:55)
+
+*Logs scroll automatically. Each line triggers a highlight on the diagram.*
+
+```
+INFO  pms_sync     : occupancy=81% arrivals=94 reservations=31
+INFO  predicthq    : PSG-Bayern 21:00 att=47K distance=2.1km score=0.94
+INFO  rag_service  : 3 CL patterns matched (scores: 0.89, 0.84, 0.81)
+INFO  capture_rate : base=18% adjusted=29% (CL delta +11pts, 3 occurrences)
+INFO  prophet      : covers=74 [68-80] confidence=83%
+DEBUG claude       : "31 bookings + 27 residents (CL capture rate) + 16 walk-ins = 74.
+                      Prepping to 90: ~145 EUR unused food cost vs. historical range."
+INFO  whatsapp     : pushed to Sophie (+33 6 ...)
+```
+
+*Voice-over:*
+> "PMS data via MCP, PredictHQ events, three similar CL nights from memory, this property's historical capture rate, Prophet, Claude Sonnet — delivered to WhatsApp."
+
+**Diagram:** each node lights up at the exact moment its log line appears.
+
+---
+
+### Beat 4 — Manager experience (0:55–1:15)
+
+*Right panel: WhatsApp message received by Sophie.*
+
+```
+Aetherix | Tomorrow Wed 6 May
+
+Forecast: 74 covers (capacity 78)
++60% vs normal Wednesday (base: 46)
+Staff: 6 — you have scheduled 5
+
+Mise en place: 74 covers
+31 bookings + 27 residents + 16 walk-ins
+(your last 3 CL home nights: 67, 71, 68 actual)
+
+Prepping for 90 covers: ~145 EUR in unused food cost
+if actuals stay within your historical range
+
+Reply Why? or What if the match is cancelled?
+```
+
+*Sophie replies:* `What if the match is cancelled?`
+
+*Terminal logs appear:*
+
+```
+INFO  webhook      : inbound — Sophie, body="What if the match is cancelled?"
+INFO  query_parser : intent=simulation param=event_cancelled
+INFO  engine       : reforecast — event=None occupancy=81%
+DEBUG claude       : "No event: capture rate reverts to 18%.
+                      94 x 0.18 = 17 residents + 31 bookings + 4 walk-ins = 52 covers."
+INFO  whatsapp     : response pushed
+```
+
+*WhatsApp — response received:*
+
+```
+Without the match: 52 covers estimated.
+Capture rate: 18% — no event modifier.
+Staff: 4 is sufficient.
+Delta vs. current plan: -2 servers.
+```
+
+*Voice-over:*
+> "One question, different parameters. The agent recalculates, traces its reasoning, responds."
+
+---
+
+### Beat 5 — Close (1:15–1:30)
+
+*Zoom out to full split-screen — all diagram nodes green.*
+
+*Voice-over:*
+> "Apaleo MCP, pgvector, Prophet, Claude Sonnet, WhatsApp. No dashboard. Sophie has what she needs for tomorrow — without opening a single tool."
+
+**Final frame:** full diagram lit green, WhatsApp conversation visible on the right.
+
+---
+
+*Estimated duration: 85–95 seconds depending on delivery pace.*
+
+*What is intentionally not shown: error handling, fallback paths, onboarding configuration. These are covered in the README and codebase.*
