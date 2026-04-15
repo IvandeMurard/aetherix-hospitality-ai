@@ -190,21 +190,12 @@ class TestGetLlmProviderFactory:
         assert isinstance(provider._primary, ClaudeProvider)
 
     def test_factory_uses_llm_model_env_var(self, monkeypatch):
-        """LLM_MODEL env var is forwarded to the Claude primary.
-
-        Cache must be cleared before patching the env var so that the factory
-        constructs a fresh provider with the overridden model name.
-        """
+        """LLM_MODEL env var is forwarded to the Claude primary."""
         from app.providers.fallback_provider import FallbackLLMProvider
-        get_llm_provider.cache_clear()
         monkeypatch.setenv("LLM_MODEL", "claude-opus-4-6")
-        try:
-            provider = get_llm_provider()
-            assert isinstance(provider, FallbackLLMProvider)
-            assert provider._primary.model_id == "claude/claude-opus-4-6"
-        finally:
-            # Restore singleton so subsequent tests get the default provider.
-            get_llm_provider.cache_clear()
+        provider = get_llm_provider()
+        assert isinstance(provider, FallbackLLMProvider)
+        assert provider._primary.model_id == "claude/claude-opus-4-6"
 
 
 # ---------------------------------------------------------------------------

@@ -22,20 +22,22 @@ class WhatsAppService:
     """
 
     def __init__(self):
-        self.account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-        self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-        self.whatsapp_from = os.getenv("TWILIO_WHATSAPP_NUMBER")
+        account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        whatsapp_number = os.getenv("TWILIO_WHATSAPP_NUMBER")
+
+        if not account_sid:
+            raise NotConfiguredError("TWILIO_ACCOUNT_SID is not set")
+        if not auth_token:
+            raise NotConfiguredError("TWILIO_AUTH_TOKEN is not set")
+        if not whatsapp_number:
+            raise NotConfiguredError("TWILIO_WHATSAPP_NUMBER is not set")
+
+        self.account_sid = account_sid
+        self.auth_token = auth_token
+        self.whatsapp_from = whatsapp_number
         self.engine = AetherixEngine()
         self.memory = MemoryService()
-
-    def _assert_configured(self) -> None:
-        """Raise NotConfiguredError if Twilio credentials are missing."""
-        if not self.account_sid:
-            raise NotConfiguredError("TWILIO_ACCOUNT_SID is not set")
-        if not self.auth_token:
-            raise NotConfiguredError("TWILIO_AUTH_TOKEN is not set")
-        if not self.whatsapp_from:
-            raise NotConfiguredError("TWILIO_WHATSAPP_NUMBER is not set")
 
     async def _resolve_tenant(self, sender: str) -> Optional[RestaurantProfile]:
         """Look up the RestaurantProfile matching the sender's phone number.
@@ -91,11 +93,9 @@ class WhatsAppService:
             )
             response_text = "Thank you for the feedback. I've noted this for future forecasts."
         elif body.lower() == "push":
-            # 2-Way Sync — Apaleo write not yet active (Decision #7: read-only Phase 0)
-            response_text = (
-                "⚠️ Apaleo staffing sync is not yet active in this phase.\n"
-                "Your latest recommendation is ready — reply 'staffing' to review it."
-            )
+            # 2. 2-Way Sync Action
+            result = await self.engine.push_staffing(tenant_id)
+            response_text = result["message"]
         else:
             # 3. General logic: Determine if it's a forecast request or general query
             response_text = await self._generate_response(body, tenant_id)
@@ -125,7 +125,7 @@ class WhatsAppService:
         # 2. Staffing Recommendation Intent
         if any(w in query for w in ["staff", "staffing", "reco"]):
             forecast = await self.engine.get_forecast(tenant_id, date.today(), "dinner", {})
-            s = forecast["staffing_recommendation"]
+            s = forecast["staffing"]
             d = s["deltas"]
 
             delta_str = (
@@ -156,7 +156,6 @@ class WhatsAppService:
 
     async def send_message(self, to: str, body: str):
         """Sends a WhatsApp message via Twilio API."""
-        self._assert_configured()
         url = f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Messages.json"
 
         auth = (self.account_sid, self.auth_token)
