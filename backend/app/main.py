@@ -9,6 +9,7 @@ Architecture constraints:
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -50,6 +51,17 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Decision #10: provider singletons — one instance for the entire process.
+    # Services receive these via dependency injection rather than calling the
+    # factory on every request.
+    app.state.llm = get_llm_provider()
+    app.state.embedding = get_embedding_provider()
+    logger.info(
+        "Providers initialised: llm=%s embedding=%s",
+        app.state.llm.model_id,
+        type(app.state.embedding).__name__,
+    )
+
     # Register and start background cron jobs (anomaly scan + alert dispatch)
     register_anomaly_scan_job(_scheduler)
     register_dispatch_job(_scheduler)
@@ -58,10 +70,6 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = _scheduler
 
     # Weather sync (12h cron) and event sync (daily 06:00 UTC)
-    start_weather_scheduler()
-    start_event_scheduler()
-
-    # Start periodic sync schedulers (weather + events)
     start_weather_scheduler()
     start_event_scheduler()
 
@@ -75,8 +83,14 @@ async def lifespan(app: FastAPI):
         _scheduler.shutdown(wait=False)
         logger.info("APScheduler stopped")
 
-    stop_weather_scheduler()
-    stop_event_scheduler()
+    # Close providers that hold open HTTP connections (e.g. AsyncAnthropic).
+    for provider in (app.state.llm, app.state.embedding):
+        _close = getattr(provider, "aclose", None)
+        if callable(_close):
+            try:
+                await _close()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Provider close error (non-fatal): %s", exc)
 
 
 app = FastAPI(
@@ -92,26 +106,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000").split(","),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-app.add_exception_handler(HTTPException, problem_details_handler)
-
-app = FastAPI(
-    title="Aetherix API",
-    description="Aetherix F&B Operations Agent backend",
-    version="0.1.0",
-    # AC #3 & #5: OpenAPI schema at /api/openapi.json; Swagger UI at /docs
-    openapi_url="/api/openapi.json",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan,
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Tighten to specific origins via env var before production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
