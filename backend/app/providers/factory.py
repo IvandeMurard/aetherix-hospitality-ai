@@ -20,10 +20,12 @@ Gemini. No env var or human action required.
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 
 from app.providers.base import EmbeddingProvider, LLMProvider
 
 
+@lru_cache(maxsize=1)
 def get_llm_provider() -> LLMProvider:
     """Return a FallbackLLMProvider: Claude primary, Gemini automatic fallback.
 
@@ -46,6 +48,7 @@ def get_llm_provider() -> LLMProvider:
     )
 
 
+@lru_cache(maxsize=1)
 def get_embedding_provider() -> EmbeddingProvider:
     """Return the Mistral embedding provider."""
     from app.providers.mistral_provider import MistralEmbeddingProvider
