@@ -12,6 +12,7 @@ Design constraints followed:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
@@ -29,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import LocalEvent, RestaurantProfile
 from app.schemas.events import EventRecord
+from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,8 @@ class EventIngestionService:
             inserted,
             len(records),
         )
+        # Demo board: highlight PredictHQ node after events fetched and persisted
+        asyncio.create_task(demo_emit("predicthq"))
         return inserted
 
     # ------------------------------------------------------------------
