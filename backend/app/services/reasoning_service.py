@@ -32,20 +32,33 @@ class ReasoningService:
         similar_patterns: List[Dict],
         cognitive_context: Optional[str] = None,
         is_mock: bool = False,
+        system_prompt: Optional[str] = None,
     ) -> Dict:
-        """Calls the LLM provider to explain the prediction rationale."""
+        """Calls the LLM provider to explain the prediction rationale.
+
+        Args:
+            system_prompt: Optional agent constitution system prompt built by
+                ``AgentConstitutionService.build_system_prompt()``. When provided,
+                passed as ``system=`` to the LLM provider (ClaudeProvider passes it
+                as the top-level Anthropic ``system`` field). When None, the LLM
+                receives only the user-turn prompt — heuristic fallback path unchanged.
+        """
         prompt = self._build_prompt(
             predicted_covers, confidence, target_date, service_type, context,
             similar_patterns, cognitive_context, is_mock=is_mock,
         )
 
         try:
-            explanation = await self._llm.complete(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=300,
-                temperature=0.3,
-            )
-            # Task 3: debug log — first 200 chars of Claude reasoning
+            llm_kwargs: Dict = {
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 300,
+                "temperature": 0.3,
+            }
+            if system_prompt is not None:
+                llm_kwargs["system"] = system_prompt
+
+            explanation = await self._llm.complete(**llm_kwargs)
+            # Task 3 (Prompt A): debug log — first 200 chars of Claude reasoning
             logger.debug("Claude reasoning: %s", explanation[:200])
             # Demo board: highlight Claude Sonnet node after LLM response
             asyncio.create_task(demo_emit("claude"))

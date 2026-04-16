@@ -76,6 +76,15 @@ class RestaurantProfile(Base):
     avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # £ per cover
     staff_hourly_rate = Column(Numeric(8, 2), nullable=True)     # £ per staff/hour
 
+    # Agent constitution (Prompt B — WhatsApp conversational agent)
+    manager_name = Column(String, nullable=True)
+    # agent_tone_profile: "luxury" | "professional" | "casual"
+    # For existing databases run:
+    #   ALTER TABLE restaurant_profiles
+    #     ADD COLUMN manager_name VARCHAR,
+    #     ADD COLUMN agent_tone_profile VARCHAR NOT NULL DEFAULT 'luxury';
+    agent_tone_profile = Column(String, default="luxury", nullable=False)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

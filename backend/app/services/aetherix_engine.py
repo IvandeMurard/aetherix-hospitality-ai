@@ -1,26 +1,39 @@
+import logging
 from datetime import date, datetime
 from typing import Dict, Any, List, Optional
+
+from app.db.models import RecommendationCache, RestaurantProfile
+from app.db.session import AsyncSessionLocal
 from app.services.prediction_engine import PredictionEngine
 from app.services.rag_service import RAGService
 from app.services.reasoning_service import ReasoningService
 from app.services.staffing_service import StaffingService
 from app.services.memory_service import MemoryService
-from app.db.session import AsyncSessionLocal
-from app.db.models import RecommendationCache
 from sqlalchemy.future import select
+
+logger = logging.getLogger(__name__)
+
 
 class AetherixEngine:
     """
     The Hybrid Hub (Phase 2).
     Orchestrates Prophet (Accuracy) + RAG (Explainability).
     """
-    
+
     def __init__(self):
         self.forecaster = PredictionEngine()
         self.rag = RAGService()
         self.reasoner = ReasoningService()
         self.staffer = StaffingService()
         self.memory = MemoryService()
+
+    async def _load_profile(self, tenant_id: str) -> Optional[RestaurantProfile]:
+        """Load the RestaurantProfile for the given tenant_id (or None)."""
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(RestaurantProfile).where(RestaurantProfile.tenant_id == tenant_id)
+            )
+            return result.scalars().first()
 
     async def get_forecast(self, tenant_id: str, target_date: date, service_type: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Hybrid orchestration logic."""
@@ -37,13 +50,35 @@ class AetherixEngine:
         # 3. Memory Retrieval (Interaction History)
         memory_context = await self.memory.get_relevant_context(tenant_id, context_query)
 
-        # 4. Reasoning (Claude)
+        # 4. Agent Constitution — build system prompt if profile available
+        system_prompt: Optional[str] = None
+        try:
+            profile = await self._load_profile(tenant_id)
+            if profile is not None:
+                from app.services.agent_constitution import AgentConstitutionService
+                similar_text = "\n".join(
+                    f"- {p['payload'].get('pattern_text', '')} ({p['payload'].get('outcome_description', '')})"
+                    for p in patterns[:3]
+                ) if patterns else ""
+                system_prompt = AgentConstitutionService().build_system_prompt(
+                    profile=profile,
+                    forecast_context={
+                        "date": target_date.isoformat(),
+                        "covers": predicted_covers,
+                        "confidence": int(confidence * 100),
+                        "similar_nights": similar_text,
+                    },
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("AgentConstitutionService failed (non-fatal): %s", exc)
+
+        # 5. Reasoning (Claude) — with optional system prompt
         reasoning = await self.reasoner.generate_explanation(
             predicted_covers, confidence, target_date, service_type, context, patterns,
-            memory_context, is_mock=is_mock,
+            memory_context, is_mock=is_mock, system_prompt=system_prompt,
         )
 
-        # 5. Staffing Recommendation
+        # 6. Staffing Recommendation
         staffing = await self.staffer.calculate_recommendation(predicted_covers)
 
         result = {

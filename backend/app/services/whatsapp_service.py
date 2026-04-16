@@ -11,6 +11,7 @@ from app.core.demo_events import demo_emit
 from app.core.exceptions import NotConfiguredError
 from app.db.models import RestaurantProfile
 from app.db.session import AsyncSessionLocal
+from app.providers.factory import get_llm_provider
 from app.services.aetherix_engine import AetherixEngine
 from app.services.memory_service import MemoryService
 
@@ -29,6 +30,7 @@ class WhatsAppService:
         self.whatsapp_from = os.getenv("TWILIO_WHATSAPP_NUMBER")
         self.engine = AetherixEngine()
         self.memory = MemoryService()
+        self._llm = get_llm_provider()
 
     def _assert_configured(self) -> None:
         """Raise NotConfiguredError if Twilio credentials are missing."""
@@ -99,62 +101,69 @@ class WhatsAppService:
                 "Your latest recommendation is ready — reply 'staffing' to review it."
             )
         else:
-            # 3. General logic: Determine if it's a forecast request or general query
-            response_text = await self._generate_response(body, tenant_id)
+            # 3. General query — delegated to LLM with agent constitution
+            response_text = await self._generate_response(body, tenant_id, profile)
 
         # 2. Send response back
         await self.send_message(sender_raw, response_text)
 
-    async def _generate_response(self, text: str, tenant_id: str) -> str:
-        """Uses AetherixEngine to generate context-aware F&B responses."""
-        query = text.lower()
+    async def _generate_response(
+        self, text: str, tenant_id: str, profile: RestaurantProfile
+    ) -> str:
+        """Generates a context-aware F&B response via single LLM call.
 
-        # 1. Demand Forecast Intent
-        if any(w in query for w in ["forecast", "covers", "prediction"]):
+        Loads the latest forecast to ground the agent constitution system prompt,
+        then delegates intent understanding entirely to the LLM (Claude).
+        """
+        from app.services.agent_constitution import AgentConstitutionService
+
+        # 1. Load latest forecast for context injection into the system prompt
+        try:
             forecast = await self.engine.get_forecast(tenant_id, date.today(), "dinner", {})
-            p = forecast["prediction"]
-            r = forecast["reasoning"]
+            prediction = forecast.get("prediction", {})
+            patterns = forecast.get("historical_patterns", [])
+            similar_text = "\n".join(
+                f"- {p['payload'].get('pattern_text', '')} ({p['payload'].get('outcome_description', '')})"
+                for p in patterns[:3]
+                if "payload" in p
+            ) if patterns else ""
+            forecast_context = {
+                "date": date.today().isoformat(),
+                "covers": prediction.get("covers", "—"),
+                "confidence": int(prediction.get("confidence", 0) * 100),
+                "similar_nights": similar_text,
+                "staffing": forecast.get("staffing_recommendation", {}),
+            }
+        except Exception as exc:
+            logger.warning("WhatsApp: failed to load forecast for context: %s", exc)
+            forecast_context = {"date": date.today().isoformat()}
 
+        # 2. Build agent constitution system prompt
+        try:
+            system_prompt = AgentConstitutionService().build_system_prompt(
+                profile=profile,
+                forecast_context=forecast_context,
+            )
+        except Exception as exc:
+            logger.warning("WhatsApp: AgentConstitutionService failed: %s", exc)
+            system_prompt = None
+
+        # 3. Single LLM call — intent understanding delegated to Claude
+        try:
+            llm_kwargs: Dict = {
+                "messages": [{"role": "user", "content": text}],
+                "max_tokens": 400,
+                "temperature": 0.3,
+            }
+            if system_prompt is not None:
+                llm_kwargs["system"] = system_prompt
+            return await self._llm.complete(**llm_kwargs)
+        except Exception as exc:
+            logger.error("WhatsApp: LLM call failed: %s", exc)
             return (
-                f"📊 *Demand Forecast: Dinner Today*\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"• *Predicted Covers:* {p['covers']}\n"
-                f"• *Confidence:* {int(p['confidence']*100)}%\n"
-                f"• *Range:* {p['interval'][0]} - {p['interval'][1]}\n\n"
-                f"📝 *Rationale:*\n{r['summary']}"
+                "I'm having trouble processing your request right now. "
+                "Please try again in a moment."
             )
-
-        # 2. Staffing Recommendation Intent
-        if any(w in query for w in ["staff", "staffing", "reco"]):
-            forecast = await self.engine.get_forecast(tenant_id, date.today(), "dinner", {})
-            s = forecast["staffing_recommendation"]
-            d = s["deltas"]
-
-            delta_str = (
-                f"({'+' if d['servers'] >= 0 else ''}{d['servers']} vs usual)"
-            )
-
-            return (
-                f"👥 *Staffing Suggestion*\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"• *Servers:* {s['servers']} {delta_str}\n"
-                f"• *Kitchen:* {s['kitchen']}\n"
-                f"• *Hosts:* {s['hosts']}\n\n"
-                f"💡 *Action:* {s['rationale']}"
-            )
-
-        # 3. Status/Help Intent
-        if any(w in query for w in ["status", "hi", "hello", "help"]):
-            return (
-                "👋 *Aetherix Ambient Agent*\n"
-                "I'm monitoring your operations. You can ask me:\n"
-                "• \"What's the forecast for tonight?\"\n"
-                "• \"Should I change staffing levels?\"\n"
-                "• \"Show covers for today.\"\n"
-                "• \"PUSH\" (to sync the latest recommendation with Apaleo)"
-            )
-
-        return "I'm not sure how to help with that yet. Try asking for a 'forecast' or 'staffing' update."
 
     async def send_message(self, to: str, body: str):
         """Sends a WhatsApp message via Twilio API."""
