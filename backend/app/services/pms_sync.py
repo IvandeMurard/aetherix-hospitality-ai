@@ -1,10 +1,12 @@
 import abc
+import asyncio
 import hashlib
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date
 from app.db.session import AsyncSessionLocal
 from app.db.models import PMSSyncLog
 from sqlalchemy.future import select
+from app.core.demo_events import demo_emit
 
 class PMSAdapter(abc.ABC):
     """Base class for all Property Management System (PMS) adapters."""
@@ -133,6 +135,8 @@ class PMSSyncService:
             folder=VAULT_FOLDERS["sync_logs"],
             tags=["pms-sync", property_id],
         )
+        # Demo board: highlight PMS Sync node after successful sync
+        asyncio.create_task(demo_emit("pms_sync"))
         return result
 
     async def _trigger_captation_recalculation(self, property_id: str) -> None:
