@@ -46,6 +46,7 @@
 | 8 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement |
 | 9 | Multi-LLM via `LLMProvider` abstrait | Swap Claude → Gemini → GPT sans réécriture. Claude reste provider principal |
 | 10 | Provider singleton via `lifespan` FastAPI | `LLMProvider` + `EmbeddingProvider` instanciés une fois au démarrage, stockés dans `app.state`. Factory = construction uniquement. Providers closés proprement (`aclose()`) au shutdown. Détail → `docs/bmad/_bmad-output/planning-artifacts/architecture.md` |
+| 11 | Agent Constitution via `AgentConstitutionService` | System prompt structuré injecté au runtime depuis `RestaurantProfile` (tone_profile, property_name, outlet_name, total_seats). Remplace le keyword matching dans `WhatsAppService`. Ton par défaut : `luxury`. Détail → `docs/context/demo-apaleo.md §4` |
 
 ---
 
@@ -70,7 +71,7 @@
 - [ ] **MCP server** : FastAPI endpoint dédié vs sidecar process séparé
 - [x] **Apaleo MCP direct (31/03/2026 — RÉSOLU)** : URL confirmée `https://mcp.apaleo.com/mcp/`, transport HTTP Streamable (SSE déprécié — notre `streamablehttp_client` est correct). Scope MCP activé sur le compte (code IIQJ). Auth OAuth2 bearer identique à la raw API. Activer via `POST /pms/sync?use_mcp=true` + `APALEO_MCP_SERVER_URL=https://mcp.apaleo.com/mcp/` dans `.env`.
 - [ ] **ROI dashboard vs WhatsApp** : afficher "€ économisés ce mois-ci" + évolution précision forecast 90j → via dashboard dédié (Next.js) ou via rapport WhatsApp hebdomadaire ? Dashboard = surface à maintenir (risque thin-frontend), WhatsApp = ambiant mais moins visuel. À trancher avec PM avant Phase 1.
-- [ ] **Food waste tracking** : instrumenter predicted prep vs actual waste par service comme KPI produit différenciant — ~25% gaspillage moyen en hôtellerie FR (ADEME/Accor), ~115g/couvert. Opportunité : la plupart des hôtels ne mesurent pas précisément → notre modèle crée cette donnée comme sous-produit du forecasting. Décision : intégrer en Phase 4 comme feature ROI (€ gaspillés évités) ou Phase 5 avec POS data ? À trancher avec PM.
+- [ ] **Food waste tracking** : instrumenter predicted prep vs actual waste par service comme KPI produit différenciant — ~25% gaspillage moyen en hôtellerie FR (ADEME/Accor), ~115g/couvert. **Décision partielle (Avr 2026) :** signal food waste planté dans le message WhatsApp MVP (coût over-prep chiffré, chaîne de calcul traçable). Mesure réelle (prépa vs réel) en Phase 4 avec POS data. Nouvelle Epic à créer avec SM.
 
 ---
 
@@ -104,9 +105,12 @@ backend/app/integrations/      — Obsidian, Linear, Apaleo
 backend/app/mcp_server.py      — [À créer] MCP Server capabilities
 backend/app/middleware/        — [À créer] tracking Agent SEO
 scripts/veille_proactive.py    — monitoring hebdomadaire automatisé
+scripts/demo_board.html        — [À créer] observabilité démo (SSE + SVG) — DEMO_MODE uniquement
 docs/ARCHITECTURE.md           — design système (v0.2.0 — certaines sections obsolètes, se fier à ce fichier)
 docs/ROADMAP_NOW_NEXT_LATER.md — roadmap opérationnelle
 docs/context/                  — contexte détaillé par domaine
+docs/context/demo-apaleo.md   — PRD démo Apaleo (scénario, flux agentique, script Loom, agent constitution, setup technique) — VERSION COURANTE
+docs/demo_script.md            — OBSOLÈTE (hackathon 2024, Mistral/Qdrant/ElevenLabs) — ne pas utiliser
 .github/workflows/veille-hebdomadaire.yml — cron lundi 8h30
 ```
 
@@ -133,6 +137,8 @@ LLM_MODEL             — "claude-sonnet-4-6" (défaut)
 EMBEDDING_BACKEND     — "mistral" (défaut) | "openai"
 EMBEDDING_MODEL       — "mistral-embed" (défaut)
 REDIS_URL             — Upstash (session state)
+PREDICTHQ_API_KEY     — Événements locaux (event_ingestion.py) — requis pour démo
+DEMO_MODE             — "true" active SSE observabilité + /demo/stream — false en production
 ```
 
 ---
