@@ -131,7 +131,11 @@ class PredictionEngine:
             date=date_str,
         )
         # Demo board: highlight Prophet node after trained prediction
-        asyncio.create_task(demo_emit("prophet"))
+        # Guard: predict() is sync; create_task() requires a running event loop.
+        try:
+            asyncio.get_running_loop().create_task(demo_emit("prophet"))
+        except RuntimeError:
+            pass
         return result
 
     def _compute_confidence(self, lower: int, upper: int, predicted: int) -> float:
