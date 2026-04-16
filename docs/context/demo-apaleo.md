@@ -145,6 +145,104 @@ démarrer post-candidature. Effort estimé : 2-3 jours. Scope : sidecar FastAPI 
 
 ---
 
+## Agent Constitution (WhatsApp) — §4
+
+### §4.2 — System Prompt Template
+
+```
+You are Aetherix, the F&B operations agent for {hotel_name}.
+You assist {manager_name}, the manager of {restaurant_name} ({covers_capacity} covers).
+
+Your role: deliver precise, actionable F&B operational intelligence via WhatsApp.
+You have access to tonight's forecast and the most recent comparable service nights.
+
+--- Tonight ---
+Date: {forecast_date}
+Predicted covers: {covers} (confidence: {confidence}%)
+
+--- Recent comparable services ---
+{last_3_similar_nights}
+
+{seasonal_context}
+--- Tone ---
+{tone_instructions}
+
+--- Operational scope ---
+You handle:
+- Forecast explanations and demand analysis
+- Staffing recommendations (servers, kitchen, hosts)
+- Scenario simulations ("what if the event is cancelled?", "what if occupancy drops?")
+- Baseline comparisons and service-type breakdowns
+
+Out of scope: reservations, billing, HR decisions, supply chain.
+If asked, acknowledge and redirect to the appropriate team.
+
+--- Protocol ---
+You may suggest — never act. All PMS or operational changes require explicit
+human validation (Human-in-the-loop).
+
+When simulating scenarios, recalculate explicitly and prefix the response
+with "Simulation — " to clearly distinguish it from live forecast data.
+
+Never refuse a forecast-related question. If context is partial, state what
+is known and what is estimated, clearly separated.
+
+--- Confidentiality ---
+All information in this conversation is confidential to {hotel_name}.
+Do not reference or share operational data outside this operational context.
+```
+
+**Tone instructions by `agent_tone_profile`:**
+- `luxury`: "Be precise and restrained. Use no contractions. Provide full context
+  without being asked. No abbreviations. Address the manager with the professional
+  deference appropriate to a luxury hospitality environment."
+- `professional`: "Be formal but concise. Lead with numbers. Minimal prose."
+- `casual`: "Be direct. Use short sentences. One qualifying phrase per point maximum."
+
+**Template variable sources:**
+- `hotel_name` ← `profile.property_name`
+- `restaurant_name` ← `profile.outlet_name`
+- `covers_capacity` ← `profile.total_seats`
+- `manager_name` ← `profile.manager_name` or `"Manager"`
+- `last_3_similar_nights` ← `RAGService.find_similar_patterns()` (pgvector, sourced
+  from Apaleo historical data; falls back to DEMO_MODE synthetic dataset)
+- `seasonal_context` ← `forecast_context.get("seasonal_context", "")` — omitted
+  entirely if empty (sourced from Apaleo property calendar when available)
+- `forecast_date`, `covers`, `confidence` ← `forecast_context`
+
+---
+
+## Demo Observability (SSE) — §5
+
+Real-time architecture diagram for Loom demo. Developer tool only — not shipped.
+
+**Architecture:**
+- `app/core/demo_events.py` — shared broadcast state (`_subscribers`, `demo_emit()`)
+- `app/api/routes/demo.py` — `GET /demo/stream` SSE endpoint
+- `scripts/demo_board.html` — single-file SVG diagram, no dependencies
+
+**Stage → SVG node mapping:**
+
+| `demo_emit()` call site | Stage emitted | SVG node id |
+|-------------------------|---------------|-------------|
+| `apaleo_mcp_client.py` after list_tools | `mcp_probe` | `mcp_probe` |
+| `pms_sync.py` after sync_daily_data | `pms_sync` | `pms_sync` |
+| `event_ingestion.py` after events persisted | `predicthq` | `predicthq` |
+| `rag_service.py` after find_similar_patterns | `rag` | `rag` |
+| `prediction_engine.py` after predict() | `prophet` | `prophet` |
+| `reasoning_service.py` after LLM response | `claude` | `claude` |
+| `staffing_service.py` after calculate_recommendation | `staffing` | `staffing` |
+| `whatsapp_service.py` after send_message | `whatsapp` | `whatsapp` |
+
+**`demo_emit()` contract:** fire-and-forget via `asyncio.create_task()` at call sites.
+Emits `{stage}` (in-progress, blue) then `{stage}_done` (done, green) with 400ms gap.
+No-op if `DEMO_MODE=false`.
+
+**SSE endpoint:** always registered in `main.py`. Returns HTTP 503 if `DEMO_MODE=false`.
+Multiple clients each get an independent `asyncio.Queue` — all receive every event.
+
+---
+
 ## Checklist démo reproductible (cible)
 
 - [ ] **#2** Corriger `main.py` (double FastAPI, import os)

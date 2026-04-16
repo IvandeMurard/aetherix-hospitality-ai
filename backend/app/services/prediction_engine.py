@@ -1,10 +1,14 @@
-from prophet import Prophet
-import pandas as pd
-from datetime import datetime, date
-from typing import Optional, List, Dict
+import asyncio
 import logging
-from pathlib import Path
 import os
+from datetime import datetime, date
+from pathlib import Path
+from typing import Optional, List, Dict
+
+import pandas as pd
+from prophet import Prophet
+
+from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 
@@ -118,14 +122,17 @@ class PredictionEngine:
         upper = max(0, int(round(row['yhat_upper'])))
         
         confidence = self._compute_confidence(lower, upper, predicted)
-        
-        return PredictionResult(
+
+        result = PredictionResult(
             predicted=predicted,
             lower=lower,
             upper=upper,
             confidence=confidence,
-            date=date_str
+            date=date_str,
         )
+        # Demo board: highlight Prophet node after trained prediction
+        asyncio.create_task(demo_emit("prophet"))
+        return result
 
     def _compute_confidence(self, lower: int, upper: int, predicted: int) -> float:
         """Computes confidence score based on interval width."""

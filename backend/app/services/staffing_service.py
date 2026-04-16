@@ -1,6 +1,8 @@
+import asyncio
 import math
 from typing import Dict, Optional
 from pydantic import BaseModel
+from app.core.demo_events import demo_emit
 
 class StaffingConfig(BaseModel):
     covers_per_server: int = 18
@@ -42,7 +44,7 @@ class StaffingService:
             warnings.append(msg)
             await self._dispatch_budget_alert(predicted_covers, current_cost, cfg.labor_budget_gbp_per_day)
 
-        return {
+        result = {
             "servers": servers,
             "hosts": hosts,
             "kitchen": kitchen,
@@ -50,11 +52,14 @@ class StaffingService:
                 "servers": servers - cfg.usual_servers,
                 "hosts": hosts - cfg.usual_hosts,
                 "kitchen": kitchen - cfg.usual_kitchen,
-                "sommeliers": sommeliers - cfg.usual_sommeliers
+                "sommeliers": sommeliers - cfg.usual_sommeliers,
             },
             "warnings": warnings,
-            "rationale": f"Staffing suggestion based on {predicted_covers} covers. Optimized for role-ratios."
+            "rationale": f"Staffing suggestion based on {predicted_covers} covers. Optimized for role-ratios.",
         }
+        # Demo board: highlight Staffing Service node after recommendation
+        asyncio.create_task(demo_emit("staffing"))
+        return result
 
     @staticmethod
     async def _dispatch_budget_alert(covers: int, cost: float, budget: float) -> None:

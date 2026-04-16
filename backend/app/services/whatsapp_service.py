@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from datetime import date
@@ -6,6 +7,7 @@ from typing import Any, Dict, Optional
 import httpx
 from sqlalchemy.future import select
 
+from app.core.demo_events import demo_emit
 from app.core.exceptions import NotConfiguredError
 from app.db.models import RestaurantProfile
 from app.db.session import AsyncSessionLocal
@@ -173,5 +175,7 @@ class WhatsAppService:
                     logger.error(f"Twilio error: {response.text}")
                 else:
                     logger.info(f"Message sent to {to}")
+                    # Demo board: highlight WhatsApp/Twilio node after delivery
+                    asyncio.create_task(demo_emit("whatsapp"))
             except Exception as e:
                 logger.error(f"Failed to send Twilio message: {str(e)}")

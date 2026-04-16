@@ -13,6 +13,7 @@ Zero-vector fallback is preserved when no API key is configured (dev mode).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date
 from typing import Any, Dict, List, Optional
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.providers.base import EmbeddingProvider
 from app.providers.factory import get_embedding_provider
+from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +119,7 @@ class RAGService:
                 logger.error("RAGService.find_similar_patterns error: %s", exc)
                 return []
 
-        return [
+        results = [
             {
                 "id": str(row["id"]),
                 "score": float(row.get("similarity", 1.0)),
@@ -133,6 +135,9 @@ class RAGService:
             }
             for row in rows
         ]
+        # Demo board: highlight pgvector RAG node after pattern retrieval
+        asyncio.create_task(demo_emit("rag"))
+        return results
 
     async def _fallback_select(
         self,
