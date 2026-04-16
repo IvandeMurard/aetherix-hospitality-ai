@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 from typing import Dict, List, Optional
 from datetime import date
 
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
+from app.core.demo_events import demo_emit
+
+logger = logging.getLogger(__name__)
 
 
 class ReasoningService:
@@ -40,6 +45,10 @@ class ReasoningService:
                 max_tokens=300,
                 temperature=0.3,
             )
+            # Task 3: debug log — first 200 chars of Claude reasoning
+            logger.debug("Claude reasoning: %s", explanation[:200])
+            # Demo board: highlight Claude Sonnet node after LLM response
+            asyncio.create_task(demo_emit("claude"))
             return {
                 "summary": explanation.strip(),
                 "confidence_factors": self._extract_factors(context, similar_patterns),
@@ -51,7 +60,6 @@ class ReasoningService:
                 predicted_covers, confidence, target_date, service_type, context, similar_patterns
             )
         except Exception as e:
-            import asyncio
             from app.services.ops_dispatcher import dispatch_error
             asyncio.ensure_future(dispatch_error(
                 title="Reasoning service failure — LLM provider error",

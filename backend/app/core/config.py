@@ -41,3 +41,9 @@ SENDGRID_FROM_EMAIL: str = _os.getenv("SENDGRID_FROM_EMAIL", "noreply@aetherix.i
 TWILIO_SKIP_SIGNATURE_VALIDATION: bool = (
     _os.getenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "false").lower() == "true"
 )
+
+# ─── Demo Mode ────────────────────────────────────────────────────────────────
+# When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
+# and loads synthetic Prophet training data from demo_data/prophet_training.json.
+# All demo_emit() calls are no-ops when false.
+DEMO_MODE: bool = _os.getenv("DEMO_MODE", "false").lower() == "true"
