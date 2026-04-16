@@ -34,6 +34,7 @@ from app.integrations.apaleo_logger import (
     is_readonly_mode,
     is_write_tool,
 )
+from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 _agent_logger = ApaleoAgentLogger()
@@ -182,6 +183,9 @@ class ApaleoMCPClient:
                 duration_ms=duration_ms,
                 result_summary=str(decoded)[:200],
             )
+            # Demo board: highlight MCP Probe node after successful handshake
+            import asyncio as _asyncio
+            _asyncio.create_task(demo_emit("mcp_probe"))
             return decoded
 
         except ApaleoWriteBlockedError:
