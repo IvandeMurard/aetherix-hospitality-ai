@@ -49,6 +49,7 @@
 | 11 | Démo — stratégie données hybride | Apaleo sandbox pour appels MCP live (probe + occupancy). Dataset synthétique 365j pour training Prophet (DEMO_MODE=true). Script `scripts/generate_demo_data.py` → `demo_data/prophet_training.json`. Détail → `docs/context/demo-apaleo.md` |
 | 12 | MCP Server Apaleo — probe suffisant pour candidature | `GET /pms/mcp/probe` (endpoint existant) prouve la connexion MCP native — suffit pour la démo Apaleo. HOS-71 (Aetherix MCP Server complet) = Phase 0.5, post-candidature. |
 | 13 | Pipeline Prophet — gap training identifié | `ApaleoMCPAdapter.get_historical_data()` → `DataTransformer.stay_records_to_prophet()` → `PredictionEngine.train()` : briques existent, orchestrateur manquant. Débloquer via `POST /api/v1/predictions/train` ou worker de démarrage. |
+| 14 | Phase 0 DoD amendée — MCP Server v0 inclus | Suite directive PM 17/04/2026 (tweet Benioff "headless for agents"): ship Aetherix MCP Server v0 (HOS-71, 3 tools) est désormais un critère de validation Phase 0, APRÈS gate MAPE interne. Si MAPE > 22%, pivot avant ship MCP. Détail → `docs/planning/phase-0-1-execution-plan.md` |
 
 ---
 
