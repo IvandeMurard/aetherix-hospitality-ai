@@ -1,0 +1,114 @@
+{
+  "workspace": "Hospitalityagent",
+  "team_id": "2f6bb5e2-d735-4769-9377-11fe186aa0ad",
+  "note": "Check before import: HOS-71 and HOS-72 may already exist in Linear. If so, link P1-2/P1-5 to them instead of creating duplicates.",
+  "epics": [
+    {
+      "external_id": "HOS-EPIC-P0",
+      "title": "Phase 0 — Keystone Validation",
+      "priority": "urgent",
+      "labels": ["phase-0", "validation", "keystone"],
+      "description": "Débloquer le pipeline Prophet + mémoire et publier des métriques vérifiables. Gate pour tout le reste du roadmap.\n\n**Problem**: Les briques techniques existent (MCP adapter Apaleo, Prophet engine, demo data 365j) mais ne sont pas orchestrées. Zéro MAPE mesurable, zéro preuve publique.\n\n**Success metrics**:\n- MAPE < 18% (cible < 15% sur 70%+ jours) sur backtest rolling 30-90j\n- Directional accuracy ≥ 75%\n- Ablation lift idiosyncratic memory > 0, documenté\n- ROI calculator déployé\n- MCP Server v0 (3 tools) shippé et testé par agent externe (Décision #14)\n\n**Kill criterion**: MAPE > 22% → pivot, pas de MCP Server."
+    },
+    {
+      "external_id": "HOS-EPIC-P1",
+      "title": "Phase 1 — Outcome-Driven + Headless Positioning",
+      "priority": "high",
+      "labels": ["phase-1", "mcp-server", "differentiation"],
+      "description": "Aetherix devient appelable par d'autres agents (agent mesh). Gate d'entrée : Phase 0 DONE.\n\n**Problem**: Consommer Apaleo MCP est devenu commodity. Aetherix a besoin d'un axe de différenciation durable (headless for agents per Benioff/Levie standard).\n\n**Success metrics**:\n- Memory feedback loops instrumentés per-layer\n- Forecast benchmark Prophet vs alternatives documenté\n- HOS-72 Agent SEO livré",
+      "depends_on": ["HOS-EPIC-P0"]
+    }
+  ],
+  "stories": [
+    {
+      "external_id": "HOS-P0-1",
+      "parent": "HOS-EPIC-P0",
+      "title": "Orchestrer le pipeline de training Prophet via MCP adapter",
+      "priority": "urgent",
+      "labels": ["phase-0", "backend", "prophet", "mcp"],
+      "estimate_days": 6,
+      "depends_on": [],
+      "description": "**Problem**: `ApaleoMCPAdapter.get_historical_data()` → `DataTransformer.stay_records_to_prophet()` → `PredictionEngine.train()` existent isolément. Aucun orchestrateur ne les enchaîne (Décision #13 CLAUDE.md).\n\n**Acceptance criteria**:\n- [ ] Endpoint `POST /api/v1/predictions/train` dans `backend/app/api/routes/predictions.py`\n- [ ] Params: `property_id`, `start_date`, `end_date`, `data_source` (enum: `mcp_sandbox` | `synthetic` | `hybrid`)\n- [ ] Retourne: `training_id`, `status`, `records_processed`, `duration_ms`, `model_path`\n- [ ] Enchaîne: MCP adapter → DataTransformer → PredictionEngine.train → persist model\n- [ ] Mode `synthetic` utilise `demo_data/prophet_training.json`\n- [ ] Mode `hybrid` merge sandbox + synthétique avec tag source\n- [ ] Audit log Supabase (`training_runs` table)\n- [ ] Test intégration: run complet < 5 min sur 365j synthétique\n- [ ] README mis à jour avec flow diagram Mermaid\n\n**Note audit**: `scripts/train_prophet.py` existant pointe vers path legacy (`backend.ml.*`), ne pas réutiliser.\n\n**Out of scope**: scheduling cron, UI, pipeline Gemini/OpenAI fallback."
+    },
+    {
+      "external_id": "HOS-P0-2",
+      "parent": "HOS-EPIC-P0",
+      "title": "Backtests 30-90j + publication KPIs Niveau 1",
+      "priority": "urgent",
+      "labels": ["phase-0", "backend", "metrics", "kpi"],
+      "estimate_days": 4,
+      "depends_on": ["HOS-P0-1"],
+      "description": "**Problem**: Aucune métrique publique n'existe pour juger la qualité du modèle.\n\n**Acceptance criteria**:\n- [ ] Script `scripts/backtest.py` — rolling backtest 30-90j, MAPE/MAE par horizon (J+1, J+3, J+7)\n- [ ] Calcule: staffing_prediction_accuracy, labor_cost_variance directionnel, food_waste_per_cover\n- [ ] Ablation study: idiosyncratic-only vs full → report lift % explicite\n- [ ] Résultats: `docs/metrics/backtest_YYYY-MM-DD.json` + charts PNG\n- [ ] README mis à jour: section 'Current metrics' + 'Assumptions & limitations'\n- [ ] Split train/test strict (jamais de métrique sur données vues au training)\n\n**Gate interne PM**: MAPE < 18%, directional ≥ 75%, ablation lift > 0 → débloquer Sprint B."
+    },
+    {
+      "external_id": "HOS-P0-3",
+      "parent": "HOS-EPIC-P0",
+      "title": "ROI calculator public (assumptions-based)",
+      "priority": "high",
+      "labels": ["phase-0", "frontend-thin", "recruitment-artifact"],
+      "estimate_days": 3,
+      "depends_on": ["HOS-P0-2"],
+      "description": "**Note audit**: `backend/app/services/roi_calculator.py` existe déjà. Story = endpoint API + page web minimale, pas from-scratch.\n\n**Acceptance criteria**:\n- [ ] Endpoint `POST /api/v1/roi/simulate` avec schema Pydantic documenté\n- [ ] Inputs: `rooms_count`, `avg_cover_revenue_eur`, `labor_cost_per_hour_eur`, `food_cost_pct`, `current_waste_pct`, `annual_revenue_eur`\n- [ ] Outputs: savings projetés + `assumptions` dict + `disclaimers` list\n- [ ] Calculs basés sur ranges KPI backtest P0-2 uniquement\n- [ ] Banner disclaimer '⚠️ Simulated — synthetic backtest data, no real hotel pilots' visible\n- [ ] Page déployée publiquement (Vercel/HF Space gratuit)\n- [ ] URL ajoutée au README"
+    },
+    {
+      "external_id": "HOS-P0-4",
+      "parent": "HOS-EPIC-P0",
+      "title": "Draft PM retrospective publique (phase-0-lessons)",
+      "priority": "medium",
+      "labels": ["phase-0", "portfolio", "tech-writer"],
+      "estimate_days": 2,
+      "depends_on": ["HOS-P0-2"],
+      "description": "**Acceptance criteria**:\n- [ ] `docs/retro/phase-0-lessons.md` créé, 1500-2500 mots\n- [ ] Sections: Context, What I built, What worked, What didn't, Decisions I'd revisit, Metrics, What Phase 1 becomes\n- [ ] Cite 3-5 décisions architecturales avec trade-offs\n- [ ] Inclut métriques backtest P0-2 avec limitations\n- [ ] Cross-post LinkedIn + Medium\n\n**Agent**: Tech Writer"
+    },
+    {
+      "external_id": "HOS-P1-1",
+      "parent": "HOS-EPIC-P1",
+      "title": "Architect session: Aetherix MCP Server v0 — ADR",
+      "priority": "high",
+      "labels": ["phase-1", "architect", "design"],
+      "estimate_days": 1,
+      "depends_on": ["HOS-EPIC-P0"],
+      "description": "**Problem**: Avant de coder HOS-71, décisions cross-cutting durables à arbitrer.\n\n**Acceptance criteria**:\n- [ ] Session Architect (Winston) tenue\n- [ ] ADR `docs/adr/0001-aetherix-mcp-server-v0.md` écrit\n- [ ] ADR couvre: transport (stdio vs HTTP streamable), auth bearer + scoping property_id, isolation multi-tenant, versioning tools, tool surface v0 (max 3 tools)\n- [ ] ADR couvre: rate limiting, observability (logs structurés, cost tracking)\n- [ ] ADR validé PM avant P1-2\n\n**Agent**: Architect (Winston) / **Model**: Opus 4.7"
+    },
+    {
+      "external_id": "HOS-P1-2",
+      "parent": "HOS-EPIC-P1",
+      "title": "Ship Aetherix MCP Server v0 (3 tools) — HOS-71",
+      "priority": "high",
+      "labels": ["phase-1", "backend", "mcp-server", "hos-71"],
+      "estimate_days": 10,
+      "depends_on": ["HOS-P1-1"],
+      "description": "**Note**: Si HOS-71 existe déjà dans Linear, lier cette story à HOS-71 au lieu de dupliquer.\n\n**Tools v0** (fixés par Décision #14 CLAUDE.md):\n1. `get_operational_predictions` — prédictions couverts/staffing, confidence intervals, explainability trace\n2. `get_recommendations_with_memory_context` — recommandations + reasoning trace Claude + memory layer trace\n3. `submit_feedback_to_memory` — override manager actual-vs-predicted → update pgvector idiosyncratic\n\n**Acceptance criteria**:\n- [ ] Module `backend/app/mcp_server.py` créé, conforme ADR P1-1\n- [ ] Auth bearer + scoping property_id\n- [ ] Rate limiting 60 req/min per property\n- [ ] Logs structurés: durée, tokens LLM, status par tool call\n- [ ] Tests unitaires par tool (mocked provider)\n- [ ] Test e2e: Claude Desktop → chaque tool → réponse valide\n- [ ] Doc `docs/mcp-server/README.md` + `integration-guide.md`\n- [ ] Démo vidéo 2 min publiée\n- [ ] Latence p95 `get_operational_predictions` < 2s\n\n**Gate externe**: ≥1 agent externe appelle avec succès → Phase 0 DONE (Décision #14)."
+    },
+    {
+      "external_id": "HOS-P1-3",
+      "parent": "HOS-EPIC-P1",
+      "title": "Memory feedback loops instrumentation (per-layer metrics)",
+      "priority": "medium",
+      "labels": ["phase-1", "backend", "memory", "metrics"],
+      "estimate_days": 4,
+      "depends_on": ["HOS-P1-2"],
+      "description": "**Acceptance criteria**:\n- [ ] Colonne `memory_trace` ajoutée aux prédictions (JSON structuré)\n- [ ] Format: `{idiosyncratic_matches, hive_matches, layer_weights, lift_estimate}`\n- [ ] Shadow computation idio-only sur chaque prédiction, delta logué\n- [ ] Endpoint `GET /api/v1/memory/metrics` avec aggregated contribution\n- [ ] Test: sur 100+ prédictions synthétiques, `memory_trace` toujours peuplée\n- [ ] Doc `docs/memory/metrics.md` (méthodologie transparente)"
+    },
+    {
+      "external_id": "HOS-P1-4",
+      "parent": "HOS-EPIC-P1",
+      "title": "Hybrid forecasting benchmark (Prophet vs alternatives)",
+      "priority": "medium",
+      "labels": ["phase-1", "backend", "ml", "forecasting"],
+      "estimate_days": 6,
+      "depends_on": ["HOS-P0-2"],
+      "description": "**Acceptance criteria**:\n- [ ] Script `scripts/forecast_benchmark.py`\n- [ ] Compare Prophet vs ≥2 alternatives (NeuralProphet + Darts TFT)\n- [ ] Même dataset split que P0-2\n- [ ] Métriques: MAPE/MAE/RMSE par horizon + training time + inference latency\n- [ ] Section explainability dans rapport\n- [ ] Rapport `docs/metrics/forecast_benchmark_YYYY-MM-DD.md` avec recommandation: swap/keep/ensemble\n- [ ] Règle: swap uniquement si lift ≥ 5% ET explainability maintenue\n- [ ] Revue Architect obligatoire avant toute décision de swap\n\n**Agent**: Dev pour impl / Architect (Opus 4.7) pour décision finale"
+    },
+    {
+      "external_id": "HOS-P1-5",
+      "parent": "HOS-EPIC-P1",
+      "title": "Agent SEO (HOS-72) — exécution parallèle",
+      "priority": "medium",
+      "labels": ["phase-1", "agent-seo", "parallel"],
+      "estimate_days": 7,
+      "depends_on": [],
+      "description": "**Note**: Si HOS-72 existe déjà dans Linear avec spec détaillée, utiliser cette issue. Sinon SM rédige la spec avant dev.\n\nMiddleware tracking dans `backend/app/middleware/` (CLAUDE.md §Fichiers clés).\nIndépendant du Prophet pipeline — exécutable en parallèle dans un slot libre."
+    }
+  ]
+}
