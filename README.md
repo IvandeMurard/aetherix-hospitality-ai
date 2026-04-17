@@ -82,6 +82,28 @@ Roadmap hosted on [Linear](https://linear.app/hospitalityagent/team/HOS/all)
 - Conversational feedback loop ("Why?", "What if?", outcomes)
 - Self-improving per-hotel intelligence
 
+### Current Metrics (P0-2 Backtest — 17 April 2026)
+
+> ⚠️ **Data: synthetic (Paris 4\* simulation, 365 days) — not validated on real hotel data. No live pilots yet.**
+> Rolling cross-validation, 12 folds, train=120d. Full methodology: [`docs/metrics/backtest_2026-04-17.json`](docs/metrics/backtest_2026-04-17.json)
+
+| Metric | J+1 | J+3 | J+7 | Gate | Status |
+|--------|-----|-----|-----|------|--------|
+| **MAPE** | **7.8%** | 10.4% | 11.8% | < 18% | ✅ |
+| **MAPE target** | 7.8% | 10.4% | 11.8% | < 15% | ✅ |
+| **Directional accuracy** | **90.9%** | 71.4% | 85.5% | ≥ 75% (J+1) | ✅ |
+| **Staffing accuracy** | 75.0% | 55.6% | 48.8% | — | — |
+| **Memory ablation lift** | +4.1pp | — | — | > 0 (simulated) | ✅ |
+
+**Phase 0 Internal Gate: ✅ PASS** → Sprint B (MCP Server v0) unlocked.
+
+**Assumptions & Limitations:**
+- Data is synthetic — real hotel variability may increase MAPE by 5-10pp
+- Ablation test is **simulated** (noise injection) — true ablation requires memory layer integration (P1-3)
+- Labor cost variance is directional only (assumptions-based, not from actual payroll)
+- Rolling folds capped at 12 for speed — full publication run uses more folds
+- No captation rate calibration applied (no real property baseline available)
+
 ### Prophet Training Pipeline (Decision #13 — P0-1)
 
 `POST /api/v1/predictions/train` orchestrates the full training flow:
