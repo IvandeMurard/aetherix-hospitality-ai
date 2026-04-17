@@ -82,6 +82,26 @@ Roadmap hosted on [Linear](https://linear.app/hospitalityagent/team/HOS/all)
 - Conversational feedback loop ("Why?", "What if?", outcomes)
 - Self-improving per-hotel intelligence
 
+### Prophet Training Pipeline (Decision #13 — P0-1)
+
+`POST /api/v1/predictions/train` orchestrates the full training flow:
+
+```mermaid
+flowchart LR
+    A["POST /predictions/train\n(data_source: synthetic|mcp_sandbox|hybrid)"] --> B{data_source}
+    B -->|synthetic| C["demo_data/\nprophet_training.json\n(365j Paris 4*)"]
+    B -->|mcp_sandbox| D["ApaleoMCPAdapter\n.get_historical_data()"]
+    B -->|hybrid| C & D
+    C & D --> E["DataTransformer\n.stay_records_to_prophet()"]
+    E --> F["CaptationBaseline\n(per-property calibration)"]
+    F --> G["PredictionEngine\n.train()"]
+    G --> H["prophet_model.json\n(persisted)"]
+    G --> I["training_runs\n(Supabase audit log)"]
+    H --> J["/predict calls\nis_mock=false"]
+```
+
+**Response**: `training_id`, `status`, `records_processed`, `duration_ms`, `model_path`, `mape_training`
+
 ---
 ## Architecture & Technical Strategy
 

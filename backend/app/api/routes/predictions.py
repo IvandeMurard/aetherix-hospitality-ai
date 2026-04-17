@@ -1,10 +1,14 @@
 import json
 import logging
 import os
+import time
+import uuid
 from datetime import date, timedelta
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -12,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.security import get_current_user
-from app.db.models import RestaurantProfile
+from app.db.models import CaptationBaseline, RestaurantProfile, TrainingRun
 from app.db.session import get_db
 from app.services.aetherix_engine import AetherixEngine
 
@@ -152,59 +156,69 @@ async def predict(body: PredictRequest):
 # Training endpoint — HOS-143 (Decision #13)
 # ---------------------------------------------------------------------------
 
+class DataSource(str, Enum):
+    mcp_sandbox = "mcp_sandbox"
+    synthetic = "synthetic"
+    hybrid = "hybrid"
+
+
 class TrainRequest(BaseModel):
-    """Input for POST /predictions/train."""
-    property_id: str = Field(
-        "demo_hotel",
-        description="Apaleo property ID.  Ignored when DEMO_MODE=true.",
-    )
+    property_id: str = Field("demo_hotel", description="Apaleo property ID.")
     start_date: date = Field(
         default_factory=lambda: date.today() - timedelta(days=365),
-        description="Historical window start (live mode only).",
+        description="Historical window start (live MCP modes only).",
     )
     end_date: date = Field(
         default_factory=lambda: date.today() - timedelta(days=1),
-        description="Historical window end (live mode only).",
+        description="Historical window end (live MCP modes only).",
     )
+    data_source: DataSource = Field(
+        DataSource.synthetic,
+        description=(
+            "mcp_sandbox: live Apaleo MCP only. "
+            "synthetic: demo_data/prophet_training.json only. "
+            "hybrid: merge both, tag each row with its source."
+        ),
+    )
+    include_weather: bool = Field(True)
+    include_events: bool = Field(True)
+    include_occupancy: bool = Field(True)
 
 
 class TrainResponse(BaseModel):
+    training_id: str
     status: str
-    rows_trained: int
-    demo_mode: bool
-    model_saved_to: str
+    records_processed: int
+    duration_ms: int
+    model_path: str
+    mape_training: Optional[float] = None
+    data_source: str
     message: str
 
 
 @router.post(
     "/train",
     response_model=TrainResponse,
-    summary="Train Prophet model (DEMO_MODE or live Apaleo)",
+    summary="Train Prophet model — orchestrates MCP adapter → DataTransformer → PredictionEngine (Decision #13)",
 )
-async def train_prophet(body: TrainRequest = TrainRequest()):
-    """Connect the Prophet training pipeline (Decision #13 gap).
+async def train_prophet(
+    body: TrainRequest = TrainRequest(),
+    db: AsyncSession = Depends(get_db),
+):
+    """Orchestrates the full Prophet training pipeline (Decision #13 gap closure).
 
-    **DEMO_MODE=true** (default for local dev):
-      Loads ``demo_data/prophet_training.json`` — synthetic 365-day Paris 4*
-      dataset.  No Apaleo credentials required.
+    data_source=synthetic  → loads demo_data/prophet_training.json (default, no credentials needed)
+    data_source=mcp_sandbox → fetches live Apaleo MCP reservations
+    data_source=hybrid      → merges both sources, each row tagged with 'source' column
 
-    **DEMO_MODE=false**:
-      Fetches live historical reservations from Apaleo MCP, transforms them
-      via ``DataTransformer.stay_records_to_prophet()``, and trains Prophet.
-
-    After training, the model is:
-    - Active in-process immediately (subsequent ``/predict`` calls use it).
-    - Persisted to ``demo_data/prophet_model.json`` for restart-resilience.
+    After training the model is active in-process and persisted for restart-resilience.
+    Every call is audit-logged to the training_runs table.
     """
-    demo_mode = os.getenv("DEMO_MODE", "false").lower() in ("1", "true", "yes")
+    t0 = time.monotonic()
+    training_id = str(uuid.uuid4())
 
     try:
-        if demo_mode:
-            df = _load_demo_dataframe()
-            source = "demo_data/prophet_training.json"
-        else:
-            df = await _load_live_dataframe(body.property_id, body.start_date, body.end_date)
-            source = f"Apaleo/{body.property_id} ({body.start_date}→{body.end_date})"
+        df = await _build_training_dataframe(body)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Data loading failed: {exc}") from exc
 
@@ -212,27 +226,70 @@ async def train_prophet(body: TrainRequest = TrainRequest()):
         raise HTTPException(
             status_code=422,
             detail=(
-                "Training dataset is empty.  "
-                "Set DEMO_MODE=true or supply valid Apaleo credentials."
+                "Training dataset is empty. Use data_source=synthetic or "
+                "supply valid APALEO_MCP_SERVER_URL credentials."
             ),
         )
 
+    if len(df) < 60:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Insufficient data: {len(df)} days found, minimum 60 required for reliable training.",
+        )
+
+    # Apply per-property captation rate calibration when available
+    df = await _apply_captation_calibration(df, body.property_id, db)
+
     try:
-        engine.forecaster.train(df)
+        engine.forecaster.train(
+            df,
+            include_weather=body.include_weather,
+            include_events=body.include_events,
+            include_occupancy=body.include_occupancy,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Prophet training failed: {exc}") from exc
 
     engine.forecaster.save_model(_MODEL_PATH)
-    logger.info("Prophet trained on %d rows from %s, saved to %s", len(df), source, _MODEL_PATH)
+
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    mape_training = _compute_in_sample_mape(engine.forecaster, df)
+
+    # Audit log (best-effort — don't fail the response if DB write fails)
+    try:
+        run = TrainingRun(
+            id=uuid.UUID(training_id),
+            property_id=body.property_id,
+            source=body.data_source.value,
+            records_count=len(df),
+            mape_training=mape_training,
+            duration_ms=duration_ms,
+            model_path=_MODEL_PATH,
+        )
+        db.add(run)
+        await db.commit()
+    except Exception as db_exc:
+        logger.warning("training_runs audit log failed (non-blocking): %s", db_exc)
+
+    logger.info(
+        "Prophet trained: id=%s property=%s source=%s rows=%d mape=%.2f%% duration=%dms",
+        training_id, body.property_id, body.data_source.value,
+        len(df), (mape_training or 0) * 100, duration_ms,
+    )
 
     return TrainResponse(
+        training_id=training_id,
         status="ok",
-        rows_trained=len(df),
-        demo_mode=demo_mode,
-        model_saved_to=_MODEL_PATH,
+        records_processed=len(df),
+        duration_ms=duration_ms,
+        model_path=_MODEL_PATH,
+        mape_training=mape_training,
+        data_source=body.data_source.value,
         message=(
-            f"Prophet model trained on {len(df)} days from {source}. "
-            "is_mock will be false on subsequent /predict calls."
+            f"Prophet model trained on {len(df)} days "
+            f"(source={body.data_source.value}, mape_training="
+            f"{'N/A' if mape_training is None else f'{mape_training*100:.1f}%'}). "
+            "is_mock will be False on subsequent /predict calls."
         ),
     )
 
@@ -242,25 +299,89 @@ async def train_prophet(body: TrainRequest = TrainRequest()):
 # ---------------------------------------------------------------------------
 
 def _load_demo_dataframe() -> pd.DataFrame:
-    """Load the pre-generated synthetic dataset into a Prophet-ready DataFrame."""
     if not _DEMO_DATA.exists():
         raise FileNotFoundError(
-            f"Demo dataset not found at {_DEMO_DATA}.  "
+            f"Demo dataset not found at {_DEMO_DATA}. "
             "Run: python scripts/generate_demo_data.py"
         )
     rows = json.loads(_DEMO_DATA.read_text(encoding="utf-8"))
     df = pd.DataFrame(rows)
     df["ds"] = pd.to_datetime(df["ds"])
+    df["_source"] = "synthetic"
     return df
 
 
-async def _load_live_dataframe(
+async def _load_mcp_dataframe(
     property_id: str, start_date: date, end_date: date
 ) -> pd.DataFrame:
-    """Fetch Apaleo reservations and transform them into a Prophet DataFrame."""
     from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
     from app.services.data_transformer import DataTransformer
 
     adapter = ApaleoMCPAdapter()
     records = await adapter.get_historical_data(property_id, start_date, end_date)
-    return DataTransformer.stay_records_to_prophet(records)
+    df = DataTransformer.stay_records_to_prophet(records)
+    if not df.empty:
+        df["_source"] = "mcp_sandbox"
+    return df
+
+
+async def _build_training_dataframe(body: "TrainRequest") -> pd.DataFrame:
+    if body.data_source == DataSource.synthetic:
+        return _load_demo_dataframe()
+    if body.data_source == DataSource.mcp_sandbox:
+        return await _load_mcp_dataframe(body.property_id, body.start_date, body.end_date)
+    # hybrid: merge both, prefer MCP where dates overlap
+    df_synthetic = _load_demo_dataframe()
+    df_mcp = await _load_mcp_dataframe(body.property_id, body.start_date, body.end_date)
+    if df_mcp.empty:
+        logger.warning("hybrid mode: MCP returned no data, falling back to synthetic only")
+        return df_synthetic
+    # Union — MCP rows override synthetic rows on the same date
+    mcp_dates = set(df_mcp["ds"].dt.normalize())
+    df_synthetic_trimmed = df_synthetic[~df_synthetic["ds"].dt.normalize().isin(mcp_dates)]
+    df_merged = pd.concat([df_synthetic_trimmed, df_mcp], ignore_index=True)
+    df_merged.sort_values("ds", inplace=True)
+    df_merged.reset_index(drop=True, inplace=True)
+    return df_merged
+
+
+async def _apply_captation_calibration(
+    df: pd.DataFrame, property_id: str, db: AsyncSession
+) -> pd.DataFrame:
+    """Scale 'y' values by per-property captation baseline when available."""
+    try:
+        result = await db.execute(
+            select(CaptationBaseline)
+            .where(CaptationBaseline.tenant_id == property_id)
+            .order_by(CaptationBaseline.computed_at.desc())
+            .limit(1)
+        )
+        baseline = result.scalars().first()
+        if baseline and baseline.avg_fb_revenue_per_room and baseline.avg_fb_revenue_per_room > 0:
+            scale = float(baseline.avg_fb_revenue_per_room)
+            df = df.copy()
+            df["y"] = (df["y"] * scale).round().astype(int)
+            logger.info("Captation calibration applied: property=%s scale=%.3f", property_id, scale)
+        else:
+            logger.debug("No captation baseline for property=%s, using raw values", property_id)
+    except Exception as exc:
+        logger.warning("Captation calibration failed (non-blocking): %s", exc)
+    return df
+
+
+def _compute_in_sample_mape(forecaster: Any, df: pd.DataFrame) -> Optional[float]:
+    """Compute in-sample MAPE on training data as a training quality signal."""
+    try:
+        if not forecaster.is_trained or forecaster.model is None:
+            return None
+        pred_df = forecaster.model.predict(df[["ds"]].copy())
+        y_true = df["y"].values
+        y_pred = pred_df["yhat"].values
+        mask = y_true > 0
+        if mask.sum() == 0:
+            return None
+        mape = float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])))
+        return round(mape, 4)
+    except Exception as exc:
+        logger.warning("In-sample MAPE computation failed: %s", exc)
+        return None

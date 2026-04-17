@@ -372,6 +372,23 @@ class FBPattern(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class TrainingRun(Base):
+    """
+    Audit log for Prophet training runs (P0-1 / Decision #13).
+    One row per POST /predictions/train call.
+    """
+    __tablename__ = "training_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    property_id = Column(String, nullable=False, index=True)
+    source = Column(String, nullable=False)           # mcp_sandbox | synthetic | hybrid
+    records_count = Column(Integer, nullable=False)
+    mape_training = Column(Float, nullable=True)      # in-sample MAPE, null if not computable
+    duration_ms = Column(Integer, nullable=False)
+    model_path = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class OperationalMemory(Base):
     """
     Per-hotel operational memory: manager decisions, reflections, feedback.
