@@ -27,6 +27,7 @@ from app.api.routes import (
     pms,
     predictions,
     reports,
+    roi,
     webhooks,
     weather,
 )
@@ -127,6 +128,8 @@ app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(weather.router, prefix="/api/v1")
 app.include_router(baselines.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
+# P0-3 public ROI simulator — stateless, public, rate-limited at the edge
+app.include_router(roi.router, prefix="/api/v1")
 # Demo observability board — always registered, returns 503 when DEMO_MODE=false
 app.include_router(demo.router, prefix="/api/v1")
 # Story 4.3 (HOS-26): public Twilio callback — no /api/v1 or auth prefix
