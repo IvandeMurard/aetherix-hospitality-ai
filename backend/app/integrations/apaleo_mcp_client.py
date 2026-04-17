@@ -184,8 +184,11 @@ class ApaleoMCPClient:
                 result_summary=str(decoded)[:200],
             )
             # Demo board: highlight MCP Probe node after successful handshake
-            import asyncio as _asyncio
-            _asyncio.create_task(demo_emit("mcp_probe"))
+            import asyncio
+            try:
+                asyncio.get_running_loop().create_task(demo_emit("mcp_probe"))
+            except RuntimeError:
+                pass
             return decoded
 
         except ApaleoWriteBlockedError:

@@ -87,7 +87,7 @@ class ApaleoPMSAdapter(PMSAdapter):
                 duration_ms = (time.monotonic() - t0) * 1000
                 if response.status_code == 200:
                     data = response.json()
-                    result = int(data.get("occupancy") or 85)
+                    result = int(data.get("occupancy") or 0)
                     _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
                                       result_summary=str(result))
                     return result
