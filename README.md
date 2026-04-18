@@ -76,11 +76,14 @@ Roadmap hosted on [Linear](https://linear.app/hospitalityagent/team/HOS/all)
 
 ### Current Status (April 2026)
 
+- **Phase 0 — ✅ PASS (18 April 2026)** · MAPE gate + MCP Server v0 shipped per amended DoD
 - Native Apaleo integration (OAuth + MCP-compatible read-only access)
 - End-to-end agentic pipeline: Prophet forecasting + pgvector retrieval + Backboard memory + Claude reasoning
 - Daily push recommendations (F&B covers + staffing + prep)
 - Conversational feedback loop ("Why?", "What if?", outcomes)
 - Self-improving per-hotel intelligence
+- **Aetherix MCP Server v0** — 3 agent-callable tools, opaque bearer auth, per-tenant rate limit. See [`docs/mcp/getting-started.md`](docs/mcp/getting-started.md).
+- **Public ROI simulator** — `POST /api/v1/roi/simulate` grounded in P0-2 backtest KPIs.
 
 ### Current Metrics (P0-2 Backtest — 17 April 2026)
 
