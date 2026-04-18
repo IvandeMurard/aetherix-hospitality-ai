@@ -435,5 +435,25 @@ class OperationalMemory(Base):
     tags = Column(JSON, nullable=True)               # list of string tags
 
     embedding = Column(_VECTOR_1024, nullable=True)  # Mistral 1024d
+    embedding_pending = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class AgentActionLog(Base):
+    """One row per MCP tool call — billing + observability meter (ADR 0003 D1)."""
+
+    __tablename__ = "agent_action_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    hotel_id = Column(String, nullable=False, index=True)
+    tool_name = Column(String, nullable=False)
+    scopes = Column(JSON, nullable=True)             # list[str]
+    status = Column(String, nullable=False)          # ok|auth_error|tool_error|rate_limited
+    error_code = Column(String, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    embedding_latency_ms = Column(Integer, nullable=True)
+    dedup_hit = Column(Boolean, nullable=True)
+    top_similarity = Column(Float, nullable=True)
+    request_id = Column(String, nullable=False, default="")
