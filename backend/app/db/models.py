@@ -7,11 +7,14 @@ from datetime import datetime
 import uuid
 
 # pgvector: use real Vector type on PostgreSQL, fall back to JSON for SQLite tests
+# Dimension: 1024 (Mistral mistral-embed, per migration 20260323220000)
 try:
     from pgvector.sqlalchemy import Vector as _PgVector
-    _VECTOR_1536 = _PgVector(1536)
+    _VECTOR_1024 = _PgVector(1024)
+    _VECTOR_1536 = _PgVector(1536)  # kept for legacy fb_patterns column
 except ImportError:  # pragma: no cover
     from sqlalchemy import JSON as _PgVector  # type: ignore[assignment]
+    _VECTOR_1024 = JSON
     _VECTOR_1536 = JSON
 
 Base = declarative_base()
@@ -422,13 +425,15 @@ class OperationalMemory(Base):
     hotel_id = Column(String, nullable=False, index=True)   # maps to tenant_id
     session_id = Column(String, nullable=True, index=True)
 
-    # Stored content
-    content = Column(Text, nullable=False)       # reflection / feedback / context string
-    reco_json = Column(JSON, nullable=True)      # cached recommendation payload
-    manager_feedback = Column(String, nullable=True)  # followed|rejected|neutral
-    outcome = Column(Text, nullable=True)        # free-text outcome description
-    tags = Column(JSON, nullable=True)           # list of string tags
+    # Stored content — aligned with migration 20260323240000
+    reflection = Column(Text, nullable=False)       # reflection / feedback / context string
+    reco_json = Column(JSON, nullable=True)          # cached recommendation payload
+    manager_feedback = Column(String, nullable=True) # followed|rejected|neutral
+    outcome = Column(Text, nullable=True)            # free-text outcome description
+    memory_type = Column(String, nullable=False, default="reflection")
+    # 'reflection' | 'feedback' | 'recommendation_cache'
+    tags = Column(JSON, nullable=True)               # list of string tags
 
-    embedding = Column(_VECTOR_1536, nullable=True)
+    embedding = Column(_VECTOR_1024, nullable=True)  # Mistral 1024d
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)

@@ -46,10 +46,15 @@ def hash_token(raw: str) -> str:
 
 
 def sanitize_notes(text: str | None, max_len: int = 1000) -> str:
-    """Strip control chars, trim, enforce max length (ADR D10)."""
+    """Strip all control chars including newlines/CR, trim, enforce max length.
+
+    Strips 0x00-0x1f + 0x7f (entire C0 range). This intentionally removes
+    \n (0x0a) and \r (0x0d) because notes are returned to calling agents via
+    memory_hits[].summary — newlines are a prompt-injection vector.
+    """
     if not text:
         return ""
-    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    cleaned = re.sub(r"[\x00-\x1f\x7f]", "", text)
     return cleaned.strip()[:max_len]
 
 
