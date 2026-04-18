@@ -99,6 +99,13 @@ async def lifespan(app: FastAPI):
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Provider close error (non-fatal): %s", exc)
 
+    # Close Redis rate-limit connection if opened
+    try:
+        from app.services.rate_limit import close as _close_rate_limit
+        await _close_rate_limit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Rate-limit close error (non-fatal): %s", exc)
+
 
 app = FastAPI(
     title="Aetherix API",

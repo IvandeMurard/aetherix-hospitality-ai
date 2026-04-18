@@ -26,12 +26,12 @@ from app.db.models import MCPApiToken, OperationalMemory
 from app.mcp_core import (
     TOOLS_MANIFEST,
     MCPAuthError,
-    check_rate_limit,
     hash_token,
     require_scope,
     sanitize_notes,
 )
 from app.services.agent_event import AgentEvent, emit_agent_event
+from app.services.rate_limit import check_rate_limit_async
 from app.services.aetherix_engine import AetherixEngine
 from app.services.memory_recall_service import MemoryRecallService
 
@@ -277,7 +277,7 @@ async def dispatch_tool(
         raise MCPAuthError(404, "not_found", f"Unknown tool: {tool_name}")
     tok = await verify_bearer(authorization, db)
     require_scope(tok.scopes, tool_name)
-    check_rate_limit(tok.hotel_id, tool_name)
+    redis_used = await check_rate_limit_async(tok.hotel_id, tool_name)
 
     # hotel_id comes from the token — never from arguments (ADR D4)
     args = {k: v for k, v in (arguments or {}).items() if k != "hotel_id"}
@@ -289,6 +289,11 @@ async def dispatch_tool(
         status="ok",
         request_id=request_id,
     )
+    if not redis_used:
+        logger.warning(
+            "rate_limit_fallback hotel=%s tool=%s (Redis unavailable)",
+            tok.hotel_id, tool_name,
+        )
 
     t0 = time.monotonic()
     try:
