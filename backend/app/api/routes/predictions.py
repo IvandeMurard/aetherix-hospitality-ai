@@ -104,7 +104,12 @@ async def get_property_prediction(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/predict", response_model=PredictResponse, summary="Forecast F&B covers (MCP-callable)")
+@router.post(
+    "/predict",
+    response_model=PredictResponse,
+    summary="Forecast F&B covers (MCP-callable)",
+    openapi_extra={"x-agent-callable": True, "x-mcp-compatible": True},
+)
 async def predict(body: PredictRequest):
     """MCP-callable endpoint: given a hotel_id and date, returns a structured
     demand forecast with LLM reasoning (Claude Sonnet) or a heuristic fallback
