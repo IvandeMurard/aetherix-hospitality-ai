@@ -46,7 +46,11 @@ def _rpc_result(request_id: Any, result: Any) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
-@router.post("/", summary="MCP JSON-RPC endpoint (initialize, tools/list, tools/call)")
+@router.post(
+    "/",
+    summary="MCP JSON-RPC endpoint (initialize, tools/list, tools/call)",
+    openapi_extra={"x-agent-callable": True, "x-mcp-compatible": True},
+)
 async def mcp_rpc(
     request: Request,
     response: Response,

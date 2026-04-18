@@ -119,6 +119,7 @@ def _range(mid: float, low_pct: float, high_pct: float) -> tuple[float, float]:
     "/simulate",
     response_model=ROISimulateResponse,
     summary="Simulate Aetherix ROI for a prospective property (public, stateless)",
+    openapi_extra={"x-agent-callable": True, "x-mcp-compatible": True},
 )
 async def simulate_roi(body: ROISimulateRequest) -> ROISimulateResponse:
     """Return an order-of-magnitude savings projection grounded in P0-2 backtest KPIs.
