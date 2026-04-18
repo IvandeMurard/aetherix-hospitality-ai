@@ -92,25 +92,14 @@ class MemoryRecallService:
               AND memory_type = 'feedback'
               AND embedding_pending = FALSE
               AND embedding IS NOT NULL
-              AND created_at > NOW() - INTERVAL ':days days'
+              AND created_at > NOW() - make_interval(days => :days)
               AND 1 - (embedding <=> CAST(:q AS vector)) > :threshold
             ORDER BY embedding <=> CAST(:q AS vector) ASC
             LIMIT 1
         """)
         try:
             result = await self._db.execute(
-                text("""
-                    SELECT id
-                    FROM operational_memory
-                    WHERE hotel_id = :hotel_id
-                      AND memory_type = 'feedback'
-                      AND embedding_pending = FALSE
-                      AND embedding IS NOT NULL
-                      AND created_at > NOW() - make_interval(days => :days)
-                      AND 1 - (embedding <=> CAST(:q AS vector)) > :threshold
-                    ORDER BY embedding <=> CAST(:q AS vector) ASC
-                    LIMIT 1
-                """),
+                sql,
                 {
                     "hotel_id": hotel_id,
                     "q": str(query_embedding),
@@ -210,7 +199,7 @@ class MemoryRecallService:
             return [
                 MemoryHit(
                     id=UUID(str(p.get("id", "00000000-0000-0000-0000-000000000000"))),
-                    similarity=float(1 - p.get("similarity", 0.5)),
+                    similarity=float(p.get("similarity", 0.5)),
                     reflection=p.get("description", "") or p.get("context_summary", ""),
                     outcome=None,
                     manager_feedback=None,
