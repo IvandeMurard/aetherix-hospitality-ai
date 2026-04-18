@@ -19,12 +19,24 @@
 
 ## Overview
 
-**Aetherix is a proactive Agentic Layer for Hospitality Operations.**
+**Aetherix is a proactive Agentic Intelligence Layer for Hospitality Operations.**
 
-*An intelligent, push-first and UI-less copilot that helps F&B and Operations Managers in hotels make better decisions.*
+It functions as a **UI-less, push-first copilot** that delivers contextualized F&B covers, staffing, and prep recommendations directly to operations teams. 
 
-Aetherix quickly adapts to a client's IT stack, uses a proactive, UI-less "push" model, and delivers the right insights at the right time.
-It synthesizes internal context and property data (occupancy, capture rate, bookings, PMS, POS, ...) with external context (events, weather, social media reputation) using a semantic layer.
+Aetherix synthesizes PMS data, property-specific capture rates, and external signals (weather, events, etc.) through a multi-layer memory-and-reasoning system.
+It is designed from the ground up to be **easy to integrate** into existing hotel tech stacks and **callable by other agents** via MCP.
+
+---
+
+### Why Aetherix exists
+
+Hotels waste ~25% of the food they produce, and labor costs represent 30-45% of operating expenses. Accurate daily operational forecasting remains manual, repetitive, and error-prone.
+
+Aetherix delivers **contextual, explainable recommendations** via WhatsApp (or other channels) at the right moment, learns each property’s unique reality, and improves over time through feedback.
+
+**Key insight:** By modeling each property’s real historical capture rates and enriching them with contextual demand signals, Aetherix generates recommendations that actually fit the hotel’s reality.
+
+**Goal:** Reduce food waste and labor inefficiencies while giving managers more time to focus on their guests.
 
 ---
 
@@ -41,48 +53,58 @@ Aetherix delivers **contextual, explainable recommendations** directly via Whats
 
 ### Core Value Proposition
 
-| Feature | Aetherix (Proactive "Push") |
-| :--- | :--- |
-| **Push-first & UI-less** | Proactive alerts via Slack, WhatsApp, or else |
-| **Forecasting** | Contextualized ML/LLM predictions calibrated per property |
-| **Conversational Explainability** | Delivers clear and structured operational recommandations|
-| **Context** | Synthesizes internal + external data |
-| **Demand modeling** | Property-specific capture rate + anonymized cross-property patterns (hive) |
-| **Integration model** | Additive layer on top of existing tools |
-| **Feedback-loop** | Self-improving idiosyncratic intelligence |
+| Feature                    | Aetherix (Proactive & Headless)                  |
+|---------------------------|--------------------------------------------------|
+| **Delivery**              | Push-first (WhatsApp/Slack/etc.) + MCP callable |
+| **Forecasting**           | Contextual ML/LLM predictions per property       |
+| **Explainability**        | Conversational, structured breakdowns            |
+| **Memory**                | Idiosyncratic (per-hotel) + Hive (anonymized cross-property) |
+| **Integration**           | Additive layer on top of PMS; MCP inbound/outbound |
+| **Feedback Loop**         | Self-improving via manager overrides             |
 
-Built with real hospitality constraints in mind: high uncertainty, human decisions, and a need for trust.
+Built with real hospitality constraints in mind: high uncertainty, human oversight, GDPR, and labor regulations.
+
+---
 
 ## Key Features & Innovation
 
-*   **Semantic Reasoning Engine:** Translation of external data into specific, high-ROI operational directives (revenue opportunity vs. labor cost). 
-*   **Conversational Receipts:** If a manager questions a recommendation, Aetherix responds instantly with a clear and immediately scannable data-driven breakdown. Trust is built by clearly explaining contextualised business decisions in an adapted user language.
-*   **Property-Calibrated Demand Modeling:** Aetherix learns each property's real capture rate (% of in-house guests who dine on-site), not a theoretical industry ratio. The model adapts over time.
-*   **Painless Pilot & 1-Way Sync:** Designed for zero-friction integration. Aetherix requires only a read-only webhook/API key from legacy or modern PMS systems (Mews, Apaleo, etc.) to establish baselines.
+- **Property-Calibrated Demand Modeling**: Learns actual capture rates per hotel. The model improves over time.
+- **Two-Layer Memory System**: Private idiosyncratic memory + anonymized hive intelligence grouped by metadata (size, type, location, customers, ...).
+- **Conversational Explainability**: Managers can challenge recommendations and get an immediate, scannable, data-driven reasoning breakdown.
+- **Headless-First Design**: UI-less core with optional verification dashboard. Exposes capabilities as MCP tools so other agents can consume predictions at scale.
+- **Painless Integration**: Designed for zero-friction integration. Aetherix requires only a read-only access via webhooks, API keys, or Apaleo MCP.
+
+---
+
+## Current Status (April 2026)
+
+- Native Apaleo integration (OAuth + MCP-compatible read access)
+- End-to-end pipeline: Prophet forecasting + semantic patterns (Qdrant) + memory layers + Claude Sonnet reasoning
+- Daily proactive recommendations (F&B covers, staffing, prep)
+- Conversational feedback loop with memory updates
+- Outbound MCP Server in progress (making Aetherix callable by orchestration agents)
+
+**Note**: This is a side project / portfolio piece currently in validation phase with sandbox + synthetic data. No live hotel pilots yet.
 
 ---
 
 ## Building with the BMAD Methodology
 
 Aetherix is conceived, structured, and validated using the rigorous **BMAD (Business, Market, Architecture, Design)** methodology.
-This ensures the project is not just a technical proof-of-concept, but a viable Agentic AI product.
+This helps ensure the project is not just a technical proof-of-concept, but a viable Agentic AI product.
 
 *   **Business Justification:** Clear financial ROI and metrics for success (e.g., Target MAPE < 15%, Labor Cost reduction).
 *   **Domain Compliance:** Explicit architectural decisions to handle GDPR (anonymized PII) and European Labor Laws (calculating penalty pay into recommendations).
 *   **Traceable Architecture:** Documented logic separating business requirements from technical implementation layers.
 
-Roadmap hosted on [Linear](https://linear.app/hospitalityagent/team/HOS/all)
+**Roadmap:** hosted on [Linear](https://linear.app/hospitalityagent/team/HOS/all)
+
+**Immediate priorities**:
+- Complete MCP data orchestration + backtesting with defined KPIs (MAPE <15%, etc.)
+- Ship minimal outbound Aetherix MCP Server so other agents can call predictions and memory-enriched insights
+- Transparent validation results (sandbox/synthetic)
 ---
 
-### Current Status (April 2026)
-
-- Native Apaleo integration (OAuth + MCP-compatible read-only access)
-- End-to-end agentic pipeline: Prophet forecasting + pgvector retrieval + Backboard memory + Claude reasoning
-- Daily push recommendations (F&B covers + staffing + prep)
-- Conversational feedback loop ("Why?", "What if?", outcomes)
-- Self-improving per-hotel intelligence
-
----
 ## Architecture & Technical Strategy
 
 The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy. The intelligence stack has four distinct layers working in sequence to produce a single actionable recommendation.
@@ -140,12 +162,12 @@ graph TD
 
 ### The Four Intelligence Layers
 
-| Layer | Technology | Role |
-| :--- | :--- | :--- |
-| **1. Numerical Forecast** | Prophet (time-series) | Predicts covers volume from PMS + occupancy + regressors |
-| **2. Semantic Patterns** | Qdrant Cloud (495+ vectors) | Matches current context against similar historical service scenarios |
-| **3. Cognitive Memory** | pgvector → Backboard.io (Ph. 3) | Two-layer design. **1. Private Memory** (per hotel, Phase 0–1): ultra-specific idiosyncrasies - what works *only* for this property (real capture rate, manager preferences, non-generalizable local patterns). **2. Hive Memory** (anonymized cross-hotel, Phase 3 via Backboard): patterns grouped by tags (city/resort/airport, clientele type, segment, restaurant size) - enriches predictions with cross-property proof of impact. Each hotel benefits from its own learning *and* collective wisdom, never sharing raw data. |
-| **4. Reasoning & Explanation** | Claude Sonnet (Anthropic) | Synthesizes the three layers into a directive with natural-language explanation |
+| Layer                  | Technology                  | Role |
+|------------------------|-----------------------------|------|
+| **1. Numerical Forecast** | Prophet (time-series)      | Base volume predictions from PMS + regressors |
+| **2. Semantic Patterns**  | Qdrant Cloud               | Context matching against historical scenarios |
+| **3. Cognitive Memory**   | pgvector → Backboard.io (Ph. 3) | Two-layer: Private (idiosyncratic) + Hive (anonymized, metadata-grouped) |
+| **4. Reasoning & Explanation** | Claude Sonnet (Anthropic)  | Synthesizes everything into actionable, explainable recommendations |
 
 ### Tech Stack
 
@@ -199,9 +221,15 @@ Aetherix is designed with security and data isolation as first-class constraints
 | **LLM input scoping** | Claude prompts are scoped to the requesting hotel's context. Recommendations are generated per-property and never cross-contaminate tenant data. Manager replies passed to the LLM are sanitized against prompt injection. |
 | **GDPR / data minimization** | Hotel operational data is stored in Supabase (EU-compatible infrastructure). Hive Memory (Phase 3) aggregates patterns in anonymized, non-attributable form; no raw hotel data is ever shared across tenants. PII is minimized by design. |
 
-> A formal security review will be conducted before any live deployment with real property data, and before any Agent Hub listing.
+> A formal security review will be conducted before any live deployment and before any Agent Hub listing.
 
 ---
-Made with ❤️ for hotels, restaurants, and those who love them. Ivan de Murard
+
+## Philosophy
+
+Aetherix is built to be part of the emerging **agent mesh** in hospitality, not just a tool for human managers, but a **callable capability** that other agents (orchestration, revenue, procurement, etc.) can invoke at scale.
+
+---
+Made with ❤️ for hotels, restaurants, and those who love them by Ivan de Murard
 ---
 *Aetherix - Contextual Intelligence for Hospitality Operations.*
