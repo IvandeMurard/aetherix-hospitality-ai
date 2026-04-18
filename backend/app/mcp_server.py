@@ -14,6 +14,7 @@ input (ADR D4, multi-tenant isolation). Tool schemas do not expose it.
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 from uuid import UUID
@@ -30,6 +31,7 @@ from app.mcp_core import (
     require_scope,
     sanitize_notes,
 )
+from app.services.agent_event import AgentEvent, emit_agent_event
 from app.services.aetherix_engine import AetherixEngine
 from app.services.memory_recall_service import MemoryRecallService
 
@@ -263,11 +265,13 @@ async def dispatch_tool(
     authorization: Optional[str],
     db: AsyncSession,
     embedding_provider: Any = None,
+    request_id: str = "",
 ) -> dict[str, Any]:
     """Validate auth + scope + rate limit, then route to the tool body.
 
     embedding_provider is injected from app.state.embedding by the HTTP shim.
     If None (test env / missing creds), tools fall back gracefully (ADR D9).
+    Emits one agent_action_log row per call (ADR 0003 D2).
     """
     if tool_name not in {t["name"] for t in TOOLS_MANIFEST}:
         raise MCPAuthError(404, "not_found", f"Unknown tool: {tool_name}")
@@ -278,14 +282,36 @@ async def dispatch_tool(
     # hotel_id comes from the token — never from arguments (ADR D4)
     args = {k: v for k, v in (arguments or {}).items() if k != "hotel_id"}
 
-    if tool_name == "get_operational_predictions":
-        return await tool_get_operational_predictions(tok.hotel_id, **args)
-    if tool_name == "get_recommendations_with_memory_context":
-        return await tool_get_recommendations_with_memory_context(
-            tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
-        )
-    if tool_name == "submit_feedback_to_memory":
-        return await tool_submit_feedback_to_memory(
-            tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
-        )
-    raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
+    event = AgentEvent(
+        hotel_id=tok.hotel_id,
+        tool_name=tool_name,
+        scopes=tok.scopes or [],
+        status="ok",
+        request_id=request_id,
+    )
+
+    t0 = time.monotonic()
+    try:
+        if tool_name == "get_operational_predictions":
+            result = await tool_get_operational_predictions(tok.hotel_id, **args)
+        elif tool_name == "get_recommendations_with_memory_context":
+            result = await tool_get_recommendations_with_memory_context(
+                tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
+            )
+        elif tool_name == "submit_feedback_to_memory":
+            result = await tool_submit_feedback_to_memory(
+                tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
+            )
+        else:
+            raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
+    except MCPAuthError:
+        event.status = "tool_error"
+        raise
+    except Exception:
+        event.status = "tool_error"
+        raise
+    finally:
+        event.latency_ms = round((time.monotonic() - t0) * 1000)
+        await emit_agent_event(event, db)
+
+    return result
