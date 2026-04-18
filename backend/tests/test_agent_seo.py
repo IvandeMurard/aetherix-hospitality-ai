@@ -142,6 +142,24 @@ class TestExtractAgentId:
         result = _extract_id(req)
         assert len(result) <= 80
 
+    @_skip_mw
+    def test_x_agent_id_truncated_at_80_chars(self):
+        long_id = "agent-" + "y" * 200
+        req = _make_request(headers={"x-agent-id": long_id})
+        result = _extract_id(req)
+        assert len(result) <= 80
+
+    @_skip_mw
+    def test_x_agent_id_control_chars_stripped(self):
+        """Log-forging / PII hardening: CR/LF/NUL and C0 range stripped."""
+        malicious = "agent-1\r\nFAKE LOG LINE\x00\x1b[31m"
+        req = _make_request(headers={"x-agent-id": malicious})
+        result = _extract_id(req)
+        assert "\n" not in result
+        assert "\r" not in result
+        assert "\x00" not in result
+        assert "\x1b" not in result
+
 
 # ---------------------------------------------------------------------------
 # Tier 1 — agent.json manifest shape

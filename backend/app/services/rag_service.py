@@ -139,6 +139,68 @@ class RAGService:
         asyncio.create_task(demo_emit("rag"))
         return results
 
+    async def find_similar_patterns_by_embedding(
+        self,
+        embedding: List[float],
+        tenant_id: Optional[str] = None,
+        limit: int = 5,
+        service_type: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Pre-embedded variant of find_similar_patterns — used by MemoryRecallService
+        cold-start (ADR 0002 D6) when private memory is empty and we already hold
+        a query vector (no need to re-embed).
+
+        Returns patterns in the same shape as find_similar_patterns, shaped for
+        MemoryHit construction. Cross-hotel global patterns (tenant_id IS NULL)
+        are included; private memory is never cross-tenant.
+        """
+        if self._db is None:
+            return []
+
+        params: Dict[str, Any] = {
+            "limit": limit,
+            "embedding": str(embedding),
+        }
+        where_clauses = ["feedback_status != 'rejected'"]
+        if service_type:
+            where_clauses.append("service_type = :service_type")
+            params["service_type"] = service_type
+        if tenant_id:
+            where_clauses.append("(tenant_id = :tenant_id OR tenant_id IS NULL)")
+            params["tenant_id"] = tenant_id
+
+        where_sql = " AND ".join(where_clauses)
+        sql = text(
+            f"""
+            SELECT id, service_type, pattern_text, outcome_description,
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
+            FROM fb_patterns
+            WHERE {where_sql}
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> CAST(:embedding AS vector) ASC
+            LIMIT :limit
+            """
+        )
+        try:
+            result = await self._db.execute(sql, params)
+            rows = result.mappings().all()
+        except Exception as exc:
+            logger.warning(
+                "find_similar_patterns_by_embedding failed (cold-start fallback): %s", exc
+            )
+            return []
+
+        return [
+            {
+                "id": str(row["id"]),
+                "similarity": float(row["similarity"]),
+                "description": row["pattern_text"] or "",
+                "context_summary": row["outcome_description"] or "",
+                "service_type": row["service_type"],
+            }
+            for row in rows
+        ]
+
     async def _fallback_select(
         self,
         service_type: str,
