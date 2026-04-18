@@ -31,6 +31,7 @@ from app.mcp_core import (
     sanitize_notes,
 )
 from app.services.aetherix_engine import AetherixEngine
+from app.services.memory_recall_service import MemoryRecallService
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ async def tool_get_recommendations_with_memory_context(
     hotel_id: str,
     query: str,
     db: AsyncSession,
+    embedding_provider: Any = None,
     target_date: Optional[str] = None,
     k_memory: int = 5,
 ) -> dict[str, Any]:
@@ -99,25 +101,47 @@ async def tool_get_recommendations_with_memory_context(
         raise MCPAuthError(400, "invalid_input", "query is required")
     k = max(1, min(20, int(k_memory)))
 
-    # Retrieve recent reflections for the tenant — simple ordering by recency.
-    # Semantic search (cosine on embedding) deferred to v1 once Mistral embedding
-    # integration is wired through the provider lifespan.
-    result = await db.execute(
-        select(OperationalMemory)
-        .where(OperationalMemory.hotel_id == hotel_id)
-        .order_by(OperationalMemory.created_at.desc())
-        .limit(k)
-    )
-    rows = result.scalars().all()
-    memory_hits = [
-        {
-            "pattern_id": str(r.id),
-            "summary": (r.reflection or "")[:200],
-            "feedback": r.manager_feedback,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        }
-        for r in rows
-    ]
+    # Semantic recall via MemoryRecallService (ADR 0002 D4 / P1-3)
+    memory_hits_raw = []
+    if embedding_provider is not None:
+        try:
+            query_vec = await embedding_provider.embed(query)
+            recall_svc = MemoryRecallService(db)
+            hits = await recall_svc.recall(hotel_id, query_vec, k=k)
+            memory_hits_raw = [
+                {
+                    "pattern_id": str(h.id),
+                    "summary": h.reflection[:200],
+                    "feedback": h.manager_feedback,
+                    "similarity": round(h.similarity, 4),
+                    "source": h.source,
+                    "created_at": h.created_at.isoformat() if h.created_at else None,
+                }
+                for h in hits
+            ]
+        except Exception as exc:
+            logger.warning("semantic recall failed, falling back to recency: %s", exc)
+
+    # Recency fallback if embedding unavailable or recall failed
+    if not memory_hits_raw:
+        result = await db.execute(
+            select(OperationalMemory)
+            .where(OperationalMemory.hotel_id == hotel_id)
+            .order_by(OperationalMemory.created_at.desc())
+            .limit(k)
+        )
+        rows = result.scalars().all()
+        memory_hits_raw = [
+            {
+                "pattern_id": str(r.id),
+                "summary": (r.reflection or "")[:200],
+                "feedback": r.manager_feedback,
+                "similarity": None,
+                "source": "recency_fallback",
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
 
     try:
         if target_date:
@@ -129,17 +153,17 @@ async def tool_get_recommendations_with_memory_context(
             reasoning_summary = forecast.get("reasoning", "")
             confidence = forecast.get("prediction", {}).get("confidence", 0.0)
         else:
-            reasoning_summary = f"Retrieved {len(memory_hits)} memory hits for query: {query}"
+            reasoning_summary = f"Retrieved {len(memory_hits_raw)} memory hits for query: {query}"
             confidence = 0.5
     except Exception as exc:
-        logger.warning("forecast enrichment failed, returning memory-only: %s", exc)
-        reasoning_summary = f"Retrieved {len(memory_hits)} memory hits for query: {query}"
+        logger.warning("forecast enrichment failed: %s", exc)
+        reasoning_summary = f"Retrieved {len(memory_hits_raw)} memory hits for query: {query}"
         confidence = 0.3
 
     return {
         "recommendation": reasoning_summary,
         "confidence": confidence,
-        "memory_hits": memory_hits,
+        "memory_hits": memory_hits_raw,
         "reasoning_summary": reasoning_summary,
     }
 
@@ -149,6 +173,7 @@ async def tool_submit_feedback_to_memory(
     recommendation_id: str,
     outcome: str,
     db: AsyncSession,
+    embedding_provider: Any = None,
     actual_value: Optional[float] = None,
     notes: Optional[str] = None,
 ) -> dict[str, Any]:
@@ -157,11 +182,10 @@ async def tool_submit_feedback_to_memory(
                            "outcome must be accepted|rejected|modified|ignored")
     try:
         rec_uuid = UUID(recommendation_id)
-    except ValueError as exc:
+    except (ValueError, AttributeError) as exc:
         raise MCPAuthError(400, "invalid_input", f"Bad recommendation_id: {exc}") from exc
 
     clean_notes = sanitize_notes(notes or "", max_len=1000)
-
     feedback_map = {"accepted": "followed", "rejected": "rejected",
                     "modified": "neutral", "ignored": "neutral"}
 
@@ -171,9 +195,7 @@ async def tool_submit_feedback_to_memory(
     if clean_notes:
         reflection += f" notes={clean_notes}"
 
-    # Embedding stub — real Mistral embedding wired via provider singleton in v1.
-    # For v0 we write a deterministic zero-vector placeholder; dedup relies on
-    # (hotel_id, recommendation_id, outcome) tuple instead of cosine.
+    # Tuple dedup — fast, no embedding needed (ADR D7 first pass)
     existing = await db.execute(
         select(OperationalMemory)
         .where(OperationalMemory.hotel_id == hotel_id)
@@ -184,20 +206,50 @@ async def tool_submit_feedback_to_memory(
     if existing.scalars().first():
         return {"memory_id": None, "status": "deduplicated", "embedding_dim": 1024}
 
+    # Compute real embedding (ADR D1 / P1-3); fall back to pending-flag on failure (ADR D9)
+    embedding_vec: list[float] | None = None
+    embedding_pending = False
+    embedding_status = "stored"
+
+    if embedding_provider is not None:
+        try:
+            payload = MemoryRecallService.build_embedding_payload(
+                memory_type="feedback",
+                outcome=outcome,
+                notes=clean_notes or None,
+                actual_value=actual_value,
+            )
+            embedding_vec = await embedding_provider.embed(payload)
+
+            # Cosine dedup second pass (ADR D7)
+            recall_svc = MemoryRecallService(db)
+            dup_id = await recall_svc.check_cosine_dedup(hotel_id, embedding_vec)
+            if dup_id:
+                return {"memory_id": str(dup_id), "status": "deduplicated", "embedding_dim": 1024}
+        except Exception as exc:
+            logger.warning("embedding failed, writing pending row (ADR D9): %s", exc)
+            embedding_pending = True
+            embedding_status = "stored_pending_embedding"
+    else:
+        # No embedding provider available — write pending (ADR D9)
+        embedding_pending = True
+        embedding_status = "stored_pending_embedding"
+
     mem = OperationalMemory(
         hotel_id=hotel_id,
         reflection=reflection,
         manager_feedback=feedback_map[outcome],
         outcome=outcome,
         memory_type="feedback",
-        embedding=[0.0] * 1024,
+        embedding=embedding_vec,
+        embedding_pending=embedding_pending,
     )
     db.add(mem)
     await db.flush()
     return {
         "memory_id": str(mem.id),
-        "status": "stored",
-        "embedding_dim": 1024,
+        "status": embedding_status,
+        "embedding_dim": len(embedding_vec) if embedding_vec else 0,
     }
 
 
@@ -210,25 +262,30 @@ async def dispatch_tool(
     arguments: dict[str, Any],
     authorization: Optional[str],
     db: AsyncSession,
+    embedding_provider: Any = None,
 ) -> dict[str, Any]:
-    """Validate auth + scope + rate limit, then route to the tool body."""
+    """Validate auth + scope + rate limit, then route to the tool body.
+
+    embedding_provider is injected from app.state.embedding by the HTTP shim.
+    If None (test env / missing creds), tools fall back gracefully (ADR D9).
+    """
     if tool_name not in {t["name"] for t in TOOLS_MANIFEST}:
         raise MCPAuthError(404, "not_found", f"Unknown tool: {tool_name}")
     tok = await verify_bearer(authorization, db)
     require_scope(tok.scopes, tool_name)
     check_rate_limit(tok.hotel_id, tool_name)
 
-    # hotel_id comes from the token — never from arguments
+    # hotel_id comes from the token — never from arguments (ADR D4)
     args = {k: v for k, v in (arguments or {}).items() if k != "hotel_id"}
 
     if tool_name == "get_operational_predictions":
         return await tool_get_operational_predictions(tok.hotel_id, **args)
     if tool_name == "get_recommendations_with_memory_context":
         return await tool_get_recommendations_with_memory_context(
-            tok.hotel_id, db=db, **args,
+            tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
         )
     if tool_name == "submit_feedback_to_memory":
         return await tool_submit_feedback_to_memory(
-            tok.hotel_id, db=db, **args,
+            tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
         )
     raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
