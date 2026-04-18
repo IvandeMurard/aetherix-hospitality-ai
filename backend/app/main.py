@@ -42,6 +42,7 @@ from app.providers.factory import get_embedding_provider, get_llm_provider
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.event_sync import start_event_scheduler, stop_event_scheduler
+from app.workers.memory_metrics import register_memory_metrics_job
 from app.workers.weather_sync import start_weather_scheduler, stop_weather_scheduler
 
 logger = logging.getLogger(__name__)
@@ -67,9 +68,10 @@ async def lifespan(app: FastAPI):
         type(app.state.embedding).__name__,
     )
 
-    # Register and start background cron jobs (anomaly scan + alert dispatch)
+    # Register and start background cron jobs (anomaly scan + alert dispatch + MV refresh)
     register_anomaly_scan_job(_scheduler)
     register_dispatch_job(_scheduler)
+    register_memory_metrics_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler
