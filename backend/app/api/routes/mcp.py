@@ -81,8 +81,12 @@ async def mcp_rpc(
     if method == "tools/call":
         tool_name = params.get("name")
         arguments = params.get("arguments") or {}
+        embedding_provider = getattr(request.app.state, "embedding", None)
         try:
-            result = await dispatch_tool(tool_name, arguments, authorization, db)
+            result = await dispatch_tool(
+                tool_name, arguments, authorization, db,
+                embedding_provider=embedding_provider,
+            )
             await db.commit()
         except MCPAuthError as exc:
             await db.rollback()
