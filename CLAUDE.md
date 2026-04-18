@@ -57,9 +57,8 @@
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
-| Phase 0 | En cours | Architecture FastAPI, modèles DB, Apaleo, WhatsApp |
-| Phase 0.5 | Planifié | MCP Server — capabilities agent-callable (HOS-71) |
-| Phase 1 | Planifié | Forecasting F&B (Prophet + LLM), alertes WhatsApp, Agent SEO (HOS-72) |
+| Phase 0 | ✅ Done (18/04/2026) | Backtest PASS (MAPE 7.8% J+1) + ROI simulator + MCP Server v0 (HOS-71) |
+| Phase 1 | En cours | Memory instrumentation (P1-3), forecast benchmark (P1-4), Agent SEO (HOS-72/P1-5) |
 | Phase 2 | Planifié | Agent conversationnel "Receipts" — explications recommandations |
 | Phase 3 | Planifié | Multi-hotel, Mews, analytics avancés |
 | Phase MCP | Nouveau | Exposer capabilities via MCP Server (HOS-71) |
