@@ -389,6 +389,26 @@ class TrainingRun(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
+class MCPApiToken(Base):
+    """Bearer token for the inbound MCP Server (ADR 0001 · P1-2).
+
+    Tokens are opaque strings (atx_<env>_<random>), SHA-256 hashed at rest.
+    hotel_id is carried by the token — NEVER accepted as a client parameter.
+    """
+    __tablename__ = "mcp_api_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    hotel_id = Column(String, nullable=False, index=True)
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    token_prefix = Column(String, nullable=False)
+    scopes = Column(JSON, nullable=False, default=lambda: ["predict", "recommend", "feedback"])
+    label = Column(String, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class OperationalMemory(Base):
     """
     Per-hotel operational memory: manager decisions, reflections, feedback.
