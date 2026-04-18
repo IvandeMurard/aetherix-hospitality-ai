@@ -39,17 +39,32 @@ def is_agent_request(request: Request) -> bool:
     return any(kw in ua for kw in _AGENT_UA_KEYWORDS)
 
 
+_MAX_AGENT_ID_LEN = 80
+
+
+def _sanitize_header_value(value: str) -> str:
+    """Strip control chars and truncate to prevent log forging / PII sprawl."""
+    import re
+    cleaned = re.sub(r"[\x00-\x1f\x7f]", "", value).strip()
+    return cleaned[:_MAX_AGENT_ID_LEN]
+
+
 def extract_agent_id(request: Request) -> str:
-    """Return a best-effort agent identifier from the request headers."""
+    """Return a best-effort agent identifier from the request headers.
+
+    Caller-supplied values are sanitised (control chars stripped, length capped)
+    before being returned — prevents log-forging and bounds PII leakage from
+    arbitrary X-Agent-Id values.
+    """
     agent_id = request.headers.get("x-agent-id")
     if agent_id:
-        return agent_id
+        return _sanitize_header_value(agent_id)
     mcp_version = request.headers.get("x-aetherix-mcp-version")
     if mcp_version:
-        return f"mcp-v{mcp_version}"
+        return f"mcp-v{_sanitize_header_value(mcp_version)}"
     ua = request.headers.get("user-agent", "")
     if ua:
-        return ua[:80]  # truncate long UA strings
+        return _sanitize_header_value(ua)
     return "unknown"
 
 

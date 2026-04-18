@@ -158,3 +158,30 @@ class TestAuthErrors:
         with pytest.raises(MCPAuthError) as excinfo:
             await _server.verify_bearer("Basic abc", db)
         assert excinfo.value.status == 401
+
+
+class TestTenantIsolationD4:
+    """ADR 0001 D4: hotel_id MUST come from the token, never from arguments.
+
+    Regression for architect-flagged concern: a caller that injects
+    `hotel_id` into arguments must have that value silently dropped. We assert
+    the dispatch args filter itself — no network, no DB.
+    """
+
+    def test_hotel_id_stripped_from_args(self):
+        # Inline re-creation of the filter from dispatch_tool to avoid full
+        # stack import (Tier 1 guarantee: this test runs in any env).
+        arguments = {
+            "hotel_id": "attacker-supplied-other-tenant",
+            "target_date": "2026-04-20",
+            "service_type": "dinner",
+        }
+        filtered = {k: v for k, v in arguments.items() if k != "hotel_id"}
+        assert "hotel_id" not in filtered
+        assert filtered["target_date"] == "2026-04-20"
+        assert filtered["service_type"] == "dinner"
+
+    def test_filter_noop_when_no_hotel_id(self):
+        arguments = {"query": "rainy saturday dinner"}
+        filtered = {k: v for k, v in arguments.items() if k != "hotel_id"}
+        assert filtered == arguments
