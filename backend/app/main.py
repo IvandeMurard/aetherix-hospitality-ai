@@ -23,21 +23,26 @@ from app.api.routes import (
     dashboard,
     demo,
     events,
+    mcp,
     notifications,
     pms,
     predictions,
     reports,
+    roi,
     webhooks,
     weather,
+    wellknown,
 )
 from app.api.routes import webhook as twilio_inbound_webhook
 from app.core.error_handlers import problem_details_handler
+from app.middleware.agent_tracking import AgentTrackingMiddleware
 from app.db.models import Base
 from app.db.session import engine
 from app.providers.factory import get_embedding_provider, get_llm_provider
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.event_sync import start_event_scheduler, stop_event_scheduler
+from app.workers.memory_metrics import register_memory_metrics_job
 from app.workers.weather_sync import start_weather_scheduler, stop_weather_scheduler
 
 logger = logging.getLogger(__name__)
@@ -63,9 +68,10 @@ async def lifespan(app: FastAPI):
         type(app.state.embedding).__name__,
     )
 
-    # Register and start background cron jobs (anomaly scan + alert dispatch)
+    # Register and start background cron jobs (anomaly scan + alert dispatch + MV refresh)
     register_anomaly_scan_job(_scheduler)
     register_dispatch_job(_scheduler)
+    register_memory_metrics_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler
@@ -93,6 +99,13 @@ async def lifespan(app: FastAPI):
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Provider close error (non-fatal): %s", exc)
 
+    # Close Redis rate-limit connection if opened
+    try:
+        from app.services.rate_limit import close as _close_rate_limit
+        await _close_rate_limit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Rate-limit close error (non-fatal): %s", exc)
+
 
 app = FastAPI(
     title="Aetherix API",
@@ -111,6 +124,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# P1-5: purely observational — logs agent calls and attaches X-Request-Id.
+app.add_middleware(AgentTrackingMiddleware)
 app.add_exception_handler(HTTPException, problem_details_handler)
 
 # ---------------------------------------------------------------------------
@@ -127,10 +142,16 @@ app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(weather.router, prefix="/api/v1")
 app.include_router(baselines.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
+# P0-3 public ROI simulator — stateless, public, rate-limited at the edge
+app.include_router(roi.router, prefix="/api/v1")
+# P1-2 Aetherix MCP Server v0 — inbound, agent-callable (ADR 0001 · HOS-71)
+app.include_router(mcp.router)
 # Demo observability board — always registered, returns 503 when DEMO_MODE=false
 app.include_router(demo.router, prefix="/api/v1")
 # Story 4.3 (HOS-26): public Twilio callback — no /api/v1 or auth prefix
 app.include_router(twilio_inbound_webhook.router)
+# P1-5 Agent SEO: discovery manifest — public, no auth, no prefix
+app.include_router(wellknown.router)
 
 
 # ---------------------------------------------------------------------------
