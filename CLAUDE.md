@@ -50,6 +50,7 @@
 | 12 | MCP Server Apaleo — probe suffisant pour candidature | `GET /pms/mcp/probe` (endpoint existant) prouve la connexion MCP native — suffit pour la démo Apaleo. HOS-71 (Aetherix MCP Server complet) = Phase 0.5, post-candidature. |
 | 13 | Pipeline Prophet — gap training identifié | `ApaleoMCPAdapter.get_historical_data()` → `DataTransformer.stay_records_to_prophet()` → `PredictionEngine.train()` : briques existent, orchestrateur manquant. Débloquer via `POST /api/v1/predictions/train` ou worker de démarrage. |
 | 14 | Phase 0 DoD amendée — MCP Server v0 inclus | Suite directive PM 17/04/2026 (tweet Benioff "headless for agents"): ship Aetherix MCP Server v0 (HOS-71, 3 tools) est désormais un critère de validation Phase 0, APRÈS gate MAPE interne. Si MAPE > 22%, pivot avant ship MCP. Détail → `docs/planning/phase-0-1-execution-plan.md` |
+| 15 | Phase 2 "Receipts" — scope locké 19/04/2026 | Channel = WhatsApp primary + email opt-in (SendGrid). Inbound classifier = Haiku, log confidence, auto-`modified` si <0.6. Auth web drill-down = MCP bearer + scope `receipts:read`. Tone = terse + sharp bullets + luxury feel (driver principal, données quantitatives, evidence historique, confidence, follow-up proactif). Gate = two-track : (a) technical-ship sur Apaleo Sandbox (round-trip daily Receipt + feedback→memory + 4 Sundays digest) ; (b) trust-signal (US-7 ablation) reporté au premier pilote réel. Détail → `docs/planning/phase-2-agent-receipts.md` |
 
 ---
 
@@ -58,10 +59,10 @@
 | Phase | Statut | Contenu |
 |-------|--------|---------|
 | Phase 0 | ✅ Done (18/04/2026) | Backtest PASS (MAPE 7.8% J+1) + ROI simulator + MCP Server v0 (HOS-71) |
-| Phase 1 | En cours | Memory instrumentation (P1-3), forecast benchmark (P1-4), Agent SEO (HOS-72/P1-5) |
-| Phase 2 | Planifié | Agent conversationnel "Receipts" — explications recommandations |
-| Phase 3 | Planifié | Multi-hotel, Mews, analytics avancés |
-| Phase MCP | Nouveau | Exposer capabilities via MCP Server (HOS-71) |
+| Phase 1 | ✅ Done (19/04/2026) | MCP Server v0 + ADR 0003 observability (agent_action_log, Redis rate-limiter, MV refresh) + memory instrumentation (Mistral 1024d embeddings, 2-pass dedup). PR #73 merged. |
+| Phase 2 | En cours | Agent "Receipts" — 7 stories P2-1→P2-7. Scope locké (Décision #15). Apaleo Sandbox-first, trust KPI reporté au premier pilote réel. |
+| Phase 3 | Planifié | Multi-hotel, Mews, analytics avancés, pilote réel + trust-KPI measurement |
+| Phase MCP | ✅ Intégré Phase 0/1 | MCP Server v0 shipped (HOS-71). v1 (FastMCP SDK) quand besoin progress/capability-negotiation. |
 
 ---
 
