@@ -271,50 +271,79 @@ async def dispatch_tool(
 
     embedding_provider is injected from app.state.embedding by the HTTP shim.
     If None (test env / missing creds), tools fall back gracefully (ADR D9).
-    Emits one agent_action_log row per call (ADR 0003 D2).
+    Emits one agent_action_log row per call (ADR 0003 D2), including auth_error
+    and rate_limited paths — every served request produces exactly one row.
     """
     if tool_name not in {t["name"] for t in TOOLS_MANIFEST}:
         raise MCPAuthError(404, "not_found", f"Unknown tool: {tool_name}")
-    tok = await verify_bearer(authorization, db)
-    require_scope(tok.scopes, tool_name)
-    redis_used = await check_rate_limit_async(tok.hotel_id, tool_name)
 
-    # hotel_id comes from the token — never from arguments (ADR D4)
-    args = {k: v for k, v in (arguments or {}).items() if k != "hotel_id"}
-
+    # Pre-tool event: hotel_id + scopes unknown until verify_bearer succeeds.
+    # We build the event lazily and emit it in the outer finally block so that
+    # any status transition (auth_error, rate_limited, tool_error, ok) produces
+    # exactly one agent_action_log row.
     event = AgentEvent(
-        hotel_id=tok.hotel_id,
+        hotel_id="<unauthenticated>",
         tool_name=tool_name,
-        scopes=tok.scopes or [],
+        scopes=[],
         status="ok",
         request_id=request_id,
     )
-    if not redis_used:
-        logger.warning(
-            "rate_limit_fallback hotel=%s tool=%s (Redis unavailable)",
-            tok.hotel_id, tool_name,
-        )
-
     t0 = time.monotonic()
+
     try:
-        if tool_name == "get_operational_predictions":
-            result = await tool_get_operational_predictions(tok.hotel_id, **args)
-        elif tool_name == "get_recommendations_with_memory_context":
-            result = await tool_get_recommendations_with_memory_context(
-                tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
+        try:
+            tok = await verify_bearer(authorization, db)
+        except MCPAuthError as exc:
+            event.status = "auth_error"
+            event.error_code = exc.title
+            raise
+        event.hotel_id = tok.hotel_id
+        event.scopes = tok.scopes or []
+
+        try:
+            require_scope(tok.scopes, tool_name)
+        except MCPAuthError as exc:
+            event.status = "auth_error"
+            event.error_code = exc.title
+            raise
+
+        try:
+            redis_used = await check_rate_limit_async(tok.hotel_id, tool_name)
+        except MCPAuthError as exc:
+            event.status = "rate_limited"
+            event.error_code = exc.title
+            raise
+
+        if not redis_used:
+            logger.warning(
+                "rate_limit_fallback hotel=%s tool=%s (Redis unavailable)",
+                tok.hotel_id, tool_name,
             )
-        elif tool_name == "submit_feedback_to_memory":
-            result = await tool_submit_feedback_to_memory(
-                tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
-            )
-        else:
-            raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
-    except MCPAuthError:
-        event.status = "tool_error"
-        raise
-    except Exception:
-        event.status = "tool_error"
-        raise
+
+        # hotel_id comes from the token — never from arguments (ADR D4)
+        args = {k: v for k, v in (arguments or {}).items() if k != "hotel_id"}
+
+        try:
+            if tool_name == "get_operational_predictions":
+                result = await tool_get_operational_predictions(tok.hotel_id, **args)
+            elif tool_name == "get_recommendations_with_memory_context":
+                result = await tool_get_recommendations_with_memory_context(
+                    tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
+                )
+            elif tool_name == "submit_feedback_to_memory":
+                result = await tool_submit_feedback_to_memory(
+                    tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
+                )
+            else:
+                raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
+        except MCPAuthError as exc:
+            event.status = "tool_error"
+            event.error_code = exc.title
+            raise
+        except Exception:
+            event.status = "tool_error"
+            event.error_code = "internal_error"
+            raise
     finally:
         event.latency_ms = round((time.monotonic() - t0) * 1000)
         await emit_agent_event(event, db)
