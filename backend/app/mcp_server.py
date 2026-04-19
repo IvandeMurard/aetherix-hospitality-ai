@@ -178,6 +178,7 @@ async def tool_submit_feedback_to_memory(
     embedding_provider: Any = None,
     actual_value: Optional[float] = None,
     notes: Optional[str] = None,
+    request_id: str = "",
 ) -> dict[str, Any]:
     if outcome not in ("accepted", "rejected", "modified", "ignored"):
         raise MCPAuthError(400, "invalid_input",
@@ -245,6 +246,7 @@ async def tool_submit_feedback_to_memory(
         memory_type="feedback",
         embedding=embedding_vec,
         embedding_pending=embedding_pending,
+        request_id=request_id,
     )
     db.add(mem)
     await db.flush()
@@ -320,8 +322,8 @@ async def dispatch_tool(
                 tok.hotel_id, tool_name,
             )
 
-        # hotel_id comes from the token — never from arguments (ADR D4)
-        args = {k: v for k, v in (arguments or {}).items() if k != "hotel_id"}
+        # hotel_id + request_id come from the server — never from arguments (ADR D4 / P2-2)
+        args = {k: v for k, v in (arguments or {}).items() if k not in ("hotel_id", "request_id")}
 
         try:
             if tool_name == "get_operational_predictions":
@@ -332,7 +334,8 @@ async def dispatch_tool(
                 )
             elif tool_name == "submit_feedback_to_memory":
                 result = await tool_submit_feedback_to_memory(
-                    tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
+                    tok.hotel_id, db=db, embedding_provider=embedding_provider,
+                    request_id=event.request_id, **args,
                 )
             else:
                 raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
