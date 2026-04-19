@@ -1,0 +1,85 @@
+{
+  "benchmark_date": "2026-04-18",
+  "generated_at": "2026-04-18T12:30:44.462093Z",
+  "data_source": "prophet_training.json",
+  "data_rows": 365,
+  "disclaimer": "Synthetic data benchmark (Paris 4* simulation). FakeEmbeddingProvider used for memory ablation \u2014 not Mistral. Not validated on real hotel data.",
+  "part1_forecaster_comparison": {
+    "n_folds": 8,
+    "horizon": 1,
+    "prophet": {
+      "mape_mean": 0.0823,
+      "mape_median": 0.0495,
+      "mae_mean": 8.74,
+      "n_folds": 8
+    },
+    "naive_last_weekday": {
+      "mape_mean": 0.0365,
+      "mape_median": 0.0262,
+      "mae_mean": 3.75,
+      "n_folds": 8
+    },
+    "naive_rolling_14d": {
+      "mape_mean": 0.1695,
+      "mape_median": 0.1509,
+      "mae_mean": 14.36,
+      "n_folds": 8
+    },
+    "naive_seasonal": {
+      "mape_mean": 0.2166,
+      "mape_median": 0.1683,
+      "mae_mean": 19.35,
+      "n_folds": 8
+    },
+    "prophet_vs_naive_last_weekday_uplift_pct": -125.5,
+    "prophet_vs_naive_rolling_14d_uplift_pct": 51.4,
+    "prophet_vs_naive_seasonal_uplift_pct": 62.0
+  },
+  "part2_memory_ablation": {
+    "corpus_size": 10,
+    "n_queries": 4,
+    "mean_top_similarity_with_memory": 0.0374,
+    "mean_similarity_without_memory_random": -0.0033,
+    "similarity_lift": 0.0406,
+    "directional_lift": true,
+    "correct_top_matches": 0,
+    "correct_match_pct": 0.0,
+    "per_query": [
+      {
+        "query": "dinner rainy overstaffed",
+        "top_similarity": 0.0499,
+        "top_match_idx": 8,
+        "expected_idx": 0,
+        "correct_match": false
+      },
+      {
+        "query": "breakfast corporate monday",
+        "top_similarity": 0.0313,
+        "top_match_idx": 5,
+        "expected_idx": 1,
+        "correct_match": false
+      },
+      {
+        "query": "saturday wedding high demand",
+        "top_similarity": 0.033,
+        "top_match_idx": 5,
+        "expected_idx": 2,
+        "correct_match": false
+      },
+      {
+        "query": "lunch quiet understaffed",
+        "top_similarity": 0.0353,
+        "top_match_idx": 4,
+        "expected_idx": 3,
+        "correct_match": false
+      }
+    ],
+    "note": "Ablation uses FakeEmbeddingProvider (deterministic blake2b-based vectors). Measures cosine similarity lift: semantic recall (WITH memory) vs random baseline (WITHOUT). Real ablation with live Mistral embeddings requires production data."
+  },
+  "benchmark_gate": {
+    "prophet_mape_h1": 8.23,
+    "prophet_beats_all_baselines": false,
+    "memory_lift_positive": true,
+    "correct_match_pct": 0.0
+  }
+}

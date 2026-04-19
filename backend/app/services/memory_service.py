@@ -67,6 +67,14 @@ class MemoryProvider(Protocol):
         self, tenant_id: str
     ) -> Optional[Dict[str, Any]]: ...
 
+    async def recall(
+        self,
+        tenant_id: str,
+        query_embedding: list[float],
+        k: int = 5,
+        min_similarity: float = 0.5,
+    ) -> list: ...  # returns list[MemoryHit] — avoid circular import on type
+
 
 # ---------------------------------------------------------------------------
 # MemoryService — concrete Phase 0-1 implementation
