@@ -105,23 +105,41 @@ All feedback writes go through the same MCP tool (`submit_feedback_to_memory`) u
 
 ---
 
-## 5. Gate criteria for "Phase 2 done"
+## 5. Gate criteria — two-track split (locked 19/04/2026)
 
-1. **US-1 shipped in production**: at least one hotel receives daily Receipts in WhatsApp.
-2. **US-3 round-trip works**: manager reply → embedding written → next day's Receipt shows "Thanks, noted — updated forecast uses your correction."
-3. **Weekly digest running**: P2-5 cron job runs 4 consecutive Sundays without manual intervention.
-4. **Trust KPI measured**: `recommendation_acceptance_rate` delta measured vs pre-Receipts baseline; directional lift (even if not significant) is the minimum bar.
-5. **ADR 0003 metering data used**: pricing decision (CLAUDE.md open) is unblocked — at least one pricing tier recommendation to PM backed by 90 days of `agent_action_log` data.
+Apaleo Sandbox is the only environment available pre-pilot. `recommendation_acceptance_rate` cannot be measured without a real manager, so the gate is split:
+
+### Track A — Technical-ship gate (Sandbox-achievable, blocks Phase 2 close)
+
+1. **US-1 round-trip**: daily Receipt composed and sent to a test WhatsApp number AND an opt-in email (SendGrid) with identical content. One receipt/day, ≤7 bullets, deep link to web view.
+2. **US-3 round-trip**: inbound WhatsApp reply → Haiku classifier → `submit_feedback_to_memory` → embedding written → next day's Receipt cites the correction by reference. End-to-end on Sandbox with synthetic manager replies.
+3. **US-4 weekly digest**: P2-5 cron runs 4 consecutive Sundays on synthetic data, no manual intervention.
+4. **Web drill-down**: `/receipts/[hotel]/[date]` loads, MCP bearer auth works with `receipts:read` scope, memory hits + similarity scores render.
+
+### Track B — Trust-signal gate (deferred, becomes Phase 3 entry criterion)
+
+5. **Trust KPI measured** (Phase 3 entry): `recommendation_acceptance_rate` delta vs pre-Receipts baseline on a real pilot hotel; directional lift is the minimum bar.
+6. **Pricing decision unblocked** (Phase 3 entry): ≥1 pricing tier recommendation to PM backed by ≥90d of `agent_action_log` from a real hotel.
 
 ---
 
-## 6. Open questions (to resolve at kickoff)
+## 6. Resolved decisions (locked 19/04/2026)
 
-- **OQ1** — Receipt channel: WhatsApp only (per CLAUDE.md push-first), or also email digest for managers who prefer async? WhatsApp costs €0.005/msg, email is free — the question is behavioral, not cost.
-- **OQ2** — Inbound feedback LLM: Claude Haiku for the classifier (low cost, low latency) or reuse the singleton provider from `app.state.llm` (Sonnet — higher cost per call)? Recommendation: Haiku; cross-check with CLAUDE.md decision #9 (`LLMProvider` abstract allows swap).
-- **OQ3** — Web drill-down auth: extend existing `fastapi-users` session, or reuse MCP bearer token scoped to `receipts:read`? MCP bearer is cleaner but requires new scope in `mcp_core._TOOL_SCOPE` mapping.
-- **OQ4** — Receipt tone: terse/neutral ("Forecast 140, actual 155, memory hit from 2026-03-15") or narrative ("Tonight I predicted 140 covers — weather was wrong, I'll use the private event you flagged next time")? Recommendation: test both; narrative first, fallback to terse on churn.
-- **OQ5** — Phase 2 gate for the PM check-in: when does Receipts count as "shipped"? Pilot hotel + 2 weeks + measurable US-3 round-trip, or earlier?
+- **OQ1 — Channel**: WhatsApp primary + email opt-in via SendGrid (fallback for async managers). Same payload rendered for both. Env vars `SENDGRID_API_KEY` + `SENDGRID_FROM_EMAIL` already in `.env.example`.
+- **OQ2 — Inbound LLM**: Claude Haiku (low cost, low latency, sufficient for 3-intent classification: `structured_correction | free_form | acknowledge`). Log classifier confidence in `agent_action_log.payload`. Auto-downgrade to `outcome=modified` when confidence <0.6 and prompt manager for confirmation via thumbs-up reply. Allows swap via `LLMProvider` abstract (CLAUDE.md Decision #9).
+- **OQ3 — Web drill-down auth**: MCP bearer + new `receipts:read` scope in `mcp_core._TOOL_SCOPE`. Reuses existing token plumbing; no `fastapi-users` duplication.
+- **OQ4 — Tone**: terse + sharp bullets + luxury feel — main driver, quantified evidence, historical comparative, confidence, proactive follow-up. Canonical example:
+
+> **Why this recommendation?**
+> • Main driver: PSG-Bayern match at 2.1km → expected capture rate of 29% (vs 18% on normal Wednesdays)
+> • 84% occupancy forecasted, with 31 additional late arrivals expected after 22h
+> • On the last 2 similar event nights, adding +2 servers reduced average wait time by 9 min and increased revenue by ~€4.2k
+> **Confidence**: High
+> Would you like me to simulate "What if the match ends later"?
+
+Style rules: never 1st-person narrative ("I predicted…"), always evidence-led bullets, always ≥1 quantified comparative (vs baseline / similar nights), always explicit confidence (High/Medium/Low), always proactive follow-up offer.
+
+- **OQ5 — Shipped gate**: two-track split (see §5). Most of Phase 2 must be deliverable on Apaleo Sandbox; trust-signal ablation deferred to first real pilot (Phase 3 entry).
 
 ---
 
@@ -139,9 +157,9 @@ All feedback writes go through the same MCP tool (`submit_feedback_to_memory`) u
 
 ## 8. Kickoff checklist
 
-- [ ] PM sign-off on user stories + gate criteria
-- [ ] Resolve OQ1–OQ5 with PM
+- [x] PM sign-off on user stories + gate criteria (19/04/2026)
+- [x] Resolve OQ1–OQ5 with PM (19/04/2026 — see §6)
 - [ ] Linear epic HOS-75 "Phase 2 — Agent Receipts" + 7 child stories P2-1 to P2-7
-- [ ] Twilio WhatsApp template pre-submitted for daily Receipt format
-- [ ] Pilot hotel identified (reuse whichever one validates Phase 1 MCP Server v0)
-- [ ] Architect check: does this need ADR 0004 (Receipts composition / LLM tone policy)? — probably yes if we keep OQ4 narrative tone; defer to kickoff
+- [ ] Twilio WhatsApp template pre-submitted for daily Receipt format (use OQ4 canonical example)
+- [x] Pilot environment identified: **Apaleo Sandbox** (real pilot hotel deferred to Phase 3; impacts Track B of gate — see §5)
+- [ ] Architect check: ADR 0004 needed for Receipts composition (LLM tone policy + memory-hits→prose render pipeline). Defer to P2-1 kickoff.
