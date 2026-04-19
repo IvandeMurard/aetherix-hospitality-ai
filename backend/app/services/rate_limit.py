@@ -79,10 +79,14 @@ async def check_rate_limit_async(hotel_id: str, tool_name: str) -> bool:
         return False
 
     try:
-        count = await client.incr(key)
-        if count == 1:
-            # First hit in this bucket — set TTL so Redis cleans up automatically.
-            await client.expire(key, 65)
+        # Atomic INCR + EXPIRE via pipeline — prevents key leak if expire fails
+        # after a successful incr (partial Redis failure leaves a keyless counter
+        # permanently blocking the hotel). Pipeline executes both or neither.
+        async with client.pipeline(transaction=False) as pipe:
+            pipe.incr(key)
+            pipe.expire(key, 65)
+            results = await pipe.execute()
+        count = results[0]
     except Exception as exc:
         # Redis transient failure — fail open (ADR 0003 D6) + log for monitoring.
         global _redis_available

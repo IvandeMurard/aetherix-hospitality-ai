@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, Request, Response
@@ -86,7 +87,10 @@ async def mcp_rpc(
         tool_name = params.get("name")
         arguments = params.get("arguments") or {}
         embedding_provider = getattr(request.app.state, "embedding", None)
-        request_id = response.headers.get("x-request-id", "")
+        # Generate request_id here — middleware sets x-request-id POST call_next,
+        # so reading it from response headers at this point always returns "".
+        request_id = str(uuid.uuid4())
+        response.headers["x-request-id"] = request_id
         try:
             result = await dispatch_tool(
                 tool_name, arguments, authorization, db,
