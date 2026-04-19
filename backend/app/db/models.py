@@ -7,11 +7,14 @@ from datetime import datetime
 import uuid
 
 # pgvector: use real Vector type on PostgreSQL, fall back to JSON for SQLite tests
+# Dimension: 1024 (Mistral mistral-embed, per migration 20260323220000)
 try:
     from pgvector.sqlalchemy import Vector as _PgVector
-    _VECTOR_1536 = _PgVector(1536)
+    _VECTOR_1024 = _PgVector(1024)
+    _VECTOR_1536 = _PgVector(1536)  # kept for legacy fb_patterns column
 except ImportError:  # pragma: no cover
     from sqlalchemy import JSON as _PgVector  # type: ignore[assignment]
+    _VECTOR_1024 = JSON
     _VECTOR_1536 = JSON
 
 Base = declarative_base()
@@ -372,6 +375,43 @@ class FBPattern(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class TrainingRun(Base):
+    """
+    Audit log for Prophet training runs (P0-1 / Decision #13).
+    One row per POST /predictions/train call.
+    """
+    __tablename__ = "training_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    property_id = Column(String, nullable=False, index=True)
+    source = Column(String, nullable=False)           # mcp_sandbox | synthetic | hybrid
+    records_count = Column(Integer, nullable=False)
+    mape_training = Column(Float, nullable=True)      # in-sample MAPE, null if not computable
+    duration_ms = Column(Integer, nullable=False)
+    model_path = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class MCPApiToken(Base):
+    """Bearer token for the inbound MCP Server (ADR 0001 · P1-2).
+
+    Tokens are opaque strings (atx_<env>_<random>), SHA-256 hashed at rest.
+    hotel_id is carried by the token — NEVER accepted as a client parameter.
+    """
+    __tablename__ = "mcp_api_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    hotel_id = Column(String, nullable=False, index=True)
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    token_prefix = Column(String, nullable=False)
+    scopes = Column(JSON, nullable=False, default=lambda: ["predict", "recommend", "feedback"])
+    label = Column(String, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class OperationalMemory(Base):
     """
     Per-hotel operational memory: manager decisions, reflections, feedback.
@@ -385,13 +425,35 @@ class OperationalMemory(Base):
     hotel_id = Column(String, nullable=False, index=True)   # maps to tenant_id
     session_id = Column(String, nullable=True, index=True)
 
-    # Stored content
-    content = Column(Text, nullable=False)       # reflection / feedback / context string
-    reco_json = Column(JSON, nullable=True)      # cached recommendation payload
-    manager_feedback = Column(String, nullable=True)  # followed|rejected|neutral
-    outcome = Column(Text, nullable=True)        # free-text outcome description
-    tags = Column(JSON, nullable=True)           # list of string tags
+    # Stored content — aligned with migration 20260323240000
+    reflection = Column(Text, nullable=False)       # reflection / feedback / context string
+    reco_json = Column(JSON, nullable=True)          # cached recommendation payload
+    manager_feedback = Column(String, nullable=True) # followed|rejected|neutral
+    outcome = Column(Text, nullable=True)            # free-text outcome description
+    memory_type = Column(String, nullable=False, default="reflection")
+    # 'reflection' | 'feedback' | 'recommendation_cache'
+    tags = Column(JSON, nullable=True)               # list of string tags
 
-    embedding = Column(_VECTOR_1536, nullable=True)
+    embedding = Column(_VECTOR_1024, nullable=True)  # Mistral 1024d
+    embedding_pending = Column(Boolean, nullable=False, default=False)
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
+class AgentActionLog(Base):
+    """One row per MCP tool call — billing + observability meter (ADR 0003 D1)."""
+
+    __tablename__ = "agent_action_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    hotel_id = Column(String, nullable=False, index=True)
+    tool_name = Column(String, nullable=False)
+    scopes = Column(JSON, nullable=True)             # list[str]
+    status = Column(String, nullable=False)          # ok|auth_error|tool_error|rate_limited
+    error_code = Column(String, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    embedding_latency_ms = Column(Integer, nullable=True)
+    dedup_hit = Column(Boolean, nullable=True)
+    top_similarity = Column(Float, nullable=True)
+    request_id = Column(String, nullable=False, default="")
