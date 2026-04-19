@@ -7,7 +7,7 @@ paths.
 from __future__ import annotations
 
 import os
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,6 +25,33 @@ def _reset_state():
     _LOCAL_BUCKETS.clear()
     rl._redis_client = None
     rl._redis_available = None
+
+
+class _PipelineMock:
+    """Async context manager mock for redis pipeline (incr/expire are sync queues)."""
+
+    def __init__(self, count=1, execute_side_effect=None):
+        self.incr = MagicMock()
+        self.expire = MagicMock()
+        if execute_side_effect is not None:
+            self.execute = AsyncMock(side_effect=execute_side_effect)
+        else:
+            self.execute = AsyncMock(return_value=[count, True])
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
+def _fake_client(count=1, execute_side_effect=None):
+    """Return a fake redis client whose pipeline() yields a _PipelineMock."""
+    pipe = _PipelineMock(count=count, execute_side_effect=execute_side_effect)
+    client = MagicMock()
+    client.pipeline = MagicMock(return_value=pipe)
+    client._pipe = pipe  # expose for assertions
+    return client
 
 
 class TestFallbackWhenNoRedis:
@@ -57,45 +84,40 @@ class TestRedisPath:
     @pytest.mark.asyncio
     async def test_redis_incr_under_limit(self, monkeypatch):
         monkeypatch.setenv("REDIS_URL", "redis://fake:6379")
-        fake_client = AsyncMock()
-        fake_client.incr = AsyncMock(return_value=5)
-        fake_client.expire = AsyncMock(return_value=True)
-        with patch.object(rl, "_make_client", return_value=fake_client):
+        client = _fake_client(count=5)
+        with patch.object(rl, "_make_client", return_value=client):
             used_redis = await rl.check_rate_limit_async("h2", "get_operational_predictions")
         assert used_redis is True
-        fake_client.incr.assert_called_once()
+        client._pipe.incr.assert_called_once()
         # limit=60, count=5 → under
 
     @pytest.mark.asyncio
-    async def test_redis_ttl_set_on_first_hit(self, monkeypatch):
+    async def test_redis_pipeline_sets_ttl(self, monkeypatch):
+        """Pipeline atomically calls expire(key, 65) on every request."""
         monkeypatch.setenv("REDIS_URL", "redis://fake:6379")
-        fake_client = AsyncMock()
-        fake_client.incr = AsyncMock(return_value=1)  # first hit in bucket
-        fake_client.expire = AsyncMock(return_value=True)
-        with patch.object(rl, "_make_client", return_value=fake_client):
+        client = _fake_client(count=1)
+        with patch.object(rl, "_make_client", return_value=client):
             await rl.check_rate_limit_async("h3", "submit_feedback_to_memory")
-        # TTL should be set to ~65s (minute + small buffer)
-        fake_client.expire.assert_called_once()
-        args = fake_client.expire.call_args[0]
+        client._pipe.expire.assert_called_once()
+        args = client._pipe.expire.call_args[0]
         assert args[1] == 65
 
     @pytest.mark.asyncio
-    async def test_redis_ttl_not_reset_on_subsequent_hits(self, monkeypatch):
+    async def test_redis_pipeline_atomic_on_subsequent_hits(self, monkeypatch):
+        """Pipeline always issues both incr and expire (atomic, no key-leak risk)."""
         monkeypatch.setenv("REDIS_URL", "redis://fake:6379")
-        fake_client = AsyncMock()
-        fake_client.incr = AsyncMock(return_value=7)  # not first hit
-        fake_client.expire = AsyncMock(return_value=True)
-        with patch.object(rl, "_make_client", return_value=fake_client):
+        client = _fake_client(count=7)
+        with patch.object(rl, "_make_client", return_value=client):
             await rl.check_rate_limit_async("h4", "get_operational_predictions")
-        fake_client.expire.assert_not_called()
+        # Both commands queued in the pipeline
+        client._pipe.incr.assert_called_once()
+        client._pipe.expire.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_redis_over_limit_raises_429(self, monkeypatch):
         monkeypatch.setenv("REDIS_URL", "redis://fake:6379")
-        fake_client = AsyncMock()
-        fake_client.incr = AsyncMock(return_value=61)  # limit=60
-        fake_client.expire = AsyncMock(return_value=True)
-        with patch.object(rl, "_make_client", return_value=fake_client):
+        client = _fake_client(count=61)  # limit=60
+        with patch.object(rl, "_make_client", return_value=client):
             with pytest.raises(MCPAuthError) as excinfo:
                 await rl.check_rate_limit_async("h5", "get_operational_predictions")
         assert excinfo.value.status == 429
@@ -107,9 +129,8 @@ class TestRedisFailOpen:
     async def test_redis_connection_error_falls_open(self, monkeypatch):
         """Redis transient failure → fail-open to local, return False."""
         monkeypatch.setenv("REDIS_URL", "redis://fake:6379")
-        fake_client = AsyncMock()
-        fake_client.incr = AsyncMock(side_effect=ConnectionError("redis is down"))
-        with patch.object(rl, "_make_client", return_value=fake_client):
+        client = _fake_client(execute_side_effect=ConnectionError("redis is down"))
+        with patch.object(rl, "_make_client", return_value=client):
             used_redis = await rl.check_rate_limit_async("h_fail", "get_operational_predictions")
         assert used_redis is False  # fallback marker
         # Local bucket was incremented as fallback
@@ -118,9 +139,8 @@ class TestRedisFailOpen:
     @pytest.mark.asyncio
     async def test_redis_timeout_falls_open(self, monkeypatch):
         monkeypatch.setenv("REDIS_URL", "redis://fake:6379")
-        fake_client = AsyncMock()
-        fake_client.incr = AsyncMock(side_effect=TimeoutError("socket timeout"))
-        with patch.object(rl, "_make_client", return_value=fake_client):
+        client = _fake_client(execute_side_effect=TimeoutError("socket timeout"))
+        with patch.object(rl, "_make_client", return_value=client):
             used_redis = await rl.check_rate_limit_async("h_timeout", "submit_feedback_to_memory")
         assert used_redis is False
 
@@ -132,15 +152,25 @@ class TestKeyFormat:
     async def test_key_format_includes_prefix_and_hotel(self, monkeypatch):
         monkeypatch.setenv("REDIS_URL", "redis://fake:6379")
         captured_keys = []
-        fake_client = AsyncMock()
 
-        async def _capture_incr(key):
-            captured_keys.append(key)
-            return 1
+        class _CapturePipe:
+            def incr(self, key):
+                captured_keys.append(key)
 
-        fake_client.incr = _capture_incr
-        fake_client.expire = AsyncMock(return_value=True)
-        with patch.object(rl, "_make_client", return_value=fake_client):
+            def expire(self, key, ttl):
+                pass
+
+            execute = AsyncMock(return_value=[1, True])
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+        client = MagicMock()
+        client.pipeline = MagicMock(return_value=_CapturePipe())
+        with patch.object(rl, "_make_client", return_value=client):
             await rl.check_rate_limit_async("hotel_abc", "submit_feedback_to_memory")
         assert len(captured_keys) == 1
         key = captured_keys[0]
