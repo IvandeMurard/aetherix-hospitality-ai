@@ -71,9 +71,9 @@
 - [ ] **Embedding strategy** : pgvector vs Qdrant pour RAG (Qdrant préféré actuellement mais réévaluer si multi-tenant)
 - [ ] **Pricing model** : par hôtel / par prédiction / hybrid — non décidé
 - [ ] **PMS priorité live** : Apaleo (sandbox dispo, API-first) vs Mews (vision alignée, marketplace)
-- [ ] **MCP server** : FastAPI endpoint dédié vs sidecar process séparé
+- [x] **MCP server (RÉSOLU 19/04/2026)** : FastAPI endpoint dédié retenu — `/mcp/v0` mounted sur l'app principale (lifespan partagé, ADR D2). Shippé via PR #73. Sidecar process rejeté (coût ops, pas de bénéfice latence observé).
 - [x] **Apaleo MCP direct (31/03/2026 — RÉSOLU)** : URL confirmée `https://mcp.apaleo.com/mcp/`, transport HTTP Streamable (SSE déprécié — notre `streamablehttp_client` est correct). Scope MCP activé sur le compte (code IIQJ). Auth OAuth2 bearer identique à la raw API. Activer via `POST /pms/sync?use_mcp=true` + `APALEO_MCP_SERVER_URL=https://mcp.apaleo.com/mcp/` dans `.env`.
-- [ ] **ROI dashboard vs WhatsApp** : afficher "€ économisés ce mois-ci" + évolution précision forecast 90j → via dashboard dédié (Next.js) ou via rapport WhatsApp hebdomadaire ? Dashboard = surface à maintenir (risque thin-frontend), WhatsApp = ambiant mais moins visuel. À trancher avec PM avant Phase 1.
+- [x] **ROI dashboard vs WhatsApp (RÉSOLU implicitement post-Phase 1)** : WhatsApp primary retenu (cf. Decision #15 OQ1 — Receipts channel = WhatsApp + email opt-in). Dashboard différé Phase 3+ si adoption le justifie.
 - [ ] **Food waste tracking** : instrumenter predicted prep vs actual waste par service comme KPI produit différenciant — ~25% gaspillage moyen en hôtellerie FR (ADEME/Accor), ~115g/couvert. Opportunité : la plupart des hôtels ne mesurent pas précisément → notre modèle crée cette donnée comme sous-produit du forecasting. Décision : intégrer en Phase 4 comme feature ROI (€ gaspillés évités) ou Phase 5 avec POS data ? À trancher avec PM.
 
 ---
@@ -102,11 +102,11 @@ Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026
 ## Fichiers clés
 
 ```
-backend/app/providers/         — abstraction LLM + Embedding (Epic 0) — [À créer]
+backend/app/providers/         — abstraction LLM + Embedding (claude, mistral, gemini, fallback, factory)
 backend/app/services/          — orchestration IA et logique métier
-backend/app/integrations/      — Obsidian, Linear, Apaleo
-backend/app/mcp_server.py      — [À créer] MCP Server capabilities
-backend/app/middleware/        — [À créer] tracking Agent SEO
+backend/app/integrations/      — Obsidian, Linear, Apaleo, Twilio, SendGrid
+backend/app/mcp_server.py      — MCP Server v0 (3 tools, HOS-71, PR #73)
+backend/app/middleware/        — agent_tracking.py (Agent SEO discovery + request_id, P1-5/HOS-72)
 scripts/veille_proactive.py    — monitoring hebdomadaire automatisé
 docs/ARCHITECTURE.md           — design système (v0.2.0 — certaines sections obsolètes, se fier à ce fichier)
 docs/ROADMAP_NOW_NEXT_LATER.md — roadmap opérationnelle
