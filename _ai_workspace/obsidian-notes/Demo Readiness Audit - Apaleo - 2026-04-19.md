@@ -1,9 +1,39 @@
 # Demo Readiness Audit — Apaleo Loom Demo
 
-> **Date:** 2026-04-19
+> **Date:** 2026-04-19 (v1) · 2026-04-23 (v2 — MVP split clarified)
 > **Context:** Pre-recording audit against `docs/context/demo-apaleo.md`
 > **Trigger:** Budget constraint — user at 21% of 5-hour window, 90% of weekly window. Need to identify the actual critical gap before spending remaining credits.
-> **Conclusion:** Infrastructure is shipped. The only unverified risk is the end-to-end dry run.
+> **Conclusion v1:** Infrastructure is shipped. The only unverified risk is the end-to-end dry run.
+> **Conclusion v2:** A parallel `aetherix-mvp` repo exists but is a template-based toy. Demo must run from this repo (`aetherix-hospitality-ai`). No merge needed.
+
+---
+
+## Update 2026-04-23 — The "other repo" question resolved
+
+After a session split onto a new machine, a second repo appeared:
+`C:\Users\ivand\OneDrive\Documents\aetherix-mvp\fastapi_backend`.
+
+**Investigation output:**
+```
+origin    https://github.com/IvandeMurard/aetherix-mvp.git
+upstream  https://github.com/vintasoftware/nextjs-fastapi-template.git
+git log:  2 commits of user work on top of the template
+CLAUDE.md:   absent
+docs/context: absent
+```
+
+**Finding.** The MVP repo is a Next.js/FastAPI **starter template** with a thin Claude-built demo harness on top. It contains **zero** Phase 0/1 code (no MCP Server v0, no ADR 0003 observability, no memory embeddings, no Receipts). The "dry-run test plan" built there uses deterministic synthetic mocks (*"no extra ML deps needed"*) — it would produce a Loom that demonstrates animations, not actual agentic capability.
+
+**Decision.**
+- ❌ Do not merge MVP → `aetherix-hospitality-ai` (nothing of substance to absorb)
+- ❌ Do not create a third reconciled repo (adds load, solves nothing)
+- ✅ **Archive or delete `aetherix-mvp`** to remove confusion
+- ✅ **Demo from `aetherix-hospitality-ai`** where the real Phase 0/1 work lives
+- ✅ Run the real dry-run here, not the fake one there
+
+The trap. A prior session, rather than installing the real backend deps + .env + Apaleo sandbox creds in `aetherix-hospitality-ai`, built a cheaper mock harness on a clean template. That passes surface inspection but fails on the "headless callable Agentic/MCP vision" criterion Apaleo will evaluate.
+
+---
 
 ---
 
@@ -108,6 +138,30 @@ End-to-end integration. Individual bricks exist, but the full chain has never be
 - `docs/context/demo-apaleo.md` — full demo PRD (source of truth)
 - `docs/planning/phase-2-agent-receipts.md` — Receipts scope (deferred for demo)
 - [[CLAUDE]] — root project instructions, Decision #13
+
+---
+
+## Cleanup status (2026-04-23)
+
+**Local branches** — cleaned:
+- Deleted merged: `claude/p2-1-receipts-service`, `claude/phase-2-kickoff-docs`
+- Kept: `claude/aetherix-market-analysis-5JiJ1` (current), `claude/p2-2-memory-hits-join` (PR #76 open)
+
+**Remote branches** — delete attempted via `git push origin --delete`, blocked with `fatal: the remote end hung up unexpectedly`. The local git proxy lacks delete permission. **Requires UI action.**
+
+Branches to delete manually on GitHub:
+- `claude/hotel-context-layer-9rLVJ`
+- `claude/implement-aetherix-orchestrator-z4kim`
+- `claude/implement-hos-106-bGrXC`
+- `claude/implement-mcp-server-90Db1`
+- `claude/review-feedback-epic-c4puU`
+- `claude/setup-aetherix-pm-agent-q3D4x`
+
+Link: https://github.com/IvandeMurard/aetherix-hospitality-ai/branches
+
+**PR #23 ("Api client")** — NOT closed automatically. On inspection, it contains 20 files / 1261 additions including Dockerfile for HuggingFace Spaces deployment + old README rewrite. Base SHA is 1 month stale (`044841b7`). Most content is likely superseded but non-trivial. **User decision required** — close as stale or cherry-pick anything relevant first.
+
+**PR #76 ("P2-2 memory_hits")** — Open, 13/13 tests passing, no peer review. Merge via UI when ready.
 
 ---
 
