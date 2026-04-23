@@ -437,6 +437,10 @@ class OperationalMemory(Base):
     embedding = Column(_VECTOR_1024, nullable=True)  # Mistral 1024d
     embedding_pending = Column(Boolean, nullable=False, default=False)
 
+    # P2-2: backlink to the agent_action_log request that triggered this write.
+    # Empty string for rows pre-dating this column (migration 20260419000200).
+    request_id = Column(String, nullable=False, default="")
+
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
