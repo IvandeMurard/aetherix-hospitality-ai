@@ -131,6 +131,9 @@ def md_escape(s: str | None) -> str:
 
 
 def main() -> int:
+    # Force UTF-8 on stdout — Windows default is cp1252 which chokes on →, ✓, etc.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.write(f"Linear audit — team {TEAM_ID}\n")
     try:
         team_name, issues = fetch_all_issues()
