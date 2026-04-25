@@ -146,6 +146,8 @@ REDIS_URL             — Upstash (session state)
 **Workspace :** Hospitalityagent — toutes les issues dans HOS, jamais dans ivanportfolio/Tacet.
 **Team ID :** `2f6bb5e2-d735-4769-9377-11fe186aa0ad`
 **Vérification session :** `list_teams` → doit retourner "Hospitalityagent". Si "Tacet" → reconnecter dans claude.ai Settings → Integrations → redémarrer Claude Desktop.
+**Conventions Epic/Story (DoD, labels, statuts) :** `docs/context/linear-conventions.md` — protocole obligatoire pour toute création.
+**Audit :** `python scripts/linear_audit.py > linear_state.md` (read-only, fin de sprint).
 
 ---
 
