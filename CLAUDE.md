@@ -62,6 +62,7 @@
 | Phase 1 | ✅ Done (19/04/2026) | MCP Server v0 + ADR 0003 observability (agent_action_log, Redis rate-limiter, MV refresh) + memory instrumentation (Mistral 1024d embeddings, 2-pass dedup). PR #73 merged. |
 | Phase 2 | En cours | Agent "Receipts" — 7 stories P2-1→P2-7. Scope locké (Décision #15). Apaleo Sandbox-first, trust KPI reporté au premier pilote réel. |
 | Phase 3 | Planifié | Multi-hotel, Mews, analytics avancés, pilote réel + trust-KPI measurement |
+| Phase 4 | Vision long-terme | Agentic Hospitality Mesh — Revenue Orchestration Agent + MCP-native design pipeline. Détail → `docs/context/vision-future.md` |
 | Phase MCP | ✅ Intégré Phase 0/1 | MCP Server v0 shipped (HOS-71). v1 (FastMCP SDK) quand besoin progress/capability-negotiation. |
 
 ---
