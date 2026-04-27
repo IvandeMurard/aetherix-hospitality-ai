@@ -359,6 +359,8 @@ Aetherix is built to be part of an **agent mesh** in hospitality, and to not be 
 
 </svg>
 
+
+
 Aetherix is an intelligence layer for hotel F&B operations, not an additional dashboard, but a connectivity layer that sits between existing hotel systems and the decisions that run the floor. It accesses hotel data through a PMS-agnostic data access layer, reasons across PMS, POS, RMS, labor signals and external context, and surfaces structured outputs into tools operators already use.
 The architecture is built around three specialized agents sharing a common data context.
 - The F&B Agent is live, handling staffing intelligence, shift forecasting, and explainable reasoning.
