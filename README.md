@@ -19,7 +19,7 @@
 
 ## Overview
 
-**Aetherix is a proactive Agentic Intelligence Layer for Hospitality Operations.**
+**Aetherix is a proactive Contextual Agentic Intelligence Layer for Hospitality Operations.**
 
 It functions as a **UI-less, push-first copilot** that delivers contextualized F&B covers, staffing, and prep recommendations directly to operations teams. 
 
