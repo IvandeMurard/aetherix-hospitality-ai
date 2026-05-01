@@ -33,10 +33,12 @@ jobs:
       - name: Install ruff
         run: pip install "ruff>=0.4.0"
 
-      # Run from backend/ so ruff discovers backend/pyproject.toml (ignore = ["E501"])
+      # Run from backend/ so ruff discovers backend/pyproject.toml ([tool.ruff.lint])
+      # CLI --ignore extends config.ignore (CLI --select replaces config.select),
+      # so E501 must be re-asserted here when --select E,F is used.
       - name: Check linting (E/F errors — AC4)
         working-directory: backend
-        run: ruff check . --select E,F
+        run: ruff check . --select E,F --ignore E501
 
   # ---------------------------------------------------------------------------
   # AC1/AC2/AC5/AC6 — pytest + coverage
