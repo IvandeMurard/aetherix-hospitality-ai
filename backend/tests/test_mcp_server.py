@@ -9,15 +9,14 @@ from __future__ import annotations
 import pytest
 
 from app.mcp_core import (
-    MCPAuthError,
-    TOOLS_MANIFEST,
     _LOCAL_BUCKETS,
+    TOOLS_MANIFEST,
+    MCPAuthError,
     check_rate_limit,
     hash_token,
     require_scope,
     sanitize_notes,
 )
-
 
 # ---------------------------------------------------------------------------
 # Tier 1 — mcp_core pure logic

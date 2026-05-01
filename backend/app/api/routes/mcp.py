@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.mcp_core import MCPAuthError, TOOLS_MANIFEST
+from app.mcp_core import TOOLS_MANIFEST, MCPAuthError
 from app.mcp_server import dispatch_tool, verify_bearer
 
 logger = logging.getLogger(__name__)

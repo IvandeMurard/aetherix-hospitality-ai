@@ -6,12 +6,11 @@ paths.
 """
 from __future__ import annotations
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.mcp_core import MCPAuthError, _LOCAL_BUCKETS
+from app.mcp_core import _LOCAL_BUCKETS, MCPAuthError
 from app.services import rate_limit as rl
 
 

@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import time
 import uuid
 from datetime import date, timedelta
@@ -10,7 +9,7 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select

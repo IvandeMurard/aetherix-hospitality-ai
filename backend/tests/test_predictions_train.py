@@ -8,7 +8,6 @@ Split into two tiers:
 from __future__ import annotations
 
 import json
-import sys
 from datetime import date
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -169,7 +168,12 @@ class TestHybridMerge:
     @_skip_if_no_pred
     async def test_hybrid_uses_mcp_over_synthetic_on_overlap(self, tmp_path: Path):
         from unittest.mock import patch
-        from app.api.routes.predictions import DataSource, TrainRequest, _build_training_dataframe
+
+        from app.api.routes.predictions import (
+            DataSource,
+            TrainRequest,
+            _build_training_dataframe,
+        )
 
         synthetic_rows = [{"ds": f"2025-01-{i:02d}", "y": 10} for i in range(1, 50)]
         demo_file = tmp_path / "synth.json"

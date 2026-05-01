@@ -16,9 +16,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.providers.base import LLMProvider
-from app.providers.gemini_provider import GeminiProvider, _to_gemini_contents
 from app.providers.factory import get_llm_provider
-
+from app.providers.gemini_provider import GeminiProvider, _to_gemini_contents
 
 # ---------------------------------------------------------------------------
 # Helpers

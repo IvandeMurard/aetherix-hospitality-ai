@@ -22,8 +22,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.db.session import AsyncSessionLocal
 from app.services.anomaly_detection import AnomalyDetectionService
-from app.services.roi_calculator import ROICalculatorService
 from app.services.recommendation_formatter import RecommendationFormatterService
+from app.services.roi_calculator import ROICalculatorService
 
 logger = logging.getLogger(__name__)
 

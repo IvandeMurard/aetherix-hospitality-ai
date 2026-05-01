@@ -8,6 +8,8 @@ avg_spend_per_cover and staff_hourly_rate via the properties table
 """
 from __future__ import annotations
 
+import os as _os
+
 # ---------------------------------------------------------------------------
 # ROI Calculator defaults  (Story 3.3b)
 # ---------------------------------------------------------------------------
@@ -24,8 +26,6 @@ DEFAULT_STAFF_HOURLY_RATE: float = 14.0
 DEFAULT_CAPTATION_RATE: float = 0.7
 
 # ─── Twilio (SMS + WhatsApp) ─────────────────────────────────────────────────
-import os as _os
-
 TWILIO_ACCOUNT_SID: str = _os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN: str = _os.getenv("TWILIO_AUTH_TOKEN", "")
 TWILIO_FROM_NUMBER: str = _os.getenv("TWILIO_FROM_NUMBER", "")   # E.164 e.g. +15005550006
