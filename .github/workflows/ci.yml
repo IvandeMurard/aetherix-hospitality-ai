@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # AC4 — Ruff linting (E/F errors only)
+  # ---------------------------------------------------------------------------
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-ruff-${{ hashFiles('backend/pyproject.toml') }}
+          restore-keys: ${{ runner.os }}-ruff-
+
+      - name: Install ruff
+        run: pip install "ruff>=0.4.0"
+
+      - name: Check linting (E/F errors — AC4)
+        run: ruff check backend/ --select E,F
+
+  # ---------------------------------------------------------------------------
+  # AC1/AC2/AC5/AC6 — pytest + coverage
+  # ---------------------------------------------------------------------------
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: aetherix_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: aetherix_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://aetherix_test:test_password@localhost:5432/aetherix_test
+      # Secrets: empty fallback is safe — tests requiring real keys are @pytest.mark.requires_real_keys
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      APALEO_CLIENT_ID: ${{ secrets.APALEO_CLIENT_ID }}
+      APALEO_CLIENT_SECRET: ${{ secrets.APALEO_CLIENT_SECRET }}
+      REDIS_URL: redis://localhost:6379
+      # Test-safe defaults (AC5)
+      TWILIO_SKIP_SIGNATURE_VALIDATION: "true"
+      TWILIO_ACCOUNT_SID: AC_CI_TEST
+      TWILIO_AUTH_TOKEN: test_token
+      TWILIO_FROM_NUMBER: "+15005550006"
+      TWILIO_WHATSAPP_FROM: "whatsapp:+15005550006"
+      LINEAR_API_KEY: lin_api_ci_test
+      LINEAR_TEAM_ID: 00000000-0000-0000-0000-000000000000
+      LLM_BACKEND: claude
+      LLM_MODEL: claude-sonnet-4-6
+      EMBEDDING_BACKEND: mistral
+      EMBEDDING_MODEL: mistral-embed
+      DEMO_MODE: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/pyproject.toml"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # AC6 — cache hit target < 30s when pyproject.toml unchanged
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      # AC1/AC2 — pytest with coverage gate
+      - name: Run pytest with coverage
+        working-directory: backend
+        run: |
+          uv run pytest tests/ -x --timeout=60 \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=60
+
+      # AC2 — upload coverage XML as artifact
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+
+      # AC2 — PR annotation showing per-module coverage
+      - name: Coverage annotation
+        uses: py-cov-action/python-coverage-comment-action@v3
+        if: github.event_name == 'pull_request'
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COVERAGE_DATA_FILE: backend/.coverage
+        continue-on-error: true
+
+  # ---------------------------------------------------------------------------
+  # AC3 — Schema drift check (no live DB required in dry-run)
+  # ---------------------------------------------------------------------------
+  schema-drift:
+    name: schema-drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/pyproject.toml"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Check schema drift
+        working-directory: backend
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./test_drift.db
+        run: uv run python ../scripts/check_schema_drift.py --dry-run
