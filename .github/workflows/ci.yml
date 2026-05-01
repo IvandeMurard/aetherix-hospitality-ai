@@ -101,10 +101,11 @@ jobs:
         run: uv sync --group dev
 
       # AC1/AC2 — pytest with coverage gate
+      # -v + --tb=short so the first failure is fully visible in the GH Actions UI summary
       - name: Run pytest with coverage
         working-directory: backend
         run: |
-          uv run pytest tests/ -x --timeout=60 \
+          uv run pytest tests/ -x --timeout=60 -v --tb=short \
             --cov=app \
             --cov-report=xml:coverage.xml \
             --cov-report=term-missing \
