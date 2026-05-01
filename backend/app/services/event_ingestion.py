@@ -19,18 +19,18 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.demo_events import demo_emit
 from app.db.models import LocalEvent, RestaurantProfile
 from app.schemas.events import EventRecord
-from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 
@@ -263,7 +263,9 @@ class EventIngestionService:
             )
         else:
             # PostgreSQL (default / production)
-            from sqlalchemy.dialects.postgresql import insert as _insert  # type: ignore[no-redef]
+            from sqlalchemy.dialects.postgresql import (
+                insert as _insert,  # type: ignore[no-redef]
+            )
 
             stmt = (
                 _insert(LocalEvent)

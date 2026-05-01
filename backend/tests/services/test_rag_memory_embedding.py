@@ -13,9 +13,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.rag_service import RAGService
 from app.services.memory_service import MemoryService
-
+from app.services.rag_service import RAGService
 
 # ---------------------------------------------------------------------------
 # Helpers

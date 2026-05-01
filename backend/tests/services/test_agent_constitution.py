@@ -15,7 +15,6 @@ import pytest
 from app.db.models import RestaurantProfile
 from app.services.agent_constitution import AgentConstitutionService
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

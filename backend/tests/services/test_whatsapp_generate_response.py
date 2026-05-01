@@ -10,7 +10,6 @@ Coverage:
 from __future__ import annotations
 
 import sys
-from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,7 +24,6 @@ for _mod in ("pandas", "prophet", "qdrant_client", "redis", "twilio"):
 
 from app.db.models import RestaurantProfile  # noqa: E402
 from app.services.whatsapp_service import WhatsAppService  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Helpers

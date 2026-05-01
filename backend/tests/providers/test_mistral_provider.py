@@ -14,9 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.providers.base import EmbeddingProvider
-from app.providers.mistral_provider import MistralEmbeddingProvider
 from app.providers.factory import get_embedding_provider
-
+from app.providers.mistral_provider import MistralEmbeddingProvider
 
 # ---------------------------------------------------------------------------
 # Helpers

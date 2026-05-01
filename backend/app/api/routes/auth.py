@@ -1,12 +1,13 @@
+import uuid
+
 from fastapi import APIRouter, Depends
+from fastapi_users import schemas
+
 from app.core.security import auth_backend, fastapi_users
 from app.db.models import User
-from pydantic import BaseModel, EmailStr
-import uuid
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-from fastapi_users import schemas
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
     full_name: str | None = None

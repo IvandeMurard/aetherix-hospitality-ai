@@ -10,14 +10,12 @@ Coverage:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.services.alert_dispatcher import _validate_phone
 from app.services.explainability_service import ExplainabilityService
-
 
 # ===========================================================================
 # AC5 — _validate_phone E.164 validation

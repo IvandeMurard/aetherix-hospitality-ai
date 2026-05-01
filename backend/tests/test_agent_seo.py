@@ -7,9 +7,9 @@ Tier 2: integration tests that exercise the actual FastAPI app — skipped when
 """
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
 
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers — try importing without raising
@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 def _try_import_middleware():
     try:
-        from app.middleware.agent_tracking import is_agent_request, extract_agent_id
+        from app.middleware.agent_tracking import extract_agent_id, is_agent_request
         return is_agent_request, extract_agent_id
     except (ImportError, ModuleNotFoundError):
         return None, None
@@ -219,6 +219,7 @@ class TestAgentManifest:
 def _try_import_test_client():
     try:
         from fastapi.testclient import TestClient
+
         from app.main import app
         return TestClient(app, raise_server_exceptions=False)
     except Exception:

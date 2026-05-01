@@ -33,8 +33,8 @@ from app.schemas.anomalies import (
 )
 from app.schemas.recommendations import FormatTriggerRequest, FormatTriggerResponse
 from app.services.anomaly_detection import AnomalyDetectionService
-from app.services.roi_calculator import ROICalculatorService
 from app.services.recommendation_formatter import RecommendationFormatterService
+from app.services.roi_calculator import ROICalculatorService
 
 router = APIRouter(prefix="/anomalies", tags=["anomalies"])
 

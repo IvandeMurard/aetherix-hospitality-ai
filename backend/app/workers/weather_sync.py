@@ -29,11 +29,11 @@ import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.future import select
 
 from app.db.models import RestaurantProfile
 from app.db.session import AsyncSessionLocal
-from apscheduler.triggers.interval import IntervalTrigger
 from app.services.weather_ingestion import WeatherIngestionService
 
 logger = logging.getLogger(__name__)

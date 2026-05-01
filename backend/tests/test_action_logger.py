@@ -11,7 +11,7 @@ All DB calls are mocked — no real database connection required.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -20,7 +20,6 @@ from fastapi.testclient import TestClient
 
 from app.schemas.webhook import ActionType
 from app.services.action_logger import ActionLoggerService, parse_action
-
 
 # ===========================================================================
 # parse_action — unit tests

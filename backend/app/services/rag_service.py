@@ -21,9 +21,9 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.demo_events import demo_emit
 from app.providers.base import EmbeddingProvider
 from app.providers.factory import get_embedding_provider
-from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 

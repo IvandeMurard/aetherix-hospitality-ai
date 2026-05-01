@@ -1,5 +1,6 @@
 """Linear integration — create and query issues via GraphQL API."""
 import os
+
 import httpx
 
 LINEAR_API_URL = "https://api.linear.app/graphql"

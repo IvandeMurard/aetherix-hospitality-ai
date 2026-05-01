@@ -18,7 +18,7 @@ Coverage:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -28,7 +28,6 @@ from fastapi.testclient import TestClient
 
 from app.core.error_handlers import problem_details_handler
 from app.services.weather_ingestion import WeatherIngestionService
-
 
 # ---------------------------------------------------------------------------
 # Helpers

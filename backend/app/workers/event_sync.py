@@ -15,8 +15,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.future import select
 
-from app.db.session import AsyncSessionLocal
 from app.db.models import RestaurantProfile
+from app.db.session import AsyncSessionLocal
 from app.services.event_ingestion import EventIngestionService
 
 logger = logging.getLogger(__name__)

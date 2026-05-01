@@ -8,12 +8,11 @@ Coverage:
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.explainability_service import ExplainabilityService, _FALLBACK_REPLY
-
+from app.services.explainability_service import _FALLBACK_REPLY, ExplainabilityService
 
 # ---------------------------------------------------------------------------
 # Helpers

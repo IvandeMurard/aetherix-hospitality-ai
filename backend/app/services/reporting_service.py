@@ -1,7 +1,8 @@
 import logging
 from datetime import date, timedelta
-from typing import List, Dict, Any
-import pandas as pd # For easy data manipulation
+from typing import Any, Dict, List
+
+import pandas as pd  # For easy data manipulation
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +59,8 @@ class ReportingService:
 
     async def _dispatch_ops(self, result: Dict[str, Any], mape: float) -> None:
         """Fire-and-forget: write audit to Obsidian; alert Linear if accuracy drops."""
-        from app.services.ops_dispatcher import dispatch_report, dispatch_anomaly
         from app.integrations.obsidian import VAULT_FOLDERS
+        from app.services.ops_dispatcher import dispatch_anomaly, dispatch_report
 
         m = result["metrics"]
         f = result["financial_impact"]
@@ -96,7 +97,8 @@ class ReportingService:
 
     def _calculate_savings(self, df: pd.DataFrame) -> float:
         """Heuristic for labor savings based on prediction accuracy."""
-        if df.empty: return 0.0
+        if df.empty:
+            return 0.0
         
         # Captured Revenue (Surges predicted correctly)
         # Assume correct surge predictions (actual > baseline + 10%) saved 10% of that revenue
