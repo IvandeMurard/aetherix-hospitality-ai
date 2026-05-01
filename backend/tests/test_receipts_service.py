@@ -14,8 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.receipts import ReceiptsService, ReceiptPayload
-
+from app.services.receipts import ReceiptPayload, ReceiptsService
 
 # ---------------------------------------------------------------------------
 # Fake ORM rows (no DB, no SQLAlchemy)

@@ -16,7 +16,6 @@ import sys
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -30,10 +29,12 @@ for _mod in ("pandas", "prophet", "qdrant_client", "redis", "twilio"):
 from app.core.exceptions import AnomalyDetectionError  # noqa: E402
 from app.db.models import DemandAnomaly  # noqa: E402
 from app.services.anomaly_detection import AnomalyDetectionService  # noqa: E402
-from app.services.prediction_engine import PredictionEngine, PredictionResult  # noqa: E402
+from app.services.prediction_engine import (  # noqa: E402
+    PredictionEngine,
+    PredictionResult,
+)
 from app.services.reasoning_service import ReasoningService  # noqa: E402
 from app.services.staffing_service import StaffingConfig, StaffingService  # noqa: E402
-
 
 # ===========================================================================
 # R1 — PredictionResult.is_mock + _build_prompt warning

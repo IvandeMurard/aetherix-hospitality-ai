@@ -13,7 +13,6 @@ import pytest
 
 from app.services.pattern_scorer import _recency_weight, score_patterns
 
-
 # ---------------------------------------------------------------------------
 # _recency_weight
 # ---------------------------------------------------------------------------

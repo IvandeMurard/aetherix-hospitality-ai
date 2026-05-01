@@ -5,17 +5,16 @@ from datetime import date
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.core.security import get_current_user
 from app.db.models import RestaurantProfile
 from app.db.session import get_db
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
-from app.services.apaleo_adapter import ApaleoSyncError, ApaleoPMSAdapter
+from app.services.apaleo_adapter import ApaleoPMSAdapter, ApaleoSyncError
 from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
 from app.services.pms_sync import MockPMSAdapter, PMSSyncService
 

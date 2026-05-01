@@ -28,13 +28,13 @@ import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
+from app.core.demo_events import demo_emit
 from app.integrations.apaleo_logger import (
     ApaleoAgentLogger,
     ApaleoWriteBlockedError,
     is_readonly_mode,
     is_write_tool,
 )
-from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 _agent_logger = ApaleoAgentLogger()

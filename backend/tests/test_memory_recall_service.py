@@ -11,7 +11,7 @@ import pytest
 
 def _try_import():
     try:
-        from app.services.memory_recall_service import MemoryRecallService, MemoryHit
+        from app.services.memory_recall_service import MemoryHit, MemoryRecallService
         return MemoryRecallService, MemoryHit
     except (ImportError, ModuleNotFoundError, TypeError):
         return None, None
@@ -125,8 +125,8 @@ class TestBuildEmbeddingPayload:
 class TestMemoryHit:
     @_skip
     def test_frozen(self):
-        from uuid import uuid4
         from datetime import datetime
+        from uuid import uuid4
         hit = _MH(
             id=uuid4(),
             similarity=0.87,

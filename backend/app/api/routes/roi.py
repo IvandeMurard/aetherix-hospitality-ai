@@ -195,7 +195,7 @@ async def simulate_roi(body: ROISimulateRequest) -> ROISimulateResponse:
             ),
         ),
         assumptions=[
-            f"Labor modelled as 35% of annual F&B revenue (industry average).",
+            "Labor modelled as 35% of annual F&B revenue (industry average).",
             f"Food waste baseline: {int(_FOOD_WASTE_BASELINE_PCT*100)}% "
             f"(ADEME/Accor reference).",
             f"Forecast lift: ~{_FORECAST_LIFT*100:.0f}pp MAPE improvement vs manual baseline.",
