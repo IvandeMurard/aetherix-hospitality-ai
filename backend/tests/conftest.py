@@ -43,3 +43,25 @@ def _ci_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     """Ensure safe defaults for env vars read at import/request time."""
     if not os.environ.get("TWILIO_SKIP_SIGNATURE_VALIDATION"):
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
+
+
+# Provider/integration constructors typically use `arg or os.getenv("KEY", "")`,
+# so an env var leaking from CI or a local .env makes tests that pass "" non-hermetic.
+# Clear these per-test so empty-arg behaviour is deterministic.
+_HERMETIC_ENV_VARS = (
+    "ANTHROPIC_API_KEY",
+    "MISTRAL_API_KEY",
+    "GEMINI_API_KEY",
+    "APALEO_CLIENT_ID",
+    "APALEO_CLIENT_SECRET",
+    "APALEO_MCP_SERVER_URL",
+    "COMPOSIO_API_KEY",
+    "COMPOSIO_USER_ID",
+    "COMPOSIO_MCP_URL",
+)
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_secret_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in _HERMETIC_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
