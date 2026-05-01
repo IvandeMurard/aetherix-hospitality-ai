@@ -187,8 +187,24 @@ Déclare le mode en début de conversation. Chaque agent charge son propre fichi
 6. Ouvrir une PR contre `main`
 7. Marquer la Linear issue → Done + poster l'URL PR en commentaire
 
-**Gate de merge :** CI vert → merge manuel SM (sans revue de code).
-**Gates supérieurs :** Fin d'Epic → revue d'architecture. Pré-pilote → QA sign-off propriété hôtelière réelle.
+**Gate de merge (Story) :** CI vert → merge manuel SM (sans revue de code).
+
+**Gate de fermeture d'Epic :**
+1. Toutes les stories filles → Done
+2. CI green sur `main`
+3. `python scripts/check_schema_drift.py` → exit 0
+4. `pytest tests/smoke/test_e2e_mock.py` → PASS
+5. Aucun finding CRITIQUE ouvert dans le rapport d'audit associé
+6. Sign-off PM sur le périmètre fonctionnel
+7. SM retrospective : 1 décision architecturale apprise → ligne dans §Décisions architecturales
+
+**Gate de transition de Phase :**
+1. Tous les gates Epic PASS pour les Epics de la phase
+2. Smoke test E2E PASS sur Supabase **staging** (vraies intégrations — `scripts/smoke_test_e2e.py`)
+3. Coverage ≥ 70% (`pytest --cov`)
+4. Security review complétée (Opus 4.7 ou `/security-review`) → aucun P0 ouvert
+5. Sign-off PM + SM — checklist `docs/context/runbook-pre-pilot.md` signée
+6. CLAUDE.md mis à jour : phase marquée ✅ dans §Roadmap, décisions nouvelles ajoutées
 
 **Règle de contexte :** toute décision, contrainte ou blocage découvert pendant l'implémentation → commenter sur la Linear issue. Si la décision devient une contrainte permanente cross-cutting → promouvoir en une ligne dans §Décisions architecturales ci-dessus. Ne pas écrire de contexte story-specific dans CLAUDE.md ou docs/context/.
 
