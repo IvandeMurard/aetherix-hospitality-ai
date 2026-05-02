@@ -91,7 +91,13 @@ _skip_if_no_pred = pytest.mark.skipif(
 class TestLoadDemoDataframe:
     @_skip_if_no_pred
     def test_loads_synthetic_data(self, tmp_path: Path):
-        rows = [{"ds": f"2025-01-{i:02d}", "y": 40 + i} for i in range(1, 100)]
+        # 99 consecutive valid dates starting 2025-01-01 (f-string only worked
+        # for i ≤ 31; days 32–99 produced invalid date strings — HOS-162)
+        from datetime import date as _date, timedelta as _td
+        rows = [
+            {"ds": (_date(2025, 1, 1) + _td(days=i)).isoformat(), "y": 40 + i + 1}
+            for i in range(99)
+        ]
         demo_file = tmp_path / "prophet_training.json"
         demo_file.write_text(json.dumps(rows))
 
