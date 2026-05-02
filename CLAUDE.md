@@ -182,7 +182,7 @@ Déclare le mode en début de conversation. Chaque agent charge son propre fichi
 1. Lire le spec de la Linear issue (MCP Linear)
 2. Auditer ce qui existe dans le codebase
 3. Implémenter la story (migration DB, ORM, schemas, service, worker, route)
-4. Tests — CI green
+4. **Gate local pré-push** : `cd backend && ruff check . && pytest tests/ -x --timeout=60` — corriger toutes les erreurs avant le premier `git push` (évite la boucle CI itérative coûteuse)
 5. Commit + Push sur la branche désignée (`claude/<story-suffix>`)
 6. Ouvrir une PR contre `main`
 7. Marquer la Linear issue → Done + poster l'URL PR en commentaire
