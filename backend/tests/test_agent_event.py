@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Try importing — graceful skip if full stack absent

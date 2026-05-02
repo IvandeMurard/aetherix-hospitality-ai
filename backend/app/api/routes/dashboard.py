@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
-from typing import Dict, Any, List
-from app.core.security import get_current_user
-from app.db.session import get_db
-from app.db.models import RestaurantProfile, PMSSyncLog, RecommendationCache
-from sqlalchemy.future import select
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import date, timedelta
+from sqlalchemy.future import select
+
+from app.core.security import get_current_user
+from app.db.models import PMSSyncLog, RecommendationCache, RestaurantProfile
+from app.db.session import get_db
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -44,7 +45,7 @@ async def get_dashboard_metrics(
     rec_result = await db.execute(
         select(RecommendationCache)
         .where(RecommendationCache.tenant_id == profile.tenant_id)
-        .where(RecommendationCache.is_pushed == False)
+        .where(RecommendationCache.is_pushed.is_(False))
     )
     pending_recs = rec_result.scalars().all()
 

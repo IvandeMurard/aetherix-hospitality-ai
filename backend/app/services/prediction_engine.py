@@ -1,9 +1,9 @@
 import asyncio
 import logging
 import os
-from datetime import datetime, date
+from datetime import date
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional
 
 import pandas as pd
 from prophet import Prophet
@@ -140,19 +140,26 @@ class PredictionEngine:
 
     def _compute_confidence(self, lower: int, upper: int, predicted: int) -> float:
         """Computes confidence score based on interval width."""
-        if predicted <= 0: return 0.5
+        if predicted <= 0:
+            return 0.5
         interval = upper - lower
         rel_interval = interval / predicted
-        
-        if rel_interval < 0.20: return 0.90
-        elif rel_interval < 0.30: return 0.80
-        elif rel_interval < 0.40: return 0.70
-        elif rel_interval < 0.50: return 0.60
-        else: return 0.50
+
+        if rel_interval < 0.20:
+            return 0.90
+        elif rel_interval < 0.30:
+            return 0.80
+        elif rel_interval < 0.40:
+            return 0.70
+        elif rel_interval < 0.50:
+            return 0.60
+        else:
+            return 0.50
 
     def save_model(self, path: str) -> None:
         """Saves current model state."""
-        if not self.is_trained or not self.model: return
+        if not self.is_trained or not self.model:
+            return
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         from prophet.serialize import model_to_json
         with open(path, 'w') as f:
@@ -160,7 +167,8 @@ class PredictionEngine:
 
     def load_model(self, path: str) -> None:
         """Loads model from path."""
-        if not os.path.exists(path): return
+        if not os.path.exists(path):
+            return
         from prophet.serialize import model_from_json
         with open(path, 'r') as f:
             self.model = model_from_json(f.read())

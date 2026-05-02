@@ -16,7 +16,7 @@ Results are returned sorted descending by composite_score (higher = better rank)
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 # ------------------------------------------------------------------
 # Tuning constants (adjust per business experiment)

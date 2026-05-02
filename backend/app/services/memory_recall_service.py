@@ -190,7 +190,9 @@ class MemoryRecallService:
     ) -> list[MemoryHit]:
         """Fall back to fb_patterns (RAGService) — no cross-hotel private memory."""
         try:
-            from app.services.rag_service import RAGService  # lazy import avoids circular dep
+            from app.services.rag_service import (
+                RAGService,  # lazy import avoids circular dep
+            )
 
             rag = RAGService(self._db)
             patterns = await rag.find_similar_patterns_by_embedding(

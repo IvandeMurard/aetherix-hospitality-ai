@@ -30,10 +30,10 @@ from app.mcp_core import (
     require_scope,
     sanitize_notes,
 )
-from app.services.agent_event import AgentEvent, emit_agent_event
-from app.services.rate_limit import check_rate_limit_async
 from app.services.aetherix_engine import AetherixEngine
+from app.services.agent_event import AgentEvent, emit_agent_event
 from app.services.memory_recall_service import MemoryRecallService
+from app.services.rate_limit import check_rate_limit_async
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Request, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import Response
+
 from app.services.whatsapp_service import WhatsAppService
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
