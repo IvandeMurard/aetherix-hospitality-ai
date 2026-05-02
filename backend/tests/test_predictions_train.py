@@ -165,7 +165,7 @@ class TestComputeInSampleMape:
         forecaster.is_trained = True
         forecaster.model = MagicMock()
         forecaster.model.predict.side_effect = RuntimeError("boom")
-        df = pd.DataFrame({"ds": pd.date_range("2025-01-01", 3), "y": [10, 20, 30]})
+        df = pd.DataFrame({"ds": pd.date_range("2025-01-01", periods=3), "y": [10, 20, 30]})
         assert _compute_in_sample_mape(forecaster, df) is None
 
 
@@ -181,7 +181,12 @@ class TestHybridMerge:
             _build_training_dataframe,
         )
 
-        synthetic_rows = [{"ds": f"2025-01-{i:02d}", "y": 10} for i in range(1, 50)]
+        # 49 consecutive valid dates — f"2025-01-{i:02d}" was invalid for i > 31 (HOS-162)
+        from datetime import date as _date, timedelta as _td
+        synthetic_rows = [
+            {"ds": (_date(2025, 1, 1) + _td(days=i)).isoformat(), "y": 10}
+            for i in range(49)
+        ]
         demo_file = tmp_path / "synth.json"
         demo_file.write_text(json.dumps(synthetic_rows))
 
