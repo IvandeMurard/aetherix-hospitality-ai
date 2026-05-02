@@ -61,7 +61,6 @@ class TestCaptationServiceCalculations:
     def setup_method(self):
         self.svc = CaptationService()
 
-    @pytest.mark.xfail(reason="HOS-162 AC9: pd.DataFrame returns MagicMock in CI — investigate SQLAlchemy transient instance interaction before pilot")
     def test_to_dataframe_sets_captation_rate(self):
         logs = [_make_log(date(2025, 1, 6), occupancy=100, fb_revenue=2000.0)]
         df = self.svc._to_dataframe(logs)
@@ -69,15 +68,8 @@ class TestCaptationServiceCalculations:
 
     def test_overall_avg_uniform_data(self):
         logs = _build_logs(n=14, base_revenue=2000.0, base_occ=100)
-        # HOS-162 CI-only diagnostic: dump raw row attrs and DF columns
-        print(f"DBG first log: tenant_id={logs[0].tenant_id!r} sync_date={logs[0].sync_date!r} "
-              f"occupancy={logs[0].occupancy!r} fb_revenue={logs[0].fb_revenue!r}")
-        print(f"DBG types: occ={type(logs[0].occupancy).__name__} rev={type(logs[0].fb_revenue).__name__}")
         df = self.svc._to_dataframe(logs)
-        print(f"DBG df.head:\n{df.head().to_string()}")
-        print(f"DBG df.dtypes:\n{df.dtypes.to_string()}")
         avg = self.svc._compute_overall_avg(df)
-        print(f"DBG avg={avg!r}")
         assert avg == pytest.approx(20.0)
 
     def test_dow_factors_uniform_data_are_close_to_one(self):
