@@ -63,20 +63,13 @@ jobs:
 
     env:
       DATABASE_URL: postgresql+asyncpg://aetherix_test:test_password@localhost:5432/aetherix_test
-      # Secrets: empty fallback is safe — tests requiring real keys are @pytest.mark.requires_real_keys
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-      APALEO_CLIENT_ID: ${{ secrets.APALEO_CLIENT_ID }}
-      APALEO_CLIENT_SECRET: ${{ secrets.APALEO_CLIENT_SECRET }}
       REDIS_URL: redis://localhost:6379
-      # Test-safe defaults (AC5)
+      # IMPORTANT: do NOT inject TWILIO_ACCOUNT_SID/AUTH_TOKEN/FROM_NUMBER/WHATSAPP_FROM
+      # or LINEAR_API_KEY here. config.py reads them at module-import time and freezes
+      # the value, breaking "not configured" tests. Tests that need them use
+      # patch("app.core.config.TWILIO_*", ...) directly. Lazy-read secrets (ANTHROPIC/
+      # MISTRAL/APALEO/...) are cleared per-test in tests/conftest.py instead.
       TWILIO_SKIP_SIGNATURE_VALIDATION: "true"
-      TWILIO_ACCOUNT_SID: AC_CI_TEST
-      TWILIO_AUTH_TOKEN: test_token
-      TWILIO_FROM_NUMBER: "+15005550006"
-      TWILIO_WHATSAPP_FROM: "whatsapp:+15005550006"
-      LINEAR_API_KEY: lin_api_ci_test
-      LINEAR_TEAM_ID: 00000000-0000-0000-0000-000000000000
       LLM_BACKEND: claude
       LLM_MODEL: claude-sonnet-4-6
       EMBEDDING_BACKEND: mistral
