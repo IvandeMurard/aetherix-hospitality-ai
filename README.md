@@ -13,6 +13,9 @@
   <img src="https://img.shields.io/badge/Claude-Anthropic-D97706?style=flat&logo=anthropic&logoColor=white" alt="Claude AI" />
   <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/License-MIT-22C55E?style=flat" alt="License MIT" />
+  <a href="https://github.com/IvandeMurard/aetherix-hospitality-ai/actions/workflows/ci.yml">
+    <img src="https://github.com/IvandeMurard/aetherix-hospitality-ai/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  </a>
 </p>
 
 ---

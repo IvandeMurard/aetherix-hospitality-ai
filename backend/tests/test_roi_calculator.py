@@ -24,8 +24,7 @@ Test categories:
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -38,7 +37,6 @@ from app.core.config import (
 )
 from app.core.error_handlers import problem_details_handler
 from app.services.roi_calculator import ROICalculatorService
-
 
 # ===========================================================================
 # Fixtures
@@ -400,10 +398,9 @@ class TestROIRoute:
 
     @pytest.fixture
     def app_client(self) -> TestClient:
-        from fastapi import FastAPI
-        from app.api.routes.anomalies import router
-        from app.core.error_handlers import problem_details_handler
         from fastapi import HTTPException
+
+        from app.api.routes.anomalies import router
 
         app = FastAPI()
         app.add_exception_handler(HTTPException, problem_details_handler)

@@ -1,9 +1,11 @@
+import logging
 import os
 import uuid
-import logging
 from typing import Optional
+
 from fastapi import Depends, Request
 from fastapi_users import BaseUserManager, UUIDIDMixin
+
 from app.db.models import User
 from app.db.session import get_db
 

@@ -1,8 +1,11 @@
 import asyncio
 import math
 from typing import Dict, Optional
+
 from pydantic import BaseModel
+
 from app.core.demo_events import demo_emit
+
 
 class StaffingConfig(BaseModel):
     covers_per_server: int = 18

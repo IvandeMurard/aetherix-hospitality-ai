@@ -91,8 +91,9 @@ class TestROISimulator:
 
     @_skip
     def test_request_rejects_out_of_range(self):
-        from app.api.routes.roi import ROISimulateRequest
         from pydantic import ValidationError
+
+        from app.api.routes.roi import ROISimulateRequest
 
         with pytest.raises(ValidationError):
             ROISimulateRequest(

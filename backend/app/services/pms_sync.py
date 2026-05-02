@@ -1,12 +1,13 @@
 import abc
 import asyncio
 import hashlib
-from typing import List, Dict, Any, Optional
-from datetime import datetime, date
-from app.db.session import AsyncSessionLocal
-from app.db.models import PMSSyncLog
-from sqlalchemy.future import select
+from datetime import date
+from typing import Any, Dict, List
+
 from app.core.demo_events import demo_emit
+from app.db.models import PMSSyncLog
+from app.db.session import AsyncSessionLocal
+
 
 class PMSAdapter(abc.ABC):
     """Base class for all Property Management System (PMS) adapters."""
@@ -119,8 +120,8 @@ class PMSSyncService:
             "fb_revenue": revenue,
         }
 
-        from app.services.ops_dispatcher import dispatch_report  # noqa: PLC0415
         from app.integrations.obsidian import VAULT_FOLDERS  # noqa: PLC0415
+        from app.services.ops_dispatcher import dispatch_report  # noqa: PLC0415
         await dispatch_report(
             title=f"PMS Sync — {property_id} — {target_date.isoformat()}",
             content=(
@@ -147,7 +148,10 @@ class PMSSyncService:
         import logging  # noqa: PLC0415
         _log = logging.getLogger(__name__)
 
-        from app.services.captation_service import CaptationService, InsufficientDataError  # noqa: PLC0415
+        from app.services.captation_service import (  # noqa: PLC0415
+            CaptationService,
+            InsufficientDataError,
+        )
 
         try:
             async with AsyncSessionLocal() as session:

@@ -38,7 +38,6 @@ from fastapi.testclient import TestClient
 from app.db.models import RestaurantProfile, StaffingRecommendation
 from app.services.alert_dispatcher import AlertDispatcherService, _format_message
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -393,7 +392,9 @@ def test_format_message_without_triggering_factor():
 
 
 def _build_test_app() -> FastAPI:
-    from fastapi import FastAPI as _FastAPI, HTTPException
+    from fastapi import FastAPI as _FastAPI
+    from fastapi import HTTPException
+
     from app.api.routes.notifications import router
     from app.core.error_handlers import problem_details_handler
 

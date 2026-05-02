@@ -1,0 +1,83 @@
+name: CI Integration (real keys)
+
+# AC5 — Tests marked @pytest.mark.requires_real_keys
+# Triggered manually or from a PR comment "/integration-tests"
+# Requires all real API credentials to be set as GitHub Secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or SHA to test"
+        required: false
+        default: "main"
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: aetherix_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: aetherix_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://aetherix_test:test_password@localhost:5432/aetherix_test
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      APALEO_CLIENT_ID: ${{ secrets.APALEO_CLIENT_ID }}
+      APALEO_CLIENT_SECRET: ${{ secrets.APALEO_CLIENT_SECRET }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+      TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+      LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
+      REAL_KEYS: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/pyproject.toml"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Run integration tests (requires_real_keys)
+        working-directory: backend
+        run: |
+          uv run pytest tests/ -m "requires_real_keys" --timeout=120 \
+            --cov=app \
+            --cov-report=xml:coverage-integration.xml \
+            --cov-report=term-missing
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-integration
+          path: backend/coverage-integration.xml

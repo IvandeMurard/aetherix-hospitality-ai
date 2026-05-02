@@ -12,7 +12,6 @@ from httpx import ASGITransport, AsyncClient
 from app.api.routes.pms import router
 from app.core.security import get_current_user
 
-
 # ---------------------------------------------------------------------------
 # Minimal app fixture (no DB, no auth)
 # ---------------------------------------------------------------------------

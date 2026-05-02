@@ -19,7 +19,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -334,7 +334,6 @@ class TestAnomalyScanEndpoint:
 
     @pytest.fixture
     def client(self):
-        from app.api.routes.anomalies import _resolve_property_for_user
 
         test_app = _make_test_app()
 

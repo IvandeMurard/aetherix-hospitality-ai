@@ -14,7 +14,6 @@ import pytest
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
 from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

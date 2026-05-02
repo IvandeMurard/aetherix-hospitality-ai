@@ -33,8 +33,8 @@ def get_llm_provider() -> LLMProvider:
     retried on Gemini transparently — no configuration needed.
     """
     from app.providers.claude_provider import ClaudeProvider
-    from app.providers.gemini_provider import GeminiProvider
     from app.providers.fallback_provider import FallbackLLMProvider
+    from app.providers.gemini_provider import GeminiProvider
 
     return FallbackLLMProvider(
         primary=ClaudeProvider(
