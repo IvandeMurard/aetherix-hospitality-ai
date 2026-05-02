@@ -1,10 +1,25 @@
-from sqlalchemy import Column, String, Float, Integer, Date, DateTime, JSON, ForeignKey, Boolean, Numeric, Text, UniqueConstraint
-from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
-from sqlalchemy import JSON as JSONB  # JSON is dialect-agnostic (works with SQLite in tests)
-from fastapi_users.db import SQLAlchemyBaseUserTableUUID
-from datetime import datetime
 import uuid
+from datetime import datetime
+
+from fastapi_users.db import SQLAlchemyBaseUserTableUUID
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
+from sqlalchemy import (
+    JSON as JSONB,  # JSON is dialect-agnostic (works with SQLite in tests)
+)
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import declarative_base, relationship
 
 # pgvector: use real Vector type on PostgreSQL, fall back to JSON for SQLite tests
 # Dimension: 1024 (Mistral mistral-embed, per migration 20260323220000)

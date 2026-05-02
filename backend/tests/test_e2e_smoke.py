@@ -22,10 +22,8 @@ from typing import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 
 # ===========================================================================
 # 1. Backend health
@@ -541,6 +539,7 @@ class TestSchedulerStartupWiring:
 
     def test_anomaly_scan_job_registered(self):
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
         from app.workers.anomaly_scan import register_anomaly_scan_job
 
         scheduler = AsyncIOScheduler()
@@ -549,6 +548,7 @@ class TestSchedulerStartupWiring:
 
     def test_dispatch_job_registered(self):
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
         from app.workers.dispatch_worker import register_dispatch_job
 
         scheduler = AsyncIOScheduler()
@@ -556,10 +556,12 @@ class TestSchedulerStartupWiring:
         assert any(j.id == "dispatch_worker" for j in scheduler.get_jobs())
 
     def test_scheduler_running_flag_after_start(self):
+        import asyncio
+
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
         from app.workers.anomaly_scan import register_anomaly_scan_job
         from app.workers.dispatch_worker import register_dispatch_job
-        import asyncio
 
         scheduler = AsyncIOScheduler()
         register_anomaly_scan_job(scheduler)

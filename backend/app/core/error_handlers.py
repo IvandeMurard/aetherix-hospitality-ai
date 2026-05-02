@@ -5,7 +5,7 @@ as RFC 7807 Problem Details JSON. Register this handler in main.py.
 
 Architecture constraint: [Source: architecture.md#Process-Patterns]
 """
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 

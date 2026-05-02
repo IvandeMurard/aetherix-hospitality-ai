@@ -27,16 +27,15 @@ import json
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from sqlalchemy import text
 
 from app.services.recommendation_formatter import (
     RecommendationFormatterService,
@@ -264,7 +263,6 @@ def test_format_message_lull_uses_abs_headcount():
 
 
 def test_extract_factor_picks_highest_weight():
-    mock_anomaly = MagicMock()
     # triggering_factors is now one flat list in the real anomaly model
     factors = [
         {"label": "Rain", "weight": 0.3},
@@ -570,10 +568,11 @@ async def test_worker_chains_formatter_after_roi():
 def _build_test_app(mock_session: AsyncSession) -> FastAPI:
     """Build a minimal FastAPI app with the anomalies router and a mock DB."""
     from fastapi import FastAPI, HTTPException
-    from app.core.error_handlers import problem_details_handler
+
     from app.api.routes.anomalies import router as anomalies_router
-    from app.db.session import get_db
+    from app.core.error_handlers import problem_details_handler
     from app.core.security import get_current_user
+    from app.db.session import get_db
 
     app = FastAPI()
     app.add_exception_handler(HTTPException, problem_details_handler)

@@ -38,7 +38,7 @@ async def dispatch_error(
 
     # Mirror into Obsidian Alerts folder
     try:
-        from app.integrations.obsidian import write_note, VAULT_FOLDERS
+        from app.integrations.obsidian import VAULT_FOLDERS, write_note
         content = f"## {title}\n\n{detail}\n\n> Linear issue created (priority {priority})"
         write_note(title, content, folder=VAULT_FOLDERS["alerts"], tags=["error"] + (tags or []))
     except Exception as exc:
@@ -62,7 +62,7 @@ async def dispatch_report(
 ) -> None:
     """Write a report or operational log to the Obsidian vault only."""
     try:
-        from app.integrations.obsidian import write_note, VAULT_FOLDERS
+        from app.integrations.obsidian import VAULT_FOLDERS, write_note
         write_note(
             title=title,
             content=content,

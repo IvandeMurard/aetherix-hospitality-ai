@@ -9,7 +9,6 @@ Coverage:
 """
 from __future__ import annotations
 
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,7 +16,6 @@ import pytest
 from app.providers.base import LLMProvider
 from app.providers.claude_provider import ClaudeProvider
 from app.providers.factory import get_llm_provider
-
 
 # ---------------------------------------------------------------------------
 # Helpers

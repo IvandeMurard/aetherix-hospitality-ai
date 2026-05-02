@@ -16,8 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.services.apaleo_adapter import ApaleoSyncError, ApaleoPMSAdapter
-
+from app.services.apaleo_adapter import ApaleoPMSAdapter, ApaleoSyncError
 
 # ---------------------------------------------------------------------------
 # Helpers

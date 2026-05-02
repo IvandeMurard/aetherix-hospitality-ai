@@ -11,20 +11,17 @@ All tests run in-memory with mocked DB session; no live Supabase connection requ
 """
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Any
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pandas as pd
 import pytest
 
 from app.db.models import CaptationBaseline, PMSSyncLog
 from app.services.captation_service import (
+    MIN_DATA_POINTS,
     CaptationService,
     InsufficientDataError,
-    MIN_DATA_POINTS,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

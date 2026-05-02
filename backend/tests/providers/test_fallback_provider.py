@@ -17,9 +17,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.providers.base import LLMProvider
-from app.providers.fallback_provider import FallbackLLMProvider
 from app.providers.factory import get_llm_provider
-
+from app.providers.fallback_provider import FallbackLLMProvider
 
 # ---------------------------------------------------------------------------
 # Helpers

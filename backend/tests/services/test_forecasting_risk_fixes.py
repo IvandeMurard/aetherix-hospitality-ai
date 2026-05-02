@@ -16,24 +16,32 @@ import sys
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import sqlalchemy.exc
 
-# Stub heavy optional dependencies not installed in CI before any app import.
+# Stub heavy optional dependencies ONLY if genuinely missing.
+# HOS-162: the unguarded `if _mod not in sys.modules` form pollutes sys.modules
+# globally for the rest of the pytest session — installed pandas/prophet then
+# get replaced by MagicMocks because this file imports before any test that
+# actually imports pandas, breaking captation_service / data_transformer / etc.
 for _mod in ("pandas", "prophet", "qdrant_client", "redis", "twilio"):
     if _mod not in sys.modules:
-        sys.modules[_mod] = MagicMock()
+        try:
+            __import__(_mod)
+        except ImportError:
+            sys.modules[_mod] = MagicMock()
 
 from app.core.exceptions import AnomalyDetectionError  # noqa: E402
 from app.db.models import DemandAnomaly  # noqa: E402
 from app.services.anomaly_detection import AnomalyDetectionService  # noqa: E402
-from app.services.prediction_engine import PredictionEngine, PredictionResult  # noqa: E402
+from app.services.prediction_engine import (  # noqa: E402
+    PredictionEngine,
+    PredictionResult,
+)
 from app.services.reasoning_service import ReasoningService  # noqa: E402
 from app.services.staffing_service import StaffingConfig, StaffingService  # noqa: E402
-
 
 # ===========================================================================
 # R1 — PredictionResult.is_mock + _build_prompt warning

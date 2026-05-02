@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-from typing import Dict, List, Optional
 from datetime import date
+from typing import Dict, List, Optional
 
+from app.core.demo_events import demo_emit
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
-from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 
@@ -123,9 +122,12 @@ Keep it actionable for a manager.
 
     def _extract_factors(self, context, patterns) -> List[str]:
         factors = []
-        if context.get('weather'): factors.append(f"Weather: {context['weather'].get('condition')}")
-        if context.get('events'): factors.append(f"{len(context['events'])} events nearby")
-        if patterns: factors.append("Historical pattern matching")
+        if context.get('weather'):
+            factors.append(f"Weather: {context['weather'].get('condition')}")
+        if context.get('events'):
+            factors.append(f"{len(context['events'])} events nearby")
+        if patterns:
+            factors.append("Historical pattern matching")
         return factors
 
     def _heuristic_explanation(

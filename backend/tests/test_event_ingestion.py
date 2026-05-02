@@ -17,21 +17,19 @@ Coverage:
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.future import select
+from sqlalchemy.orm import sessionmaker
 
 from app.db.models import Base, LocalEvent, RestaurantProfile
-from app.schemas.events import EventRecord
 from app.services.event_ingestion import EventIngestionService, _parse_phq_datetime
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

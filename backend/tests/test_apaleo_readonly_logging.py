@@ -32,7 +32,6 @@ from app.integrations.apaleo_mcp_client import ApaleoMCPClient
 from app.services.apaleo_adapter import ApaleoPMSAdapter
 from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
 
-
 # ===========================================================================
 # is_readonly_mode
 # ===========================================================================

@@ -33,8 +33,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from decimal import Decimal
-from typing import Dict, Optional
+from typing import Dict
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
