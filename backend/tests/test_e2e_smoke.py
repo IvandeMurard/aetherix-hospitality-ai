@@ -77,10 +77,18 @@ def _mock_forecast_result(hotel_id: str = "hotel-001") -> dict:
 
 def _predict_client(monkeypatch) -> TestClient:
     monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
-    from app.api.routes.predictions import router
+    from unittest.mock import MagicMock
+
+    from app.api.routes.predictions import _predict_auth, router
+
+    fake_tok = MagicMock()
+    fake_tok.hotel_id = "hotel-001"
+    fake_tok.scopes = ["predict"]
 
     app = FastAPI()
     app.include_router(router)
+    # Bypass MCP bearer auth — smoke tests exercise business logic, not auth
+    app.dependency_overrides[_predict_auth] = lambda: fake_tok
     return TestClient(app)
 
 
