@@ -28,6 +28,9 @@ _TOOL_SCOPE = {
     "submit_feedback_to_memory": "feedback",
 }
 
+# Separate admin scope for destructive / model-mutating operations (HOS-149 AC4)
+ADMIN_TRAIN_SCOPE = "admin:train"
+
 # In-memory fallback bucket; prod uses Redis (ADR D6) wired in v1.
 _LOCAL_BUCKETS: dict[str, tuple[int, int]] = {}
 
