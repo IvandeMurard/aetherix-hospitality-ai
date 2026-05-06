@@ -21,12 +21,12 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid as _uuid
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models import OperationalMemory
 from app.providers.base import EmbeddingProvider
 from app.providers.factory import get_embedding_provider
 
@@ -84,11 +84,10 @@ class MemoryService:
     """
     Operational Memory Layer — backed by pgvector (Supabase).
 
-    Replaces Backboard.io with direct SQL operations on the
-    ``operational_memory`` table. Semantic retrieval uses the pgvector
-    cosine-distance operator (<=>); feedback signals (followed/rejected)
-    are stored as structured columns so they can be filtered in SQL and
-    boosted by pattern_scorer.py.
+    Replaces Backboard.io with ORM operations on the ``operational_memory``
+    table. Semantic retrieval uses the pgvector cosine-distance operator
+    (<=>); feedback signals (followed/rejected) are stored as structured
+    columns so they can be filtered in SQL and boosted by pattern_scorer.py.
     """
 
     def __init__(
@@ -118,35 +117,37 @@ class MemoryService:
         Accepts either:
           - seed script:    store_reflection(tenant_id, reflection="...", tags=[...])
           - feedback loop:  store_reflection(tenant_id, context="...", outcome="...")
+
+        On embedding-provider failure (ADR D9), writes a pending row with
+        ``embedding=None`` and ``embedding_pending=True`` for backfill.
         """
         if self._db is None:
             return
 
-        content = reflection if reflection else f"Context: {context} | Outcome: {outcome}"
-        embedding = await self._embedding.embed(content)
-
-        await self._db.execute(
-            text(
-                """
-                INSERT INTO operational_memory
-                  (id, hotel_id, session_id, content, outcome, tags, embedding, created_at)
-                VALUES
-                  (:id, :hotel_id, :session_id, :content, :outcome, :tags,
-                   CAST(:embedding AS vector), NOW())
-                """
-            ),
-            {
-                "id": str(_uuid.uuid4()),
-                "hotel_id": tenant_id,
-                "session_id": session_id,
-                "content": content,
-                "outcome": outcome,
-                "tags": json.dumps(tags or []),
-                "embedding": str(embedding),
-            },
+        reflection_text = (
+            reflection if reflection else f"Context: {context} | Outcome: {outcome}"
         )
+
+        embedding_vec, embedding_pending = await self._safe_embed(reflection_text)
+
+        mem = OperationalMemory(
+            hotel_id=tenant_id,
+            session_id=session_id,
+            reflection=reflection_text,
+            outcome=outcome,
+            tags=tags or [],
+            memory_type="reflection",
+            embedding=embedding_vec,
+            embedding_pending=embedding_pending,
+        )
+        self._db.add(mem)
+        await self._db.flush()
         await self._db.commit()
-        logger.info("Stored reflection for tenant '%s'", tenant_id)
+        logger.info(
+            "Stored reflection for tenant '%s' (pending=%s)",
+            tenant_id,
+            embedding_pending,
+        )
 
     async def get_relevant_context(self, tenant_id: str, current_query: str) -> str:
         """
@@ -164,10 +165,11 @@ class MemoryService:
             result = await self._db.execute(
                 text(
                     """
-                    SELECT content, outcome,
+                    SELECT reflection, outcome,
                            embedding <=> CAST(:embedding AS vector) AS similarity
                     FROM operational_memory
                     WHERE hotel_id = :hotel_id
+                      AND embedding IS NOT NULL
                     ORDER BY similarity ASC
                     LIMIT 3
                     """
@@ -190,7 +192,7 @@ class MemoryService:
 
         parts = []
         for row in rows:
-            parts.append(row["content"])
+            parts.append(row["reflection"])
             if row.get("outcome"):
                 parts.append(f"  → {row['outcome']}")
         return "\n".join(parts)
@@ -217,27 +219,19 @@ class MemoryService:
         if self._db is None:
             return
 
-        content = f"[recommendation_cache] {json.dumps(data)}"
-        embedding = await self._embedding.embed(content)
+        reflection_text = f"[recommendation_cache] {json.dumps(data)}"
+        embedding_vec, embedding_pending = await self._safe_embed(reflection_text)
 
-        await self._db.execute(
-            text(
-                """
-                INSERT INTO operational_memory
-                    (id, hotel_id, content, reco_json, memory_type, embedding, created_at)
-                VALUES
-                    (:id, :hotel_id, :content, CAST(:reco AS jsonb),
-                     'recommendation_cache', CAST(:embedding AS vector), NOW())
-                """
-            ),
-            {
-                "id": str(_uuid.uuid4()),
-                "hotel_id": tenant_id,
-                "content": content,
-                "reco": json.dumps(data),
-                "embedding": str(embedding),
-            },
+        mem = OperationalMemory(
+            hotel_id=tenant_id,
+            reflection=reflection_text,
+            reco_json=data,
+            memory_type="recommendation_cache",
+            embedding=embedding_vec,
+            embedding_pending=embedding_pending,
         )
+        self._db.add(mem)
+        await self._db.flush()
         await self._db.commit()
 
     async def get_latest_recommendation(
@@ -268,6 +262,17 @@ class MemoryService:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    async def _safe_embed(
+        self, content: str
+    ) -> tuple[Optional[list[float]], bool]:
+        """Embed *content*; on failure return (None, True) for pending-row write (ADR D9)."""
+        try:
+            vec = await self._embedding.embed(content)
+            return vec, False
+        except Exception as exc:
+            logger.warning("embedding failed, writing pending row (ADR D9): %s", exc)
+            return None, True
+
     async def _fallback_select(self, tenant_id: str) -> List[Any]:
         """Plain SELECT without vector ops — SQLite fallback."""
         if self._db is None:
@@ -275,7 +280,7 @@ class MemoryService:
         result = await self._db.execute(
             text(
                 """
-                SELECT content, outcome
+                SELECT reflection, outcome
                 FROM operational_memory
                 WHERE hotel_id = :hotel_id
                 ORDER BY created_at DESC
