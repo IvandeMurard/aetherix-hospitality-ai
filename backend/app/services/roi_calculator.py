@@ -241,8 +241,12 @@ class ROICalculatorService:
             db: Async SQLAlchemy session.
         """
         try:
+            # HOS-150 AC9 — restaurant_profiles is the canonical table; the
+            # legacy `properties` reference returned zero rows on every run.
             result = await db.execute(
-                text("SELECT id FROM properties WHERE is_active = TRUE")
+                text(
+                    "SELECT id FROM restaurant_profiles WHERE is_active = TRUE"
+                )
             )
             property_ids = [row[0] for row in result.fetchall()]
         except Exception:
@@ -291,14 +295,14 @@ class ROICalculatorService:
         """Return (avg_spend_per_cover, staff_hourly_rate) for a property.
 
         Falls back to system defaults (from config.py) when the columns are
-        NULL or when the properties table cannot be queried.
+        NULL or when the restaurant_profiles row cannot be queried.
         """
         try:
             result = await db.execute(
                 text(
                     """
                     SELECT avg_spend_per_cover, staff_hourly_rate
-                    FROM properties
+                    FROM restaurant_profiles
                     WHERE id = :property_id
                     LIMIT 1
                     """
@@ -320,8 +324,8 @@ class ROICalculatorService:
                 return avg_spend, hourly_rate
         except Exception:
             logger.debug(
-                "roi_calculator: properties rate lookup failed for %s — "
-                "using defaults",
+                "roi_calculator: restaurant_profiles rate lookup failed for "
+                "%s — using defaults",
                 property_id,
             )
 
