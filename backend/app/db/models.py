@@ -103,6 +103,9 @@ class RestaurantProfile(Base):
     #     ADD COLUMN agent_tone_profile VARCHAR NOT NULL DEFAULT 'luxury';
     agent_tone_profile = Column(String, default="luxury", nullable=False)
 
+    # HOS-150 AC5 — soft-disable flag used by anomaly_scan.run_full_scan
+    is_active = Column(Boolean, nullable=False, default=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
