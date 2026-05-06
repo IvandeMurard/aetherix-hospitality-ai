@@ -39,6 +39,9 @@ from app.db.models import Base
 from app.db.session import engine
 from app.middleware.agent_tracking import AgentTrackingMiddleware
 from app.providers.factory import get_embedding_provider, get_llm_provider
+from app.workers.agent_action_log_partition_rotation import (
+    register_partition_rotation_job,
+)
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.event_sync import start_event_scheduler, stop_event_scheduler
@@ -72,6 +75,8 @@ async def lifespan(app: FastAPI):
     register_anomaly_scan_job(_scheduler)
     register_dispatch_job(_scheduler)
     register_memory_metrics_job(_scheduler)
+    # HOS-150 AC4 — keep agent_action_log monthly partitions ahead of `now()`.
+    register_partition_rotation_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler
