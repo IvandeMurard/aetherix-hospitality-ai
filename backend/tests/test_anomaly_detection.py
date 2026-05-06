@@ -628,3 +628,66 @@ class TestNFR5Performance:
             f"run_full_scan is not running in parallel: elapsed={elapsed:.3f}s "
             f"(expected ~0.01s with gather)"
         )
+
+
+# ===========================================================================
+# 9. HOS-150 AC9 — _resolve_property_for_user queries restaurant_profiles
+# ===========================================================================
+class TestResolvePropertyForUserQueriesRestaurantProfiles:
+    """HOS-150 AC9: route helper must hit restaurant_profiles, never the
+    legacy `properties` table (which never existed in this schema).
+
+    Without this fix, every authenticated POST /api/v1/anomalies/scan and
+    POST /api/v1/anomalies/roi 404'd silently with 'No active property
+    linked to the authenticated user.'"""
+
+    @pytest.mark.asyncio
+    async def test_resolves_via_restaurant_profiles(self):
+        from app.api.routes.anomalies import _resolve_property_for_user
+
+        captured_sql: list[str] = []
+        captured_params: list[dict] = []
+
+        property_id = uuid.uuid4()
+        tenant_id = uuid.uuid4()
+
+        async def capture_execute(stmt, params=None, *args, **kwargs):
+            captured_sql.append(str(stmt))
+            captured_params.append(params or {})
+            mock_result = MagicMock()
+            mock_result.fetchone.return_value = (str(property_id), str(tenant_id))
+            return mock_result
+
+        mock_db = AsyncMock()
+        mock_db.execute = capture_execute
+
+        user_id = uuid.uuid4()
+        resolved_pid, resolved_tid = await _resolve_property_for_user(
+            mock_db, {"id": str(user_id)}
+        )
+
+        assert resolved_pid == property_id
+        assert resolved_tid == tenant_id
+        assert any("restaurant_profiles" in s for s in captured_sql), (
+            f"Expected restaurant_profiles in SQL, got: {captured_sql}"
+        )
+        assert not any(" properties " in s.lower() for s in captured_sql), (
+            "Legacy `properties` table should not be queried anymore"
+        )
+        assert any("owner_id" in s for s in captured_sql), (
+            "owner_id filter missing"
+        )
+        assert captured_params[0].get("user_id") == str(user_id)
+
+    @pytest.mark.asyncio
+    async def test_raises_404_when_no_row(self):
+        from app.api.routes.anomalies import _resolve_property_for_user
+
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = None
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await _resolve_property_for_user(mock_db, {"id": str(uuid.uuid4())})
+        assert exc_info.value.status_code == 404
