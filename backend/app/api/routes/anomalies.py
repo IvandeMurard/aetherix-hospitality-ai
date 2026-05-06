@@ -276,11 +276,14 @@ async def _resolve_property_for_user(
     Raises HTTPException 404 (RFC 7807) if no property is linked.
     """
     user_id = current_user.get("id")
+    # HOS-150 AC9 — query restaurant_profiles (the legacy `properties` table
+    # never existed in this schema; this endpoint 404'd on every authenticated
+    # call). Mirrors the AC5 fix in run_full_scan.
     result = await db.execute(
         text(
             """
             SELECT id, tenant_id
-            FROM properties
+            FROM restaurant_profiles
             WHERE owner_id = :user_id
               AND is_active = TRUE
             LIMIT 1
