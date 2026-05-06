@@ -33,11 +33,13 @@ def _mock_embedding(vector: list[float] = _FIXED_VEC) -> MagicMock:
 
 
 def _make_db_session() -> MagicMock:
-    """Return a minimal AsyncSession mock that satisfies execute()."""
+    """Return a minimal AsyncSession mock that satisfies execute() / add() / flush() / commit()."""
     session = MagicMock()
     result = MagicMock()
     result.mappings.return_value.all.return_value = []
     session.execute = AsyncMock(return_value=result)
+    session.add = MagicMock()
+    session.flush = AsyncMock()
     session.commit = AsyncMock()
     return session
 
@@ -140,6 +142,92 @@ class TestMemoryServiceEmbeddingDI:
 
         emb.embed.assert_not_awaited()
         assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_store_reflection_uses_orm_with_reflection_column(self):
+        """HOS-150 AC1 — writes go through ORM into the `reflection` column, not raw SQL `content`."""
+        from app.db.models import OperationalMemory
+
+        emb = _mock_embedding()
+        db = _make_db_session()
+        svc = MemoryService(db=db, embedding=emb)
+
+        await svc.store_reflection(
+            tenant_id="hotel_1",
+            reflection="Saturday dinner always over-forecast",
+            tags=["dinner", "weekend"],
+        )
+
+        db.add.assert_called_once()
+        added = db.add.call_args.args[0]
+        assert isinstance(added, OperationalMemory)
+        assert added.reflection == "Saturday dinner always over-forecast"
+        assert added.hotel_id == "hotel_1"
+        assert added.embedding == _FIXED_VEC
+        assert added.embedding_pending is False
+        assert added.tags == ["dinner", "weekend"]
+        db.flush.assert_awaited()
+        db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_store_reflection_embedding_failure_writes_pending_row(self):
+        """HOS-150 AC2 — Mistral failure → embedding=None, embedding_pending=True (ADR D9)."""
+        from app.db.models import OperationalMemory
+
+        emb = MagicMock()
+        emb.embed = AsyncMock(side_effect=RuntimeError("mistral 503"))
+        emb.dimensions = _DIM
+        db = _make_db_session()
+        svc = MemoryService(db=db, embedding=emb)
+
+        await svc.store_reflection(tenant_id="hotel_1", reflection="capture rate flaky")
+
+        db.add.assert_called_once()
+        added = db.add.call_args.args[0]
+        assert isinstance(added, OperationalMemory)
+        assert added.embedding is None
+        assert added.embedding_pending is True
+        assert added.reflection == "capture rate flaky"
+
+    @pytest.mark.asyncio
+    async def test_cache_recommendation_uses_orm(self):
+        """HOS-150 AC1 — cache_recommendation goes through ORM, populates reco_json."""
+        from app.db.models import OperationalMemory
+
+        emb = _mock_embedding()
+        db = _make_db_session()
+        svc = MemoryService(db=db, embedding=emb)
+
+        payload = {"action": "add_2_chefs", "confidence": 0.82}
+        await svc.cache_recommendation(tenant_id="hotel_1", data=payload)
+
+        db.add.assert_called_once()
+        added = db.add.call_args.args[0]
+        assert isinstance(added, OperationalMemory)
+        assert added.memory_type == "recommendation_cache"
+        assert added.reco_json == payload
+        assert added.embedding == _FIXED_VEC
+
+    @pytest.mark.asyncio
+    async def test_learn_from_feedback_uses_orm(self):
+        """HOS-150 AC1 — learn_from_feedback flows through ORM via store_reflection."""
+        from app.db.models import OperationalMemory
+
+        emb = _mock_embedding()
+        db = _make_db_session()
+        svc = MemoryService(db=db, embedding=emb)
+
+        await svc.learn_from_feedback(
+            tenant_id="hotel_1",
+            alert_id="alert-123",
+            feedback="rejected",
+        )
+
+        db.add.assert_called_once()
+        added = db.add.call_args.args[0]
+        assert isinstance(added, OperationalMemory)
+        assert "AlertID: alert-123" in added.reflection
+        assert "rejected" in (added.outcome or "")
 
 
 # ---------------------------------------------------------------------------
