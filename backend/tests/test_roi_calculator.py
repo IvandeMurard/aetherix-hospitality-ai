@@ -495,3 +495,75 @@ class TestWorkerChain:
         mock_scan.assert_called_once()
         mock_roi.assert_called_once()
         mock_fmt.assert_called_once()  # Story 3.3c AC 6: formatter chained after ROI
+
+
+# ===========================================================================
+# 9. HOS-150 AC9 — roi_calculator queries restaurant_profiles, not properties
+# ===========================================================================
+class TestROIQueriesRestaurantProfiles:
+    """HOS-150 AC9: roi_calculator must hit restaurant_profiles, never the
+    legacy `properties` table (which never existed in this schema)."""
+
+    @pytest.mark.asyncio
+    async def test_run_full_scan_queries_restaurant_profiles(self, svc):
+        captured_sql: list[str] = []
+
+        async def capture_execute(stmt, *args, **kwargs):
+            captured_sql.append(str(stmt))
+            mock_result = MagicMock()
+            mock_result.fetchall.return_value = []
+            return mock_result
+
+        mock_db = AsyncMock()
+        mock_db.execute = capture_execute
+
+        await svc.run_full_scan(mock_db)
+
+        assert any("restaurant_profiles" in s for s in captured_sql), (
+            f"Expected restaurant_profiles in SQL, got: {captured_sql}"
+        )
+        assert not any(" properties " in s.lower() for s in captured_sql), (
+            "Legacy `properties` table should not be queried anymore"
+        )
+        assert any("is_active = TRUE" in s for s in captured_sql), (
+            "Filter on is_active = TRUE missing"
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_property_rates_queries_restaurant_profiles(self, svc):
+        captured_sql: list[str] = []
+
+        async def capture_execute(stmt, *args, **kwargs):
+            captured_sql.append(str(stmt))
+            mock_result = MagicMock()
+            mock_result.fetchone.return_value = (40.0, 14.0)
+            return mock_result
+
+        mock_db = AsyncMock()
+        mock_db.execute = capture_execute
+
+        avg_spend, hourly_rate = await svc._get_property_rates(
+            mock_db, uuid.uuid4()
+        )
+
+        assert any("restaurant_profiles" in s for s in captured_sql), (
+            f"Expected restaurant_profiles in SQL, got: {captured_sql}"
+        )
+        assert not any(" properties " in s.lower() for s in captured_sql), (
+            "Legacy `properties` table should not be queried anymore"
+        )
+        assert avg_spend == 40.0
+        assert hourly_rate == 14.0
+
+    @pytest.mark.asyncio
+    async def test_get_property_rates_falls_back_to_defaults_on_error(self, svc):
+        """Defensive: SQL error → defaults (preserves AC7 behaviour)."""
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(side_effect=Exception("connection refused"))
+
+        avg_spend, hourly_rate = await svc._get_property_rates(
+            mock_db, uuid.uuid4()
+        )
+
+        assert avg_spend == DEFAULT_AVG_SPEND_PER_COVER
+        assert hourly_rate == DEFAULT_STAFF_HOURLY_RATE
