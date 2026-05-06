@@ -35,7 +35,7 @@ from app.api.routes import (
 )
 from app.api.routes import webhook as twilio_inbound_webhook
 from app.core.error_handlers import problem_details_handler
-from app.db.models import Base
+from app.db.schema_check import verify_schema
 from app.db.session import engine
 from app.middleware.agent_tracking import AgentTrackingMiddleware
 from app.providers.factory import get_embedding_provider, get_llm_provider
@@ -57,8 +57,10 @@ _scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --------------- startup ---------------
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # HOS-150 AC7 — verify migrations have been applied; refuse boot if any
+    # critical table is missing. Replaces the old `Base.metadata.create_all`
+    # path, which silently created divergent tables in fresh environments.
+    await verify_schema(engine)
 
     # Decision #10: provider singletons — one instance for the entire process.
     # Services receive these via dependency injection rather than calling the
