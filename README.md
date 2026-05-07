@@ -43,17 +43,6 @@ Aetherix delivers **contextual, explainable recommendations** via WhatsApp (or o
 
 ---
 
-### Why Aetherix exists
-
-Hotels waste ~25% of food produced and labor costs represent 30-45% of operating expenses. F&B and Staff prediction remains a complex and repetitive process.
-Aetherix delivers **contextual, explainable recommendations** directly via WhatsApp at the right moment, learns from each property’s reality, and improves over time.
-
-**Key insight:** The agent models each property's historical capture rate and applies contextual demand to generate recommendations that align with each property's reality.
-
-**The result:** Contextualized intelligence, helping reduce food waste (hotels waste ~25% of food produced), labor costs, and, most importantly, giving more time to managers to focus on their customers.
-
----
-
 ### Core Value Proposition
 
 | Feature                    | Aetherix (Proactive & Headless)                  |
