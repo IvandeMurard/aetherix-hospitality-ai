@@ -38,7 +38,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, Header, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.db.session import AsyncSessionLocal, get_db
 from app.schemas.webhook import ActionType, TwilioInboundPayload
 from app.services.action_logger import ActionLoggerService, parse_action
 from app.services.explainability_service import ExplainabilityService
@@ -95,6 +95,37 @@ _ACTION_TWIML: dict[ActionType, str] = {
 
 def _xml_response(twiml: str, status_code: int = 200) -> Response:
     return Response(content=twiml, media_type="application/xml", status_code=status_code)
+
+
+# ---------------------------------------------------------------------------
+# Reverse-proxy aware URL reconstruction for HMAC validation
+# ---------------------------------------------------------------------------
+
+def _get_webhook_url(request: Request) -> str:
+    """Return the public-facing URL that Twilio signed.
+
+    Behind a reverse proxy, ``request.url`` reflects the internal address
+    (e.g. ``http://127.0.0.1:8000/...``). Twilio signed the original public
+    URL, so we rebuild it in this priority order:
+      1. ``TWILIO_WEBHOOK_BASE_URL`` env-var override (explicit production config)
+      2. ``X-Forwarded-Proto`` + ``X-Forwarded-Host`` headers set by the proxy
+      3. Raw ``request.url`` (local dev / direct access)
+    """
+    override = os.getenv("TWILIO_WEBHOOK_BASE_URL", "").rstrip("/")
+    path = request.url.path
+    if request.url.query:
+        path = f"{path}?{request.url.query}"
+
+    if override:
+        return override + path
+
+    proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = (
+        request.headers.get("x-forwarded-host")
+        or request.headers.get("host")
+        or request.url.netloc
+    )
+    return f"{proto}://{host}{path}"
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +203,7 @@ async def twilio_inbound_webhook(
         auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
         signature = x_twilio_signature or ""
         form_data = dict(await request.form())
-        full_url = str(request.url)
+        full_url = _get_webhook_url(request)
 
         if not _validate_twilio_signature(
             full_url,
@@ -210,7 +241,6 @@ async def twilio_inbound_webhook(
         _bg_parse_query,
         from_number=payload.From_,
         body=payload.Body,
-        db=db,
     )
     return _xml_response(_TWIML_QUERY_ACK)
 
@@ -218,30 +248,33 @@ async def twilio_inbound_webhook(
 async def _bg_parse_query(
     from_number: str,
     body: str,
-    db: AsyncSession,
 ) -> None:
     """Background task: parse, store, then generate & send explainability receipt.
+
+    Opens an isolated AsyncSession so that commits here are independent of
+    the request session (fixes silent rollback — same pattern as HOS-154).
 
     Story 5.1 (HOS-28) AC#2 — identifies tenant + recommendation.
     Story 5.2 (HOS-29)       — calls Claude and replies via Twilio.
     """
-    # Step 1: store the query (Story 5.1)
-    parser = QueryParserService()
-    parse_result = await parser.parse_and_store(
-        from_number=from_number, body=body, session=db
-    )
-    logger.info("twilio_inbound bg_parse_query: parse_result=%s", parse_result)
-
-    if parse_result.get("status") not in ("stored",):
-        # duplicate or not_found — QueryParserService already logged; nothing more to do
-        return
-
-    # Step 2: generate explanation and send reply (Story 5.2)
-    query_id = parse_result.get("query_id")
-    if query_id:
-        import uuid as _uuid
-        explainer = ExplainabilityService()
-        explain_result = await explainer.generate_and_send(
-            query_id=_uuid.UUID(query_id), session=db
+    async with AsyncSessionLocal() as db:
+        # Step 1: store the query (Story 5.1)
+        parser = QueryParserService()
+        parse_result = await parser.parse_and_store(
+            from_number=from_number, body=body, session=db
         )
-        logger.info("twilio_inbound bg_parse_query: explain_result=%s", explain_result)
+        logger.info("twilio_inbound bg_parse_query: parse_result=%s", parse_result)
+
+        if parse_result.get("status") not in ("stored",):
+            # duplicate or not_found — QueryParserService already logged
+            return
+
+        # Step 2: generate explanation and send reply (Story 5.2)
+        query_id = parse_result.get("query_id")
+        if query_id:
+            import uuid as _uuid
+            explainer = ExplainabilityService()
+            explain_result = await explainer.generate_and_send(
+                query_id=_uuid.UUID(query_id), session=db
+            )
+            logger.info("twilio_inbound bg_parse_query: explain_result=%s", explain_result)
