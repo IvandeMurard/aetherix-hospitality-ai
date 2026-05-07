@@ -17,7 +17,6 @@ Error handling contract:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -135,14 +134,11 @@ class AlertDispatcherService:
 
         logger.info("Dispatching %d pending recommendation(s).", len(pending))
 
-        async def _safe_dispatch(rec: StaffingRecommendation) -> None:
+        for rec in pending:
             try:
                 await self.dispatch_one(rec, session)
             except Exception:
-                # dispatch_one already logged the error; leave status unchanged
                 pass
-
-        await asyncio.gather(*[_safe_dispatch(rec) for rec in pending])
 
     # ------------------------------------------------------------------
     # Private channel routing
