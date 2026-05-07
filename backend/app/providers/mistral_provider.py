@@ -12,12 +12,17 @@ Zero-vector fallback:
 """
 from __future__ import annotations
 
+import logging
 import os
+from collections import OrderedDict
 
 from app.providers.base import EmbeddingProvider  # noqa: F401 — satisfies Protocol
 
 # Mistral's ``mistral-embed`` model produces 1024-dimensional embeddings.
 _MISTRAL_DIM = 1024
+_EMBED_CACHE_MAXSIZE = 512
+
+logger = logging.getLogger(__name__)
 
 
 class MistralEmbeddingProvider:
@@ -35,6 +40,7 @@ class MistralEmbeddingProvider:
         self._api_key = api_key or os.getenv("MISTRAL_API_KEY", "")
         self._model = model
         self._client = None
+        self._cache: OrderedDict[str, list[float]] = OrderedDict()
         if self._api_key:
             from mistralai.client.sdk import Mistral
 
@@ -56,6 +62,13 @@ class MistralEmbeddingProvider:
         Returns:
             A list of 1024 floats representing the embedding.
         """
+        if text in self._cache:
+            self._cache.move_to_end(text)
+            logger.debug("embed cache hit (text len=%d)", len(text))
+            return self._cache[text]
+
+        logger.debug("embed cache miss (text len=%d)", len(text))
+
         if self._client is None:
             # One last attempt — key may have been set after instantiation.
             key = os.getenv("MISTRAL_API_KEY", "")
@@ -70,7 +83,13 @@ class MistralEmbeddingProvider:
             model=self._model,
             inputs=[text],
         )
-        return response.data[0].embedding
+        result = response.data[0].embedding
+
+        self._cache[text] = result
+        if len(self._cache) > _EMBED_CACHE_MAXSIZE:
+            self._cache.popitem(last=False)
+
+        return result
 
     @property
     def dimensions(self) -> int:
