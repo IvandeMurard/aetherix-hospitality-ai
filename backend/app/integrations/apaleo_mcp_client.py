@@ -71,7 +71,7 @@ class ApaleoMCPClient:
 
     async def _get_token(self) -> str:
         """Fetch or reuse a valid OAuth2 bearer token (30s buffer)."""
-        if self._token and time.time() < self._token_expiry - 30:
+        if self._token and time.time() < self._token_expiry - 60:
             return self._token
 
         async with httpx.AsyncClient(timeout=10) as http:
