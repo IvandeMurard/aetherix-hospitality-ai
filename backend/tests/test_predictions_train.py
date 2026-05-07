@@ -93,7 +93,8 @@ class TestLoadDemoDataframe:
     def test_loads_synthetic_data(self, tmp_path: Path):
         # 99 consecutive valid dates starting 2025-01-01 (f-string only worked
         # for i ≤ 31; days 32–99 produced invalid date strings — HOS-162)
-        from datetime import date as _date, timedelta as _td
+        from datetime import date as _date
+        from datetime import timedelta as _td
         rows = [
             {"ds": (_date(2025, 1, 1) + _td(days=i)).isoformat(), "y": 40 + i + 1}
             for i in range(99)
@@ -173,6 +174,9 @@ class TestHybridMerge:
     @pytest.mark.asyncio
     @_skip_if_no_pred
     async def test_hybrid_uses_mcp_over_synthetic_on_overlap(self, tmp_path: Path):
+        # 49 consecutive valid dates — f"2025-01-{i:02d}" was invalid for i > 31 (HOS-162)
+        from datetime import date as _date
+        from datetime import timedelta as _td
         from unittest.mock import patch
 
         from app.api.routes.predictions import (
@@ -180,9 +184,6 @@ class TestHybridMerge:
             TrainRequest,
             _build_training_dataframe,
         )
-
-        # 49 consecutive valid dates — f"2025-01-{i:02d}" was invalid for i > 31 (HOS-162)
-        from datetime import date as _date, timedelta as _td
         synthetic_rows = [
             {"ds": (_date(2025, 1, 1) + _td(days=i)).isoformat(), "y": 10}
             for i in range(49)
