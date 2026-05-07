@@ -78,11 +78,17 @@ def _mock_forecast_result(hotel_id: str = "hotel-001") -> dict:
 def _predict_client(monkeypatch) -> TestClient:
     monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
     from app.api.routes.predictions import router
+    from app.db.session import get_db
 
     app = FastAPI()
     app.include_router(router)
     # HOS-157: engine is now a lifespan singleton on app.state — inject a mock here.
     app.state.engine = MagicMock()
+    # HOS-151: predict() now depends on get_db — override to avoid real DB connection.
+    async def _noop_db():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_db] = _noop_db
     return TestClient(app)
 
 
