@@ -73,14 +73,16 @@ class TestPredictionResultIsMock:
 
 
 class TestPredictUntrainedReturnsMock:
-    def test_untrained_engine_returns_is_mock_true(self):
+    @pytest.mark.asyncio
+    async def test_untrained_engine_returns_is_mock_true(self):
         engine = PredictionEngine()
-        result = engine.predict(date(2026, 7, 14))
+        result = await engine.predict(date(2026, 7, 14))
         assert result.is_mock is True
 
-    def test_untrained_engine_returns_sentinel_covers(self):
+    @pytest.mark.asyncio
+    async def test_untrained_engine_returns_sentinel_covers(self):
         engine = PredictionEngine()
-        result = engine.predict(date(2026, 7, 14))
+        result = await engine.predict(date(2026, 7, 14))
         assert result.predicted == 45
 
 

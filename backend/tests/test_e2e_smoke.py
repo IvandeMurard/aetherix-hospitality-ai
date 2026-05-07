@@ -81,6 +81,8 @@ def _predict_client(monkeypatch) -> TestClient:
 
     app = FastAPI()
     app.include_router(router)
+    # HOS-157: engine is now a lifespan singleton on app.state — inject a mock here.
+    app.state.engine = MagicMock()
     return TestClient(app)
 
 
@@ -91,28 +93,20 @@ class TestPostPredict:
     def client(self, monkeypatch):
         return _predict_client(monkeypatch)
 
-    def test_predict_returns_200(self, client, monkeypatch):
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=_mock_forecast_result(),
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
-            )
+    def test_predict_returns_200(self, client):
+        client.app.state.engine.get_forecast = AsyncMock(return_value=_mock_forecast_result())
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
+        )
         assert resp.status_code == 200
 
     def test_predict_response_has_required_fields(self, client):
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=_mock_forecast_result(),
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
-            )
+        client.app.state.engine.get_forecast = AsyncMock(return_value=_mock_forecast_result())
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
+        )
         body = resp.json()
         for field in (
             "hotel_id", "target_date", "service_type", "predicted_covers",
@@ -123,30 +117,22 @@ class TestPostPredict:
     def test_predict_claude_used_flag_propagates(self, client):
         result = _mock_forecast_result()
         result["reasoning_detail"]["claude_used"] = True
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=result,
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
-            )
+        client.app.state.engine.get_forecast = AsyncMock(return_value=result)
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
+        )
         assert resp.json()["claude_used"] is True
 
     def test_predict_heuristic_fallback_when_no_reasoning_detail(self, client):
         """When reasoning_detail is absent (legacy engine), falls back gracefully."""
         result = _mock_forecast_result()
         del result["reasoning_detail"]
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=result,
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
-            )
+        client.app.state.engine.get_forecast = AsyncMock(return_value=result)
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
+        )
         body = resp.json()
         assert body["claude_used"] is False
         assert len(body["reasoning_summary"]) > 0
