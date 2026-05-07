@@ -461,11 +461,17 @@ class TestTwilioClientSmoke:
         from app.core.exceptions import NotConfiguredError
         from app.integrations.twilio_client import TwilioClient
 
-        client = TwilioClient(account_sid="", auth_token="", from_number="", whatsapp_from="")
+        # Patch config so the constructor fallback also yields empty strings
+        # (without this, real env vars would be picked up — HOS-155 fix)
+        with patch("app.integrations.twilio_client.config.TWILIO_ACCOUNT_SID", ""), \
+             patch("app.integrations.twilio_client.config.TWILIO_AUTH_TOKEN", ""):
+            client = TwilioClient(
+                account_sid="", auth_token="", from_number="", whatsapp_from=""
+            )
 
-        with pytest.raises(NotConfiguredError):
-            import asyncio
-            asyncio.run(client.send_sms(to="+33600000001", body="test"))
+            with pytest.raises(NotConfiguredError):
+                import asyncio
+                asyncio.run(client.send_sms(to="+33600000001", body="test"))
 
     @pytest.mark.asyncio
     async def test_send_whatsapp_adds_prefix(self):
