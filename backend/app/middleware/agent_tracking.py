@@ -22,6 +22,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.context import request_id_var
+
 logger = logging.getLogger(__name__)
 
 # Case-insensitive substrings that classify a User-Agent as an agent caller.
@@ -76,13 +78,18 @@ class AgentTrackingMiddleware(BaseHTTPMiddleware):
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        # Generate (or inherit) the request_id before the handler runs so that
+        # providers can read it via request_id_var during the LLM call.
+        rid = request.headers.get("x-request-id") or str(uuid.uuid4())
+        request_id_var.set(rid)
+
         start = time.monotonic()
         response: Response = await call_next(request)
         latency_ms = round((time.monotonic() - start) * 1000)
 
-        # Attach X-Request-Id if absent (useful for distributed tracing).
+        # Propagate to response headers for distributed tracing.
         if "x-request-id" not in response.headers:
-            response.headers["x-request-id"] = str(uuid.uuid4())
+            response.headers["x-request-id"] = rid
 
         # Log only if the caller looks like an agent.
         if is_agent_request(request):
