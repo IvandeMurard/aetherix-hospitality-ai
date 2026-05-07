@@ -11,12 +11,14 @@ Architecture constraints:
 - Session is opened per job execution and closed cleanly on exit.
 - ROI calculation is chained within the same job execution (AC 9).
 - Recommendation formatting is chained after ROI calculation (Story 3.3c AC 6).
+- On non-recoverable failure: dispatch_error() is called and exception re-raises.
 [Source: story 3.3a Task 4, story 3.3b AC 9, story 3.3c AC 6,
          architecture.md#Infrastructure-Deployment]
 """
 from __future__ import annotations
 
 import logging
+import uuid
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -39,25 +41,46 @@ async def _run_anomaly_scan_job() -> None:
     Phase 2 — ROI calculation chain (AC 9: auto-chain after each scan cycle).
     Phase 3 — Recommendation formatting chain (Story 3.3c AC 6).
     """
-    logger.info("anomaly_scan: starting scheduled run")
-    async with AsyncSessionLocal() as db:
-        await _service.run_full_scan(db)
-    logger.info("anomaly_scan: scheduled run complete")
+    job_id = str(uuid.uuid4())[:8]
+    logger.info("anomaly_scan: started  job_id=%s", job_id)
 
-    # AC 9: chain ROI calculation immediately after the scan
-    logger.info("roi_calculator: starting post-scan ROI chain")
-    async with AsyncSessionLocal() as db:
-        await _roi_service.run_full_scan(db)
-    logger.info("roi_calculator: post-scan ROI chain complete")
+    try:
+        async with AsyncSessionLocal() as db:
+            await _service.run_full_scan(db)
+        logger.info("anomaly_scan: scan complete  job_id=%s", job_id)
 
-    # Story 3.3c AC 6: chain recommendation formatting after ROI calculation
-    logger.info("recommendation_formatter: starting post-ROI formatting chain")
-    async with AsyncSessionLocal() as db:
-        created = await _formatter_service.run_full_scan(db)
-    logger.info(
-        "recommendation_formatter: post-ROI chain complete — %d recommendations created",
-        created,
-    )
+        logger.info("roi_calculator: starting post-scan chain  job_id=%s", job_id)
+        async with AsyncSessionLocal() as db:
+            await _roi_service.run_full_scan(db)
+        logger.info("roi_calculator: chain complete  job_id=%s", job_id)
+
+        logger.info(
+            "recommendation_formatter: starting post-ROI chain  job_id=%s", job_id
+        )
+        async with AsyncSessionLocal() as db:
+            created = await _formatter_service.run_full_scan(db)
+        logger.info(
+            "recommendation_formatter: chain complete  job_id=%s  created=%d",
+            job_id,
+            created,
+        )
+
+    except Exception as exc:
+        logger.exception("anomaly_scan: job failed  job_id=%s", job_id)
+        try:
+            from app.services.ops_dispatcher import dispatch_error
+
+            await dispatch_error(
+                title="anomaly_scan job failed",
+                detail=(
+                    f"Unrecoverable error in 4-hour anomaly scan chain. "
+                    f"job_id={job_id}. Error: {exc!r}"
+                ),
+                tags=["anomaly_scan", "worker"],
+            )
+        except Exception as inner:  # noqa: BLE001
+            logger.warning("anomaly_scan: dispatch_error failed: %s", inner)
+        raise
 
 
 def register_anomaly_scan_job(scheduler: AsyncIOScheduler) -> None:
