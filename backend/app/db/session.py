@@ -11,7 +11,12 @@ if not DATABASE_URL:
     # Fallback for local development if .env is missing
     DATABASE_URL = "postgresql+asyncpg://postgres:password@localhost:5432/aetherix"
 
-engine = create_async_engine(DATABASE_URL, echo=True)
+engine = create_async_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+)
 AsyncSessionLocal = sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
 )
