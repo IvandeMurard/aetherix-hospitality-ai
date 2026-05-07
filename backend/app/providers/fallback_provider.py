@@ -1,8 +1,9 @@
 """FallbackLLMProvider — automatic failover between two LLMProvider instances.
 
-When the primary provider fails for any reason (API error, rate limit, missing
-key, timeout), this composite transparently retries the same call on the
-fallback provider.  Services never know a fallover occurred.
+When the primary provider fails with a *transient* error (5xx, timeout, network)
+this composite transparently retries the same call on the fallback provider.
+Client errors (HTTP 4xx) are re-raised immediately — the same malformed request
+would fail identically on the fallback, making failover wasteful and misleading.
 
 Activation:
     Set ``LLM_FALLBACK_BACKEND=gemini`` alongside ``LLM_BACKEND=claude`` in
@@ -10,7 +11,8 @@ Activation:
     in a ``FallbackLLMProvider`` — no code changes needed.
 
 Failure semantics:
-    - Any exception from the primary triggers failover and a WARNING log.
+    - Transient errors from the primary trigger failover and a WARNING log.
+    - Non-transient (4xx) errors are re-raised immediately with an ERROR log.
     - If the fallback also fails, its exception propagates to the caller.
     - Both provider identities are recorded in ``model_id`` for observability.
 """
@@ -23,8 +25,26 @@ from app.providers.base import LLMProvider
 logger = logging.getLogger(__name__)
 
 
+def _is_transient_error(exc: Exception) -> bool:
+    """Return True for errors that warrant failover to the backup provider.
+
+    HTTP 4xx errors (bad request, auth failure, context too long, invalid input)
+    indicate a malformed or rejected request — the identical call will fail on
+    the fallback too, so failover only costs money without fixing anything.
+
+    5xx errors, timeouts, and network-level errors may resolve on a different
+    backend and are worth retrying.
+    """
+    for attr in ("status_code", "http_status"):
+        status = getattr(exc, attr, None)
+        if isinstance(status, int):
+            return status >= 500  # 4xx → False (don't fallback), 5xx → True
+    # No HTTP status code → network/timeout/config error → assume transient
+    return True
+
+
 class FallbackLLMProvider:
-    """Composite LLMProvider: tries *primary*, falls back to *fallback* on any error.
+    """Composite LLMProvider: tries *primary*, falls back to *fallback* on transient errors.
 
     Args:
         primary:  The preferred provider (e.g. ``ClaudeProvider``).
@@ -42,7 +62,11 @@ class FallbackLLMProvider:
         temperature: float = 0.3,
         system: str | None = None,
     ) -> str:
-        """Try primary provider; on any exception, transparently retry with fallback.
+        """Try primary provider; on transient errors, transparently retry with fallback.
+
+        4xx client errors (bad request, invalid input, context too long) are
+        re-raised immediately — they indicate a request problem that the fallback
+        cannot fix.
 
         Args:
             messages:    OpenAI-style message list.
@@ -54,7 +78,8 @@ class FallbackLLMProvider:
             The first successful text response (primary or fallback).
 
         Raises:
-            Exception: The fallback's exception if both providers fail.
+            Exception: Non-transient (4xx) errors from the primary, or the
+                       fallback's exception if both providers fail.
         """
         try:
             return await self._primary.complete(
@@ -64,6 +89,19 @@ class FallbackLLMProvider:
                 system=system,
             )
         except Exception as primary_exc:
+            if not _is_transient_error(primary_exc):
+                logger.error(
+                    "FallbackLLMProvider: primary %s raised non-transient error "
+                    "(%s status=%s) — NOT falling back",
+                    self._primary.model_id,
+                    type(primary_exc).__name__,
+                    getattr(
+                        primary_exc,
+                        "status_code",
+                        getattr(primary_exc, "http_status", "n/a"),
+                    ),
+                )
+                raise
             logger.warning(
                 "FallbackLLMProvider: primary provider %s failed (%s: %s) — "
                 "retrying with fallback %s",
