@@ -2,6 +2,7 @@ import logging
 from datetime import date
 from typing import Any, Dict, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.db.models import RecommendationCache, RestaurantProfile
@@ -36,7 +37,7 @@ class AetherixEngine:
             )
             return result.scalars().first()
 
-    async def get_forecast(self, tenant_id: str, target_date: date, service_type: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def get_forecast(self, db: Optional[AsyncSession], tenant_id: str, target_date: date, service_type: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Hybrid orchestration logic."""
         # 1. Prediction (Prophet)
         forecast = self.forecaster.predict(target_date, features=context.get('regressors'))
@@ -44,12 +45,14 @@ class AetherixEngine:
         confidence = forecast.confidence
         is_mock = forecast.is_mock
 
-        # 2. RAG (Historical Patterns)
+        # 2. RAG (Historical Patterns) — request-scoped session so pgvector queries execute
         context_query = self.rag.build_context_string(target_date, service_type, context)
-        patterns = await self.rag.find_similar_patterns(context_query, service_type)
+        rag = RAGService(db=db, embedding=self.rag._embedding)
+        patterns = await rag.find_similar_patterns(context_query, service_type)
 
-        # 3. Memory Retrieval (Interaction History)
-        memory_context = await self.memory.get_relevant_context(tenant_id, context_query)
+        # 3. Memory Retrieval (Interaction History) — request-scoped session
+        memory = MemoryService(db=db, embedding=self.memory._embedding)
+        memory_context = await memory.get_relevant_context(tenant_id, context_query)
 
         # 4. Agent Constitution — build system prompt if profile available
         system_prompt: Optional[str] = None

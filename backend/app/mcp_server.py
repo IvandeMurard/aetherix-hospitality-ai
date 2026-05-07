@@ -74,6 +74,7 @@ async def verify_bearer(authorization: Optional[str], db: AsyncSession) -> MCPAp
 async def tool_get_operational_predictions(
     hotel_id: str,
     target_date: str,
+    db: AsyncSession,
     service_type: str = "dinner",
     context: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
@@ -85,7 +86,7 @@ async def tool_get_operational_predictions(
         raise MCPAuthError(400, "invalid_input", "service_type must be breakfast|lunch|dinner")
     ctx = context or {"weather": {"condition": "Unknown"}, "events": [], "occupancy": None}
     try:
-        return await _engine.get_forecast(hotel_id, tdate, service_type, ctx)
+        return await _engine.get_forecast(db, hotel_id, tdate, service_type, ctx)
     except Exception as exc:
         logger.exception("tool_get_operational_predictions failed: %s", exc)
         raise MCPAuthError(503, "upstream_unavailable", str(exc)) from exc
@@ -150,7 +151,7 @@ async def tool_get_recommendations_with_memory_context(
         if target_date:
             tdate = date.fromisoformat(target_date)
             forecast = await _engine.get_forecast(
-                hotel_id, tdate, "dinner",
+                db, hotel_id, tdate, "dinner",
                 {"weather": {}, "events": [], "occupancy": None},
             )
             reasoning_summary = forecast.get("reasoning", "")
@@ -328,7 +329,7 @@ async def dispatch_tool(
 
         try:
             if tool_name == "get_operational_predictions":
-                result = await tool_get_operational_predictions(tok.hotel_id, **args)
+                result = await tool_get_operational_predictions(tok.hotel_id, db=db, **args)
             elif tool_name == "get_recommendations_with_memory_context":
                 result = await tool_get_recommendations_with_memory_context(
                     tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,

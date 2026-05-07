@@ -97,7 +97,7 @@ async def get_property_prediction(
     property_id = profile.tenant_id
     
     try:
-        result = await engine.get_forecast(property_id, prediction_date, service_type, context)
+        result = await engine.get_forecast(db, property_id, prediction_date, service_type, context)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -109,7 +109,7 @@ async def get_property_prediction(
     summary="Forecast F&B covers (MCP-callable)",
     openapi_extra={"x-agent-callable": True, "x-mcp-compatible": True},
 )
-async def predict(body: PredictRequest):
+async def predict(body: PredictRequest, db: AsyncSession = Depends(get_db)):
     """MCP-callable endpoint: given a hotel_id and date, returns a structured
     demand forecast with LLM reasoning (Claude Sonnet) or a heuristic fallback
     when ANTHROPIC_API_KEY is absent.
@@ -128,7 +128,7 @@ async def predict(body: PredictRequest):
 
     try:
         result = await engine.get_forecast(
-            body.hotel_id, body.target_date, body.service_type, ctx
+            db, body.hotel_id, body.target_date, body.service_type, ctx
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

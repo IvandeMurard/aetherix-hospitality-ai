@@ -119,7 +119,7 @@ class WhatsAppService:
 
         # 1. Load latest forecast for context injection into the system prompt
         try:
-            forecast = await self.engine.get_forecast(tenant_id, date.today(), "dinner", {})
+            forecast = await self.engine.get_forecast(None, tenant_id, date.today(), "dinner", {})
             prediction = forecast.get("prediction", {})
             patterns = forecast.get("historical_patterns", [])
             similar_text = "\n".join(
