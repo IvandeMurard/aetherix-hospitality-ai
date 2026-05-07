@@ -3,12 +3,13 @@
 Coverage:
 - AC1: FallbackLLMProvider satisfies LLMProvider protocol
 - AC2: Returns primary's response when primary succeeds
-- AC3: Transparently retries with fallback when primary raises any exception
+- AC3: Transparently retries with fallback when primary raises transient errors
 - AC4: Passes identical call arguments to fallback
 - AC5: Propagates fallback exception if both providers fail
-- AC6: Logs a WARNING when primary fails
+- AC6: Logs a WARNING when primary fails (transient), ERROR when non-transient
 - AC7: model_id shows primary→fallback composite identifier
 - AC8: Factory always returns FallbackLLMProvider (Claude primary, Gemini fallback)
+- AC9: 4xx (non-transient) errors from primary are re-raised without fallback
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ import pytest
 
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
-from app.providers.fallback_provider import FallbackLLMProvider
+from app.providers.fallback_provider import FallbackLLMProvider, _is_transient_error
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,12 +93,12 @@ class TestFallbackProviderPrimarySuccess:
 
 
 # ---------------------------------------------------------------------------
-# AC3 — Transparent failover
+# AC3 — Transparent failover (transient errors only)
 # ---------------------------------------------------------------------------
 
 class TestFallbackProviderFailover:
     @pytest.mark.asyncio
-    async def test_falls_back_on_api_error(self):
+    async def test_falls_back_on_network_error(self):
         primary = _failing_provider("claude/sonnet", ConnectionError("timeout"))
         fallback = _mock_provider("gemini/flash", "Fallback response.")
 
@@ -119,8 +120,19 @@ class TestFallbackProviderFailover:
         assert result == "Gemini took over."
 
     @pytest.mark.asyncio
-    async def test_falls_back_on_any_exception_type(self):
-        for exc in [ValueError("bad"), TimeoutError("slow"), Exception("generic")]:
+    async def test_falls_back_on_5xx_error(self):
+        class _ServerError(Exception):
+            status_code = 503
+
+        primary = _failing_provider("claude/sonnet", _ServerError("overloaded"))
+        fallback = _mock_provider("gemini/flash", "ok")
+        provider = FallbackLLMProvider(primary=primary, fallback=fallback)
+        result = await provider.complete(messages=_MESSAGES)
+        assert result == "ok"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_on_timeout_and_generic_errors(self):
+        for exc in [TimeoutError("slow"), Exception("generic")]:
             primary = _failing_provider("claude/sonnet", exc)
             fallback = _mock_provider("gemini/flash", "ok")
             provider = FallbackLLMProvider(primary=primary, fallback=fallback)
@@ -220,3 +232,84 @@ class TestFactoryFallbackWiring:
         assert "claude" in provider.model_id
         assert "gemini" in provider.model_id
         assert "→" in provider.model_id
+
+
+# ---------------------------------------------------------------------------
+# AC9 — 4xx errors are NOT retried on fallback
+# ---------------------------------------------------------------------------
+
+class _BadRequestError(Exception):
+    status_code = 400
+
+
+class _AuthError(Exception):
+    status_code = 401
+
+
+class _UnprocessableError(Exception):
+    http_status = 422
+
+
+class TestFallbackProviderNonTransientErrors:
+    @pytest.mark.asyncio
+    async def test_4xx_error_is_reraised_not_retried(self):
+        primary = _failing_provider("claude/sonnet", _BadRequestError("invalid input"))
+        fallback = _mock_provider("gemini/flash", "ok")
+        provider = FallbackLLMProvider(primary=primary, fallback=fallback)
+
+        with pytest.raises(_BadRequestError):
+            await provider.complete(messages=_MESSAGES)
+
+        fallback.complete.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_auth_error_is_reraised_not_retried(self):
+        primary = _failing_provider("claude/sonnet", _AuthError("unauthorized"))
+        fallback = _mock_provider("gemini/flash", "ok")
+        provider = FallbackLLMProvider(primary=primary, fallback=fallback)
+
+        with pytest.raises(_AuthError):
+            await provider.complete(messages=_MESSAGES)
+
+        fallback.complete.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_logs_error_on_non_transient_failure(self, caplog):
+        import logging
+        primary = _failing_provider("claude/sonnet", _BadRequestError("bad input"))
+        fallback = _mock_provider("gemini/flash", "ok")
+        provider = FallbackLLMProvider(primary=primary, fallback=fallback)
+
+        with caplog.at_level(logging.ERROR, logger="app.providers.fallback_provider"):
+            with pytest.raises(_BadRequestError):
+                await provider.complete(messages=_MESSAGES)
+
+        assert any("NOT falling back" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# _is_transient_error unit tests
+# ---------------------------------------------------------------------------
+
+class TestIsTransientError:
+    def test_4xx_status_code_not_transient(self):
+        assert not _is_transient_error(_BadRequestError())
+        assert not _is_transient_error(_AuthError())
+
+    def test_422_via_http_status_attr_not_transient(self):
+        assert not _is_transient_error(_UnprocessableError())
+
+    def test_5xx_is_transient(self):
+        class _ServerError(Exception):
+            status_code = 503
+        assert _is_transient_error(_ServerError())
+
+    def test_connection_error_is_transient(self):
+        assert _is_transient_error(ConnectionError("refused"))
+
+    def test_timeout_error_is_transient(self):
+        assert _is_transient_error(TimeoutError("slow"))
+
+    def test_generic_exception_no_status_is_transient(self):
+        assert _is_transient_error(RuntimeError("ANTHROPIC_API_KEY not set"))
+        assert _is_transient_error(Exception("generic"))
