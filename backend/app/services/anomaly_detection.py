@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AnomalyDetectionError
 from app.db.models import DemandAnomaly, LocalEvent, WeatherForecast
+from app.db.session import AsyncSessionLocal
 from app.services.demand_modifiers import event_modifier, weather_modifier
 
 logger = logging.getLogger(__name__)
@@ -253,14 +254,15 @@ class AnomalyDetectionService:
             logger.info("anomaly_scan: no active properties found, skipping")
             return
 
-        tasks = [
-            self.detect_for_property(
-                db,
-                property_id=row[0],
-                tenant_id=row[1],
-            )
-            for row in properties
-        ]
+        async def _scan_one(row) -> list:
+            async with AsyncSessionLocal() as isolated_session:
+                return await self.detect_for_property(
+                    isolated_session,
+                    property_id=row[0],
+                    tenant_id=row[1],
+                )
+
+        tasks = [_scan_one(row) for row in properties]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         elapsed = time.monotonic() - t_start
