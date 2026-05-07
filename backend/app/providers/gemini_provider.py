@@ -20,9 +20,14 @@ Lazy key validation:
 """
 from __future__ import annotations
 
+import logging
 import os
+import time
 
+from app.context import request_id_var
 from app.providers.base import LLMProvider  # noqa: F401 — satisfies Protocol
+
+logger = logging.getLogger(__name__)
 
 
 def _to_gemini_contents(messages: list[dict]) -> list[dict]:
@@ -84,7 +89,9 @@ class GeminiProvider:
 
         Raises:
             RuntimeError: If ``GEMINI_API_KEY`` is not set when the method
-                          is called (lazy validation — not raised at init).
+                          is called (lazy validation — not raised at init),
+                          or if Gemini returns a safety block / refusal with
+                          no usable text.
         """
         if self._client is None:
             key = os.getenv("GEMINI_API_KEY", "")
@@ -109,12 +116,29 @@ class GeminiProvider:
         config = types.GenerateContentConfig(**config_kwargs)
         contents = _to_gemini_contents(messages)
 
+        t0 = time.monotonic()
         response = await self._client.aio.models.generate_content(
             model=self._model,
             contents=contents,
             config=config,
         )
-        return response.text
+        latency_ms = round((time.monotonic() - t0) * 1000)
+
+        try:
+            text = response.text
+        except (AttributeError, ValueError) as exc:
+            raise RuntimeError(
+                f"GeminiProvider: no text in response — safety block or refusal "
+                f"(finish_reason={getattr(response, 'finish_reason', 'unknown')}): {exc}"
+            ) from exc
+
+        logger.info(
+            "llm_call provider=gemini model=%s latency_ms=%d request_id=%s",
+            self._model,
+            latency_ms,
+            request_id_var.get(),
+        )
+        return text
 
     @property
     def model_id(self) -> str:
