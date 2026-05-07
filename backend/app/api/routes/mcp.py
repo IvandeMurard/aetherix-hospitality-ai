@@ -87,6 +87,7 @@ async def mcp_rpc(
         tool_name = params.get("name")
         arguments = params.get("arguments") or {}
         embedding_provider = getattr(request.app.state, "embedding", None)
+        engine = getattr(request.app.state, "engine", None)
         # Generate request_id here — middleware sets x-request-id POST call_next,
         # so reading it from response headers at this point always returns "".
         request_id = str(uuid.uuid4())
@@ -95,6 +96,7 @@ async def mcp_rpc(
             result = await dispatch_tool(
                 tool_name, arguments, authorization, db,
                 embedding_provider=embedding_provider,
+                engine=engine,
                 request_id=request_id,
             )
             await db.commit()
