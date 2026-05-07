@@ -42,6 +42,11 @@ TWILIO_SKIP_SIGNATURE_VALIDATION: bool = (
     _os.getenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "false").lower() == "true"
 )
 
+# Public base URL used to reconstruct the HMAC-signed URL behind a reverse proxy.
+# Example: "https://api.aetherix.com"
+# When set, overrides X-Forwarded-Proto / X-Forwarded-Host header inference.
+TWILIO_WEBHOOK_BASE_URL: str = _os.getenv("TWILIO_WEBHOOK_BASE_URL", "")
+
 # ─── Demo Mode ────────────────────────────────────────────────────────────────
 # When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
 # and loads synthetic Prophet training data from demo_data/prophet_training.json.
