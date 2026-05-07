@@ -23,7 +23,6 @@ from sqlalchemy.ext.asyncio import (
 from app.db.models import AgentActionLog, Base, MCPApiToken, StringArray
 from app.mcp_core import MCPAuthError, require_scope
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
