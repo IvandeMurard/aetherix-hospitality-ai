@@ -180,10 +180,8 @@ class TestLifespanAbortsOnMissingSchema:
         monkeypatch.setattr("app.main.register_dispatch_job", lambda s: None)
         monkeypatch.setattr("app.main.register_memory_metrics_job", lambda s: None)
         monkeypatch.setattr("app.main.register_partition_rotation_job", lambda s: None)
-        monkeypatch.setattr("app.main.start_weather_scheduler", lambda: None)
-        monkeypatch.setattr("app.main.stop_weather_scheduler", lambda: None)
-        monkeypatch.setattr("app.main.start_event_scheduler", lambda: None)
-        monkeypatch.setattr("app.main.stop_event_scheduler", lambda: None)
+        monkeypatch.setattr("app.main.start_weather_scheduler", lambda s: None)
+        monkeypatch.setattr("app.main.start_event_scheduler", lambda s: None)
 
         # Make the scheduler a no-op
         monkeypatch.setattr("app.main._scheduler.start", lambda: None)
