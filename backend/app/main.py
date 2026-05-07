@@ -39,6 +39,7 @@ from app.db.schema_check import verify_schema
 from app.db.session import engine
 from app.middleware.agent_tracking import AgentTrackingMiddleware
 from app.providers.factory import get_embedding_provider, get_llm_provider
+from app.services.aetherix_engine import AetherixEngine
 from app.workers.agent_action_log_partition_rotation import (
     register_partition_rotation_job,
 )
@@ -72,6 +73,11 @@ async def lifespan(app: FastAPI):
         app.state.llm.model_id,
         type(app.state.embedding).__name__,
     )
+
+    # Decision #10 (HOS-157): AetherixEngine singleton — one instance per process.
+    # Prophet CPU-bound methods run via asyncio.to_thread; engine shared across all routes.
+    app.state.engine = AetherixEngine()
+    logger.info("AetherixEngine initialised")
 
     # Register and start background cron jobs (anomaly scan + alert dispatch + MV refresh)
     register_anomaly_scan_job(_scheduler)
