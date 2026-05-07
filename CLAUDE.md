@@ -109,6 +109,8 @@ backend/app/integrations/      — Obsidian, Linear, Apaleo, Twilio, SendGrid
 backend/app/mcp_server.py      — MCP Server v0 (3 tools, HOS-71, PR #73)
 backend/app/middleware/        — agent_tracking.py (Agent SEO discovery + request_id, P1-5/HOS-72)
 scripts/veille_proactive.py    — monitoring hebdomadaire automatisé
+scripts/audit_id_types.py      — audit statique des mismatches tenant_id/property_id/hotel_id (HOS-163)
+docs/context/data-conventions.md — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 docs/ARCHITECTURE.md           — design système (v0.2.0 — certaines sections obsolètes, se fier à ce fichier)
 docs/ROADMAP_NOW_NEXT_LATER.md — roadmap opérationnelle
 docs/context/                  — contexte détaillé par domaine
