@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import MCPApiToken, OperationalMemory
+from app.db.session import AsyncSessionLocal
 from app.mcp_core import (
     TOOLS_MANIFEST,
     MCPAuthError,
@@ -349,6 +350,11 @@ async def dispatch_tool(
             raise
     finally:
         event.latency_ms = round((time.monotonic() - t0) * 1000)
-        await emit_agent_event(event, db)
+        try:
+            async with AsyncSessionLocal() as isolated_db:
+                await emit_agent_event(event, isolated_db)
+                await isolated_db.commit()
+        except Exception as exc:
+            logger.warning("audit log isolated session failed: %s", exc)
 
     return result
