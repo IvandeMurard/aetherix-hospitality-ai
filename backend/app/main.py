@@ -39,14 +39,15 @@ from app.db.schema_check import verify_schema
 from app.db.session import engine
 from app.middleware.agent_tracking import AgentTrackingMiddleware
 from app.providers.factory import get_embedding_provider, get_llm_provider
+from app.services.aetherix_engine import AetherixEngine
 from app.workers.agent_action_log_partition_rotation import (
     register_partition_rotation_job,
 )
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
-from app.workers.event_sync import start_event_scheduler, stop_event_scheduler
+from app.workers.event_sync import start_event_scheduler
 from app.workers.memory_metrics import register_memory_metrics_job
-from app.workers.weather_sync import start_weather_scheduler, stop_weather_scheduler
+from app.workers.weather_sync import start_weather_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -73,26 +74,27 @@ async def lifespan(app: FastAPI):
         type(app.state.embedding).__name__,
     )
 
-    # Register and start background cron jobs (anomaly scan + alert dispatch + MV refresh)
+    # Decision #10 (HOS-157): AetherixEngine singleton — one instance per process.
+    # Prophet CPU-bound methods run via asyncio.to_thread; engine shared across all routes.
+    app.state.engine = AetherixEngine()
+    logger.info("AetherixEngine initialised")
+
+    # Register all background cron jobs on the single shared scheduler before starting it.
     register_anomaly_scan_job(_scheduler)
     register_dispatch_job(_scheduler)
     register_memory_metrics_job(_scheduler)
     # HOS-150 AC4 — keep agent_action_log monthly partitions ahead of `now()`.
     register_partition_rotation_job(_scheduler)
+    # HOS-156 — injected into the shared scheduler (no separate scheduler instances).
+    start_weather_scheduler(_scheduler)
+    start_event_scheduler(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler
 
-    # Weather sync (12h cron) and event sync (daily 06:00 UTC)
-    start_weather_scheduler()
-    start_event_scheduler()
-
     yield
 
     # --------------- shutdown ---------------
-    stop_weather_scheduler()
-    stop_event_scheduler()
-
     if _scheduler.running:
         _scheduler.shutdown(wait=False)
         logger.info("APScheduler stopped")

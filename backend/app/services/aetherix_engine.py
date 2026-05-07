@@ -40,7 +40,7 @@ class AetherixEngine:
     async def get_forecast(self, db: Optional[AsyncSession], tenant_id: str, target_date: date, service_type: str, context: Dict[str, Any]) -> Dict[str, Any]:
         """Hybrid orchestration logic."""
         # 1. Prediction (Prophet)
-        forecast = self.forecaster.predict(target_date, features=context.get('regressors'))
+        forecast = await self.forecaster.predict(target_date, features=context.get('regressors'))
         predicted_covers = forecast.predicted
         confidence = forecast.confidence
         is_mock = forecast.is_mock
@@ -93,6 +93,8 @@ class AetherixEngine:
                 "covers": predicted_covers,
                 "confidence": confidence,
                 "is_mock": is_mock,
+                "range_min": forecast.lower,
+                "range_max": forecast.upper,
             },
             # reasoning["summary"] kept for backward compat (WhatsApp service etc.)
             "reasoning": reasoning["summary"],
