@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AnomalyDetectionError
 from app.db.models import DemandAnomaly, LocalEvent, WeatherForecast
+from app.db.session import AsyncSessionLocal
 from app.services.demand_modifiers import event_modifier, weather_modifier
 
 logger = logging.getLogger(__name__)
@@ -94,12 +95,13 @@ class AnomalyDetectionService:
         self,
         db: AsyncSession,
         property_id: uuid.UUID,
-        tenant_id: uuid.UUID,
+        tenant_id: str,
     ) -> List[DemandAnomaly]:
         """Detect demand anomalies for a single property over the next 14 days.
 
         Steps for each 4-hour window:
-          1. Load baseline demand from captation_rates (day-of-week segmented).
+          1. Load baseline demand from captation_baselines (avg_fb_revenue_per_room
+             scaled by dow_factor[dow] × monthly_factor[month]).
           2. Get weather forecast covering that window.
           3. Get local events overlapping that window.
           4. Compute expected_demand = baseline * (1 + combined_modifier).
@@ -110,7 +112,9 @@ class AnomalyDetectionService:
         Args:
             db:          Async SQLAlchemy session.
             property_id: UUID of the property being scanned.
-            tenant_id:   UUID of the owning tenant (for RLS-safe inserts).
+            tenant_id:   String slug of the owning tenant (e.g. "demo_hotel").
+                         Convention: tenant_id is always a String slug; property_id
+                         is the internal UUID.  HOS-164 / HOS-165.
 
         Returns:
             List of DemandAnomaly ORM instances that were upserted.
@@ -120,7 +124,7 @@ class AnomalyDetectionService:
         anomalies_to_upsert: List[dict] = []
 
         for window_start, window_end in windows:
-            # 1. Baseline demand from captation_rates (fallback to 1000.0 if missing)
+            # 1. Baseline demand from captation_baselines (cold-start fallback documented)
             baseline_demand = await self._get_baseline_demand(
                 db, property_id, tenant_id, window_start
             )
@@ -171,7 +175,9 @@ class AnomalyDetectionService:
             anomalies_to_upsert.append(
                 {
                     "id": str(uuid.uuid4()),
-                    "tenant_id": str(tenant_id),
+                    # demand_anomalies.tenant_id is UUID(as_uuid=True); use property_id
+                    # UUID as surrogate until HOS-165 adds a proper tenant UUID column.
+                    "tenant_id": str(property_id),
                     "property_id": str(property_id),
                     "window_start": window_start.isoformat(),
                     "window_end": window_end.isoformat(),
@@ -233,11 +239,14 @@ class AnomalyDetectionService:
         """
         t_start = time.monotonic()
 
-        # Fetch all active (tenant_id, id) pairs from properties
+        # HOS-150 AC5 — fetch active outlets from restaurant_profiles
+        # (the legacy `properties` table never existed in Supabase, so the
+        # previous query silently returned zero rows on every run).
         try:
             result = await db.execute(
                 text(
-                    "SELECT id, tenant_id FROM properties WHERE is_active = TRUE"
+                    "SELECT id, tenant_id FROM restaurant_profiles "
+                    "WHERE is_active = TRUE"
                 )
             )
             properties = result.fetchall()
@@ -249,14 +258,15 @@ class AnomalyDetectionService:
             logger.info("anomaly_scan: no active properties found, skipping")
             return
 
-        tasks = [
-            self.detect_for_property(
-                db,
-                property_id=row[0],
-                tenant_id=row[1],
-            )
-            for row in properties
-        ]
+        async def _scan_one(row) -> list:
+            async with AsyncSessionLocal() as isolated_session:
+                return await self.detect_for_property(
+                    isolated_session,
+                    property_id=uuid.UUID(str(row[0])),  # restaurant_profiles.id → UUID
+                    tenant_id=str(row[1]),               # restaurant_profiles.tenant_id → slug
+                )
+
+        tasks = [_scan_one(row) for row in properties]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         elapsed = time.monotonic() - t_start
@@ -294,60 +304,102 @@ class AnomalyDetectionService:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+    # HOS-150 AC6 — explicit cold-start fallback when no baseline row exists.
+    _COLD_START_BASELINE: Decimal = Decimal("1000.00")
+
     async def _get_baseline_demand(
         self,
         db: AsyncSession,
         property_id: uuid.UUID,
-        tenant_id: uuid.UUID,
+        tenant_id: str,
         window_start: datetime,
     ) -> Decimal:
-        """Load baseline demand from captation_rates table (Story 2.4).
+        """Compute baseline demand from `captation_baselines` (Story 2.4).
 
-        Falls back to Decimal("1000.00") if no baseline is found so that
-        modifier maths still runs correctly during early test/dev.
+        baseline = avg_fb_revenue_per_room * dow_factor[dow] * monthly_factor[month]
+
+        Falls back to a documented cold-start constant only when no baseline
+        row exists for the tenant. Logs the source ('computed' vs 'cold-start')
+        at INFO level so anomaly numbers are auditable downstream.
         """
-        dow = window_start.strftime("%A").lower()  # e.g. "monday"
-        hour_block = (window_start.hour // 4) * 4  # 0, 4, 8, 12, 16, 20
+        dow_idx = window_start.weekday()  # 0=Monday … 6=Sunday
+        month_idx = window_start.month    # 1-12
 
         try:
             result = await db.execute(
                 text(
                     """
-                    SELECT baseline_revenue
-                    FROM captation_rates
-                    WHERE property_id = :property_id
-                      AND tenant_id   = :tenant_id
-                      AND day_of_week = :dow
-                      AND hour_block  = :hour_block
+                    SELECT avg_fb_revenue_per_room, dow_factors, monthly_factors
+                    FROM captation_baselines
+                    WHERE tenant_id = :tenant_id
+                    ORDER BY computed_at DESC
                     LIMIT 1
                     """
                 ),
-                {
-                    "property_id": str(property_id),
-                    "tenant_id": str(tenant_id),
-                    "dow": dow,
-                    "hour_block": hour_block,
-                },
+                {"tenant_id": str(tenant_id)},  # sql-param-correct: captation_baselines.tenant_id is String FK
             )
             row = result.fetchone()
             if row and row[0] is not None:
-                return Decimal(str(row[0]))
+                avg_revenue = float(row[0])
+                dow_factors = self._coerce_factors(row[1])
+                monthly_factors = self._coerce_factors(row[2])
+                dow_factor = float(dow_factors.get(str(dow_idx), 1.0))
+                month_factor = float(monthly_factors.get(str(month_idx), 1.0))
+                baseline = avg_revenue * dow_factor * month_factor
+                logger.info(
+                    "anomaly baseline source=computed tenant=%s property=%s "
+                    "baseline=%.2f (avg=%.2f dow_f=%.2f month_f=%.2f)",
+                    tenant_id,
+                    property_id,
+                    baseline,
+                    avg_revenue,
+                    dow_factor,
+                    month_factor,
+                )
+                return Decimal(str(baseline))
         except sqlalchemy.exc.ProgrammingError:
-            # Table does not exist (dev/test environment) — use fallback silently
+            # Table does not exist (dev/test environment) — use cold-start fallback.
             logger.debug(
-                "captation_rates table not found for property %s — using fallback",
-                property_id,
+                "captation_baselines table not found for tenant %s — using cold-start",
+                tenant_id,
             )
         except sqlalchemy.exc.SQLAlchemyError:
             logger.error(
-                "captation_rates lookup failed for property %s — DB error, raising",
-                property_id,
+                "captation_baselines lookup failed for tenant %s — DB error, raising",
+                tenant_id,
             )
             raise AnomalyDetectionError(
-                f"DB error during baseline lookup for property {property_id}"
+                f"DB error during baseline lookup for tenant {tenant_id}"
             )
 
-        return Decimal("1000.00")
+        logger.info(
+            "anomaly baseline source=cold-start tenant=%s property=%s baseline=%s "
+            "(no captation_baselines row — run Story 2.4 baseline computation)",
+            tenant_id,
+            property_id,
+            self._COLD_START_BASELINE,
+        )
+        return self._COLD_START_BASELINE
+
+    @staticmethod
+    def _coerce_factors(raw: Optional[object]) -> dict:
+        """Normalise the JSON column into a {str: float} mapping.
+
+        Postgres JSONB usually arrives as a dict, but defensive handling keeps
+        the scanner alive if the row has been seeded as a string blob.
+        """
+        if raw is None:
+            return {}
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str):
+            try:
+                import json
+                parsed = json.loads(raw)
+                return parsed if isinstance(parsed, dict) else {}
+            except (ValueError, TypeError):
+                return {}
+        return {}
 
     async def _get_weather_for_window(
         self,

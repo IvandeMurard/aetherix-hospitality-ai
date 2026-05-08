@@ -1,7 +1,9 @@
 """Agent observability — AgentEvent model + emit_agent_event() (ADR 0003 · HOS-73b).
 
-One row per MCP tool call, written synchronously in dispatch_tool before
-db.commit(). Never raises — logging failures are warnings, not tool errors.
+One row per MCP tool call, written via an isolated AsyncSession opened in
+dispatch_tool's finally block. Never raises — logging failures are warnings,
+not tool errors. Isolated session ensures the INSERT survives a rollback on
+the main request session (e.g. auth_error, tool_error).
 
 PII policy (ADR 0003 D9):
 - Bearer token: never logged

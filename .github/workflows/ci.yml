@@ -122,7 +122,9 @@ jobs:
         continue-on-error: true
 
   # ---------------------------------------------------------------------------
-  # AC3 — Schema drift check (no live DB required in dry-run)
+  # HOS-150 AC8 — Schema drift check (static SQL parse, no live DB required)
+  # Compares ORM Base.metadata against columns extracted from supabase/migrations
+  # and fails on any drift not acknowledged in scripts/schema_drift_ignore.json.
   # ---------------------------------------------------------------------------
   schema-drift:
     name: schema-drift
@@ -143,8 +145,6 @@ jobs:
         working-directory: backend
         run: uv sync --group dev
 
-      - name: Check schema drift
+      - name: Check schema drift (strict)
         working-directory: backend
-        env:
-          DATABASE_URL: sqlite+aiosqlite:///./test_drift.db
-        run: uv run python ../scripts/check_schema_drift.py --dry-run
+        run: uv run python ../scripts/check_schema_drift.py --strict --print-ignored

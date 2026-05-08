@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -19,12 +19,10 @@ from app.db.models import CaptationBaseline, MCPApiToken, RestaurantProfile, Tra
 from app.db.session import get_db
 from app.mcp_core import ADMIN_TRAIN_SCOPE, MCPAuthError
 from app.mcp_server import verify_bearer
-from app.services.aetherix_engine import AetherixEngine
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
-engine = AetherixEngine()
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +99,7 @@ class PredictResponse(BaseModel):
 
 @router.get("/current")
 async def get_property_prediction(
+    request: Request,
     target_date: Optional[date] = None,
     service_type: str = "dinner",
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -109,27 +108,25 @@ async def get_property_prediction(
     """
     Fetches a hybrid prediction (Prophet + RAG) for a property.
     """
+    engine = request.app.state.engine
     prediction_date = target_date or date.today()
-    
-    # Context dictionary for external factors (mocked for now)
+
     context = {
         "weather": {"condition": "Clear", "temp": 22},
         "events": [],
         "occupancy": 0.85
     }
-    
-    # Fetch property for this user
+
     result = await db.execute(
         select(RestaurantProfile).where(RestaurantProfile.owner_id == current_user["id"])
     )
     profile = result.scalars().first()
-    
+
     if not profile:
         raise HTTPException(status_code=404, detail="No restaurant profile linked to this user.")
 
-    # Use the linked property ID
     property_id = profile.tenant_id
-    
+
     try:
         result = await engine.get_forecast(property_id, prediction_date, service_type, context)
         return result
@@ -144,6 +141,7 @@ async def get_property_prediction(
     openapi_extra={"x-agent-callable": True, "x-mcp-compatible": True},
 )
 async def predict(
+    request: Request,
     body: PredictRequest,
     response: Response,
     tok: MCPApiToken = Depends(_predict_auth),
@@ -158,6 +156,7 @@ async def predict(
 
     Schema stability: BREAKING changes require a version bump (Agent SEO policy).
     """
+    engine = request.app.state.engine
     # AC3: hotel_id is bound to the token — never trusted from caller
     if body.hotel_id and body.hotel_id != tok.hotel_id:
         logger.warning(
@@ -180,20 +179,20 @@ async def predict(
         raise HTTPException(status_code=500, detail=str(exc))
 
     pred = result["prediction"]
-    # Use reasoning_detail (full dict) when available, fall back to the summary string.
     reasoning_detail = result.get("reasoning_detail", {})
     summary = reasoning_detail.get("summary") or str(result.get("reasoning", ""))
     confidence_factors = reasoning_detail.get("confidence_factors", [])
     claude_used = reasoning_detail.get("claude_used", False)
 
+    covers = pred.get("covers", pred.get("predicted_covers", 0))
     return PredictResponse(
         hotel_id=hotel_id,
         target_date=result.get("date", body.target_date.isoformat()),
         service_type=result.get("service_type", body.service_type),
-        predicted_covers=pred.get("covers", pred.get("predicted_covers", 0)),
+        predicted_covers=covers,
         confidence=pred.get("confidence", 0.0),
-        range_min=pred.get("interval", [pred.get("covers", 0), pred.get("covers", 0)])[0],
-        range_max=pred.get("interval", [pred.get("covers", 0), pred.get("covers", 0)])[1],
+        range_min=pred.get("range_min", covers),
+        range_max=pred.get("range_max", covers),
         is_mock=pred.get("is_mock", False),
         reasoning_summary=summary,
         confidence_factors=confidence_factors,
@@ -252,6 +251,7 @@ class TrainResponse(BaseModel):
     summary="Train Prophet model — orchestrates MCP adapter → DataTransformer → PredictionEngine (Decision #13)",
 )
 async def train_prophet(
+    request: Request,
     body: TrainRequest = TrainRequest(),
     db: AsyncSession = Depends(get_db),
     tok: MCPApiToken = Depends(_train_auth),
@@ -265,6 +265,7 @@ async def train_prophet(
     After training the model is active in-process and persisted for restart-resilience.
     Every call is audit-logged to the training_runs table.
     """
+    engine = request.app.state.engine
     t0 = time.monotonic()
     training_id = str(uuid.uuid4())
 
@@ -292,7 +293,7 @@ async def train_prophet(
     df = await _apply_captation_calibration(df, body.property_id, db)
 
     try:
-        engine.forecaster.train(
+        await engine.forecaster.train(
             df,
             include_weather=body.include_weather,
             include_events=body.include_events,

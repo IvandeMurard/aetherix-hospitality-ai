@@ -80,6 +80,7 @@ def _predict_client(monkeypatch) -> TestClient:
     from unittest.mock import MagicMock
 
     from app.api.routes.predictions import _predict_auth, router
+    from app.db.session import get_db
 
     fake_tok = MagicMock()
     fake_tok.hotel_id = "hotel-001"
@@ -87,8 +88,14 @@ def _predict_client(monkeypatch) -> TestClient:
 
     app = FastAPI()
     app.include_router(router)
-    # Bypass MCP bearer auth — smoke tests exercise business logic, not auth
+    # HOS-157: engine is a lifespan singleton on app.state — inject a mock here.
+    app.state.engine = MagicMock()
+    # HOS-149: bypass MCP bearer auth — smoke tests exercise business logic, not auth.
     app.dependency_overrides[_predict_auth] = lambda: fake_tok
+    # HOS-151: predict() depends on get_db — override to avoid a real DB connection.
+    async def _noop_db():
+        yield AsyncMock()
+    app.dependency_overrides[get_db] = _noop_db
     return TestClient(app)
 
 
@@ -99,28 +106,20 @@ class TestPostPredict:
     def client(self, monkeypatch):
         return _predict_client(monkeypatch)
 
-    def test_predict_returns_200(self, client, monkeypatch):
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=_mock_forecast_result(),
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
-            )
+    def test_predict_returns_200(self, client):
+        client.app.state.engine.get_forecast = AsyncMock(return_value=_mock_forecast_result())
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
+        )
         assert resp.status_code == 200
 
     def test_predict_response_has_required_fields(self, client):
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=_mock_forecast_result(),
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
-            )
+        client.app.state.engine.get_forecast = AsyncMock(return_value=_mock_forecast_result())
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
+        )
         body = resp.json()
         for field in (
             "hotel_id", "target_date", "service_type", "predicted_covers",
@@ -131,30 +130,22 @@ class TestPostPredict:
     def test_predict_claude_used_flag_propagates(self, client):
         result = _mock_forecast_result()
         result["reasoning_detail"]["claude_used"] = True
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=result,
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
-            )
+        client.app.state.engine.get_forecast = AsyncMock(return_value=result)
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
+        )
         assert resp.json()["claude_used"] is True
 
     def test_predict_heuristic_fallback_when_no_reasoning_detail(self, client):
         """When reasoning_detail is absent (legacy engine), falls back gracefully."""
         result = _mock_forecast_result()
         del result["reasoning_detail"]
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=result,
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
-            )
+        client.app.state.engine.get_forecast = AsyncMock(return_value=result)
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "hotel-001", "target_date": date.today().isoformat()},
+        )
         body = resp.json()
         assert body["claude_used"] is False
         assert len(body["reasoning_summary"]) > 0
@@ -483,11 +474,17 @@ class TestTwilioClientSmoke:
         from app.core.exceptions import NotConfiguredError
         from app.integrations.twilio_client import TwilioClient
 
-        client = TwilioClient(account_sid="", auth_token="", from_number="", whatsapp_from="")
+        # Patch config so the constructor fallback also yields empty strings
+        # (without this, real env vars would be picked up — HOS-155 fix)
+        with patch("app.integrations.twilio_client.config.TWILIO_ACCOUNT_SID", ""), \
+             patch("app.integrations.twilio_client.config.TWILIO_AUTH_TOKEN", ""):
+            client = TwilioClient(
+                account_sid="", auth_token="", from_number="", whatsapp_from=""
+            )
 
-        with pytest.raises(NotConfiguredError):
-            import asyncio
-            asyncio.run(client.send_sms(to="+33600000001", body="test"))
+            with pytest.raises(NotConfiguredError):
+                import asyncio
+                asyncio.run(client.send_sms(to="+33600000001", body="test"))
 
     @pytest.mark.asyncio
     async def test_send_whatsapp_adds_prefix(self):

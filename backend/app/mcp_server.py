@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import MCPApiToken, OperationalMemory
+from app.db.session import AsyncSessionLocal
 from app.mcp_core import (
     TOOLS_MANIFEST,
     MCPAuthError,
@@ -30,14 +31,11 @@ from app.mcp_core import (
     require_scope,
     sanitize_notes,
 )
-from app.services.aetherix_engine import AetherixEngine
 from app.services.agent_event import AgentEvent, emit_agent_event
 from app.services.memory_recall_service import MemoryRecallService
 from app.services.rate_limit import check_rate_limit_async
 
 logger = logging.getLogger(__name__)
-
-_engine = AetherixEngine()
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +73,7 @@ async def tool_get_operational_predictions(
     target_date: str,
     service_type: str = "dinner",
     context: Optional[dict[str, Any]] = None,
+    engine: Optional[Any] = None,
 ) -> dict[str, Any]:
     try:
         tdate = date.fromisoformat(target_date)
@@ -82,9 +81,11 @@ async def tool_get_operational_predictions(
         raise MCPAuthError(400, "invalid_input", f"Bad target_date: {exc}") from exc
     if service_type not in ("breakfast", "lunch", "dinner"):
         raise MCPAuthError(400, "invalid_input", "service_type must be breakfast|lunch|dinner")
+    if engine is None:
+        raise MCPAuthError(503, "upstream_unavailable", "Prediction engine not initialized")
     ctx = context or {"weather": {"condition": "Unknown"}, "events": [], "occupancy": None}
     try:
-        return await _engine.get_forecast(hotel_id, tdate, service_type, ctx)
+        return await engine.get_forecast(hotel_id, tdate, service_type, ctx)
     except Exception as exc:
         logger.exception("tool_get_operational_predictions failed: %s", exc)
         raise MCPAuthError(503, "upstream_unavailable", str(exc)) from exc
@@ -97,6 +98,7 @@ async def tool_get_recommendations_with_memory_context(
     embedding_provider: Any = None,
     target_date: Optional[str] = None,
     k_memory: int = 5,
+    engine: Optional[Any] = None,
 ) -> dict[str, Any]:
     query = sanitize_notes(query, max_len=500)
     if not query:
@@ -146,9 +148,9 @@ async def tool_get_recommendations_with_memory_context(
         ]
 
     try:
-        if target_date:
+        if target_date and engine is not None:
             tdate = date.fromisoformat(target_date)
-            forecast = await _engine.get_forecast(
+            forecast = await engine.get_forecast(
                 hotel_id, tdate, "dinner",
                 {"weather": {}, "events": [], "occupancy": None},
             )
@@ -267,11 +269,12 @@ async def dispatch_tool(
     authorization: Optional[str],
     db: AsyncSession,
     embedding_provider: Any = None,
+    engine: Any = None,
     request_id: str = "",
 ) -> dict[str, Any]:
     """Validate auth + scope + rate limit, then route to the tool body.
 
-    embedding_provider is injected from app.state.embedding by the HTTP shim.
+    embedding_provider and engine are injected from app.state by the HTTP shim.
     If None (test env / missing creds), tools fall back gracefully (ADR D9).
     Emits one agent_action_log row per call (ADR 0003 D2), including auth_error
     and rate_limited paths — every served request produces exactly one row.
@@ -322,15 +325,15 @@ async def dispatch_tool(
                 tok.hotel_id, tool_name,
             )
 
-        # hotel_id + request_id come from the server — never from arguments (ADR D4 / P2-2)
-        args = {k: v for k, v in (arguments or {}).items() if k not in ("hotel_id", "request_id")}
+        # hotel_id, request_id, engine come from the server — never from arguments (ADR D4 / P2-2)
+        args = {k: v for k, v in (arguments or {}).items() if k not in ("hotel_id", "request_id", "engine")}
 
         try:
             if tool_name == "get_operational_predictions":
-                result = await tool_get_operational_predictions(tok.hotel_id, **args)
+                result = await tool_get_operational_predictions(tok.hotel_id, engine=engine, **args)
             elif tool_name == "get_recommendations_with_memory_context":
                 result = await tool_get_recommendations_with_memory_context(
-                    tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
+                    tok.hotel_id, db=db, embedding_provider=embedding_provider, engine=engine, **args,
                 )
             elif tool_name == "submit_feedback_to_memory":
                 result = await tool_submit_feedback_to_memory(
@@ -349,6 +352,11 @@ async def dispatch_tool(
             raise
     finally:
         event.latency_ms = round((time.monotonic() - t0) * 1000)
-        await emit_agent_event(event, db)
+        try:
+            async with AsyncSessionLocal() as isolated_db:
+                await emit_agent_event(event, isolated_db)
+                await isolated_db.commit()
+        except Exception as exc:
+            logger.warning("audit log isolated session failed: %s", exc)
 
     return result
