@@ -18,6 +18,7 @@ Lookup chain (mirrors ActionLoggerService):
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -106,7 +107,7 @@ class QueryParserService:
         rec_result = await session.execute(
             select(StaffingRecommendation)
             .where(
-                StaffingRecommendation.property_id == profile.id,
+                StaffingRecommendation.property_id == uuid.UUID(str(profile.id)),
                 StaffingRecommendation.status.in_(
                     ["dispatched", "accepted", "rejected"]
                 ),
@@ -133,9 +134,14 @@ class QueryParserService:
         # -----------------------------------------------------------------------
         # 4. Persist the ConversationalQuery row
         # -----------------------------------------------------------------------
+        # profile.id is the internal property UUID (String column, UUID-formatted).
+        # Use it for both tenant_id and property_id — both are UUID columns.
+        # HOS-165 will add a proper tenant UUID; until then property UUID serves as
+        # the tenant UUID surrogate (single-property-per-tenant Phase MVP).  HOS-164.
+        _prop_uuid = uuid.UUID(str(profile.id))
         query = ConversationalQuery(
-            tenant_id=profile.tenant_id if _is_uuid(str(profile.tenant_id)) else None,
-            property_id=profile.id,
+            tenant_id=_prop_uuid,
+            property_id=_prop_uuid,
             from_number=normalised_number,
             body=body,
             recommendation_id=recommendation_id,

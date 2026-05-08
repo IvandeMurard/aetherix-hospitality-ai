@@ -66,7 +66,7 @@ class AlertDispatcherService:
         # Fetch the linked restaurant profile to determine channel + contact
         result = await session.execute(
             select(RestaurantProfile).where(
-                RestaurantProfile.tenant_id == str(recommendation.property_id)
+                RestaurantProfile.id == str(recommendation.property_id)
             )
         )
         profile: RestaurantProfile | None = result.scalars().first()
