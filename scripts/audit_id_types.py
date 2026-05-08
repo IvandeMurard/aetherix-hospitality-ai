@@ -1,129 +1,159 @@
 #!/usr/bin/env python3
-"""Audit service-layer ID type comparisons (HOS-159-B / HOS-164).
+"""Static analysis for tenant_id / property_id / hotel_id type mismatches.
 
 Convention (docs/context/data-conventions.md):
   tenant_id   -> String slug ("demo_hotel")
   property_id -> UUID interne (uuid.UUID)
   hotel_id    -> alias tenant_id, String slug
 
-Each MISMATCH_PATTERN is a (file_glob, regex, description) triple.
-A match in the source file counts as one mismatch.
+Scans backend/app/services/ for known drift patterns.  Lines that contain
+the marker comment ``# sql-param-correct`` are exempted — they represent
+correct String FK bindings (e.g. captation_baselines.tenant_id) that would
+otherwise match the UUID-column pattern.
+
+Usage:
+    python scripts/audit_id_types.py
 
 Exit code:
-  0 -- no mismatches found in the checked files
+  0 -- no mismatches found
   1 -- one or more mismatches remain
 """
 from __future__ import annotations
 
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
 
-# Root of the backend services directory
-_HERE = Path(__file__).parent
-_SERVICE_DIR = _HERE.parent / "backend" / "app" / "services"
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+ROOT = Path(__file__).parent.parent
+SERVICES_DIR = ROOT / "backend" / "app" / "services"
 
-# (filename, regex_pattern, description)
-# NOTE on "tenant_id": str(property_id) in anomaly_detection: the upsert dict
-# uses property_id as surrogate for demand_anomalies.tenant_id (UUID column).
-# _get_baseline_demand's SQL param {"tenant_id": str(tenant_id)} is CORRECT
-# (captation_baselines.tenant_id is a String FK) and is explicitly exempted via
-# the "# sql-param-correct" marker added to that line.
-MISMATCH_PATTERNS: List[Tuple[str, str, str]] = [
-    # -- alert_dispatcher.py ----------------------------------------------------
+# ---------------------------------------------------------------------------
+# Detection patterns
+# Each tuple: (compiled_regex, description)
+# Lines containing "# sql-param-correct" are always skipped.
+# ---------------------------------------------------------------------------
+PATTERNS: List[Tuple[re.Pattern, str]] = [
+    # A1 — tenant_id (String slug) == str(UUID expression) in WHERE clause
     (
-        "alert_dispatcher.py",
-        r"RestaurantProfile\.tenant_id\s*==\s*str\s*\(",
-        "str(UUID) compared with tenant_id slug -- will never match in prod",
+        re.compile(r"\.tenant_id\s*==\s*str\("),
+        "tenant_id (String slug) == str(UUID) in WHERE -- UUID string never matches slug",
     ),
-    # -- action_logger.py -------------------------------------------------------
+    # B1 — property_id (UUID column) compared with .id (String column) without cast
     (
-        "action_logger.py",
-        r"StaffingRecommendation\.property_id\s*==\s*profile\.id\b",
-        "UUID column compared with String profile.id (missing uuid.UUID cast)",
+        re.compile(r"\.property_id\s*==\s*(?:\w+\.)+id\b(?!\s*\))"),
+        "property_id (UUID col) == .id (String col) without uuid.UUID cast",
     ),
-    # -- query_parser.py --------------------------------------------------------
+    # B2 — ConversationalQuery / ORM constructor: property_id = profile.id (String, no cast)
     (
-        "query_parser.py",
-        r"StaffingRecommendation\.property_id\s*==\s*profile\.id\b",
-        "UUID column compared with String profile.id (missing uuid.UUID cast)",
+        re.compile(r"\bproperty_id\s*=\s*profile\.id\b(?!\s*\))"),
+        "ORM constructor: property_id set from String profile.id without uuid.UUID cast",
     ),
+    # B3 — ORM constructor: tenant_id = profile.tenant_id (slug assigned to UUID column)
+    #      Lines with "# convention-ok" are exempt (e.g. calls to str-typed parameters).
     (
-        "query_parser.py",
-        r"tenant_id\s*=\s*profile\.tenant_id\b",
-        "ConversationalQuery.tenant_id set from slug -- _is_uuid guard always False for slugs",
+        re.compile(r"\btenant_id\s*=\s*profile\.tenant_id\b(?!.*#\s*convention-ok)"),
+        "ORM constructor: tenant_id (UUID col) set from String slug profile.tenant_id",
     ),
+    # C1 — tenant_id type-hint annotated as uuid.UUID (should be str per convention)
     (
-        "query_parser.py",
-        r"property_id\s*=\s*profile\.id\b(?!\s*\))",
-        "ConversationalQuery.property_id set from String profile.id without uuid.UUID cast",
+        re.compile(r"\btenant_id\s*:\s*uuid\.UUID\b"),
+        "tenant_id parameter typed as uuid.UUID -- convention requires str slug",
     ),
-    # -- anomaly_detection.py ---------------------------------------------------
+    # C2 — upsert dict: "tenant_id": str(tenant_id) storing slug in UUID column
+    #      (exempted when # sql-param-correct is present on the same line)
     (
-        "anomaly_detection.py",
-        r"tenant_id\s*:\s*uuid\.UUID",
-        "tenant_id typed as uuid.UUID -- convention requires str slug",
+        re.compile(r'"tenant_id"\s*:\s*str\(tenant_id\)(?!.*#\s*sql-param-correct)'),
+        '"tenant_id": str(tenant_id) -- slug stored in UUID column; use str(property_id)',
     ),
+    # D1 — run_full_scan: raw String DB row[0] passed directly to uuid.UUID parameter
     (
-        "anomaly_detection.py",
-        # Match the upsert dict form: `"tenant_id": str(tenant_id),` on its own line.
-        # Exempt _get_baseline_demand's SQL param (marked # sql-param-correct).
-        r'"tenant_id":\s*str\(tenant_id\)(?!.*#\s*sql-param-correct)',
-        "Slug string stored in demand_anomalies.tenant_id (UUID column) -- use str(property_id)",
+        re.compile(r"\bproperty_id\s*=\s*row\[0\]\s*[,)]"),
+        "run_full_scan: raw String row[0] passed to uuid.UUID property_id (missing cast)",
     ),
+    # D2 — run_full_scan: raw DB row[1] (slug) passed to uuid.UUID parameter unannotated
     (
-        "anomaly_detection.py",
-        r"property_id=row\[0\]",
-        "Raw String DB row[0] passed to uuid.UUID property_id without uuid.UUID(str(...)) cast",
+        re.compile(r"\btenant_id\s*=\s*row\[1\]\s*[,)]"),
+        "run_full_scan: raw row[1] passed to tenant_id uuid.UUID param (missing str() cast)",
     ),
+    # D3 — run_full_scan: String pid passed directly to uuid.UUID parameter
     (
-        "anomaly_detection.py",
-        r"tenant_id=row\[1\](?!\s*#)",
-        "Raw DB row[1] passed to tenant_id parameter without explicit str() cast annotation",
-    ),
-    # -- roi_calculator.py -------------------------------------------------------
-    (
-        "roi_calculator.py",
-        r"self\.run_for_property\(db\s*,\s*property_id\s*=\s*pid\b",
-        "String pid from restaurant_profiles.id passed to run_for_property(property_id: uuid.UUID)",
+        re.compile(r"run_for_property\(db\s*,\s*property_id\s*=\s*pid\b"),
+        "run_full_scan: String pid passed to run_for_property(property_id: uuid.UUID)",
     ),
 ]
 
 
-def audit() -> int:
-    total_mismatches = 0
-    file_counts: dict[str, int] = {}
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class Mismatch:
+    path: Path
+    line_no: int
+    description: str
 
-    for filename, pattern, description in MISMATCH_PATTERNS:
-        path = _SERVICE_DIR / filename
-        if not path.exists():
-            print(f"[SKIP]  {filename} -- file not found at {path}")
-            continue
+    def relative(self, root: Path) -> str:
+        try:
+            return str(self.path.relative_to(root))
+        except ValueError:
+            return str(self.path)
 
+
+# ---------------------------------------------------------------------------
+# Scanner
+# ---------------------------------------------------------------------------
+def scan_file(path: Path) -> List[Mismatch]:
+    mismatches: List[Mismatch] = []
+    try:
         source = path.read_text(encoding="utf-8")
-        hits = list(re.finditer(pattern, source, re.MULTILINE))
+    except OSError as exc:
+        print(f"[WARN] Cannot read {path}: {exc}", file=sys.stderr)
+        return mismatches
 
-        if not hits:
+    for line_no, line in enumerate(source.splitlines(), start=1):
+        stripped = line.lstrip()
+        # Skip pure comment lines -- they describe intent, not runtime behaviour
+        if stripped.startswith("#"):
             continue
+        for pattern, description in PATTERNS:
+            if pattern.search(line):
+                mismatches.append(Mismatch(path, line_no, description))
+                break  # one mismatch report per line
 
-        for match in hits:
-            lineno = source[: match.start()].count("\n") + 1
-            print(f"[MISMATCH]  {filename}:{lineno}  {description}")
-            print(f"            found: {match.group()!r}")
-            total_mismatches += 1
-            file_counts[filename] = file_counts.get(filename, 0) + 1
+    return mismatches
 
-    print()
-    if total_mismatches == 0:
-        print("OK  0 mismatches -- all service-layer ID comparisons conform to convention.")
-        return 0
 
-    print(f"FAIL  {total_mismatches} mismatch(es) found across {len(file_counts)} file(s):")
-    for fname, count in sorted(file_counts.items()):
-        print(f"    {fname}: {count}")
-    return 1
+def collect_py_files(directory: Path) -> List[Path]:
+    if not directory.exists():
+        print(f"[ERROR] Directory not found: {directory}", file=sys.stderr)
+        sys.exit(1)
+    return sorted(directory.glob("**/*.py"))
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+def main() -> int:
+    files = collect_py_files(SERVICES_DIR)
+    all_mismatches: List[Mismatch] = []
+
+    for path in files:
+        all_mismatches.extend(scan_file(path))
+
+    for m in all_mismatches:
+        rel = m.relative(ROOT)
+        rel_fwd = rel.replace("\\", "/")
+        print(f"[MISMATCH] {rel_fwd}:{m.line_no} -- {m.description}")
+
+    count = len(all_mismatches)
+    print(f"\n{count} mismatch(es) found.")
+    return 1 if count else 0
 
 
 if __name__ == "__main__":
-    sys.exit(audit())
+    sys.exit(main())
