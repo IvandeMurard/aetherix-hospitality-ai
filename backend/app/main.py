@@ -55,9 +55,38 @@ logger = logging.getLogger(__name__)
 _scheduler = AsyncIOScheduler()
 
 
+def _validate_startup_env(env: "dict | None" = None) -> None:
+    """Fail-fast checks for critical env vars (HOS-149 AC1 + AC7).
+
+    Called once at lifespan startup — exits the process before any request
+    is served if the environment is dangerously misconfigured.
+
+    env: optional dict for hermetic unit tests; defaults to os.environ.
+    """
+    _env = env if env is not None else os.environ
+    auth_secret = _env.get("AUTH_SECRET", "")
+    if not auth_secret or auth_secret == "SECRET_CHANGE_ME" or len(auth_secret) < 32:
+        raise SystemExit(
+            "FATAL: AUTH_SECRET is missing, uses the placeholder 'SECRET_CHANGE_ME', "
+            "or is shorter than 32 characters. "
+            "Generate a secret with: "
+            "python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    app_env = _env.get("APP_ENV", _env.get("ENV", ""))
+    if app_env == "production" and _env.get(
+        "TWILIO_SKIP_SIGNATURE_VALIDATION", "false"
+    ).lower() == "true":
+        raise SystemExit(
+            "FATAL: TWILIO_SKIP_SIGNATURE_VALIDATION=true is forbidden in "
+            "APP_ENV=production. Remove this variable before starting the server."
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --------------- startup ---------------
+    _validate_startup_env()
+
     # HOS-150 AC7 — verify migrations have been applied; refuse boot if any
     # critical table is missing. Replaces the old `Base.metadata.create_all`
     # path, which silently created divergent tables in fresh environments.
