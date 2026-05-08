@@ -74,8 +74,13 @@ class RestaurantProfile(Base):
     """
     __tablename__ = "restaurant_profiles"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # HOS-165 — `id` is UUID in Supabase (migration 20250203000000); the previous
+    # String mapping was an ORM drift documented in HOS-163.
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String, unique=True, index=True, nullable=False)
+    # `property_id` mirrors `id` and is the cross-table FK target referenced
+    # by DemandAnomaly / StaffingRecommendation / ConversationalQuery.
+    property_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4)
     
     # Administrative Link
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
@@ -229,7 +234,8 @@ class DemandAnomaly(Base):
     __tablename__ = "demand_anomalies"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # HOS-165 — tenant_id is a human-readable slug (TEXT in Postgres).
+    tenant_id = Column(String, nullable=False, index=True)
     property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     window_start = Column(DateTime(timezone=True), nullable=False)
     window_end = Column(DateTime(timezone=True), nullable=False)
@@ -304,7 +310,8 @@ class StaffingRecommendation(Base):
     __tablename__ = "staffing_recommendations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # HOS-165 — tenant_id is a human-readable slug (TEXT in Postgres).
+    tenant_id = Column(String, nullable=False, index=True)
     property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     anomaly_id = Column(
         UUID(as_uuid=True),
@@ -349,7 +356,8 @@ class ConversationalQuery(Base):
     __tablename__ = "conversational_queries"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # HOS-165 — tenant_id is a human-readable slug (TEXT in Postgres).
+    tenant_id = Column(String, nullable=False, index=True)
     property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     from_number = Column(String, nullable=False)
     body = Column(Text, nullable=False)
