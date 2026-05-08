@@ -9,6 +9,7 @@ Coverage:
 """
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -161,3 +162,80 @@ class TestMistralProviderDimensions:
     def test_dimensions_is_1024(self):
         provider = MistralEmbeddingProvider(api_key="sk-x")
         assert provider.dimensions == 1024
+
+
+# ---------------------------------------------------------------------------
+# LRU cache (HOS-160)
+# ---------------------------------------------------------------------------
+
+class TestMistralProviderEmbedCache:
+    @pytest.mark.asyncio
+    async def test_cache_hit_skips_api_call(self):
+        """Second call with same text must return cached result without hitting the API."""
+        expected = [0.3] * _DIM
+
+        with patch("mistralai.client.sdk.Mistral") as MockMistral:
+            mock_client = _make_mock_mistral(expected)
+            MockMistral.return_value = mock_client
+
+            provider = MistralEmbeddingProvider(api_key="sk-test")
+            r1 = await provider.embed("same query")
+            r2 = await provider.embed("same query")
+
+        assert r1 == expected
+        assert r2 == expected
+        mock_client.embeddings.create_async.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_cache_miss_calls_api_for_different_texts(self):
+        """Different texts must each trigger an API call."""
+        expected = [0.4] * _DIM
+
+        with patch("mistralai.client.sdk.Mistral") as MockMistral:
+            mock_client = _make_mock_mistral(expected)
+            MockMistral.return_value = mock_client
+
+            provider = MistralEmbeddingProvider(api_key="sk-test")
+            await provider.embed("text-a")
+            await provider.embed("text-b")
+
+        assert mock_client.embeddings.create_async.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_logged_at_debug(self, caplog):
+        """A cache hit must emit a DEBUG log containing 'hit'."""
+        expected = [0.5] * _DIM
+
+        with patch("mistralai.client.sdk.Mistral") as MockMistral:
+            MockMistral.return_value = _make_mock_mistral(expected)
+
+            provider = MistralEmbeddingProvider(api_key="sk-test")
+            with caplog.at_level(logging.DEBUG, logger="app.providers.mistral_provider"):
+                await provider.embed("cached text")
+                await provider.embed("cached text")
+
+        assert any("hit" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_cache_evicts_lru_when_full(self):
+        """Inserting maxsize+1 distinct texts must evict the least-recently-used entry."""
+        from app.providers.mistral_provider import _EMBED_CACHE_MAXSIZE
+
+        base_vec = [0.1] * _DIM
+
+        with patch("mistralai.client.sdk.Mistral") as MockMistral:
+            MockMistral.return_value = _make_mock_mistral(base_vec)
+            provider = MistralEmbeddingProvider(api_key="sk-test")
+
+            # Fill cache to capacity
+            for i in range(_EMBED_CACHE_MAXSIZE):
+                await provider.embed(f"text-{i}")
+
+            assert len(provider._cache) == _EMBED_CACHE_MAXSIZE
+
+            # One more entry must evict the oldest ("text-0")
+            await provider.embed("overflow-text")
+
+            assert len(provider._cache) == _EMBED_CACHE_MAXSIZE
+            assert "text-0" not in provider._cache
+            assert "overflow-text" in provider._cache

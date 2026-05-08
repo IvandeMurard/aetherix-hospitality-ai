@@ -118,21 +118,26 @@ async def test_twilio_client_send_whatsapp_already_prefixed_not_doubled():
 @pytest.mark.asyncio
 async def test_twilio_not_configured_raises_error():
     """TwilioClient raises NotConfiguredError when credentials are empty."""
-    client = TwilioClient(account_sid="", auth_token="", from_number="")
+    # Patch config fallback so real env vars don't bypass the empty-cred check
+    with patch("app.integrations.twilio_client.config.TWILIO_ACCOUNT_SID", ""), \
+         patch("app.integrations.twilio_client.config.TWILIO_AUTH_TOKEN", ""):
+        client = TwilioClient(account_sid="", auth_token="", from_number="")
 
-    with pytest.raises(NotConfiguredError) as exc_info:
-        await client.send_sms(to="+33612345678", body="test")
+        with pytest.raises(NotConfiguredError) as exc_info:
+            await client.send_sms(to="+33612345678", body="test")
 
-    assert "Twilio" in str(exc_info.value)
+        assert "Twilio" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_twilio_not_configured_whatsapp_raises_error():
     """NotConfiguredError is also raised for WhatsApp when creds are missing."""
-    client = TwilioClient(account_sid="", auth_token="")
+    with patch("app.integrations.twilio_client.config.TWILIO_ACCOUNT_SID", ""), \
+         patch("app.integrations.twilio_client.config.TWILIO_AUTH_TOKEN", ""):
+        client = TwilioClient(account_sid="", auth_token="")
 
-    with pytest.raises(NotConfiguredError):
-        await client.send_whatsapp(to="+33612345678", body="test")
+        with pytest.raises(NotConfiguredError):
+            await client.send_whatsapp(to="+33612345678", body="test")
 
 
 # ===========================================================================
@@ -163,10 +168,12 @@ async def test_sendgrid_client_send_email_success():
 @pytest.mark.asyncio
 async def test_sendgrid_not_configured_raises_error():
     """SendGridClient raises NotConfiguredError when API key is empty."""
-    client = SendGridClient(api_key="", from_email="noreply@aetherix.io")
+    # Patch config fallback so real env vars don't bypass the empty-key check
+    with patch("app.integrations.sendgrid_client.config.SENDGRID_API_KEY", ""):
+        client = SendGridClient(api_key="", from_email="noreply@aetherix.io")
 
-    with pytest.raises(NotConfiguredError) as exc_info:
-        await client.send_email(to="x@y.com", subject="S", body="B")
+        with pytest.raises(NotConfiguredError) as exc_info:
+            await client.send_email(to="x@y.com", subject="S", body="B")
 
     assert "SendGrid" in str(exc_info.value)
 

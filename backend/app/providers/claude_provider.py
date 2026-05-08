@@ -6,11 +6,16 @@ should import ``anthropic`` directly.
 """
 from __future__ import annotations
 
+import logging
 import os
+import time
 
 from anthropic import AsyncAnthropic
 
+from app.context import request_id_var
 from app.providers.base import LLMProvider  # noqa: F401 — satisfies Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class ClaudeProvider:
@@ -77,7 +82,16 @@ class ClaudeProvider:
         if system is not None:
             kwargs["system"] = system
 
+        t0 = time.monotonic()
         response = await self._client.messages.create(**kwargs)
+        latency_ms = round((time.monotonic() - t0) * 1000)
+
+        logger.info(
+            "llm_call provider=claude model=%s latency_ms=%d request_id=%s",
+            self._model,
+            latency_ms,
+            request_id_var.get(),
+        )
         return response.content[0].text
 
     @property

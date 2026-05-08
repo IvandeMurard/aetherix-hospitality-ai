@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 from sqlalchemy import text
 
@@ -11,14 +12,19 @@ logger = logging.getLogger(__name__)
 
 
 async def refresh_memory_instrumentation_mv() -> None:
+    job_id = str(uuid.uuid4())[:8]
     try:
         async with engine.begin() as conn:
             await conn.execute(
                 text("REFRESH MATERIALIZED VIEW CONCURRENTLY memory_instrumentation_daily")
             )
-        logger.info("memory_instrumentation_daily MV refreshed")
+        logger.info("memory_metrics: MV refreshed  job_id=%s", job_id)
     except Exception as exc:
-        logger.warning("MV refresh failed (non-blocking): %s", exc)
+        logger.warning(
+            "memory_metrics: MV refresh failed (non-blocking)  job_id=%s  error=%s",
+            job_id,
+            exc,
+        )
 
 
 def register_memory_metrics_job(scheduler) -> None:

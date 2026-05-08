@@ -119,12 +119,22 @@ def _make_predictions_app(
     predict_dep_override=None,
     train_dep_override=None,
 ) -> FastAPI:
+    from unittest.mock import AsyncMock as _AsyncMock
+    from unittest.mock import MagicMock
+
     from app.api.routes.predictions import _predict_auth, _train_auth, router
     from app.core.error_handlers import problem_details_handler
+    from app.db.session import get_db
 
     app = FastAPI()
     app.include_router(router)
     app.add_exception_handler(HTTPException, problem_details_handler)
+    # HOS-157: engine injected from app.state (no module-level singleton)
+    app.state.engine = MagicMock()
+    # HOS-151: avoid real DB connections in unit tests
+    async def _noop_db():
+        yield _AsyncMock()
+    app.dependency_overrides[get_db] = _noop_db
     if predict_dep_override is not None:
         app.dependency_overrides[_predict_auth] = predict_dep_override
     if train_dep_override is not None:
@@ -189,13 +199,11 @@ class TestPredictAuthSurface:
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
         tok = _make_token(hotel_id="hotel-001", scopes=["predict"])
         app = _make_predictions_app(_returns_token(tok))
+        app.state.engine.get_forecast = AsyncMock(
+            return_value=_mock_forecast_result("hotel-001")
+        )
         client = TestClient(app)
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=_mock_forecast_result("hotel-001"),
-        ):
-            resp = client.post("/predictions/predict", json=self._PAYLOAD)
+        resp = client.post("/predictions/predict", json=self._PAYLOAD)
         assert resp.status_code == 200
 
     def test_hotel_id_overridden_by_token(self, monkeypatch):
@@ -203,16 +211,14 @@ class TestPredictAuthSurface:
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
         tok = _make_token(hotel_id="token-hotel", scopes=["predict"])
         app = _make_predictions_app(_returns_token(tok))
+        app.state.engine.get_forecast = AsyncMock(
+            return_value=_mock_forecast_result("token-hotel")
+        )
         client = TestClient(app)
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=_mock_forecast_result("token-hotel"),
-        ):
-            resp = client.post(
-                "/predictions/predict",
-                json={"hotel_id": "other-hotel", "target_date": "2026-05-10"},
-            )
+        resp = client.post(
+            "/predictions/predict",
+            json={"hotel_id": "other-hotel", "target_date": "2026-05-10"},
+        )
         assert resp.status_code == 200
         assert resp.json()["hotel_id"] == "token-hotel"
 
@@ -221,13 +227,11 @@ class TestPredictAuthSurface:
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
         tok = _make_token(hotel_id="hotel-001", scopes=["predict"])
         app = _make_predictions_app(_returns_token(tok))
+        app.state.engine.get_forecast = AsyncMock(
+            return_value=_mock_forecast_result("hotel-001")
+        )
         client = TestClient(app)
-        with patch(
-            "app.api.routes.predictions.engine.get_forecast",
-            new_callable=AsyncMock,
-            return_value=_mock_forecast_result("hotel-001"),
-        ):
-            resp = client.post("/predictions/predict", json=self._PAYLOAD)
+        resp = client.post("/predictions/predict", json=self._PAYLOAD)
         assert resp.headers.get("x-aetherix-hotel-id") == "hotel-001"
 
 
@@ -277,26 +281,22 @@ class TestTrainAuthSurface:
         """Token with admin:train scope reaches the handler (business logic may fail — not auth)."""
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
         tok = _make_token(hotel_id="hotel-001", scopes=["admin:train"])
-        # Mock everything the handler touches to prevent a real 500
-        with patch("app.api.routes.predictions._build_training_dataframe", new_callable=AsyncMock) as mock_df, \
-             patch("app.api.routes.predictions.engine") as mock_engine:
+
+        with patch(
+            "app.api.routes.predictions._build_training_dataframe",
+            new_callable=AsyncMock,
+        ) as mock_df:
             import pandas as pd
 
             df = pd.DataFrame({"ds": pd.date_range("2024-01-01", periods=90), "y": range(90)})
             mock_df.return_value = df
-            mock_engine.forecaster.is_trained = True
-            mock_engine.forecaster.model = None
-            mock_engine.forecaster.train = MagicMock()
-            mock_engine.forecaster.save_model = MagicMock()
 
             app = _make_predictions_app(train_dep_override=_returns_token(tok))
-            # Also override DB to avoid real session
-            from app.db.session import get_db
-            mock_db = AsyncMock()
-            mock_db.execute = AsyncMock(return_value=MagicMock(scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=None)))))
-            mock_db.add = MagicMock()
-            mock_db.commit = AsyncMock()
-            app.dependency_overrides[get_db] = lambda: mock_db
+            # HOS-157: engine on app.state — configure the mock forecaster
+            app.state.engine.forecaster.is_trained = True
+            app.state.engine.forecaster.model = None
+            app.state.engine.forecaster.train = MagicMock()
+            app.state.engine.forecaster.save_model = MagicMock()
 
             client = TestClient(app)
             resp = client.post("/predictions/train", json=self._PAYLOAD)
