@@ -57,8 +57,9 @@ def _make_profile(
     lat: float | None = 48.8566,
     lng: float | None = 2.3522,
 ) -> RestaurantProfile:
+    # HOS-165: id is UUID. Let the default generate one — tenant_id (slug) is
+    # the human-readable handle.
     return RestaurantProfile(
-        id=tenant_id,
         tenant_id=tenant_id,
         property_name="Test Hotel",
         outlet_name="Test Restaurant",
