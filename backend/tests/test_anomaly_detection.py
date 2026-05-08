@@ -381,10 +381,16 @@ class TestTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_detect_for_property_uses_tenant_in_upsert(self):
-        """tenant_id must be embedded in every upserted anomaly row."""
+        """Each upserted anomaly row must carry a tenant identifier.
+
+        HOS-164: tenant_id is a String slug; demand_anomalies.tenant_id is a UUID
+        column, so detect_for_property uses str(property_id) as a surrogate until
+        HOS-165 adds a proper tenant UUID column.  The assertion verifies that
+        every anomaly in the batch carries the property_id UUID (not the slug).
+        """
         service = AnomalyDetectionService()
         property_id = uuid.uuid4()
-        tenant_id_a = uuid.uuid4()
+        tenant_slug = "test_hotel"  # String slug per HOS-164 convention
 
         weather_mock = MagicMock()
         weather_mock.condition_code = "thunderstorm"
@@ -402,10 +408,12 @@ class TestTenantIsolation:
             patch.object(service, "_bulk_upsert", side_effect=capture_upsert),
         ):
             mock_db = AsyncMock()
-            await service.detect_for_property(mock_db, property_id, tenant_id_a)
+            await service.detect_for_property(mock_db, property_id, tenant_slug)
 
         for anomaly in captured:
-            assert anomaly["tenant_id"] == str(tenant_id_a), (
+            # tenant_id in demand_anomalies is a UUID column; we use property_id as
+            # the surrogate value until HOS-165 adds a proper tenant UUID.
+            assert anomaly["tenant_id"] == str(property_id), (
                 f"Anomaly has wrong tenant_id: {anomaly['tenant_id']}"
             )
 
