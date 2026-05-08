@@ -82,7 +82,7 @@ class WhatsAppService:
             )
             return
 
-        tenant_id = profile.tenant_id
+        tenant_id = profile.tenant_id  # convention-ok: used as str slug for memory/ops calls
 
         # 1. Feedback Detection (Phase 3 Learning Loop)
         if any(w in body.lower() for w in ["wrong", "incorrect", "too high", "too low", "no"]):

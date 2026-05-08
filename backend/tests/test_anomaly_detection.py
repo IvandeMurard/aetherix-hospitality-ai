@@ -381,10 +381,16 @@ class TestTenantIsolation:
 
     @pytest.mark.asyncio
     async def test_detect_for_property_uses_tenant_in_upsert(self):
-        """tenant_id must be embedded in every upserted anomaly row."""
+        """Each upserted anomaly row must carry a tenant identifier.
+
+        HOS-164: tenant_id is a String slug; demand_anomalies.tenant_id is a UUID
+        column, so detect_for_property uses str(property_id) as a surrogate until
+        HOS-165 adds a proper tenant UUID column.  The assertion verifies that
+        every anomaly in the batch carries the property_id UUID (not the slug).
+        """
         service = AnomalyDetectionService()
         property_id = uuid.uuid4()
-        tenant_id_a = uuid.uuid4()
+        tenant_slug = "test_hotel"  # String slug per HOS-164 convention
 
         weather_mock = MagicMock()
         weather_mock.condition_code = "thunderstorm"
@@ -402,12 +408,191 @@ class TestTenantIsolation:
             patch.object(service, "_bulk_upsert", side_effect=capture_upsert),
         ):
             mock_db = AsyncMock()
-            await service.detect_for_property(mock_db, property_id, tenant_id_a)
+            await service.detect_for_property(mock_db, property_id, tenant_slug)
 
         for anomaly in captured:
-            assert anomaly["tenant_id"] == str(tenant_id_a), (
+            # tenant_id in demand_anomalies is a UUID column; we use property_id as
+            # the surrogate value until HOS-165 adds a proper tenant UUID.
+            assert anomaly["tenant_id"] == str(property_id), (
                 f"Anomaly has wrong tenant_id: {anomaly['tenant_id']}"
             )
+
+
+# ===========================================================================
+# 7b. HOS-150 AC5 — run_full_scan queries restaurant_profiles, not properties
+# ===========================================================================
+class TestRunFullScanQueriesRestaurantProfiles:
+    """HOS-150 AC5: scanner must hit restaurant_profiles WHERE is_active = TRUE."""
+
+    @pytest.mark.asyncio
+    async def test_run_full_scan_queries_restaurant_profiles(self):
+        service = AnomalyDetectionService()
+        mock_db = AsyncMock()
+
+        captured_sql: list[str] = []
+
+        async def capture_execute(stmt, *args, **kwargs):
+            captured_sql.append(str(stmt))
+            mock_result = MagicMock()
+            mock_result.fetchall.return_value = []
+            return mock_result
+
+        mock_db.execute = capture_execute
+
+        await service.run_full_scan(mock_db)
+
+        assert any("restaurant_profiles" in s for s in captured_sql), (
+            f"Expected restaurant_profiles in SQL, got: {captured_sql}"
+        )
+        assert not any(" properties " in s.lower() for s in captured_sql), (
+            "Legacy `properties` table should not be queried anymore"
+        )
+        assert any("is_active = TRUE" in s for s in captured_sql), (
+            "Filter on is_active = TRUE missing"
+        )
+
+    @pytest.mark.asyncio
+    async def test_run_full_scan_skips_when_no_active_outlets(self):
+        service = AnomalyDetectionService()
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with patch.object(service, "detect_for_property", new_callable=AsyncMock) as detect:
+            await service.run_full_scan(mock_db)
+            detect.assert_not_called()
+
+
+# ===========================================================================
+# 7c. HOS-150 AC6 — _get_baseline_demand uses captation_baselines
+# ===========================================================================
+class TestBaselineDemandFromCaptationBaselines:
+    """HOS-150 AC6: baseline = avg_fb_revenue_per_room × dow_factor × monthly_factor."""
+
+    def setup_method(self):
+        self.service = AnomalyDetectionService()
+        self.property_id = uuid.uuid4()
+        self.tenant_id = uuid.uuid4()
+        # Wednesday in February → dow_idx=2, month_idx=2
+        self.window = datetime(2026, 2, 4, 12, 0, 0, tzinfo=timezone.utc)
+
+    @pytest.mark.asyncio
+    async def test_uses_captation_baselines_when_row_exists(self):
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        # SELECT avg_fb_revenue_per_room, dow_factors, monthly_factors
+        mock_result.fetchone.return_value = (
+            500.0,
+            {"0": 1.0, "1": 0.9, "2": 1.2, "3": 1.1, "4": 1.3, "5": 1.5, "6": 1.4},
+            {"1": 0.8, "2": 0.85, "3": 0.95, "12": 1.20},
+        )
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        baseline = await self.service._get_baseline_demand(
+            mock_db, self.property_id, self.tenant_id, self.window
+        )
+
+        # 500.0 * 1.2 * 0.85 = 510.0
+        assert baseline == Decimal("510.0"), f"Got {baseline}"
+
+    @pytest.mark.asyncio
+    async def test_targets_captation_baselines_table(self):
+        mock_db = AsyncMock()
+        captured_sql: list[str] = []
+
+        async def capture_execute(stmt, *args, **kwargs):
+            captured_sql.append(str(stmt))
+            mock_result = MagicMock()
+            mock_result.fetchone.return_value = None
+            return mock_result
+
+        mock_db.execute = capture_execute
+
+        await self.service._get_baseline_demand(
+            mock_db, self.property_id, self.tenant_id, self.window
+        )
+
+        assert any("captation_baselines" in s for s in captured_sql), (
+            f"Expected captation_baselines, got {captured_sql}"
+        )
+        assert not any("captation_rates" in s for s in captured_sql), (
+            "Legacy captation_rates table should not be queried anymore"
+        )
+
+    @pytest.mark.asyncio
+    async def test_cold_start_when_no_row(self, caplog):
+        import logging
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = None
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with caplog.at_level(logging.INFO, logger="app.services.anomaly_detection"):
+            baseline = await self.service._get_baseline_demand(
+                mock_db, self.property_id, self.tenant_id, self.window
+            )
+
+        assert baseline == Decimal("1000.00")
+        assert any("cold-start" in r.message for r in caplog.records), (
+            "Cold-start log entry missing"
+        )
+
+    @pytest.mark.asyncio
+    async def test_logs_computed_source(self, caplog):
+        import logging
+
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = (
+            500.0,
+            {"2": 1.2},
+            {"2": 0.85},
+        )
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with caplog.at_level(logging.INFO, logger="app.services.anomaly_detection"):
+            await self.service._get_baseline_demand(
+                mock_db, self.property_id, self.tenant_id, self.window
+            )
+
+        assert any("source=computed" in r.message for r in caplog.records), (
+            "Computed-source log entry missing"
+        )
+
+    @pytest.mark.asyncio
+    async def test_factor_defaults_to_one_when_key_missing(self):
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        # dow_factors and monthly_factors missing the relevant keys
+        mock_result.fetchone.return_value = (500.0, {}, {})
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        baseline = await self.service._get_baseline_demand(
+            mock_db, self.property_id, self.tenant_id, self.window
+        )
+
+        # 500 × 1.0 × 1.0 = 500
+        assert baseline == Decimal("500.0")
+
+    @pytest.mark.asyncio
+    async def test_coerces_string_json_factors(self):
+        mock_db = AsyncMock()
+        mock_result = MagicMock()
+        # Some drivers return JSONB as a string
+        mock_result.fetchone.return_value = (
+            500.0,
+            '{"2": 1.2}',
+            '{"2": 0.85}',
+        )
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        baseline = await self.service._get_baseline_demand(
+            mock_db, self.property_id, self.tenant_id, self.window
+        )
+
+        assert baseline == Decimal("510.0")
 
 
 # ===========================================================================
@@ -451,3 +636,66 @@ class TestNFR5Performance:
             f"run_full_scan is not running in parallel: elapsed={elapsed:.3f}s "
             f"(expected ~0.01s with gather)"
         )
+
+
+# ===========================================================================
+# 9. HOS-150 AC9 — _resolve_property_for_user queries restaurant_profiles
+# ===========================================================================
+class TestResolvePropertyForUserQueriesRestaurantProfiles:
+    """HOS-150 AC9: route helper must hit restaurant_profiles, never the
+    legacy `properties` table (which never existed in this schema).
+
+    Without this fix, every authenticated POST /api/v1/anomalies/scan and
+    POST /api/v1/anomalies/roi 404'd silently with 'No active property
+    linked to the authenticated user.'"""
+
+    @pytest.mark.asyncio
+    async def test_resolves_via_restaurant_profiles(self):
+        from app.api.routes.anomalies import _resolve_property_for_user
+
+        captured_sql: list[str] = []
+        captured_params: list[dict] = []
+
+        property_id = uuid.uuid4()
+        tenant_id = uuid.uuid4()
+
+        async def capture_execute(stmt, params=None, *args, **kwargs):
+            captured_sql.append(str(stmt))
+            captured_params.append(params or {})
+            mock_result = MagicMock()
+            mock_result.fetchone.return_value = (str(property_id), str(tenant_id))
+            return mock_result
+
+        mock_db = AsyncMock()
+        mock_db.execute = capture_execute
+
+        user_id = uuid.uuid4()
+        resolved_pid, resolved_tid = await _resolve_property_for_user(
+            mock_db, {"id": str(user_id)}
+        )
+
+        assert resolved_pid == property_id
+        assert resolved_tid == tenant_id
+        assert any("restaurant_profiles" in s for s in captured_sql), (
+            f"Expected restaurant_profiles in SQL, got: {captured_sql}"
+        )
+        assert not any(" properties " in s.lower() for s in captured_sql), (
+            "Legacy `properties` table should not be queried anymore"
+        )
+        assert any("owner_id" in s for s in captured_sql), (
+            "owner_id filter missing"
+        )
+        assert captured_params[0].get("user_id") == str(user_id)
+
+    @pytest.mark.asyncio
+    async def test_raises_404_when_no_row(self):
+        from app.api.routes.anomalies import _resolve_property_for_user
+
+        mock_result = MagicMock()
+        mock_result.fetchone.return_value = None
+        mock_db = AsyncMock()
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await _resolve_property_for_user(mock_db, {"id": str(uuid.uuid4())})
+        assert exc_info.value.status_code == 404

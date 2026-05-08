@@ -18,8 +18,29 @@ from sqlalchemy import (
 from sqlalchemy import (
     JSON as JSONB,  # JSON is dialect-agnostic (works with SQLite in tests)
 )
+from sqlalchemy.dialects.postgresql import ARRAY as _PgArray
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.types import TypeDecorator
+
+
+class StringArray(TypeDecorator):
+    """ARRAY(String) on PostgreSQL, JSON list on every other dialect.
+
+    HOS-150 AC3 — `mcp_api_tokens.scopes` and `agent_action_log.scopes` are
+    `TEXT[]` in Supabase; the previous `Column(JSON, ...)` mapping caused
+    asyncpg to return None on read, breaking `require_scope` end-to-end.
+    Tests use SQLite (no native ARRAY), so we transparently fall back to JSON
+    there.
+    """
+
+    impl = JSON
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):  # type: ignore[override]
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(_PgArray(String))
+        return dialect.type_descriptor(JSON())
 
 # pgvector: use real Vector type on PostgreSQL, fall back to JSON for SQLite tests
 # Dimension: 1024 (Mistral mistral-embed, per migration 20260323220000)
@@ -53,8 +74,13 @@ class RestaurantProfile(Base):
     """
     __tablename__ = "restaurant_profiles"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # HOS-165 — `id` is UUID in Supabase (migration 20250203000000); the previous
+    # String mapping was an ORM drift documented in HOS-163.
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(String, unique=True, index=True, nullable=False)
+    # `property_id` mirrors `id` and is the cross-table FK target referenced
+    # by DemandAnomaly / StaffingRecommendation / ConversationalQuery.
+    property_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4)
     
     # Administrative Link
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
@@ -102,6 +128,9 @@ class RestaurantProfile(Base):
     #     ADD COLUMN manager_name VARCHAR,
     #     ADD COLUMN agent_tone_profile VARCHAR NOT NULL DEFAULT 'luxury';
     agent_tone_profile = Column(String, default="luxury", nullable=False)
+
+    # HOS-150 AC5 — soft-disable flag used by anomaly_scan.run_full_scan
+    is_active = Column(Boolean, nullable=False, default=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -205,7 +234,8 @@ class DemandAnomaly(Base):
     __tablename__ = "demand_anomalies"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # HOS-165 — tenant_id is a human-readable slug (TEXT in Postgres).
+    tenant_id = Column(String, nullable=False, index=True)
     property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     window_start = Column(DateTime(timezone=True), nullable=False)
     window_end = Column(DateTime(timezone=True), nullable=False)
@@ -280,7 +310,8 @@ class StaffingRecommendation(Base):
     __tablename__ = "staffing_recommendations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # HOS-165 — tenant_id is a human-readable slug (TEXT in Postgres).
+    tenant_id = Column(String, nullable=False, index=True)
     property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     anomaly_id = Column(
         UUID(as_uuid=True),
@@ -325,7 +356,8 @@ class ConversationalQuery(Base):
     __tablename__ = "conversational_queries"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    # HOS-165 — tenant_id is a human-readable slug (TEXT in Postgres).
+    tenant_id = Column(String, nullable=False, index=True)
     property_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     from_number = Column(String, nullable=False)
     body = Column(Text, nullable=False)
@@ -419,7 +451,9 @@ class MCPApiToken(Base):
     hotel_id = Column(String, nullable=False, index=True)
     token_hash = Column(String, nullable=False, unique=True, index=True)
     token_prefix = Column(String, nullable=False)
-    scopes = Column(JSON, nullable=False, default=lambda: ["predict", "recommend", "feedback"])
+    # HOS-150 AC3 — TEXT[] on Postgres (matches migration 20260418000000),
+    # JSON list on SQLite for tests.
+    scopes = Column(StringArray, nullable=False, default=lambda: ["predict", "recommend", "feedback"])
     label = Column(String, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
@@ -468,7 +502,9 @@ class AgentActionLog(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     hotel_id = Column(String, nullable=False, index=True)
     tool_name = Column(String, nullable=False)
-    scopes = Column(JSON, nullable=True)             # list[str]
+    # HOS-150 AC3 — TEXT[] on Postgres (matches migration 20260418000100),
+    # JSON list on SQLite for tests.
+    scopes = Column(StringArray, nullable=True)      # list[str]
     status = Column(String, nullable=False)          # ok|auth_error|tool_error|rate_limited
     error_code = Column(String, nullable=True)
     latency_ms = Column(Integer, nullable=True)

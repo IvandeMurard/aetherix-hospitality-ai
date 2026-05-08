@@ -8,10 +8,11 @@ Coverage:
 - AC5: Lazy key validation — no raise at init, RuntimeError at complete()
 - AC6: factory uses GeminiProvider as automatic fallback
 - AC7: message role "assistant" maps to Gemini "model" role
+- AC8: safety block / refusal raises RuntimeError instead of AttributeError
 """
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -27,6 +28,22 @@ def _make_mock_client(text: str = "Gemini response.") -> MagicMock:
     """Return a mock google.genai.Client with aio.models.generate_content mocked."""
     response = MagicMock()
     response.text = text
+
+    mock_aio_models = MagicMock()
+    mock_aio_models.generate_content = AsyncMock(return_value=response)
+
+    mock_client = MagicMock()
+    mock_client.aio.models = mock_aio_models
+    return mock_client
+
+
+def _make_blocked_mock_client(exc: Exception | None = None) -> MagicMock:
+    """Return a mock client whose response.text raises (safety block / refusal)."""
+    response = MagicMock()
+    type(response).text = PropertyMock(
+        side_effect=exc or ValueError("response.text is not available — safety block")
+    )
+    response.finish_reason = "SAFETY"
 
     mock_aio_models = MagicMock()
     mock_aio_models.generate_content = AsyncMock(return_value=response)
@@ -217,3 +234,43 @@ class TestToGeminiContents:
         ]
         result = _to_gemini_contents(messages)
         assert [r["role"] for r in result] == ["user", "model", "user"]
+
+
+# ---------------------------------------------------------------------------
+# AC8 — Safety block / refusal raises RuntimeError (not AttributeError)
+# ---------------------------------------------------------------------------
+
+class TestGeminiProviderSafetyBlock:
+    @pytest.mark.asyncio
+    async def test_safety_block_raises_runtime_error(self):
+        """response.text raising ValueError (safety block) becomes a clear RuntimeError."""
+        mock_client = _make_blocked_mock_client()
+
+        with patch("google.genai.Client", return_value=mock_client):
+            provider = GeminiProvider(api_key="sk-test")
+            with pytest.raises(RuntimeError, match="no text in response"):
+                await provider.complete(
+                    messages=[{"role": "user", "content": "something sensitive"}]
+                )
+
+    @pytest.mark.asyncio
+    async def test_attribute_error_on_response_text_raises_runtime_error(self):
+        """response.text raising AttributeError is also guarded (e.g. unexpected SDK shape)."""
+
+        class _NoTextResponse:
+            @property
+            def text(self) -> str:
+                raise AttributeError("no 'text' attribute")
+            finish_reason = "ERROR"
+
+        mock_aio_models = MagicMock()
+        mock_aio_models.generate_content = AsyncMock(return_value=_NoTextResponse())
+        mock_client = MagicMock()
+        mock_client.aio.models = mock_aio_models
+
+        with patch("google.genai.Client", return_value=mock_client):
+            provider = GeminiProvider(api_key="sk-test")
+            with pytest.raises(RuntimeError, match="no text in response"):
+                await provider.complete(
+                    messages=[{"role": "user", "content": "ping"}]
+                )
