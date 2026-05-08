@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """Static analysis for tenant_id / property_id / hotel_id type mismatches.
 
-Scans backend/app/services/ for three categories of drift:
+Convention (docs/context/data-conventions.md):
+  tenant_id   -> String slug ("demo_hotel")
+  property_id -> UUID interne (uuid.UUID)
+  hotel_id    -> alias tenant_id, String slug
 
-  A. tenant_id (String) == str(UUID_expr)      — UUID cast to str for WHERE comparison
-  B. property_id (UUID) == .id (String)         — String PK compared to UUID FK
-  C. str(uuid...) used in raw SQL bind-param    — UUID column receives str instead of UUID
+Scans backend/app/services/ for known drift patterns.  Lines that contain
+the marker comment ``# sql-param-correct`` are exempted — they represent
+correct String FK bindings (e.g. captation_baselines.tenant_id) that would
+otherwise match the UUID-column pattern.
 
 Usage:
     python scripts/audit_id_types.py
 
-Exit code: always 0 (findings are expected, not errors).
+Exit code:
+  0 -- no mismatches found
+  1 -- one or more mismatches remain
 """
 from __future__ import annotations
 
@@ -28,47 +34,63 @@ SERVICES_DIR = ROOT / "backend" / "app" / "services"
 
 # ---------------------------------------------------------------------------
 # Detection patterns
-# Each tuple: (compiled_regex, description_template)
+# Each tuple: (compiled_regex, description)
+# Lines containing "# sql-param-correct" are always skipped.
 # ---------------------------------------------------------------------------
 PATTERNS: List[Tuple[re.Pattern, str]] = [
-    # A — tenant_id (String) == str(UUID) in WHERE clause
+    # A1 — tenant_id (String slug) == str(UUID expression) in WHERE clause
     (
         re.compile(r"\.tenant_id\s*==\s*str\("),
-        "tenant_id (String) == str(UUID) in WHERE",
+        "tenant_id (String slug) == str(UUID) in WHERE -- UUID string never matches slug",
     ),
-    # B — property_id (UUID) == .id (String) in WHERE clause
+    # B1 — property_id (UUID column) compared with .id (String column) without cast
     (
-        re.compile(r"\.property_id\s*==\s*(?:\w+\.)+id\b"),
-        "property_id (UUID) == .id (String) in WHERE",
+        re.compile(r"\.property_id\s*==\s*(?:\w+\.)+id\b(?!\s*\))"),
+        "property_id (UUID col) == .id (String col) without uuid.UUID cast",
     ),
-    # C1 — "tenant_id": str(...) in raw SQL bind-param dict
+    # B2 — ConversationalQuery / ORM constructor: property_id = profile.id (String, no cast)
     (
-        re.compile(r'"tenant_id"\s*:\s*str\('),
-        'str(UUID) -> UUID column "tenant_id" in INSERT params',
+        re.compile(r"\bproperty_id\s*=\s*profile\.id\b(?!\s*\))"),
+        "ORM constructor: property_id set from String profile.id without uuid.UUID cast",
     ),
-    # C2 — "property_id": str(...) in raw SQL bind-param dict
+    # B3 — ORM constructor: tenant_id = profile.tenant_id (slug assigned to UUID column)
+    #      Lines with "# convention-ok" are exempt (e.g. calls to str-typed parameters).
     (
-        re.compile(r'"property_id"\s*:\s*str\('),
-        'str(UUID) -> UUID column "property_id" in INSERT params',
+        re.compile(r"\btenant_id\s*=\s*profile\.tenant_id\b(?!.*#\s*convention-ok)"),
+        "ORM constructor: tenant_id (UUID col) set from String slug profile.tenant_id",
     ),
-    # C3 — "anomaly_id": str(...) in raw SQL bind-param dict
+    # C1 — tenant_id type-hint annotated as uuid.UUID (should be str per convention)
     (
-        re.compile(r'"anomaly_id"\s*:\s*str\('),
-        'str(UUID) -> UUID column "anomaly_id" in INSERT params',
+        re.compile(r"\btenant_id\s*:\s*uuid\.UUID\b"),
+        "tenant_id parameter typed as uuid.UUID -- convention requires str slug",
     ),
-    # C4 — "id": str(uuid...) in raw SQL bind-param dict (primary key)
+    # C2 — upsert dict: "tenant_id": str(tenant_id) storing slug in UUID column
+    #      (exempted when # sql-param-correct is present on the same line)
     (
-        re.compile(r'"id"\s*:\s*str\(uuid'),
-        'str(uuid.uuid4()) -> UUID primary key "id" in INSERT params',
+        re.compile(r'"tenant_id"\s*:\s*str\(tenant_id\)(?!.*#\s*sql-param-correct)'),
+        '"tenant_id": str(tenant_id) -- slug stored in UUID column; use str(property_id)',
     ),
-    # C5 — variable assignment: *id = str(uuid.uuid4()) used later as UUID PK
+    # D1 — run_full_scan: raw String DB row[0] passed directly to uuid.UUID parameter
     (
-        re.compile(r"\brec_id\s*=\s*str\(uuid"),
-        "str(uuid.uuid4()) assigned to rec_id (UUID PK placeholder)",
+        re.compile(r"\bproperty_id\s*=\s*row\[0\]\s*[,)]"),
+        "run_full_scan: raw String row[0] passed to uuid.UUID property_id (missing cast)",
+    ),
+    # D2 — run_full_scan: raw DB row[1] (slug) passed to uuid.UUID parameter unannotated
+    (
+        re.compile(r"\btenant_id\s*=\s*row\[1\]\s*[,)]"),
+        "run_full_scan: raw row[1] passed to tenant_id uuid.UUID param (missing str() cast)",
+    ),
+    # D3 — run_full_scan: String pid passed directly to uuid.UUID parameter
+    (
+        re.compile(r"run_for_property\(db\s*,\s*property_id\s*=\s*pid\b"),
+        "run_full_scan: String pid passed to run_for_property(property_id: uuid.UUID)",
     ),
 ]
 
 
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Mismatch:
     path: Path
@@ -85,7 +107,6 @@ class Mismatch:
 # ---------------------------------------------------------------------------
 # Scanner
 # ---------------------------------------------------------------------------
-
 def scan_file(path: Path) -> List[Mismatch]:
     mismatches: List[Mismatch] = []
     try:
@@ -96,7 +117,7 @@ def scan_file(path: Path) -> List[Mismatch]:
 
     for line_no, line in enumerate(source.splitlines(), start=1):
         stripped = line.lstrip()
-        # Skip pure comment lines — they describe intent, not runtime behaviour
+        # Skip pure comment lines -- they describe intent, not runtime behaviour
         if stripped.startswith("#"):
             continue
         for pattern, description in PATTERNS:
@@ -117,7 +138,6 @@ def collect_py_files(directory: Path) -> List[Path]:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
-
 def main() -> int:
     files = collect_py_files(SERVICES_DIR)
     all_mismatches: List[Mismatch] = []
@@ -127,13 +147,12 @@ def main() -> int:
 
     for m in all_mismatches:
         rel = m.relative(ROOT)
-        # Normalise to forward slashes for consistent output cross-platform
         rel_fwd = rel.replace("\\", "/")
         print(f"[MISMATCH] {rel_fwd}:{m.line_no} -- {m.description}")
 
     count = len(all_mismatches)
     print(f"\n{count} mismatch(es) found.")
-    return 0
+    return 1 if count else 0
 
 
 if __name__ == "__main__":

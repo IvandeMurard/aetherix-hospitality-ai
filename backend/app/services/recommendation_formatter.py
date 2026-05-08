@@ -328,7 +328,7 @@ class RecommendationFormatterService:
                 ),
                 {
                     "id": rec_id,
-                    "tenant_id": str(tenant_id),
+                    "tenant_id": str(tenant_id),  # sql-param-correct: demand_anomalies.tenant_id is UUID after HOS-164
                     "property_id": str(property_id),
                     "anomaly_id": str(anomaly_id),
                     "message_text": message,

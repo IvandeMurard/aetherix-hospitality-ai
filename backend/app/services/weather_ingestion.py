@@ -71,7 +71,7 @@ class WeatherIngestionService:
             )
 
         raw = await self._fetch_forecast(profile.latitude, profile.longitude)
-        rows = self.normalise(raw, tenant_id=profile.tenant_id, property_id=property_id)
+        rows = self.normalise(raw, tenant_id=profile.tenant_id, property_id=property_id)  # convention-ok: normalise() takes tenant_id: str
         count = await self._upsert(rows, db)
         logger.info("Weather sync OK — property=%s rows=%d", property_id, count)
         return count

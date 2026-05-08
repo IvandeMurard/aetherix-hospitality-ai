@@ -260,7 +260,7 @@ class ROICalculatorService:
             return
 
         tasks = [
-            self.run_for_property(db, property_id=pid)
+            self.run_for_property(db, property_id=uuid.UUID(str(pid)))
             for pid in property_ids
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
