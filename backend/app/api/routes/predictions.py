@@ -9,18 +9,52 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.security import get_current_user
-from app.db.models import CaptationBaseline, RestaurantProfile, TrainingRun
+from app.db.models import CaptationBaseline, MCPApiToken, RestaurantProfile, TrainingRun
 from app.db.session import get_db
+from app.mcp_core import ADMIN_TRAIN_SCOPE, MCPAuthError
+from app.mcp_server import verify_bearer
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
+
+
+# ---------------------------------------------------------------------------
+# MCP bearer-token auth dependencies (HOS-149)
+# ---------------------------------------------------------------------------
+
+def _require_mcp_scope(scope: str):
+    """Factory: returns a FastAPI dependency that validates bearer + scope."""
+    async def _dep(
+        authorization: Optional[str] = Header(None),
+        db: AsyncSession = Depends(get_db),
+    ) -> MCPApiToken:
+        try:
+            tok = await verify_bearer(authorization, db)
+        except MCPAuthError as exc:
+            raise HTTPException(
+                status_code=exc.status,
+                headers={"WWW-Authenticate": "Bearer"},
+                detail=exc.detail,
+            )
+        if scope not in (tok.scopes or []):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Token missing required scope: {scope}",
+            )
+        return tok
+    return _dep
+
+
+# Named at module level so tests can apply dependency_overrides
+_predict_auth = _require_mcp_scope("predict")
+_train_auth = _require_mcp_scope(ADMIN_TRAIN_SCOPE)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -106,18 +140,33 @@ async def get_property_prediction(
     summary="Forecast F&B covers (MCP-callable)",
     openapi_extra={"x-agent-callable": True, "x-mcp-compatible": True},
 )
-async def predict(request: Request, body: PredictRequest):
+async def predict(
+    request: Request,
+    body: PredictRequest,
+    response: Response,
+    tok: MCPApiToken = Depends(_predict_auth),
+):
     """MCP-callable endpoint: given a hotel_id and date, returns a structured
     demand forecast with LLM reasoning (Claude Sonnet) or a heuristic fallback
     when ANTHROPIC_API_KEY is absent.
 
-    Designed for agent-to-agent use (HOS-37 / HOS-71 MCP Server). No JWT auth
-    required — authenticate at the infrastructure layer (API key header, VPN, etc.)
-    when exposing publicly.
+    Requires a valid MCP bearer token with scope `predict` (HOS-149 AC2).
+    hotel_id is always taken from the token — body.hotel_id is ignored if it
+    differs (HOS-149 AC3).
 
     Schema stability: BREAKING changes require a version bump (Agent SEO policy).
     """
     engine = request.app.state.engine
+    # AC3: hotel_id is bound to the token — never trusted from caller
+    if body.hotel_id and body.hotel_id != tok.hotel_id:
+        logger.warning(
+            "predict: hotel_id mismatch body=%s token=%s — using token hotel_id",
+            body.hotel_id,
+            tok.hotel_id,
+        )
+    hotel_id = tok.hotel_id
+    response.headers["X-Aetherix-Hotel-Id"] = hotel_id
+
     ctx = body.context or {
         "weather": {"condition": "Unknown", "temp": None},
         "events": [],
@@ -125,9 +174,7 @@ async def predict(request: Request, body: PredictRequest):
     }
 
     try:
-        result = await engine.get_forecast(
-            body.hotel_id, body.target_date, body.service_type, ctx
-        )
+        result = await engine.get_forecast(hotel_id, body.target_date, body.service_type, ctx)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -139,7 +186,7 @@ async def predict(request: Request, body: PredictRequest):
 
     covers = pred.get("covers", pred.get("predicted_covers", 0))
     return PredictResponse(
-        hotel_id=body.hotel_id,
+        hotel_id=hotel_id,
         target_date=result.get("date", body.target_date.isoformat()),
         service_type=result.get("service_type", body.service_type),
         predicted_covers=covers,
@@ -207,6 +254,7 @@ async def train_prophet(
     request: Request,
     body: TrainRequest = TrainRequest(),
     db: AsyncSession = Depends(get_db),
+    tok: MCPApiToken = Depends(_train_auth),
 ):
     """Orchestrates the full Prophet training pipeline (Decision #13 gap closure).
 

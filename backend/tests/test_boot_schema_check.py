@@ -144,6 +144,10 @@ class TestLifespanAbortsOnMissingSchema:
     @pytest.mark.asyncio
     async def test_lifespan_propagates_schema_error(self, monkeypatch):
         """The FastAPI lifespan must surface SchemaValidationError, not swallow it."""
+        # HOS-149: _validate_startup_env() runs first; bypass it so this test
+        # can focus on schema validation behaviour.
+        monkeypatch.setattr("app.main._validate_startup_env", lambda env=None: None)
+
         # Override verify_schema to simulate a missing critical table.
         async def _failing_verify(*args, **kwargs):
             raise SchemaValidationError("simulated: missing operational_memory")
@@ -159,6 +163,9 @@ class TestLifespanAbortsOnMissingSchema:
     @pytest.mark.asyncio
     async def test_lifespan_no_create_all_call(self, monkeypatch):
         """Regression: no path through lifespan should call Base.metadata.create_all."""
+        # HOS-149: bypass startup-env validation so this test focuses on create_all removal.
+        monkeypatch.setattr("app.main._validate_startup_env", lambda env=None: None)
+
         called = {"flag": False}
 
         def _sync_marker(_engine, *args, **kwargs):
