@@ -15,6 +15,7 @@ Status lifecycle transition recorded here:
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -91,12 +92,13 @@ class ActionLoggerService:
             return {"status": "not_found"}
 
         # 2. Find the most recent dispatched recommendation for this property.
-        #    The dispatcher stores property_id as UUID; tenant_id on the profile
-        #    is a plain string — we cast when comparing (mirrors alert_dispatcher.py).
+        #    profile.id is a String column; cast explicitly to uuid.UUID so the
+        #    comparison is type-safe against StaffingRecommendation.property_id
+        #    (UUID column).  HOS-164.
         rec_result = await session.execute(
             select(StaffingRecommendation)
             .where(
-                StaffingRecommendation.property_id == profile.id,
+                StaffingRecommendation.property_id == uuid.UUID(str(profile.id)),
                 StaffingRecommendation.status == "dispatched",
             )
             .order_by(
