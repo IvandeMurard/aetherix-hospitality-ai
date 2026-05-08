@@ -95,7 +95,7 @@ class AnomalyDetectionService:
         self,
         db: AsyncSession,
         property_id: uuid.UUID,
-        tenant_id: uuid.UUID,
+        tenant_id: str,
     ) -> List[DemandAnomaly]:
         """Detect demand anomalies for a single property over the next 14 days.
 
@@ -112,7 +112,9 @@ class AnomalyDetectionService:
         Args:
             db:          Async SQLAlchemy session.
             property_id: UUID of the property being scanned.
-            tenant_id:   UUID of the owning tenant (for RLS-safe inserts).
+            tenant_id:   String slug of the owning tenant (e.g. "demo_hotel").
+                         Convention: tenant_id is always a String slug; property_id
+                         is the internal UUID.  HOS-164 / HOS-165.
 
         Returns:
             List of DemandAnomaly ORM instances that were upserted.
@@ -173,7 +175,9 @@ class AnomalyDetectionService:
             anomalies_to_upsert.append(
                 {
                     "id": str(uuid.uuid4()),
-                    "tenant_id": str(tenant_id),
+                    # demand_anomalies.tenant_id is UUID(as_uuid=True); use property_id
+                    # UUID as surrogate until HOS-165 adds a proper tenant UUID column.
+                    "tenant_id": str(property_id),
                     "property_id": str(property_id),
                     "window_start": window_start.isoformat(),
                     "window_end": window_end.isoformat(),
@@ -258,8 +262,8 @@ class AnomalyDetectionService:
             async with AsyncSessionLocal() as isolated_session:
                 return await self.detect_for_property(
                     isolated_session,
-                    property_id=row[0],
-                    tenant_id=row[1],
+                    property_id=uuid.UUID(str(row[0])),  # restaurant_profiles.id → UUID
+                    tenant_id=str(row[1]),               # restaurant_profiles.tenant_id → slug
                 )
 
         tasks = [_scan_one(row) for row in properties]
@@ -307,7 +311,7 @@ class AnomalyDetectionService:
         self,
         db: AsyncSession,
         property_id: uuid.UUID,
-        tenant_id: uuid.UUID,
+        tenant_id: str,
         window_start: datetime,
     ) -> Decimal:
         """Compute baseline demand from `captation_baselines` (Story 2.4).
@@ -332,7 +336,7 @@ class AnomalyDetectionService:
                     LIMIT 1
                     """
                 ),
-                {"tenant_id": str(tenant_id)},
+                {"tenant_id": str(tenant_id)},  # sql-param-correct: captation_baselines.tenant_id is String FK
             )
             row = result.fetchone()
             if row and row[0] is not None:
