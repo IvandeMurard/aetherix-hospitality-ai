@@ -132,9 +132,9 @@ graph TD
         Memory[("pgvector · operational_memory\nPer-hotel feedback loop\n→ Backboard.io (Phase 3)")]
     end
 
-    subgraph DELIVERY["🚀 Delivery & UI"]
+    subgraph DELIVERY["🚀 Delivery & Orchestration"]
         Push["WhatsApp / SMS / Email\n(UI-less, push-first)"]
-        Frontend["Next.js Dashboard\n(verification layer)"]
+        MCP["MCP Server\n(Callable by Agents & PMS Native Tasks)"]
     end
 
     PMS -- "Webhooks/API" --> Sync
@@ -147,7 +147,7 @@ graph TD
     Memory --> RAG
     RAG --> Explain
     Explain -- "Recommendation + Why?" --> Push
-    Explain -- "Typed API (openapi-fetch)" --> Frontend
+    Explain -- "MCP Tools / Native API" --> MCP
     RAG -- "Learn from feedback" --> Memory
 
     classDef foundation fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
@@ -160,7 +160,7 @@ graph TD
     class Weather,Events external
     class Sync,Semantic,RAG,Explain backend
     class DB,Vector,Memory db
-    class Push,Frontend delivery
+    class Push,MCP delivery
 
 ```
 
