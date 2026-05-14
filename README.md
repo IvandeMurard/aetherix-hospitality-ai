@@ -1,4 +1,3 @@
-
 <h1 align="center">Aetherix</h1>
 <p align="center">
   <em>Helping Hotel Managers predict their property's operational needs.</em>
@@ -56,6 +55,9 @@ Aetherix delivers **contextual, explainable recommendations** via WhatsApp (or o
 
 Built with real hospitality constraints in mind: high uncertainty, human oversight, GDPR, and labor regulations.
 
+### 💼 The Economics of Anticipation (RaaS)
+Aetherix shifts the paradigm from Software-as-a-Service to **Results-as-a-Service (RaaS)**. We don't just provide "analytics"—we align our success with yours. By turning "unexpressed wishes" and operational inefficiencies into direct revenue and labor savings, Aetherix acts as a profit partner, not a line-item expense.
+
 ---
 
 ## Key Features & Innovation
@@ -65,6 +67,9 @@ Built with real hospitality constraints in mind: high uncertainty, human oversig
 - **Conversational Explainability**: Managers can challenge recommendations and get an immediate, scannable, data-driven reasoning breakdown.
 - **Headless-First Design**: UI-less core with optional verification dashboard. Exposes capabilities as MCP tools so other agents can consume predictions at scale.
 - **Painless Integration**: Designed for zero-friction integration. Aetherix requires only a read-only access via webhooks, API keys, or Apaleo MCP.
+
+### 🐝 The Hive: Scaling Soul through Collective Intelligence
+Beyond individual property forecasting, Aetherix introduces **The Hive**. By aggregating contextual signals from properties with similar DNA (guest profiles, size, location), the Hive creates an anonymized "collective memory." A boutique hotel can now predict a surge in specific guest needs by tapping into the shared wisdom of the network—without ever compromising data privacy. Scale is no longer a corporate privilege; it is a distributed technological asset.
 
 ---
 
@@ -95,6 +100,7 @@ This helps ensure the project is not just a technical proof-of-concept, but a vi
 - Complete MCP data orchestration + backtesting with defined KPIs (MAPE <15%, etc.)
 - Ship minimal outbound Aetherix MCP Server so other agents can call predictions and memory-enriched insights
 - Transparent validation results (sandbox/synthetic)
+
 ---
 
 ## Architecture & Technical Strategy
@@ -104,8 +110,11 @@ The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy. T
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': {'edgeLabelBackground': '#1e1e2e', 'lineColor': '#6b7280'}}}%%
 graph TD
-    subgraph EXT["📡 External Integrations"]
-        PMS["Mews/Apaleo PMS\n(Read-Only)"]
+    subgraph FOUNDATION["🏨 Internal Foundation"]
+        PMS["Mews/Apaleo PMS\n(Read-Only Context)"]
+    end
+
+    subgraph EXT["📡 External Signals"]
         Weather["Weather API"]
         Events["PredictHQ Events"]
     end
@@ -123,9 +132,9 @@ graph TD
         Memory[("pgvector · operational_memory\nPer-hotel feedback loop\n→ Backboard.io (Phase 3)")]
     end
 
-    subgraph DELIVERY["🚀 Delivery & UI"]
+    subgraph DELIVERY["🚀 Delivery & Orchestration"]
         Push["WhatsApp / SMS / Email\n(UI-less, push-first)"]
-        Frontend["Next.js Dashboard\n(verification layer)"]
+        MCP["MCP Server\n(Callable by Agents & PMS Native Tasks)"]
     end
 
     PMS -- "Webhooks/API" --> Sync
@@ -138,18 +147,21 @@ graph TD
     Memory --> RAG
     RAG --> Explain
     Explain -- "Recommendation + Why?" --> Push
-    Explain -- "Typed API (openapi-fetch)" --> Frontend
+    Explain -- "MCP Tools / Native API" --> MCP
     RAG -- "Learn from feedback" --> Memory
 
+    classDef foundation fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
     classDef external  fill:#0f2744,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
     classDef backend   fill:#2d1b69,stroke:#a855f7,stroke-width:2px,color:#e9d5ff
     classDef db        fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#bbf7d0
     classDef delivery  fill:#431407,stroke:#f97316,stroke-width:2px,color:#fed7aa
 
-    class PMS,Weather,Events external
+    class PMS foundation
+    class Weather,Events external
     class Sync,Semantic,RAG,Explain backend
     class DB,Vector,Memory db
-    class Push,Frontend delivery
+    class Push,MCP delivery
+
 ```
 
 ### The Four Intelligence Layers
@@ -157,7 +169,7 @@ graph TD
 | Layer                  | Technology                  | Role |
 |------------------------|-----------------------------|------|
 | **1. Numerical Forecast** | Prophet (time-series)      | Base volume predictions from PMS + regressors |
-| **2. Semantic Patterns**  | Qdrant Cloud               | Context matching against historical scenarios |
+| **2. Semantic Patterns**  | Qdrant Cloud                | Context matching against historical scenarios |
 | **3. Cognitive Memory**   | pgvector → Backboard.io (Ph. 3) | Two-layer: Private (idiosyncratic) + Hive (anonymized, metadata-grouped) |
 | **4. Reasoning & Explanation** | Claude Sonnet (Anthropic)  | Synthesizes everything into actionable, explainable recommendations |
 
@@ -197,7 +209,6 @@ aetherix/
 ├── docker-compose.yml       # Local dev: backend + frontend + postgres + mailhog
 └── archive/                 # Legacy code (pre-FastAPI era) — not used in production
 ```
-
 ---
 
 ## Security
@@ -230,10 +241,12 @@ Aetherix is built to be part of an **agent mesh** in hospitality, and to not be 
 </p>
 
 Aetherix is an intelligence layer for hotel F&B operations, not an additional dashboard, but a connectivity layer that sits between existing hotel systems and the decisions that run the floor. It accesses hotel data through a PMS-agnostic data access layer, reasons across PMS, POS, RMS, labor signals and external context, and surfaces structured outputs into tools operators already use.
-The architecture is built around three specialized agents sharing a common data context.
+
+The architecture is built around three specialized agents sharing a common data context:
 - The F&B Agent is live, handling staffing intelligence, shift forecasting, and explainable reasoning.
 - The Revenue Agent and Ops Agent are on the roadmap, extending the same pattern to pricing signals and operations routing.
-- A human approval gate sits between every agent recommendation and action, the system informs, the operator decides.
+- A human approval gate sits between every agent recommendation and action; the system informs, the operator decides.
+
 All agents are to be MCP-callable and API-first. Aetherix is designed to integrate into existing hospitality tech stacks, not replace them.
 
 ---
