@@ -39,3 +39,6 @@ backend/data/raw/*.csv
 # Stray Obsidian vault path (Windows path written literally on Linux)
 C:\\Users\\
 .claude/
+# Ignore Fly-specific env files
+.env.fly
+.env.*.local
