@@ -42,6 +42,15 @@ from typing import Any
 
 import httpx
 
+# Load .env from repo root if present (Phase 0 convenience — no impact on CI mock).
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    if _env_path.exists():
+        load_dotenv(_env_path, override=False)
+except ImportError:
+    pass
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -331,7 +340,13 @@ def step6_anomaly_dispatch(client: httpx.Client, base_url: str, token: str, hote
         except ImportError:
             return _fail(6, name, t0, "asyncpg not installed — install or skip step 6")
 
-        db_url = os.getenv("DATABASE_URL", "")
+        # Prefer SMOKE_DATABASE_URL (raw asyncpg DSN) over DATABASE_URL
+        # (which uses SQLAlchemy's postgresql+asyncpg:// prefix incompatible
+        # with the bare asyncpg.connect() call below).
+        db_url = os.getenv("SMOKE_DATABASE_URL") or os.getenv("DATABASE_URL", "")
+        # Strip SQLAlchemy driver suffix if present.
+        if db_url.startswith("postgresql+asyncpg://"):
+            db_url = "postgresql://" + db_url[len("postgresql+asyncpg://"):]
         if not db_url:
             return _fail(6, name, t0, "DATABASE_URL not set")
         # asyncpg uses postgres:// not postgresql+asyncpg://
