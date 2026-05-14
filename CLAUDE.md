@@ -51,6 +51,8 @@
 | 13 | Pipeline Prophet — gap training identifié | `ApaleoMCPAdapter.get_historical_data()` → `DataTransformer.stay_records_to_prophet()` → `PredictionEngine.train()` : briques existent, orchestrateur manquant. Débloquer via `POST /api/v1/predictions/train` ou worker de démarrage. |
 | 14 | Phase 0 DoD amendée — MCP Server v0 inclus | Suite directive PM 17/04/2026 (tweet Benioff "headless for agents"): ship Aetherix MCP Server v0 (HOS-71, 3 tools) est désormais un critère de validation Phase 0, APRÈS gate MAPE interne. Si MAPE > 22%, pivot avant ship MCP. Détail → `docs/planning/phase-0-1-execution-plan.md` |
 | 15 | Phase 2 "Receipts" — scope locké 19/04/2026 | Channel = WhatsApp primary + email opt-in (SendGrid). Inbound classifier = Haiku, log confidence, auto-`modified` si <0.6. Auth web drill-down = MCP bearer + scope `receipts:read`. Tone = terse + sharp bullets + luxury feel (driver principal, données quantitatives, evidence historique, confidence, follow-up proactif). Gate = two-track : (a) technical-ship sur Apaleo Sandbox (round-trip daily Receipt + feedback→memory + 4 Sundays digest) ; (b) trust-signal (US-7 ablation) reporté au premier pilote réel. Détail → `docs/planning/phase-2-agent-receipts.md` |
+| 16 | Schema drift gate CI obligatoire (Epic 9 retro 14/05/2026) | Invariant **"ORM = miroir exact des migrations"**. Tout merge bloqué si une colonne du modèle SQLAlchemy n'existe pas en DB (ou inverse). Découvert via Epic 9 (HOS-148) : 3 bugs silencieux résolus. Implémentation : `scripts/check_schema_drift.py` + `scripts/schema_drift_ignore.json`. Convention IDs : `docs/context/data-conventions.md`. |
+| 17 | Hébergement Fly.io (14/05/2026) | Backend déployé sur Fly.io, région `cdg` (Paris). 1 instance always-on (`min_machines_running=1`) — requis par APScheduler in-process. Image Docker Python 3.12 + uv multi-stage. Secrets via `flyctl secrets set` (jamais commités). Latence Paris ↔ Supabase Stockholm ~30ms (acceptable Phase 0). URL staging : `https://aetherix-backend.fly.dev`. Détail déploiement : `docs/secrets_handling.md`. Remplace l'ancienne contrainte "local Windows / GitHub uniquement". |
 
 ---
 
@@ -200,4 +202,4 @@ Déclare le mode en début de conversation. Chaque agent charge son propre fichi
 
 1. `docs/ARCHITECTURE.md` daté fév. 2026 — sections Streamlit/Render.com = ancienne stack. Se fier à ce CLAUDE.md.
 2. `.env.example` racine = ancien backend (`archive/legacy-backend`).
-3. Hébergement = local Windows ou GitHub. Aucun serveur Linux, Render, Railway.
+3. Hébergement staging = Fly.io (`cdg`, Paris) — voir Décision #17. Dev local Windows pour scripts utilitaires (`veille_proactive`, MCP Obsidian).
