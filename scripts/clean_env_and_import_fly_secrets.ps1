@@ -1,19 +1,21 @@
-<#
+﻿<#
 CleanEnvAndImportFlySecrets.ps1
-Usage: coller et exécuter dans le dossier contenant .env
+Usage: coller et exécuter dans le dossier du repo.
 Options:
-  -DryRun    : affiche les paires clé=valeur filtrées sans appeler flyctl (recommandé pour partage)
+    -EnvFile   : chemin du fichier .env à importer (défaut: .env.fly)
+    -DryRun    : affiche les paires clé=valeur filtrées sans appeler flyctl
 #>
 param(
-    [switch]$DryRun
+        [string]$EnvFile = '.env.fly',
+        [switch]$DryRun
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$envPath = Join-Path -Path (Get-Location) -ChildPath '.env'
+$envPath = Join-Path -Path (Get-Location) -ChildPath $EnvFile
 if (-not (Test-Path $envPath)) {
-    Write-Error ".env introuvable à l'emplacement actuel : $envPath"
+    Write-Error "Fichier introuvable : $envPath"
     exit 2
 }
 
@@ -71,7 +73,7 @@ $content = $content -replace "`r", "`n"
 # Réécrire .env en UTF-8 sans BOM (préserver le contenu décodé)
 [byte[]]$utf8Bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
 [System.IO.File]::WriteAllBytes($envPath, $utf8Bytes)
-Write-Host ".env réécrit en UTF-8 sans BOM."
+Write-Host "$envPath réécrit en UTF-8 sans BOM."
 
 # Filtrer les lignes qui correspondent strictement à KEY= (sans espaces initiaux)
 $lines = $content -split "`n"
