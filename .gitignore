@@ -45,3 +45,18 @@ C:\\Users\\
 # Phase 0 / Phase 1 — DB snapshots (locaux, jamais commiter)
 pre-*-snapshot.sql
 *.snapshot.sql
+
+# Local artefacts & generated outputs (regénérables)
+.git-backup/
+backend/.coverage
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/htmlcov/
+docs_response.html
+linear_state.md
+openapi.json
+supabase/.temp/
+
+# Local Claude Code / agent config (non commitables, machine-specific)
+.agents/
+skills-lock.json
