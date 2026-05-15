@@ -357,16 +357,36 @@ def step6_anomaly_dispatch(client: httpx.Client, base_url: str, token: str, hote
         async def _seed_anomaly() -> str:
             conn = await asyncpg.connect(db_url)
             try:
+                # Match the ORM schema (backend/app/db/models.py — DemandAnomaly).
+                # tenant_id is a String slug (HOS-165); property_id is a UUID and
+                # must come from an existing restaurant_profiles row.
+                property_id = await conn.fetchval(
+                    "SELECT property_id FROM restaurant_profiles "
+                    "WHERE tenant_id = $1 LIMIT 1",
+                    hotel_id,
+                )
+                if not property_id:
+                    raise RuntimeError(
+                        f"No restaurant_profiles row for tenant_id={hotel_id!r}"
+                    )
+
                 row_id = await conn.fetchval(
                     """
-                    INSERT INTO demand_anomalies
-                        (tenant_id, service_type, deviation_pct, direction,
-                         triggering_factors, status, detected_at)
-                    VALUES ($1, 'dinner', 30.0, 'SURGE', ARRAY['smoke_test'],
-                            'detected', now())
+                    INSERT INTO demand_anomalies (
+                        tenant_id, property_id,
+                        window_start, window_end,
+                        expected_demand, baseline_demand, deviation_pct,
+                        direction, triggering_factors, status, detected_at
+                    )
+                    VALUES (
+                        $1, $2,
+                        now(), now() + interval '4 hours',
+                        1300.00, 1000.00, 30.00,
+                        'surge', '["smoke_test"]'::jsonb, 'detected', now()
+                    )
                     RETURNING id
                     """,
-                    hotel_id,
+                    hotel_id, property_id,
                 )
                 return str(row_id)
             finally:
