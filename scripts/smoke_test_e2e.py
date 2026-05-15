@@ -131,12 +131,21 @@ def step1_boot(client: httpx.Client, base_url: str) -> dict[str, Any]:
     name = "boot_validation"
     t0 = time.monotonic()
     try:
+        # Warm-up call: first hit after Fly machine idle may take ~15s
+        # (Python interpreter warm-up, Prophet import, asyncpg pool init).
+        # Measurement is on the SECOND call, against a warm instance.
+        try:
+            client.get(f"{base_url}/health", timeout=HTTP_TIMEOUT)
+        except Exception:
+            pass  # First call may even timeout; that's fine, we retry below.
+
+        t_measure = time.monotonic()
         r = client.get(f"{base_url}/health", timeout=HTTP_TIMEOUT)
-        health_elapsed = time.monotonic() - t0
+        health_elapsed = time.monotonic() - t_measure
         if r.status_code != 200:
             return _fail(1, name, t0, f"/health -> {r.status_code}")
         if health_elapsed > HEALTH_SLA_SECONDS:
-            return _fail(1, name, t0, f"/health latency {health_elapsed:.2f}s > {HEALTH_SLA_SECONDS}s")
+            return _fail(1, name, t0, f"/health (warm) latency {health_elapsed:.2f}s > {HEALTH_SLA_SECONDS}s")
 
         # /health/workers is optional — degrade to a warning if 404.
         workers_detail = "workers=skipped"
@@ -373,13 +382,13 @@ def step6_anomaly_dispatch(client: httpx.Client, base_url: str, token: str, hote
                 row_id = await conn.fetchval(
                     """
                     INSERT INTO demand_anomalies (
-                        tenant_id, property_id,
+                        id, tenant_id, property_id,
                         window_start, window_end,
                         expected_demand, baseline_demand, deviation_pct,
                         direction, triggering_factors, status, detected_at
                     )
                     VALUES (
-                        $1, $2,
+                        gen_random_uuid(), $1, $2,
                         now(), now() + interval '4 hours',
                         1300.00, 1000.00, 30.00,
                         'surge', '["smoke_test"]'::jsonb, 'detected', now()
