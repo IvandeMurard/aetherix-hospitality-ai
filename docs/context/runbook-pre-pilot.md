@@ -262,6 +262,42 @@ If rotation fails (job log shows `OperationalError`):
 
 ---
 
+## 5b. Webhook secret rotation procedure
+
+### Secrets à configurer en production
+
+| Variable | Provider | Console |
+|---|---|---|
+| `TWILIO_AUTH_TOKEN` | Twilio (inbound SMS/WhatsApp HMAC-SHA1) | Twilio Console → Account → Auth Tokens |
+| `APALEO_WEBHOOK_SECRET` | Apaleo (HMAC-SHA256 — Phase 2+, N/A actuellement) | Apaleo dashboard → Webhooks |
+| `MEWS_WEBHOOK_SECRET` | Mews (HMAC-SHA256 — Phase 3+, N/A actuellement) | Mews Commander → Integrations |
+
+### Procédure rotation
+
+1. Générer le nouveau secret côté provider (dans leur console).
+2. Mettre à jour le secret dans l'environnement de déploiement :
+   ```bash
+   flyctl secrets set TWILIO_AUTH_TOKEN=<new_token> --app aetherix-backend
+   ```
+3. Redéployer pour appliquer :
+   ```bash
+   flyctl deploy --app aetherix-backend
+   ```
+4. Valider en envoyant un webhook de test depuis la console provider
+   et en vérifiant qu'il est accepté (200, pas de log `invalid signature`).
+5. Révoquer l'ancien secret côté provider **après** validation.
+6. Documenter la rotation dans Linear (commentaire sur la story de sécurité active).
+
+### Vérification post-rotation
+
+```bash
+# Smoke test doit rester vert après rotation
+python scripts/smoke_test_e2e.py
+# Step 5 (auth_surface) vérifie que la validation de signature est active
+```
+
+---
+
 ## 6. Pre-pilot checklist
 
 Tick every box before opening access to a real hotel design partner.
