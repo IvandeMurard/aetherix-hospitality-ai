@@ -47,6 +47,7 @@ from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.event_sync import start_event_scheduler
 from app.workers.memory_metrics import register_memory_metrics_job
+from app.workers.receipts_dispatcher import register_receipt_dispatch_job
 from app.workers.weather_sync import start_weather_scheduler
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,8 @@ async def lifespan(app: FastAPI):
     # HOS-156 — injected into the shared scheduler (no separate scheduler instances).
     start_weather_scheduler(_scheduler)
     start_event_scheduler(_scheduler)
+    # P2-3 — daily Receipt dispatch at RECEIPT_DISPATCH_HOUR (default 18:00 UTC).
+    register_receipt_dispatch_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler
