@@ -195,7 +195,6 @@ aetherix/
 │   ├── ops/                 # Operational: backtest, veille, Prophet training
 │   └── deploy/              # Fly.io deployment helpers
 ├── supabase/                # DB migrations
-├── local-shared-data/       # OpenAPI spec shared between backend & frontend
 ├── docker-compose.yml       # Local dev: backend + frontend + postgres + mailhog
 └── archive/                 # Legacy code & archived scripts — not used in production
 ```
