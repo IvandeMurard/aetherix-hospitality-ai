@@ -33,6 +33,7 @@ out/
 # Misc
 .obsidian/
 backend/data/raw/*.csv
+_ai_workspace/
 
 # Claude Code agent worktrees
 .claude/worktrees/
