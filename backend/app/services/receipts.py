@@ -1,21 +1,21 @@
-"""Phase 2 — Agent Receipts daily composer (P2-1 + P2-2).
+"""Phase 2 — Agent Receipts daily composer (P2-1, P2-2, P2-3).
 
 P2-1: `ReceiptsService.daily_receipt` reads `agent_action_log` for a (hotel_id, date)
       and returns a typed `ReceiptPayload`.
 P2-2: Enriches each `ReceiptLine` with `memory_hits` — `operational_memory` rows
       written during that same tool call, linked via `request_id` backlink.
+P2-3: `compose_narrative` builds an OQ4-tone WhatsApp message from a ReceiptPayload
+      using LLMProvider (Claude Sonnet). Terse + sharp bullets + luxury feel.
 
 Memory-hits enrichment uses a single second SELECT (batch by request_id set),
 not N+1 queries.
-
-Intentionally not in scope here: narrative prose composition (P2-3 / OQ4 tone),
-WhatsApp/email dispatch (P2-3 / P2-5), web drill-down (P2-6).
 
 Phase 2 spec: docs/planning/phase-2-agent-receipts.md
 PM-locked decisions: CLAUDE.md Decision #15.
 """
 from __future__ import annotations
 
+import logging
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timezone
 from typing import Optional
@@ -25,6 +25,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AgentActionLog, OperationalMemory
+from app.providers.base import LLMProvider
+from app.providers.factory import get_llm_provider
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryHitSummary(BaseModel):
@@ -70,11 +74,46 @@ class ReceiptPayload(BaseModel):
     lines: list[ReceiptLine]
 
 
+_OQ4_SYSTEM = """\
+You are the Aetherix F&B operations agent composing a daily Receipt for a hotel manager.
+
+Tone rules (OQ4 — PM-locked 19/04/2026):
+- Terse + sharp bullets + luxury feel
+- Never 1st-person narrative ("I predicted…", "I found…")
+- Always evidence-led bullets — cite the data source inline
+- At least one quantified comparative (vs baseline / vs similar nights) when data permits
+- End with explicit confidence on a single line: "Confidence: High / Medium / Low"
+- End with a single proactive follow-up offer as the last line
+- Maximum 7 bullet points total
+- No emojis
+- No verbose preamble — start directly with the bullets
+- Output plain text only, no markdown headers\
+"""
+
+_RECEIPT_NARRATIVE_PROMPT = """\
+Compose a daily Receipt message for {hotel_name} — {receipt_date}.
+
+Agent activity summary:
+- Total actions: {total_actions}
+- Breakdown by status: {counts_by_status}
+- Breakdown by tool: {counts_by_tool}
+- Memory hits (patterns that shaped recommendations): {memory_hit_count} hit(s) across {memory_hit_tools} tool call(s)
+
+Key actions (most recent first, max 5):
+{action_summary}
+
+Deep link for full breakdown: {drill_down_url}
+
+Write the Receipt message now.\
+"""
+
+
 class ReceiptsService:
     """Daily Receipt composer. Stateless beyond the injected DB session."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, llm: LLMProvider | None = None):
         self.db = db
+        self._llm: LLMProvider = llm or get_llm_provider()
 
     async def daily_receipt(
         self, hotel_id: str, target_date: date
@@ -157,3 +196,61 @@ class ReceiptsService:
         for line in lines:
             if line.request_id in hits_by_rid:
                 line.memory_hits = hits_by_rid[line.request_id]
+
+    async def compose_narrative(
+        self,
+        payload: ReceiptPayload,
+        hotel_name: str,
+        drill_down_url: str,
+    ) -> str:
+        """Compose an OQ4-tone WhatsApp Receipt narrative via LLMProvider.
+
+        Returns a plain-text string ready for Twilio / SendGrid dispatch.
+        Max 7 bullets, terse + luxury, evidence-led (PM-locked Decision #15 OQ4).
+        """
+        lines_with_hits = [ln for ln in payload.lines if ln.memory_hits]
+        memory_hit_count = sum(len(ln.memory_hits) for ln in lines_with_hits)
+
+        recent_lines = sorted(payload.lines, key=lambda ln: ln.timestamp, reverse=True)[:5]
+        action_summary_parts = []
+        for ln in recent_lines:
+            hit_note = f" [{len(ln.memory_hits)} memory hit(s)]" if ln.memory_hits else ""
+            action_summary_parts.append(
+                f"  - {ln.tool_name} | {ln.status}{hit_note}"
+            )
+        action_summary = "\n".join(action_summary_parts) or "  (no actions recorded)"
+
+        user_msg = _RECEIPT_NARRATIVE_PROMPT.format(
+            hotel_name=hotel_name,
+            receipt_date=payload.receipt_date.isoformat(),
+            total_actions=payload.total_actions,
+            counts_by_status=payload.counts_by_status,
+            counts_by_tool=payload.counts_by_tool,
+            memory_hit_count=memory_hit_count,
+            memory_hit_tools=len(lines_with_hits),
+            action_summary=action_summary,
+            drill_down_url=drill_down_url,
+        )
+
+        try:
+            narrative = await self._llm.complete(
+                messages=[{"role": "user", "content": user_msg}],
+                max_tokens=400,
+                temperature=0.2,
+                system=_OQ4_SYSTEM,
+            )
+        except Exception:
+            logger.exception(
+                "receipts: LLM narrative composition failed hotel_id=%s date=%s",
+                payload.hotel_id,
+                payload.receipt_date,
+            )
+            narrative = (
+                f"Daily Receipt — {payload.receipt_date}\n"
+                f"{hotel_name}\n\n"
+                f"• {payload.total_actions} agent action(s) recorded\n"
+                f"• Status breakdown: {payload.counts_by_status}\n\n"
+                f"Full breakdown: {drill_down_url}"
+            )
+
+        return narrative.strip()
