@@ -1,4 +1,4 @@
-"""Tests for scripts/check_schema_drift.py — HOS-150 AC8.
+"""Tests for scripts/ci/check_schema_drift.py — HOS-150 AC8.
 
 Covers:
   - Static SQL parser (CREATE TABLE, ALTER TABLE ADD/DROP/RENAME COLUMN)
