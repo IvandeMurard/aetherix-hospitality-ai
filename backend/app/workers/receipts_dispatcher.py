@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date, timezone
+from datetime import date
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select

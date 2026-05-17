@@ -211,7 +211,7 @@ class ReceiptsService:
         lines_with_hits = [ln for ln in payload.lines if ln.memory_hits]
         memory_hit_count = sum(len(ln.memory_hits) for ln in lines_with_hits)
 
-        recent_lines = sorted(payload.lines, key=lambda l: l.timestamp, reverse=True)[:5]
+        recent_lines = sorted(payload.lines, key=lambda ln: ln.timestamp, reverse=True)[:5]
         action_summary_parts = []
         for ln in recent_lines:
             hit_note = f" [{len(ln.memory_hits)} memory hit(s)]" if ln.memory_hits else ""
