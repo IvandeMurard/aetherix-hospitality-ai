@@ -1,4 +1,4 @@
-"""Phase 2 — Agent Receipts daily composer (P2-1, P2-2, P2-3).
+"""Phase 2 — Agent Receipts daily composer + inbound feedback parser.
 
 P2-1: `ReceiptsService.daily_receipt` reads `agent_action_log` for a (hotel_id, date)
       and returns a typed `ReceiptPayload`.
@@ -6,6 +6,9 @@ P2-2: Enriches each `ReceiptLine` with `memory_hits` — `operational_memory` ro
       written during that same tool call, linked via `request_id` backlink.
 P2-3: `compose_narrative` builds an OQ4-tone WhatsApp message from a ReceiptPayload
       using LLMProvider (Claude Sonnet). Terse + sharp bullets + luxury feel.
+P2-4: `parse_inbound` classifies a manager's WhatsApp reply into one of three intents:
+      structured_correction (regex) | free_form (Haiku) | acknowledge (regex).
+      Confidence logged via structured log. Auto-modified + thumbs-up prompt if < 0.6.
 
 Memory-hits enrichment uses a single second SELECT (batch by request_id set),
 not N+1 queries.
@@ -15,10 +18,12 @@ PM-locked decisions: CLAUDE.md Decision #15.
 """
 from __future__ import annotations
 
+import json
 import logging
+import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -72,6 +77,75 @@ class ReceiptPayload(BaseModel):
     counts_by_status: dict[str, int]
     counts_by_tool: dict[str, int]
     lines: list[ReceiptLine]
+
+
+# ---------------------------------------------------------------------------
+# P2-4: FeedbackIntent — inbound message classification
+# ---------------------------------------------------------------------------
+
+# Structured correction: "dinner covers 180", "covers: 80", "180 pax tonight"
+_COVERS_RE = re.compile(
+    r"(?:(?:dinner|lunch|breakfast|brunch|bar|room\s*service)\s+)?"
+    r"covers?\s*:?\s*(\d+)"
+    r"|(\d+)\s+(?:covers?|pax|guests?)",
+    re.IGNORECASE,
+)
+
+# Acknowledgement patterns — single-intent, no memory write needed
+_ACK_RE = re.compile(
+    r"^\s*(?:ok|okay|thanks?(?:\s+you)?|got\s+it|noted|sure|great|perfect|cool|"
+    r"merci|compris|bien\s+reçu|👍|✅|💪|🙏)\s*[!.]*\s*$",
+    re.IGNORECASE,
+)
+
+_HAIKU_CLASSIFIER_SYSTEM = """\
+You are a hotel operations assistant classifying a manager's WhatsApp reply to a daily operational Receipt.
+
+Classify the message into exactly one of these intents:
+- structured_correction: manager corrects a specific number (covers, guests, staff count)
+- free_form: manager adds context or correction that is not a simple number (events, changes, notes)
+- acknowledge: pure acknowledgement with no operational content (ok, thanks, noted, emoji only)
+
+Respond with a single JSON object only — no explanation, no markdown:
+{"intent": "<intent>", "confidence": <0.0-1.0>, "outcome": "modified", "actual_value": <number or null>, "notes": "<cleaned manager note or empty string>"}\
+"""
+
+_HAIKU_CLASSIFIER_USER = "Manager reply: {text}"
+
+# Low-confidence threshold: auto-downgrade + request thumbs-up confirmation (OQ2)
+_CONFIDENCE_THRESHOLD = 0.6
+
+
+class FeedbackIntent:
+    """Classification result from `ReceiptsService.parse_inbound`.
+
+    Attributes:
+        intent: One of ``structured_correction``, ``free_form``, ``acknowledge``.
+        outcome: Feedback outcome for `submit_feedback_to_memory` — always
+                 ``"modified"`` for P2-4 (manager is correcting, not accepting/rejecting).
+        actual_value: Extracted numeric value (covers, pax) or None.
+        notes: Cleaned free-text note for the memory reflection.
+        confidence: 1.0 for regex matches; Haiku classifier score for LLM path.
+        requires_confirmation: True when confidence < _CONFIDENCE_THRESHOLD.
+    """
+
+    __slots__ = ("intent", "outcome", "actual_value", "notes", "confidence",
+                 "requires_confirmation")
+
+    def __init__(
+        self,
+        intent: Literal["structured_correction", "free_form", "acknowledge"],
+        outcome: str,
+        actual_value: Optional[float],
+        notes: str,
+        confidence: float,
+    ) -> None:
+        self.intent = intent
+        self.outcome = outcome
+        self.actual_value = actual_value
+        self.notes = notes
+        self.confidence = confidence
+        self.requires_confirmation = confidence < _CONFIDENCE_THRESHOLD
 
 
 _OQ4_SYSTEM = """\
@@ -254,3 +328,100 @@ class ReceiptsService:
             )
 
         return narrative.strip()
+
+    async def parse_inbound(self, text: str) -> FeedbackIntent:
+        """Classify a manager's WhatsApp reply into a FeedbackIntent (P2-4).
+
+        Routing:
+          1. Acknowledge regex → ``acknowledge`` at confidence 1.0, no DB write.
+          2. Covers regex → ``structured_correction`` at confidence 1.0.
+          3. Haiku classifier → ``free_form`` or fallback.
+
+        Confidence is logged as a structured INFO line. If confidence < 0.6 the
+        caller must set ``outcome="modified"`` and request manager confirmation.
+        No migration required — confidence is captured in the memory reflection
+        string (ADR 0002) and the structured log.
+        """
+        stripped = text.strip()
+
+        # --- Pass 1: acknowledge ---
+        if _ACK_RE.match(stripped):
+            intent = FeedbackIntent(
+                intent="acknowledge",
+                outcome="ignored",
+                actual_value=None,
+                notes="",
+                confidence=1.0,
+            )
+            logger.info(
+                "receipts.parse_inbound: intent=acknowledge confidence=1.0 text=%r",
+                stripped[:80],
+            )
+            return intent
+
+        # --- Pass 2: structured correction (regex) ---
+        m = _COVERS_RE.search(stripped)
+        if m:
+            raw_val = m.group(1) or m.group(2)
+            actual = float(raw_val) if raw_val else None
+            intent = FeedbackIntent(
+                intent="structured_correction",
+                outcome="modified",
+                actual_value=actual,
+                notes=stripped,
+                confidence=1.0,
+            )
+            logger.info(
+                "receipts.parse_inbound: intent=structured_correction actual_value=%s confidence=1.0 text=%r",
+                actual,
+                stripped[:80],
+            )
+            return intent
+
+        # --- Pass 3: Haiku classifier ---
+        try:
+            raw = await self._llm.complete(
+                messages=[{"role": "user", "content": _HAIKU_CLASSIFIER_USER.format(text=stripped[:500])}],
+                max_tokens=120,
+                temperature=0.0,
+                system=_HAIKU_CLASSIFIER_SYSTEM,
+            )
+            # Strip markdown code fences if LLM wraps the JSON
+            clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            parsed = json.loads(clean)
+            llm_intent: str = parsed.get("intent", "free_form")
+            confidence: float = float(parsed.get("confidence", 0.5))
+            actual_val: Optional[float] = parsed.get("actual_value")
+            notes: str = parsed.get("notes", stripped)
+
+            if llm_intent not in ("structured_correction", "free_form", "acknowledge"):
+                llm_intent = "free_form"
+
+            intent = FeedbackIntent(
+                intent=llm_intent,  # type: ignore[arg-type]
+                outcome="modified",
+                actual_value=float(actual_val) if actual_val is not None else None,
+                notes=notes,
+                confidence=confidence,
+            )
+        except Exception:
+            logger.exception(
+                "receipts.parse_inbound: Haiku classifier failed, defaulting to free_form text=%r",
+                stripped[:80],
+            )
+            intent = FeedbackIntent(
+                intent="free_form",
+                outcome="modified",
+                actual_value=None,
+                notes=stripped,
+                confidence=0.5,
+            )
+
+        logger.info(
+            "receipts.parse_inbound: intent=%s confidence=%.2f requires_confirmation=%s text=%r",
+            intent.intent,
+            intent.confidence,
+            intent.requires_confirmation,
+            stripped[:80],
+        )
+        return intent
