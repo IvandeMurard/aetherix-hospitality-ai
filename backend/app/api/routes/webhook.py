@@ -1,12 +1,12 @@
-"""Twilio Inbound Webhook — Story 4.3 (HOS-26) + Story 5.1 (HOS-28) + Story 5.2 (HOS-29).
+"""Twilio Inbound Webhook — Story 4.3 (HOS-26) + Story 5.1 (HOS-28) + Story 5.2 (HOS-29) + P2-4 (HOS-170).
 
 Public endpoint: POST /webhooks/twilio/inbound
 
 Receives inbound SMS/WhatsApp messages forwarded by Twilio.
 - Accept / Reject → persisted immediately via ActionLoggerService.
-- Everything else  → acknowledged immediately; a BackgroundTask runs
-                     QueryParserService (store query) then
-                     ExplainabilityService (Claude → Twilio reply) (FR13, FR14).
+- Everything else  → P2-4 receipt feedback path (parse_inbound) first;
+                     falls back to QueryParserService / ExplainabilityService
+                     if no hotel profile found for the sender number.
 
 Security model
 --------------
@@ -38,11 +38,16 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, Header, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
+from app.db.models import RestaurantProfile, StaffingRecommendation
 from app.db.session import AsyncSessionLocal, get_db
+from app.integrations.twilio_client import TwilioClient
 from app.schemas.webhook import ActionType, TwilioInboundPayload
 from app.services.action_logger import ActionLoggerService, parse_action
 from app.services.explainability_service import ExplainabilityService
 from app.services.query_parser import QueryParserService
+from app.services.receipts import ReceiptsService
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +90,30 @@ _TWIML_QUERY_NO_CONTEXT = (
     "Please contact your F&B manager directly."
     "</Message></Response>"
 )
+
+# P2-4 (HOS-170): receipt feedback acknowledgements
+_TWIML_FEEDBACK_ACK = (
+    "<?xml version='1.0' encoding='UTF-8'?>"
+    "<Response><Message>"
+    "Noted. I've updated my records and will factor this into tomorrow's recommendations."
+    "</Message></Response>"
+)
+_TWIML_FEEDBACK_CONFIRM_REQUEST = (
+    "<?xml version='1.0' encoding='UTF-8'?>"
+    "<Response><Message>"
+    "I've recorded your note with medium confidence. "
+    "Reply with a thumbs-up to confirm, or ignore to discard."
+    "</Message></Response>"
+)
+_TWIML_FEEDBACK_ACKNOWLEDGE = (
+    "<?xml version='1.0' encoding='UTF-8'?>"
+    "<Response><Message>"
+    "Understood."
+    "</Message></Response>"
+)
+
+# Singleton Twilio client for outbound replies from background tasks
+_twilio_client = TwilioClient()
 
 _ACTION_TWIML: dict[ActionType, str] = {
     ActionType.accept: _TWIML_ACCEPT,
@@ -230,19 +259,137 @@ async def twilio_inbound_webhook(
         return _xml_response(_ACTION_TWIML[action])
 
     # -------------------------------------------------------------------
-    # Story 5.1 — conversational query: acknowledge immediately, parse in bg
+    # P2-4 — receipt feedback path: parse intent, write to memory in bg
+    # Falls back to legacy conversational query (Story 5.1) if hotel not found.
     # -------------------------------------------------------------------
     logger.info(
-        "twilio_inbound: conversational query from=%s body=%r — scheduling bg task",
+        "twilio_inbound: inbound from=%s body=%r — scheduling receipt feedback bg task",
         From,
         Body,
     )
     background_tasks.add_task(
-        _bg_parse_query,
+        _bg_receipt_feedback,
         from_number=payload.From_,
         body=payload.Body,
     )
     return _xml_response(_TWIML_QUERY_ACK)
+
+
+async def _bg_receipt_feedback(from_number: str, body: str) -> None:
+    """P2-4: classify inbound WhatsApp reply and write to operational_memory.
+
+    Routing:
+      1. Normalize phone number, look up RestaurantProfile.
+      2. If hotel not found → fall back to legacy _bg_parse_query path.
+      3. classify intent via ReceiptsService.parse_inbound.
+      4. acknowledge → send ack, no DB write.
+      5. structured_correction / free_form with confidence ≥ 0.6
+         → call tool_submit_feedback_to_memory, send confirmation.
+      6. free_form with confidence < 0.6
+         → write as outcome=modified, request thumbs-up confirmation.
+    """
+    import uuid as _uuid
+
+    normalised = from_number.replace("whatsapp:", "")
+
+    async with AsyncSessionLocal() as db:
+        # Step 1: resolve hotel from phone number
+        profile_result = await db.execute(
+            select(RestaurantProfile).where(
+                RestaurantProfile.phone_number == normalised
+            )
+        )
+        profile: RestaurantProfile | None = profile_result.scalars().first()
+
+        if profile is None:
+            logger.info(
+                "_bg_receipt_feedback: no profile for %s — falling back to conversational query",
+                from_number,
+            )
+            # Fall back to old path (Phase 1 conversational queries)
+            await _bg_parse_query(from_number=from_number, body=body)
+            return
+
+        hotel_id: str = profile.tenant_id
+
+        # Step 2: find most recent recommendation for context (recommendation_id arg)
+        rec_result = await db.execute(
+            select(StaffingRecommendation)
+            .where(
+                StaffingRecommendation.property_id == _uuid.UUID(str(profile.id)),
+                StaffingRecommendation.status.in_(["dispatched", "accepted", "rejected"]),
+            )
+            .order_by(
+                StaffingRecommendation.dispatched_at.desc().nullslast(),
+                StaffingRecommendation.created_at.desc(),
+            )
+            .limit(1)
+        )
+        recommendation: StaffingRecommendation | None = rec_result.scalars().first()
+        recommendation_id: str = str(recommendation.id) if recommendation else ""
+
+        # Step 3: classify intent
+        service = ReceiptsService(db)
+        feedback = await service.parse_inbound(body)
+
+        if feedback.intent == "acknowledge":
+            logger.info(
+                "_bg_receipt_feedback: acknowledge hotel_id=%s — no DB write", hotel_id
+            )
+            try:
+                await _twilio_client.send_whatsapp(from_number, "Understood.")
+            except Exception:
+                logger.warning("_bg_receipt_feedback: ack reply failed for %s", from_number)
+            return
+
+        # Step 4: write to operational_memory via tool_submit_feedback_to_memory
+        if recommendation_id:
+            from app.mcp_server import tool_submit_feedback_to_memory
+
+            notes_text = feedback.notes
+            if feedback.actual_value is not None:
+                notes_text = f"actual={feedback.actual_value} {notes_text}".strip()
+
+            try:
+                result = await tool_submit_feedback_to_memory(
+                    hotel_id=hotel_id,
+                    recommendation_id=recommendation_id,
+                    outcome=feedback.outcome,
+                    db=db,
+                    actual_value=feedback.actual_value,
+                    notes=notes_text,
+                )
+                await db.commit()
+                logger.info(
+                    "_bg_receipt_feedback: memory written hotel_id=%s result=%s confidence=%.2f",
+                    hotel_id,
+                    result.get("status"),
+                    feedback.confidence,
+                )
+            except Exception:
+                logger.exception(
+                    "_bg_receipt_feedback: memory write failed hotel_id=%s", hotel_id
+                )
+        else:
+            logger.warning(
+                "_bg_receipt_feedback: no recommendation found hotel_id=%s — skipping memory write",
+                hotel_id,
+            )
+
+    # Step 5: Twilio reply based on confidence
+    try:
+        if feedback.requires_confirmation:
+            reply = (
+                "I've recorded your note with medium confidence. "
+                "Reply with a thumbs-up to confirm, or ignore to discard."
+            )
+        else:
+            reply = "Noted. I've updated my records and will factor this into tomorrow's recommendations."
+        await _twilio_client.send_whatsapp(from_number, reply)
+    except Exception:
+        logger.warning(
+            "_bg_receipt_feedback: reply send failed for %s", from_number
+        )
 
 
 async def _bg_parse_query(
