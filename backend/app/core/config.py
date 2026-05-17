@@ -47,6 +47,14 @@ TWILIO_SKIP_SIGNATURE_VALIDATION: bool = (
 # When set, overrides X-Forwarded-Proto / X-Forwarded-Host header inference.
 TWILIO_WEBHOOK_BASE_URL: str = _os.getenv("TWILIO_WEBHOOK_BASE_URL", "")
 
+# ─── Phase 2 Receipts (P2-3) ─────────────────────────────────────────────────
+# Hour (0–23) at which the daily Receipt is dispatched, in RECEIPT_TIMEZONE.
+RECEIPT_DISPATCH_HOUR: int = int(_os.getenv("RECEIPT_DISPATCH_HOUR", "18"))
+# IANA timezone name for receipt dispatch scheduling (e.g. "Europe/Paris").
+RECEIPT_TIMEZONE: str = _os.getenv("RECEIPT_TIMEZONE", "UTC")
+# Base URL of the frontend — used to build deep links in WhatsApp messages.
+FRONTEND_BASE_URL: str = _os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+
 # ─── Demo Mode ────────────────────────────────────────────────────────────────
 # When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
 # and loads synthetic Prophet training data from demo_data/prophet_training.json.
