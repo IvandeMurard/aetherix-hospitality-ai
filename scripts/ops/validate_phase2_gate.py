@@ -38,7 +38,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 # Allow running from repo root or scripts/ -- add backend/ to sys.path
-_BACKEND = Path(__file__).resolve().parent.parent / "backend"
+_BACKEND = Path(__file__).resolve().parent.parent.parent / "backend"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
