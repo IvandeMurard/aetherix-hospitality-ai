@@ -15,8 +15,7 @@ Covered:
 """
 from __future__ import annotations
 
-import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -131,7 +130,6 @@ async def test_dispatch_sends_whatsapp_when_phone_set():
 
     hotel = _FakeHotel(phone_number="+33612345678")
     payload = _make_payload()
-    mock_db = AsyncMock()
 
     mock_service = AsyncMock(spec=ReceiptsService)
     mock_service.daily_receipt = AsyncMock(return_value=payload)
@@ -234,8 +232,6 @@ async def test_run_receipt_dispatch_skips_hotels_without_contact():
     result_mock = MagicMock()
     result_mock.scalars.return_value.all.return_value = [no_contact_hotel]
     mock_session.execute = AsyncMock(return_value=result_mock)
-
-    call_count = {"n": 0}
 
     async def fake_session_ctx():
         return _AsyncSessionCtx(mock_session)
