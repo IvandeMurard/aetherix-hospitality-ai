@@ -31,6 +31,9 @@ _TOOL_SCOPE = {
 # Separate admin scope for destructive / model-mutating operations (HOS-149 AC4)
 ADMIN_TRAIN_SCOPE = "admin:train"
 
+# P2-6: Receipt drill-down read scope (HOS-172 OQ3)
+RECEIPTS_READ_SCOPE = "receipts:read"
+
 # In-memory fallback bucket; prod uses Redis (ADR D6) wired in v1.
 _LOCAL_BUCKETS: dict[str, tuple[int, int]] = {}
 

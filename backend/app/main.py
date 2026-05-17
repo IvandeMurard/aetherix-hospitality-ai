@@ -27,6 +27,7 @@ from app.api.routes import (
     notifications,
     pms,
     predictions,
+    receipts as receipts_route,
     reports,
     roi,
     weather,
@@ -190,6 +191,8 @@ app.include_router(baselines.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
 # P0-3 public ROI simulator — stateless, public, rate-limited at the edge
 app.include_router(roi.router, prefix="/api/v1")
+# P2-6 Receipt drill-down — MCP bearer + receipts:read scope (HOS-172)
+app.include_router(receipts_route.router, prefix="/api/v1")
 # P1-2 Aetherix MCP Server v0 — inbound, agent-callable (ADR 0001 · HOS-71)
 app.include_router(mcp.router)
 # Demo observability board — always registered, returns 503 when DEMO_MODE=false
