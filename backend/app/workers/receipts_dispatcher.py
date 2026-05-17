@@ -1,4 +1,4 @@
-"""Phase 2 — Daily Receipt dispatcher (P2-3, HOS-169).
+"""Phase 2 — Daily Receipt dispatcher + Weekly KPI digest (P2-3 + P2-5).
 
 APScheduler cron job that fires daily at RECEIPT_DISPATCH_HOUR (default 18:00)
 in RECEIPT_TIMEZONE (default UTC). For each active hotel with a phone number:
@@ -175,6 +175,126 @@ def register_receipt_dispatch_job(scheduler: AsyncIOScheduler) -> None:
     )
     logger.info(
         "receipts_dispatcher: cron job registered (daily at %02d:00 %s)",
+        config.RECEIPT_DISPATCH_HOUR,
+        config.RECEIPT_TIMEZONE,
+    )
+
+
+async def _dispatch_weekly_digest_for_hotel(
+    service: ReceiptsService,
+    hotel: RestaurantProfile,
+    week_end: date,
+) -> None:
+    """Build and send one weekly KPI digest for a single hotel (P2-5)."""
+    hotel_id: str = hotel.tenant_id
+    hotel_name: str = hotel.property_name or hotel.outlet_name or hotel_id
+
+    payload = await service.weekly_digest(hotel_id, week_end)
+    narrative = await service.compose_weekly_narrative(payload, hotel_name)
+
+    subject = f"Weekly Digest — {hotel_name} — week of {payload.week_start}"
+
+    if hotel.phone_number:
+        try:
+            sid = await _twilio.send_whatsapp(hotel.phone_number, narrative)
+            logger.info(
+                "weekly_digest: WhatsApp sent hotel_id=%s week_end=%s sid=%s",
+                hotel_id, week_end, sid,
+            )
+        except NotConfiguredError:
+            logger.warning(
+                "weekly_digest: Twilio not configured — skipping WhatsApp hotel_id=%s", hotel_id
+            )
+        except Exception:
+            logger.exception(
+                "weekly_digest: WhatsApp send failed hotel_id=%s week_end=%s", hotel_id, week_end
+            )
+
+    if hotel.notification_email:
+        try:
+            await _sendgrid.send_email(hotel.notification_email, subject, narrative)
+            logger.info(
+                "weekly_digest: email sent hotel_id=%s week_end=%s to=%s",
+                hotel_id, week_end, hotel.notification_email,
+            )
+        except NotConfiguredError:
+            logger.debug(
+                "weekly_digest: SendGrid not configured — skipping email hotel_id=%s", hotel_id
+            )
+        except Exception:
+            logger.exception(
+                "weekly_digest: email send failed hotel_id=%s week_end=%s", hotel_id, week_end
+            )
+
+
+async def _run_weekly_digest_job() -> None:
+    """Entry point called every Sunday by APScheduler at RECEIPT_DISPATCH_HOUR (P2-5)."""
+    job_id = str(uuid.uuid4())[:8]
+    week_end = date.today()
+    logger.info("weekly_digest: started job_id=%s week_end=%s", job_id, week_end)
+
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(RestaurantProfile).where(RestaurantProfile.is_active.is_(True))
+            )
+            hotels = result.scalars().all()
+
+        dispatched = 0
+        skipped = 0
+        for hotel in hotels:
+            if not hotel.phone_number and not hotel.notification_email:
+                skipped += 1
+                continue
+            async with AsyncSessionLocal() as db:
+                service = ReceiptsService(db)
+                try:
+                    await _dispatch_weekly_digest_for_hotel(service, hotel, week_end)
+                    dispatched += 1
+                except Exception:
+                    logger.exception(
+                        "weekly_digest: dispatch failed hotel_id=%s job_id=%s",
+                        hotel.tenant_id, job_id,
+                    )
+
+        logger.info(
+            "weekly_digest: complete job_id=%s dispatched=%d skipped=%d",
+            job_id, dispatched, skipped,
+        )
+
+    except Exception as exc:
+        logger.exception("weekly_digest: fatal error job_id=%s", job_id)
+        try:
+            from app.services.ops_dispatcher import dispatch_error
+
+            await dispatch_error(
+                title="weekly_digest job failed",
+                detail=f"Weekly KPI digest failed. job_id={job_id}. Error: {exc!r}",
+                tags=["weekly_digest", "worker"],
+            )
+        except Exception as inner:  # noqa: BLE001
+            logger.warning("weekly_digest: dispatch_error failed: %s", inner)
+        raise
+
+
+def register_weekly_digest_job(scheduler: AsyncIOScheduler) -> None:
+    """Register the Sunday weekly KPI digest cron job on the shared scheduler (P2-5).
+
+    Fires every Sunday at RECEIPT_DISPATCH_HOUR in RECEIPT_TIMEZONE.
+    """
+    scheduler.add_job(
+        _run_weekly_digest_job,
+        trigger="cron",
+        day_of_week="sun",
+        hour=config.RECEIPT_DISPATCH_HOUR,
+        minute=0,
+        timezone=config.RECEIPT_TIMEZONE,
+        id="weekly_digest",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info(
+        "weekly_digest: cron job registered (every Sunday at %02d:00 %s)",
         config.RECEIPT_DISPATCH_HOUR,
         config.RECEIPT_TIMEZONE,
     )
