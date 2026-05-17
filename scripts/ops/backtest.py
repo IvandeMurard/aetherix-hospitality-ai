@@ -49,7 +49,7 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-REPO_ROOT = Path(__file__).parent.parent
+REPO_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "backend"))
 
 DEMO_DATA = REPO_ROOT / "demo_data" / "prophet_training.json"

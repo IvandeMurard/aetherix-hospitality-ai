@@ -9,19 +9,19 @@ import sys
 from dotenv import load_dotenv
 
 # Add backend to path for imports
-backend_path = Path(__file__).parent.parent / "backend"
+backend_path = Path(__file__).parent.parent.parent / "backend"
 sys.path.insert(0, str(backend_path.parent))
 
 # Load .env
-env_path = Path(__file__).parent.parent / ".env"
+env_path = Path(__file__).parent.parent.parent / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 
 from backend.ml.prediction_engine import PredictionEngine
 
 # Config
-TRAINING_DATA_CSV = Path(__file__).parent.parent / "backend" / "data" / "training_data.csv"
-MODEL_PATH = Path(__file__).parent.parent / "backend" / "ml" / "models" / "prophet_model.json"
+TRAINING_DATA_CSV = Path(__file__).parent.parent.parent / "backend" / "data" / "training_data.csv"
+MODEL_PATH = Path(__file__).parent.parent.parent / "backend" / "ml" / "models" / "prophet_model.json"
 
 
 def main():
