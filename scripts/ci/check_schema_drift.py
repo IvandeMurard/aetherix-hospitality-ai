@@ -44,7 +44,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-_ROOT = Path(__file__).parent.parent
+_ROOT = Path(__file__).parent.parent.parent  # scripts/ci/ → scripts/ → repo root
 _BACKEND = _ROOT / "backend"
 _DEFAULT_SQL_DIR = _ROOT / "supabase" / "migrations"
 _DEFAULT_IGNORE_FILE = Path(__file__).parent / "schema_drift_ignore.json"

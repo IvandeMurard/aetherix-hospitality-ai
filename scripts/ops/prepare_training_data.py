@@ -12,14 +12,14 @@ from typing import List, Dict
 from dotenv import load_dotenv
 
 # Load .env from project root
-env_path = Path(__file__).parent.parent / ".env"
+env_path = Path(__file__).parent.parent.parent / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 
 # Config
 COLLECTION_NAME = "fb_patterns"  # Utiliser fb_patterns comme dans le projet
-DATA_SOURCE_JSON = Path(__file__).parent.parent / "backend" / "data" / "processed" / "patterns.json"
-OUTPUT_CSV = Path(__file__).parent.parent / "backend" / "data" / "training_data.csv"
+DATA_SOURCE_JSON = Path(__file__).parent.parent.parent / "backend" / "data" / "processed" / "patterns.json"
+OUTPUT_CSV = Path(__file__).parent.parent.parent / "backend" / "data" / "training_data.csv"
 
 
 def fetch_patterns_from_qdrant() -> List[Dict]:
