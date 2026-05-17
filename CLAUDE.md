@@ -53,6 +53,7 @@
 | 15 | Phase 2 "Receipts" — scope locké 19/04/2026 | Channel = WhatsApp primary + email opt-in (SendGrid). Inbound classifier = Haiku, log confidence, auto-`modified` si <0.6. Auth web drill-down = MCP bearer + scope `receipts:read`. Tone = terse + sharp bullets + luxury feel (driver principal, données quantitatives, evidence historique, confidence, follow-up proactif). Gate = two-track : (a) technical-ship sur Apaleo Sandbox (round-trip daily Receipt + feedback→memory + 4 Sundays digest) ; (b) trust-signal (US-7 ablation) reporté au premier pilote réel. Détail → `docs/planning/phase-2-agent-receipts.md` |
 | 16 | Schema drift gate CI obligatoire (Epic 9 retro 14/05/2026) | Invariant **"ORM = miroir exact des migrations"**. Tout merge bloqué si une colonne du modèle SQLAlchemy n'existe pas en DB (ou inverse). Découvert via Epic 9 (HOS-148) : 3 bugs silencieux résolus. Implémentation : `scripts/check_schema_drift.py` + `scripts/schema_drift_ignore.json`. Convention IDs : `docs/context/data-conventions.md`. |
 | 17 | Hébergement Fly.io (14/05/2026) | Backend déployé sur Fly.io, région `cdg` (Paris). 1 instance always-on (`min_machines_running=1`) — requis par APScheduler in-process. Image Docker Python 3.12 + uv multi-stage. Secrets via `flyctl secrets set` (jamais commités). Latence Paris ↔ Supabase Stockholm ~30ms (acceptable Phase 0). URL staging : `https://aetherix-backend.fly.dev`. Détail déploiement : `docs/secrets_handling.md`. Remplace l'ancienne contrainte "local Windows / GitHub uniquement". |
+| 18 | Phase 3 cut serré + portfolio reinforcement (17/05/2026) | Phase 3 scope = Pilot Validation **uniquement** (Track A) + Portfolio Reinforcement (Track B). Multi-hotel / Mews / cross-property dashboard / food waste → Phase 4 (Scale). Track B = over-engineering volontaire pour hiring signal : Hive Memory algorithm (k-means + shapelet + LLM persona, MCP tool exposé), Paris Open Data MCP node (`que-faire-a-paris` → pgvector → MCP tool callable par agents externes), 1 article technique public. Tacet MCP wrapping = repo séparé hors Linear Aetherix. Mews partnership form à soumettre Day 1 Phase 3 (latence partner approval). Détail → `docs/planning/phase-3-pilot-validation.md`. Epic 10 = HOS-174, 9 stories P3-1→P3-9. |
 
 ---
 
@@ -64,17 +65,18 @@
 | Phase 1 | ✅ Done (19/04/2026) | MCP Server v0 + ADR 0003 observability (agent_action_log, Redis rate-limiter, MV refresh) + memory instrumentation (Mistral 1024d embeddings, 2-pass dedup). PR #73 merged. |
 | Phase 0 (deploy) | ✅ Done (15/05/2026) | Staging Fly.io live (`aetherix-backend.fly.dev`). Smoke test E2E 5/5 PASS (Apaleo skip). Epic 9 hardening fermé (14 stories + 3 sub-HOS-159). Sécurité : HOS-111 RLS 14/14 tables + HOS-112 webhook HMAC. Reste gates non-techniques : sign-off PM runbook + pre-pilot checklist. |
 | Phase 2 | ✅ Done (17/05/2026) | Agent "Receipts" — 7 stories P2-1→P2-7 mergées. Daily Receipt + WhatsApp + email + inbound feedback parser (Haiku) + weekly KPI digest + web drill-down + Track A gate. Track B (trust-KPI) reporté Phase 3. |
-| Phase 3 | Planifié | Multi-hotel, Mews, analytics avancés, pilote réel + trust-KPI measurement |
-| Phase 4 | Vision long-terme | Agentic Hospitality Mesh — Revenue Orchestration Agent + MCP-native design pipeline. Détail → `docs/context/vision-future.md` |
+| Phase 3 | Planifié (kickoff 17/05/2026) | Pilot Validation + Portfolio Reinforcement. Track A : 1 design partner Apaleo prod + US-7 ablation (trust-KPI) + pricing decision + Apaleo Agent Hub listing. Track B (slight over-engineering volontaire) : Hive Memory algorithm v1 + Paris Open Data MCP node + technical write-up. Epic 10 = HOS-174, 9 stories P3-1→P3-9. Détail → `docs/planning/phase-3-pilot-validation.md` |
+| Phase 4 | Renuméroté — Scale & Distribution | Mews integration (PMS #2, form partner à lancer Day 1 Phase 3), cross-property dashboard (HOS-95-98 existants), food waste KPI instrumentation, multi-tenant production hardening au-delà du 1er pilote |
+| Phase 5 | Vision long-terme (ex-Phase 4) | Agentic Hospitality Mesh — Revenue Orchestration Agent + MCP-native design pipeline. Détail → `docs/context/vision-future.md` |
 | Phase MCP | ✅ Intégré Phase 0/1 | MCP Server v0 shipped (HOS-71). v1 (FastMCP SDK) quand besoin progress/capability-negotiation. |
 
 ---
 
 ## Décisions ouvertes (à trancher)
 
-- [ ] **Embedding strategy** : pgvector vs Qdrant pour RAG (Qdrant préféré actuellement mais réévaluer si multi-tenant)
-- [ ] **Pricing model** : par hôtel / par prédiction / hybrid — non décidé
-- [ ] **PMS priorité live** : Apaleo (sandbox dispo, API-first) vs Mews (vision alignée, marketplace)
+- [ ] **Embedding strategy** : pgvector vs Qdrant pour RAG (à re-évaluer Phase 4 quand multi-tenant + Hive Memory à scale ; pour l'instant pgvector reste suffisant)
+- [ ] **Pricing model** : par hôtel / par prédiction / hybrid — tracking Linear HOS-179 (P3-5), décision après 90j data pilote
+- [x] **PMS priorité live (RÉSOLU 17/05/2026)** : Apaleo prod Phase 3 (1 design partner, HOS-176). Mews déplacé Phase 4 + form partner à soumettre Day 1 Phase 3 (latence approval).
 - [x] **MCP server (RÉSOLU 19/04/2026)** : FastAPI endpoint dédié retenu — `/mcp/v0` mounted sur l'app principale (lifespan partagé, ADR D2). Shippé via PR #73. Sidecar process rejeté (coût ops, pas de bénéfice latence observé).
 - [x] **Apaleo MCP direct (31/03/2026 — RÉSOLU)** : URL confirmée `https://mcp.apaleo.com/mcp/`, transport HTTP Streamable (SSE déprécié — notre `streamablehttp_client` est correct). Scope MCP activé sur le compte (code IIQJ). Auth OAuth2 bearer identique à la raw API. Activer via `POST /pms/sync?use_mcp=true` + `APALEO_MCP_SERVER_URL=https://mcp.apaleo.com/mcp/` dans `.env`.
 - [x] **ROI dashboard vs WhatsApp (RÉSOLU implicitement post-Phase 1)** : WhatsApp primary retenu (cf. Decision #15 OQ1 — Receipts channel = WhatsApp + email opt-in). Dashboard différé Phase 3+ si adoption le justifie.
