@@ -22,7 +22,7 @@ services:
       - ./backend:/app
       - ./scripts:/scripts
       - fastapi-venv:/app/.venv
-      - ./local-shared-data:/app/shared-data
+      - ./frontend/shared-data:/app/shared-data
       # Obsidian vault — bind-mount via env var so any host path works.
       # Set OBSIDIAN_VAULT_PATH in .env to your local vault path.
       - "${OBSIDIAN_VAULT_PATH:-/tmp/vault}:/vault"
@@ -69,7 +69,6 @@ services:
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules
-      - ./local-shared-data:/app/shared-data
     depends_on:
       - backend
 

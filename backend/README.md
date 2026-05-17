@@ -201,7 +201,6 @@ aetherix/
 ├── docs/                    # Architecture, roadmap, BMAD methodology
 ├── scripts/                 # Dev & ops utility scripts
 ├── supabase/                # DB migrations
-├── local-shared-data/       # OpenAPI spec shared between backend & frontend
 ├── docker-compose.yml       # Local dev: backend + frontend + postgres + mailhog
 └── archive/                 # Legacy code (pre-FastAPI era) — not used in production
 ```
