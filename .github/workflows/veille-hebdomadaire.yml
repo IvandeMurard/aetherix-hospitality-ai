@@ -79,8 +79,8 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then
             FLAGS="$FLAGS --dry-run"
           fi
-          echo "🚀 Lancement : python scripts/veille_proactive.py $FLAGS"
-          python scripts/veille_proactive.py $FLAGS
+          echo "🚀 Lancement : python scripts/ops/veille_proactive.py $FLAGS"
+          python scripts/ops/veille_proactive.py $FLAGS
 
       - name: Commit draft to repository
         if: ${{ github.event.inputs.dry_run != 'true' }}
@@ -171,7 +171,7 @@ jobs:
           LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
         run: |
           echo "📤 Push Linear depuis : ${{ steps.find_draft.outputs.draft_path }}"
-          python scripts/veille_proactive.py --push-linear "${{ steps.find_draft.outputs.draft_path }}"
+          python scripts/ops/veille_proactive.py --push-linear "${{ steps.find_draft.outputs.draft_path }}"
 
       - name: Rename draft to final report
         run: |
