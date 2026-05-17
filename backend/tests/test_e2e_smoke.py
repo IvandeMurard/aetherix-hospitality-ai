@@ -437,20 +437,7 @@ class TestTwilioInboundConversationalPath:
         app = _webhook_app()
         app.dependency_overrides[get_db] = _noop_db
 
-        mock_explainer_instance = AsyncMock()
-        mock_explainer_instance.generate_and_send = AsyncMock(
-            return_value={"status": "sent"}
-        )
-        mock_explainer_cls = MagicMock(return_value=mock_explainer_instance)
-
-        with patch("app.api.routes.webhook.QueryParserService") as MockParser, \
-             patch("app.api.routes.webhook.ExplainabilityService", mock_explainer_cls):
-            mock_parser_instance = AsyncMock()
-            mock_parser_instance.parse_and_store = AsyncMock(
-                return_value={"status": "stored", "query_id": str(uuid.uuid4())}
-            )
-            MockParser.return_value = mock_parser_instance
-
+        with patch("app.api.routes.webhook._bg_receipt_feedback", new_callable=AsyncMock):
             with TestClient(app) as client:
                 resp = client.post(
                     "/webhooks/twilio/inbound",
@@ -459,7 +446,7 @@ class TestTwilioInboundConversationalPath:
 
         assert resp.status_code == 200
         assert "application/xml" in resp.headers.get("content-type", "")
-        # Should return the query-ack TwiML (not ACCEPT/REJECT)
+        # P2-4: all non-action messages route through receipt feedback bg task
         assert "looking into it" in resp.text or "Got your question" in resp.text
 
 

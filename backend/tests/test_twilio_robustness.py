@@ -347,7 +347,7 @@ class TestBgParseQueryIsolatedSession:
         mock_session_factory.assert_called_once()
 
     def test_route_does_not_forward_request_session_to_bg_task(self, monkeypatch):
-        """The webhook route must schedule _bg_parse_query without a db kwarg."""
+        """P2-4: The webhook route must schedule _bg_receipt_feedback without a db kwarg."""
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
         from app.api.routes.webhook import router
         from app.db.session import get_db
@@ -360,19 +360,7 @@ class TestBgParseQueryIsolatedSession:
 
         app.dependency_overrides[get_db] = _noop_db
 
-        mock_session = AsyncMock()
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
-
-        with patch("app.api.routes.webhook.AsyncSessionLocal", return_value=mock_session), \
-             patch("app.api.routes.webhook.QueryParserService") as MockParser, \
-             patch("app.api.routes.webhook.ExplainabilityService"):
-            mock_parser = AsyncMock()
-            mock_parser.parse_and_store = AsyncMock(
-                return_value={"status": "duplicate"}
-            )
-            MockParser.return_value = mock_parser
-
+        with patch("app.api.routes.webhook._bg_receipt_feedback", new_callable=AsyncMock) as mock_bg:
             with TestClient(app) as client:
                 resp = client.post(
                     "/webhooks/twilio/inbound",
@@ -380,3 +368,7 @@ class TestBgParseQueryIsolatedSession:
                 )
 
         assert resp.status_code == 200
+        # Verify the bg task was scheduled with from_number and body, no db kwarg
+        mock_bg.assert_awaited_once()
+        call_kwargs = mock_bg.await_args.kwargs
+        assert "db" not in call_kwargs
