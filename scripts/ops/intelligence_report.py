@@ -52,7 +52,7 @@ load_env()
 
 # ─── Configuration ────────────────────────────────────────────────────────────
 
-REPO_ROOT  = Path(__file__).parent.parent.resolve()
+REPO_ROOT  = Path(__file__).parent.parent.parent.resolve()
 VAULT_ROOT = Path(os.environ.get(
     "OBSIDIAN_VAULT_PATH",
     r"C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality",

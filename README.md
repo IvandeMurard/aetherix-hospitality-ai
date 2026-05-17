@@ -187,12 +187,17 @@ aetherix/
 │       ├── app/             # Pages: dashboard, settings, auth
 │       ├── components/      # shadcn/ui + feature components
 │       └── lib/             # openapi-fetch generated API client
-├── docs/                    # Architecture, roadmap, BMAD methodology
+├── docs/                    # Architecture, ADRs, planning, context docs
+│   ├── internal/            # Internal process docs & retrospectives
+│   └── assets/              # Diagrams, logos, visual assets
 ├── scripts/                 # Dev & ops utility scripts
+│   ├── ci/                  # Quality gates: schema drift, RLS audit, smoke tests
+│   ├── ops/                 # Operational: backtest, veille, Prophet training
+│   └── deploy/              # Fly.io deployment helpers
 ├── supabase/                # DB migrations
 ├── local-shared-data/       # OpenAPI spec shared between backend & frontend
 ├── docker-compose.yml       # Local dev: backend + frontend + postgres + mailhog
-└── archive/                 # Legacy code (pre-FastAPI era) — not used in production
+└── archive/                 # Legacy code & archived scripts — not used in production
 ```
 
 ---
