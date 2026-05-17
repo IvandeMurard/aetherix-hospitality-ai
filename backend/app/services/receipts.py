@@ -1,4 +1,4 @@
-"""Phase 2 — Agent Receipts daily composer + inbound feedback parser.
+"""Phase 2 — Agent Receipts daily composer + inbound feedback parser + weekly digest.
 
 P2-1: `ReceiptsService.daily_receipt` reads `agent_action_log` for a (hotel_id, date)
       and returns a typed `ReceiptPayload`.
@@ -9,6 +9,9 @@ P2-3: `compose_narrative` builds an OQ4-tone WhatsApp message from a ReceiptPayl
 P2-4: `parse_inbound` classifies a manager's WhatsApp reply into one of three intents:
       structured_correction (regex) | free_form (Haiku) | acknowledge (regex).
       Confidence logged via structured log. Auto-modified + thumbs-up prompt if < 0.6.
+P2-5: `weekly_digest` aggregates the 3 Niveau-2 KPIs (tool success rate, memory writes,
+      agent errors) from `agent_action_log` + `memory_instrumentation_daily` MV for
+      the past 7 days. `compose_weekly_narrative` formats the result OQ4-style.
 
 Memory-hits enrichment uses a single second SELECT (batch by request_id set),
 not N+1 queries.
@@ -26,7 +29,7 @@ from datetime import date, datetime, time, timezone
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AgentActionLog, OperationalMemory
@@ -146,6 +149,62 @@ class FeedbackIntent:
         self.notes = notes
         self.confidence = confidence
         self.requires_confirmation = confidence < _CONFIDENCE_THRESHOLD
+
+
+# ---------------------------------------------------------------------------
+# P2-5: WeeklyDigestPayload — weekly KPI aggregates
+# ---------------------------------------------------------------------------
+
+class WeeklyDigestPayload(BaseModel):
+    """Weekly KPI digest for one hotel covering the past 7 days.
+
+    KPIs are derived from available data sources:
+    - tool_success_rate_pct: fraction of ok calls in agent_action_log (proxy for reliability)
+    - memory_writes_week: total operational_memory rows written (memory adoption)
+    - memory_pending_pct: % writes still awaiting embedding (data quality indicator)
+    - agent_error_count: total non-ok agent_action_log rows (incident count proxy)
+
+    MAPE and labor_cost_variance require PMS actual data — deferred to live pilot (Phase 3).
+    """
+
+    hotel_id: str
+    week_start: date
+    week_end: date
+    generated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    total_agent_actions: int
+    tool_success_rate_pct: float  # 0–100
+    agent_error_count: int
+    memory_writes_week: int
+    memory_pending_pct: float  # 0–100; 0.0 if no MV data
+
+
+_WEEKLY_NARRATIVE_SYSTEM = """\
+You are the Aetherix F&B operations agent composing a weekly KPI digest for a hotel manager.
+
+Tone rules (OQ4 — PM-locked 19/04/2026):
+- Terse + sharp bullets + luxury feel
+- Never 1st-person narrative
+- Always evidence-led bullets with quantified data
+- End with explicit trend indicator: Trending Up / Stable / Trending Down
+- End with a single proactive follow-up offer
+- Maximum 6 bullet points
+- No emojis, no markdown headers, plain text only\
+"""
+
+_WEEKLY_NARRATIVE_PROMPT = """\
+Compose a weekly KPI digest for {hotel_name} — week of {week_start} to {week_end}.
+
+Agent activity this week:
+- Total agent actions: {total_actions}
+- Tool success rate: {success_rate:.1f}%
+- Errors / non-ok calls: {error_count}
+- Memory writes (new feedback & reflections): {memory_writes}
+- Memory pending embedding: {memory_pending:.1f}%
+
+Write the weekly digest now.\
+"""
 
 
 _OQ4_SYSTEM = """\
@@ -425,3 +484,105 @@ class ReceiptsService:
             stripped[:80],
         )
         return intent
+
+    async def weekly_digest(
+        self, hotel_id: str, week_end: date
+    ) -> WeeklyDigestPayload:
+        """Build a WeeklyDigestPayload for `hotel_id` covering the 7 days ending on `week_end` (P2-5).
+
+        Queries:
+          1. `agent_action_log` — total actions + status breakdown for the week.
+          2. `memory_instrumentation_daily` MV — total writes + pending_pct for the week.
+
+        MAPE and labor_cost_variance require live PMS actuals — deferred to Phase 3.
+        """
+        from datetime import timedelta
+
+        week_start = week_end - timedelta(days=6)
+        day_start = datetime.combine(week_start, time.min, tzinfo=timezone.utc)
+        day_end = datetime.combine(week_end, time.max, tzinfo=timezone.utc)
+
+        # 1. agent_action_log aggregates for the week
+        log_result = await self.db.execute(
+            select(AgentActionLog)
+            .where(AgentActionLog.hotel_id == hotel_id)
+            .where(AgentActionLog.created_at >= day_start)
+            .where(AgentActionLog.created_at <= day_end)
+        )
+        log_rows = log_result.scalars().all()
+
+        total_actions = len(log_rows)
+        ok_count = sum(1 for r in log_rows if r.status == "ok")
+        error_count = total_actions - ok_count
+        success_rate = (ok_count / total_actions * 100.0) if total_actions > 0 else 0.0
+
+        # 2. memory_instrumentation_daily MV — raw SQL (no ORM model for MV)
+        mv_result = await self.db.execute(
+            text(
+                "SELECT COALESCE(SUM(writes), 0) AS total_writes, "
+                "COALESCE(AVG(pending_pct), 0) AS avg_pending_pct "
+                "FROM memory_instrumentation_daily "
+                "WHERE hotel_id = :hotel_id AND date BETWEEN :week_start AND :week_end"
+            ),
+            {"hotel_id": hotel_id, "week_start": week_start, "week_end": week_end},
+        )
+        mv_row = mv_result.fetchone()
+        memory_writes = int(mv_row[0]) if mv_row else 0
+        memory_pending_pct = float(mv_row[1]) if mv_row else 0.0
+
+        return WeeklyDigestPayload(
+            hotel_id=hotel_id,
+            week_start=week_start,
+            week_end=week_end,
+            total_agent_actions=total_actions,
+            tool_success_rate_pct=round(success_rate, 1),
+            agent_error_count=error_count,
+            memory_writes_week=memory_writes,
+            memory_pending_pct=round(memory_pending_pct, 1),
+        )
+
+    async def compose_weekly_narrative(
+        self,
+        payload: WeeklyDigestPayload,
+        hotel_name: str,
+    ) -> str:
+        """Compose an OQ4-tone weekly digest message via LLMProvider (P2-5).
+
+        Returns a plain-text string ready for Twilio / SendGrid dispatch.
+        Falls back to a structured plain-text summary on LLM error.
+        """
+        user_msg = _WEEKLY_NARRATIVE_PROMPT.format(
+            hotel_name=hotel_name,
+            week_start=payload.week_start.isoformat(),
+            week_end=payload.week_end.isoformat(),
+            total_actions=payload.total_agent_actions,
+            success_rate=payload.tool_success_rate_pct,
+            error_count=payload.agent_error_count,
+            memory_writes=payload.memory_writes_week,
+            memory_pending=payload.memory_pending_pct,
+        )
+
+        try:
+            narrative = await self._llm.complete(
+                messages=[{"role": "user", "content": user_msg}],
+                max_tokens=350,
+                temperature=0.2,
+                system=_WEEKLY_NARRATIVE_SYSTEM,
+            )
+        except Exception:
+            logger.exception(
+                "receipts: weekly narrative composition failed hotel_id=%s week_end=%s",
+                payload.hotel_id,
+                payload.week_end,
+            )
+            narrative = (
+                f"Weekly Digest — {payload.week_start} to {payload.week_end}\n"
+                f"{hotel_name}\n\n"
+                f"• {payload.total_agent_actions} agent actions — "
+                f"{payload.tool_success_rate_pct:.0f}% success rate\n"
+                f"• {payload.agent_error_count} error(s) this week\n"
+                f"• {payload.memory_writes_week} memory write(s), "
+                f"{payload.memory_pending_pct:.0f}% pending embedding"
+            )
+
+        return narrative.strip()
