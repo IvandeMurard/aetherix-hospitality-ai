@@ -20,12 +20,16 @@ _TOOL_RATE_LIMITS = {
     "get_operational_predictions": 60,
     "get_recommendations_with_memory_context": 30,
     "submit_feedback_to_memory": 20,
+    # v1 atomic tools
+    "recall_memory": 60,
 }
 
 _TOOL_SCOPE = {
     "get_operational_predictions": "predict",
     "get_recommendations_with_memory_context": "recommend",
     "submit_feedback_to_memory": "feedback",
+    # v1 atomic tools
+    "recall_memory": "memory:read",
 }
 
 # Separate admin scope for destructive / model-mutating operations (HOS-149 AC4)
@@ -90,6 +94,24 @@ def require_scope(scopes: list[str] | None, tool_name: str) -> None:
         )
 
 
+RECALL_MEMORY_TOOL: dict[str, Any] = {
+    "name": "recall_memory",
+    "description": (
+        "Semantic recall from the property's operational memory. "
+        "Returns the k most relevant past observations for a free-text query. "
+        "Atomic replacement for the memory-recall step of "
+        "get_recommendations_with_memory_context (deprecated in v0)."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+            "query": {"type": "string", "maxLength": 500},
+            "k": {"type": "integer", "default": 5, "minimum": 1, "maximum": 20},
+        },
+    },
+}
+
 TOOLS_MANIFEST: list[dict[str, Any]] = [
     {
         "name": "get_operational_predictions",
@@ -145,4 +167,11 @@ TOOLS_MANIFEST: list[dict[str, Any]] = [
             },
         },
     },
+]
+
+# v1 manifest: get_recommendations_with_memory_context replaced by recall_memory
+V1_TOOLS_MANIFEST: list[dict[str, Any]] = [
+    next(t for t in TOOLS_MANIFEST if t["name"] == "get_operational_predictions"),
+    RECALL_MEMORY_TOOL,
+    next(t for t in TOOLS_MANIFEST if t["name"] == "submit_feedback_to_memory"),
 ]
