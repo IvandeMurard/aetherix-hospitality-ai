@@ -142,9 +142,17 @@ graph TD
         end
     end
 
-    subgraph EXT["📡 External Sources"]
+    subgraph HOTEL["🏨 Hotel Stack — internal"]
         PMS["Apaleo PMS\nOAuth2 + MCP"]
-        ENV["Weather · Events\nOpen Data"]
+        POS["POS — F&B\nPhase 4"]
+        RMS["RMS — Revenue\nPhase 4"]
+        SOCIAL["Property Social\nSentiment · Phase 4"]
+    end
+
+    subgraph EXT["🌍 External Signals"]
+        WEATHER["Weather API"]
+        EVENTS["Public Events"]
+        OPENDATA["Paris Open Data"]
     end
 
     subgraph OUT["📲 Delivery"]
@@ -156,7 +164,12 @@ graph TD
     TACET -- "env signals" --> ORCH
     ORCH -- "MCP call" --> MCP_IN
     PMS -- "OAuth2 / MCP" --> SVC
-    ENV --> SVC
+    POS -.->|future| SVC
+    RMS -.->|future| SVC
+    SOCIAL -.->|future| SVC
+    WEATHER --> SVC
+    EVENTS --> SVC
+    OPENDATA --> SVC
     MCP_IN --> SVC
     SCHED --> SVC
     SVC --> PROPHET
@@ -174,16 +187,22 @@ graph TD
     classDef fly      fill:#1a1a2e,stroke:#8b5cf6,stroke-width:1px,color:#e9d5ff
     classDef intel    fill:#2d1b69,stroke:#a855f7,stroke-width:2px,color:#e9d5ff
     classDef data     fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#bbf7d0
+    classDef hotel    fill:#1e293b,stroke:#0ea5e9,stroke-width:2px,color:#bae6fd
     classDef ext      fill:#0f2744,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
     classDef out      fill:#431407,stroke:#f97316,stroke-width:2px,color:#fed7aa
+    classDef future   fill:#1e293b,stroke:#475569,stroke-width:1px,stroke-dasharray: 4 3,color:#94a3b8
 
     class ORCH,TACET mesh
     class MCP_IN,SCHED,SVC fly
     class PROPHET,LLM intel
     class DB,VEC data
-    class PMS,ENV ext
+    class PMS hotel
+    class POS,RMS,SOCIAL future
+    class WEATHER,EVENTS,OPENDATA ext
     class WA,EMAIL,DASH out
 ```
+
+**Internal vs external context.** The Hotel Stack groups the property's own operational systems — high trust, GDPR scope is the hotel's own. External Signals are third-party data sources that contextualize demand. Future internal integrations (POS for actual consumption, RMS for room revenue context, Property Social Sentiment for guest-expressed feedback) form a complete operational picture: *what they booked · what they consumed · what they spent · what they felt*.
 
 ### Tech stack
 
@@ -231,7 +250,8 @@ aetherix/
 
 | Gate | Result |
 |------|--------|
-| Forecasting MAPE J+1 | ✅ 7.8% (target < 15%) |
+| Forecasting harness (Prophet + regressors) | ✅ Built — backtest pipeline ready |
+| MAPE J+1 real-world measurement | 🔨 Pending — first run on design partner data |
 | MCP Server v0 | ✅ Shipped — `/mcp/v0/`, 3 tools |
 | Staging deploy | ✅ Live — `aetherix-backend.fly.dev` |
 | Apaleo integration | ✅ OAuth2 + MCP read |
@@ -269,12 +289,12 @@ Aetherix uses a two-layer memory system:
 
 | Phase | Status | Highlights |
 |-------|--------|------------|
-| Phase 0 — Validation | ✅ Done | MAPE 7.8% · ROI simulator · MCP Server v0 |
+| Phase 0 — Validation harness | 🔨 In Progress | Backtest pipeline · ROI simulator · MCP Server v0 — real-world MAPE measurement pending |
 | Phase 1 — Observability | ✅ Done | agent_action_log · Redis rate-limiter · HiveMemory instrumentation |
 | Phase 0 deploy | ✅ Done | Fly.io staging live · RLS 14/14 · webhook HMAC |
 | Phase 2 — Receipts | ✅ Done | Daily Receipt · WhatsApp · inbound feedback · weekly digest |
 | Phase 3 — Pilot | 🔨 In Progress | Design partner (Apaleo prod) · Orchestrator separation · HiveMemory algorithm · Article technique Mesh |
-| Phase 4 — Scale | 📋 Planned | Mews integration · Anima (Guest Context Node) · Orchestrator repo |
+| Phase 4 — Scale | 📋 Planned | Mews integration · POS/RMS/Social Sentiment ingestion · Anima (Guest Context Node) · Orchestrator repo |
 
 Full roadmap: [Linear — Hospitalityagent](https://linear.app/hospitalityagent/team/HOS/all)
 
@@ -282,4 +302,4 @@ Mesh architecture: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 
 ---
 
-*Built by Ivan de Murard — Aetherix is one node of the Hospitality Agentic Mesh.*
+**Built with <3 for hotels, restaurants, and those who love them by Ivan de Murard**

@@ -62,7 +62,7 @@
 
 | Phase | Statut | Contenu |
 |-------|--------|---------|
-| Phase 0 (validation) | ✅ Done (18/04/2026) | Backtest PASS (MAPE 7.8% J+1) + ROI simulator + MCP Server v0 (HOS-71) |
+| Phase 0 (validation harness) | 🔨 In Progress | Backtest pipeline + ROI simulator + MCP Server v0 (HOS-71) livrés. **Mesure MAPE J+1 réelle non encore exécutée** — premier run prévu sur données design partner Phase 3. Cible interne < 15% (gate < 22% sinon pivot, cf. Décision #14). |
 | Phase 1 | ✅ Done (19/04/2026) | MCP Server v0 + ADR 0003 observability (agent_action_log, Redis rate-limiter, MV refresh) + memory instrumentation (Mistral 1024d embeddings, 2-pass dedup). PR #73 merged. |
 | Phase 0 (deploy) | ✅ Done (15/05/2026) | Staging Fly.io live (`aetherix-backend.fly.dev`). Smoke test E2E 5/5 PASS (Apaleo skip). Epic 9 hardening fermé (14 stories + 3 sub-HOS-159). Sécurité : HOS-111 RLS 14/14 tables + HOS-112 webhook HMAC. Reste gates non-techniques : sign-off PM runbook + pre-pilot checklist. |
 | Phase 2 | ✅ Done (17/05/2026) | Agent "Receipts" — 7 stories P2-1→P2-7 mergées. Daily Receipt + WhatsApp + email + inbound feedback parser (Haiku) + weekly KPI digest + web drill-down + Track A gate. Track B (trust-KPI) reporté Phase 3. |
