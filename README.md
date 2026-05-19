@@ -1,228 +1,285 @@
 
 <h1 align="center">Aetherix</h1>
 <p align="center">
-  <em>Helping Hotel Managers predict their property's operational needs.</em>
+  <em>F&B Execution Node of the Hospitality Agentic Mesh.</em>
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white" alt="FastAPI" />
-  <img src="https://img.shields.io/badge/Next.js-16-000000?style=flat&logo=next.js&logoColor=white" alt="Next.js 16" />
-  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/MCP-Native-6366f1?style=flat" alt="MCP Native" />
+  <img src="https://img.shields.io/badge/Claude-Sonnet-D97706?style=flat&logo=anthropic&logoColor=white" alt="Claude Sonnet" />
   <img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat&logo=postgresql&logoColor=white" alt="PostgreSQL 17" />
-  <img src="https://img.shields.io/badge/Claude-Anthropic-D97706?style=flat&logo=anthropic&logoColor=white" alt="Claude AI" />
-  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/Fly.io-cdg-8b5cf6?style=flat" alt="Fly.io Paris" />
   <img src="https://img.shields.io/badge/License-MIT-22C55E?style=flat" alt="License MIT" />
 </p>
 
 ---
 
-## Overview
+## What is Aetherix
 
-**Aetherix is a proactive Agentic Intelligence Layer for Hospitality Operations.**
+Aetherix is the **F&B operations node** of the Hospitality Agentic Mesh — a platform of specialized AI agents communicating exclusively via MCP (Model Context Protocol).
 
-It functions as a **UI-less, push-first copilot** that delivers contextualized F&B covers, staffing, and prep recommendations directly to operations teams. 
+It handles one domain with precision: **forecasting F&B covers, optimizing staffing, and delivering actionable recommendations** to hotel managers via WhatsApp. It learns from each property's real history, adapts through manager feedback, and exposes its capabilities as MCP tools callable by any orchestration agent.
 
-Aetherix synthesizes PMS data, property-specific capture rates, and external signals (weather, events, etc.) through a multi-layer memory-and-reasoning system.
-It is designed from the ground up to be **easy to integrate** into existing hotel tech stacks and **callable by other agents** via MCP.
+**Aetherix does not orchestrate. It executes.**
+
+The separation is intentional — each node in the Mesh has a strict bounded context. Aetherix owns F&B. An Orchestrator decides when to call it.
 
 ---
 
-### Why Aetherix exists
+## The Hospitality Agentic Mesh
 
-Hotels waste ~25% of the food they produce, and labor costs represent 30-45% of operating expenses. Accurate daily operational forecasting remains manual, repetitive, and error-prone.
+Aetherix is one node in a broader architecture designed to replace rigid hotel tech monoliths with composable, MCP-native agents:
 
-Aetherix delivers **contextual, explainable recommendations** via WhatsApp (or other channels) at the right moment, learns each property’s unique reality, and improves over time through feedback.
+```
+┌─────────────────────────────────────────────────────────┐
+│                 Hospitality Agentic Mesh                 │
+│                                                         │
+│   ┌─────────────┐    MCP calls     ┌─────────────────┐ │
+│   │  Tacet      │ ──────────────→  │   Orchestrator  │ │
+│   │ Sensory Node│  room_risk_score  │ Supervisory Agent│ │
+│   │ (env data)  │                  │  (routes, rules) │ │
+│   └─────────────┘                  └────────┬────────┘ │
+│                                             │           │
+│   ┌─────────────┐    MCP calls             │           │
+│   │  Apaleo PMS │ ──────────────→          │           │
+│   │  Commerce   │  inventory, occ.          │           │
+│   │  Hub        │                           ▼           │
+│   └─────────────┘             ┌─────────────────────┐  │
+│                                │   Aetherix          │  │
+│                                │   F&B Execution Node│  │
+│                                │   (this repo)       │  │
+│                                └──────────┬──────────┘  │
+│                                           │             │
+│   ┌─────────────┐                         │ WhatsApp    │
+│   │  Anima      │    Phase 4              ▼             │
+│   │ Guest Context│ ──────────→   Hotel Manager          │
+│   │  Node       │                                       │
+│   └─────────────┘                                       │
+└─────────────────────────────────────────────────────────┘
+```
 
-**Key insight:** By modeling each property’s real historical capture rates and enriching them with contextual demand signals, Aetherix generates recommendations that actually fit the hotel’s reality.
+| Node | Role | Status |
+|------|------|--------|
+| **Aetherix** | F&B execution — forecast, staffing, memory, receipts | ✅ Live (staging) |
+| **Tacet** | Environmental signals — weather, noise, open data → scores | 🔨 Phase 3 |
+| **Orchestrator** | Supervisory agent — MCP routing, business rules, agentic loop | 📐 Phase 3 stub |
+| **Anima** | Guest context — emotional state, CRM, flight delays → profile | 📋 Phase 4 |
+
+---
+
+## Why it exists
+
+Hotels waste ~25% of the food they produce. Labor costs represent 30–45% of F&B operating expenses. Daily staffing decisions remain manual, repetitive, and error-prone — made by gut feel at 8am with no data.
+
+**Key insight:** The bottleneck is not data — hotels have PMS data. The bottleneck is synthesis: combining occupancy, weather, local events, and property-specific capture rates into a recommendation that actually fits *this* hotel's reality.
+
+Aetherix builds that synthesis automatically, learns from manager feedback, and delivers it where managers already work — WhatsApp, not another dashboard.
 
 **Goal:** Reduce food waste and labor inefficiencies while giving managers more time to focus on their guests.
 
 ---
 
-### Core Value Proposition
+## What Aetherix does
 
-| Feature                    | Aetherix (Proactive & Headless)                  |
-|---------------------------|--------------------------------------------------|
-| **Delivery**              | Push-first (WhatsApp/Slack/etc.) + MCP callable |
-| **Forecasting**           | Contextual ML/LLM predictions per property       |
-| **Explainability**        | Conversational, structured breakdowns            |
-| **Memory**                | Idiosyncratic (per-hotel) + Hive (anonymized cross-property) |
-| **Integration**           | Additive layer on top of PMS; MCP inbound/outbound |
-| **Feedback Loop**         | Self-improving via manager overrides             |
+### Delivered (May 2026)
 
-Built with real hospitality constraints in mind: high uncertainty, human oversight, GDPR, and labor regulations.
+- **Daily F&B forecast** — Prophet time-series + occupancy regressors (weather, events, occupancy). MAPE 7.8% J+1 on backtest.
+- **Staffing recommendations** — covers → optimal headcount, respecting labor regulations
+- **Daily Receipt** — WhatsApp push at 6am: yesterday's actuals vs forecast, delta, confidence
+- **Weekly digest** — Sunday KPI summary: acceptance rate, MAPE trend, cost variance
+- **Feedback loop** — managers reply "accepted / rejected / modified" → memory update → next forecast improves
+- **MCP Server v0** — 3 tools exposed at `/mcp/v0/`: `get_operational_predictions`, `get_recommendations_with_memory_context`, `submit_feedback_to_memory`
+- **Apaleo integration** — native OAuth2 + MCP read (occupancy, reservations, historical data)
 
----
+### MCP Tools (callable by any agent)
 
-## Key Features & Innovation
+```json
+get_operational_predictions(target_date, service_type, context)
+  → { prediction: { covers, confidence }, staffing, reasoning }
 
-- **Property-Calibrated Demand Modeling**: Learns actual capture rates per hotel. The model improves over time.
-- **Two-Layer Memory System**: Private idiosyncratic memory + anonymized hive intelligence grouped by metadata (size, type, location, customers, ...).
-- **Conversational Explainability**: Managers can challenge recommendations and get an immediate, scannable, data-driven reasoning breakdown.
-- **Headless-First Design**: UI-less core with optional verification dashboard. Exposes capabilities as MCP tools so other agents can consume predictions at scale.
-- **Painless Integration**: Designed for zero-friction integration. Aetherix requires only a read-only access via webhooks, API keys, or Apaleo MCP.
+get_recommendations_with_memory_context(query, target_date, k_memory)
+  → { recommendation, confidence, memory_hits, reasoning_summary }
 
----
+submit_feedback_to_memory(recommendation_id, outcome, notes)
+  → { memory_id, status }
+```
 
-## Current Status (April 2026)
+> **v1 (in progress — ADR-0004):** `get_recommendations_with_memory_context` will be split into two atomic tools — `recall_memory` and `get_operational_predictions` — so an Orchestrator can compose them with full visibility into intermediate results.
 
-- Native Apaleo integration (OAuth + MCP-compatible read access)
-- End-to-end pipeline: Prophet forecasting + semantic patterns (Qdrant) + memory layers + Claude Sonnet reasoning
-- Daily proactive recommendations (F&B covers, staffing, prep)
-- Conversational feedback loop with memory updates
-- Outbound MCP Server in progress (making Aetherix callable by orchestration agents)
-
-**Note**: This is a side project / portfolio piece currently in validation phase with sandbox + synthetic data. No live hotel pilots yet.
+Authentication: bearer token per hotel. `hotel_id` is never a tool parameter — resolved server-side from the token (multi-tenant isolation by design).
 
 ---
 
-## Building with the BMAD Methodology
+## Architecture
 
-Aetherix is conceived, structured, and validated using the rigorous **BMAD (Business, Market, Architecture, Design)** methodology.
-This helps ensure the project is not just a technical proof-of-concept, but a viable Agentic AI product.
-
-*   **Business Justification:** Clear financial ROI and metrics for success (e.g., Target MAPE < 15%, Labor Cost reduction).
-*   **Domain Compliance:** Explicit architectural decisions to handle GDPR (anonymized PII) and European Labor Laws (calculating penalty pay into recommendations).
-*   **Traceable Architecture:** Documented logic separating business requirements from technical implementation layers.
-
-**Roadmap:** hosted on [Linear](https://linear.app/hospitalityagent/team/HOS/all)
-
-**Immediate priorities**:
-- Complete MCP data orchestration + backtesting with defined KPIs (MAPE <15%, etc.)
-- Ship minimal outbound Aetherix MCP Server so other agents can call predictions and memory-enriched insights
-- Transparent validation results (sandbox/synthetic)
----
-
-## Architecture & Technical Strategy
-
-The architecture adheres to a strict "Thin Frontend / Fat Backend" philosophy. The intelligence stack has four distinct layers working in sequence to produce a single actionable recommendation.
+### Intelligence stack (internal to Aetherix)
 
 ```mermaid
 %%{init: {'theme': 'dark', 'themeVariables': {'edgeLabelBackground': '#1e1e2e', 'lineColor': '#6b7280'}}}%%
 graph TD
-    subgraph EXT["📡 External Integrations"]
-        PMS["Mews/Apaleo PMS\n(Read-Only)"]
-        Weather["Weather API"]
-        Events["PredictHQ Events"]
+    subgraph MESH["🕸️ Hospitality Agentic Mesh"]
+        ORCH["Orchestrator\nSupervisory Agent"]
+        TACET["Tacet\nSensory Node"]
     end
 
-    subgraph BACK["⚙️ Fat Backend — FastAPI + Python"]
-        Sync["PMS Sync\n+ Captation Rate"]
-        Semantic["Semantic Reasoning\n+ Anomaly Detection"]
-        RAG["Claude Sonnet\nReasoning Engine"]
-        Explain["Explainability\nService"]
+    subgraph FLY["🚀 Fly.io — Paris cdg"]
+        subgraph BACK["⚙️ Aetherix — FastAPI + Python 3.12"]
+            MCP_IN["MCP Server v0\n/mcp/v0/"]
+            SCHED["APScheduler\ndaily triggers"]
+            SVC["F&B Services\nforecast · staffing · receipts"]
+        end
+
+        subgraph INTEL["🧠 Intelligence Stack"]
+            PROPHET["Prophet (Meta)\nNumerical Forecast\n+ regressors"]
+            LLM["LLMProvider\nClaude Sonnet — primary\n↳ Gemini · GPT — fallback"]
+        end
+
+        subgraph DATA["🗄️ Supabase (Stockholm)"]
+            DB[("PostgreSQL\noperational data · RLS")]
+            VEC[("pgvector\noperational_memory\nHiveMemory")]
+        end
     end
 
-    subgraph DATA["🗄️ Intelligence Layers"]
-        DB[("Supabase PostgreSQL\nOperational data")]
-        Vector[("Qdrant Cloud\nF&B patterns · 495+")]
-        Memory[("pgvector · operational_memory\nPer-hotel feedback loop\n→ Backboard.io (Phase 3)")]
+    subgraph EXT["📡 External Sources"]
+        PMS["Apaleo PMS\nOAuth2 + MCP"]
+        ENV["Weather · Events\nOpen Data"]
     end
 
-    subgraph DELIVERY["🚀 Delivery & UI"]
-        Push["WhatsApp / SMS / Email\n(UI-less, push-first)"]
-        Frontend["Next.js Dashboard\n(verification layer)"]
+    subgraph OUT["📲 Delivery"]
+        WA["WhatsApp\nTwilio"]
+        EMAIL["Email\nSendGrid"]
+        DASH["Next.js\nverification layer"]
     end
 
-    PMS -- "Webhooks/API" --> Sync
-    Weather --> Semantic
-    Events --> Semantic
-    Sync --> DB
-    Semantic --> Vector
-    DB --> RAG
-    Vector --> RAG
-    Memory --> RAG
-    RAG --> Explain
-    Explain -- "Recommendation + Why?" --> Push
-    Explain -- "Typed API (openapi-fetch)" --> Frontend
-    RAG -- "Learn from feedback" --> Memory
+    TACET -- "env signals" --> ORCH
+    ORCH -- "MCP call" --> MCP_IN
+    PMS -- "OAuth2 / MCP" --> SVC
+    ENV --> SVC
+    MCP_IN --> SVC
+    SCHED --> SVC
+    SVC --> PROPHET
+    SVC --> VEC
+    PROPHET --> LLM
+    VEC --> LLM
+    DB --> LLM
+    LLM --> SVC
+    SVC --> WA
+    SVC --> EMAIL
+    SVC --> DASH
+    SVC -- "feedback → learn" --> VEC
 
-    classDef external  fill:#0f2744,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
-    classDef backend   fill:#2d1b69,stroke:#a855f7,stroke-width:2px,color:#e9d5ff
-    classDef db        fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#bbf7d0
-    classDef delivery  fill:#431407,stroke:#f97316,stroke-width:2px,color:#fed7aa
+    classDef mesh     fill:#1e1b4b,stroke:#6366f1,stroke-width:2px,color:#c7d2fe
+    classDef fly      fill:#1a1a2e,stroke:#8b5cf6,stroke-width:1px,color:#e9d5ff
+    classDef intel    fill:#2d1b69,stroke:#a855f7,stroke-width:2px,color:#e9d5ff
+    classDef data     fill:#052e16,stroke:#22c55e,stroke-width:2px,color:#bbf7d0
+    classDef ext      fill:#0f2744,stroke:#3b82f6,stroke-width:2px,color:#bfdbfe
+    classDef out      fill:#431407,stroke:#f97316,stroke-width:2px,color:#fed7aa
 
-    class PMS,Weather,Events external
-    class Sync,Semantic,RAG,Explain backend
-    class DB,Vector,Memory db
-    class Push,Frontend delivery
+    class ORCH,TACET mesh
+    class MCP_IN,SCHED,SVC fly
+    class PROPHET,LLM intel
+    class DB,VEC data
+    class PMS,ENV ext
+    class WA,EMAIL,DASH out
 ```
 
-### The Four Intelligence Layers
+### Tech stack
 
-| Layer                  | Technology                  | Role |
-|------------------------|-----------------------------|------|
-| **1. Numerical Forecast** | Prophet (time-series)      | Base volume predictions from PMS + regressors |
-| **2. Semantic Patterns**  | Qdrant Cloud               | Context matching against historical scenarios |
-| **3. Cognitive Memory**   | pgvector → Backboard.io (Ph. 3) | Two-layer: Private (idiosyncratic) + Hive (anonymized, metadata-grouped) |
-| **4. Reasoning & Explanation** | Claude Sonnet (Anthropic)  | Synthesizes everything into actionable, explainable recommendations |
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| Backend | FastAPI + Python 3.12 | Async, Pydantic v2 |
+| Forecast | Prophet (Meta) | Time-series + weather/event regressors |
+| Memory | pgvector (Supabase) | Mistral 1024d embeddings, HNSW index |
+| LLM | Claude Sonnet | Reasoning + explainability. Multi-LLM via `LLMProvider` abstraction |
+| Cache | Redis (Upstash) | Session state, rate limiting |
+| PMS | Apaleo | OAuth2 + MCP read |
+| Delivery | WhatsApp (Twilio) + Email (SendGrid) | Push-first, inbound feedback parser |
+| Deploy | Fly.io (Paris, cdg) | 1 always-on instance, Docker + uv multi-stage |
+| Database | Supabase (PostgreSQL) | RLS on 14 tables, Stockholm region |
 
-### Tech Stack
+### Project structure
 
-| Layer | Technologies | Purpose |
-| :--- | :--- | :--- |
-| **Frontend (UI)** | Next.js (App Router), Tailwind CSS, shadcn/ui | Verification and oversight layer — not the primary interaction surface |
-| **Backend (AI/Logic)** | Python, FastAPI, APScheduler | LLM orchestration, async jobs, push dispatch |
-| **Operational DB** | Supabase (PostgreSQL) + RLS | Multi-tenant data isolation, actuals tracking |
-| **Pattern Store** | Qdrant Cloud | Vector similarity search for F&B scenario patterns |
-| **Cognitive Memory** | pgvector `operational_memory` → Backboard.io (Ph. 3) | Phase 0–1: per-hotel feedback loop via `MemoryProvider` interface. Phase 3: Backboard adds structured insights + anonymized cross-hotel pattern generalization (by segment, location, clientele type). |
-| **Delivery** | Twilio (WhatsApp/SMS), SendGrid | UI-less push notifications; inbound "Why?" reply handling |
-| **Client-Server Contract** | OpenAPI, `openapi-fetch` | End-to-end type safety |
+```
+aetherix/
+├── backend/
+│   ├── app/
+│   │   ├── api/             # HTTP routes (auth, pms, predictions, receipts)
+│   │   ├── db/              # SQLAlchemy models + Supabase session
+│   │   ├── services/        # F&B execution: forecast, staffing, memory, receipts, WhatsApp
+│   │   ├── providers/       # LLM + Embedding abstraction (Claude, Mistral, Gemini, fallback)
+│   │   ├── integrations/    # Apaleo, Twilio, SendGrid, Linear, Obsidian
+│   │   ├── middleware/       # Agent tracking, request_id
+│   │   └── mcp_server.py    # MCP Server v0 — 3 tools
+│   └── orchestrator/        # Proto-orchestrator (Phase 3, in progress — ADR-0004)
+├── docs/
+│   ├── adr/                 # Architecture Decision Records (0001–0004)
+│   ├── mesh-architecture.md # Cross-repo source of truth: full Mesh vision
+│   ├── planning/            # Phase roadmaps
+│   └── context/             # Domain context, conventions, memory architecture
+├── scripts/
+│   ├── ci/                  # Schema drift gate, RLS audit, smoke tests
+│   └── ops/                 # Backtest, Prophet training, veille
+├── supabase/                # DB migrations
+└── archive/                 # Legacy pre-FastAPI code — not used in production
+```
 
 ---
 
-## Project Structure
+## Current status (May 2026)
 
-```text
-aetherix/
-├── backend/                 # FastAPI — AI orchestration & business logic
-│   └── app/
-│       ├── api/             # HTTP routes (auth, pms, predictions, reports)
-│       ├── db/              # PostgreSQL models & session
-│       ├── services/        # Reasoning engine, RAG, PMS sync, WhatsApp…
-│       └── integrations/    # External tools: Obsidian (knowledge base), Linear (issues)
-├── frontend/                # Next.js App Router UI
-│   └── src/
-│       ├── app/             # Pages: dashboard, settings, auth
-│       ├── components/      # shadcn/ui + feature components
-│       └── lib/             # openapi-fetch generated API client
-├── docs/                    # Architecture, ADRs, planning, context docs
-│   ├── internal/            # Internal process docs & retrospectives
-│   └── assets/              # Diagrams, logos, visual assets
-├── scripts/                 # Dev & ops utility scripts
-│   ├── ci/                  # Quality gates: schema drift, RLS audit, smoke tests
-│   ├── ops/                 # Operational: backtest, veille, Prophet training
-│   └── deploy/              # Fly.io deployment helpers
-├── supabase/                # DB migrations
-├── docker-compose.yml       # Local dev: backend + frontend + postgres + mailhog
-└── archive/                 # Legacy code & archived scripts — not used in production
-```
+| Gate | Result |
+|------|--------|
+| Forecasting MAPE J+1 | ✅ 7.8% (target < 15%) |
+| MCP Server v0 | ✅ Shipped — `/mcp/v0/`, 3 tools |
+| Staging deploy | ✅ Live — `aetherix-backend.fly.dev` |
+| Apaleo integration | ✅ OAuth2 + MCP read |
+| Daily Receipt + WhatsApp | ✅ End-to-end |
+| RLS security | ✅ 14/14 tables |
+| First design partner | 🔨 Phase 3 in progress |
+| Orchestrator separation | 🔨 ADR-0004, in progress |
+
+---
+
+## Memory architecture
+
+Aetherix uses a two-layer memory system:
+
+**Private Memory (per-hotel)** — `operational_memory` table in pgvector. Stores manager feedback, outcomes, and patterns specific to each property. Used to personalize every recommendation.
+
+**HiveMemory (cross-hotel)** — anonymized pattern aggregation across properties (k-means clustering + LLM persona generation). Hotels learn from each other without sharing raw data. Phase 3 Track B.
 
 ---
 
 ## Security
 
-Aetherix is designed with security and data isolation as first-class constraints, not afterthoughts. This is particularly important given the platform's multi-tenant nature and its integration with live PMS systems.
-
 | Area | Approach |
-| :--- | :--- |
-| **Multi-tenant isolation** | Each hotel's data is strictly scoped by `hotel_id` at every layer: Supabase Row-Level Security (RLS), service-layer enforcement, and vector store namespace separation. No cross-hotel data access by design. |
-| **Read-only PMS access** | Aetherix operates in read-only mode against PMS systems (Apaleo, ...). The agent never writes to or modifies reservation or guest data. This is an architectural constraint, not just a convention. |
-| **Agent action logging** | Every AI-driven action is logged with full context (hotel, model invocation, tool calls, outcomes). Human-in-the-loop by default: the agent recommends, the manager decides. |
-| **Credential management** | API keys and secrets are managed via environment variables, never hardcoded. OAuth2 flows follow provider standards (Apaleo OAuth2). Webhook endpoints validate inbound signatures (Twilio, PMS providers). |
-| **LLM input scoping** | Claude prompts are scoped to the requesting hotel's context. Recommendations are generated per-property and never cross-contaminate tenant data. Manager replies passed to the LLM are sanitized against prompt injection. |
-| **GDPR / data minimization** | Hotel operational data is stored in Supabase (EU-compatible infrastructure). Hive Memory (Phase 3) aggregates patterns in anonymized, non-attributable form; no raw hotel data is ever shared across tenants. PII is minimized by design. |
-
-> A formal security review will be conducted before any live deployment and before any Agent Hub listing.
+|------|----------|
+| Multi-tenant isolation | `hotel_id` scoped at every layer: Supabase RLS, Python guards, MCP token binding. No cross-hotel data access. |
+| MCP auth | Opaque bearer tokens per hotel. `hotel_id` resolved server-side — never accepted as tool input. |
+| PMS access | Read-only (Apaleo Phase 0). No writes to reservations or guest records. All agent actions logged. |
+| LLM scoping | Claude prompts scoped per property. Manager replies sanitized against prompt injection. |
+| Secrets | `flyctl secrets set` — never committed. Webhook signatures validated (Twilio HMAC). |
+| GDPR | Supabase EU (Stockholm). HiveMemory = anonymized aggregates only — no raw hotel data shared cross-tenant. |
 
 ---
 
-## Philosophy
+## Roadmap
 
-Aetherix is built to be part of the emerging **agent mesh** in hospitality, not just a tool for human managers, but a **callable capability** that other agents (orchestration, revenue, procurement, etc.) can invoke at scale.
+| Phase | Status | Highlights |
+|-------|--------|------------|
+| Phase 0 — Validation | ✅ Done | MAPE 7.8% · ROI simulator · MCP Server v0 |
+| Phase 1 — Observability | ✅ Done | agent_action_log · Redis rate-limiter · HiveMemory instrumentation |
+| Phase 0 deploy | ✅ Done | Fly.io staging live · RLS 14/14 · webhook HMAC |
+| Phase 2 — Receipts | ✅ Done | Daily Receipt · WhatsApp · inbound feedback · weekly digest |
+| Phase 3 — Pilot | 🔨 In Progress | Design partner (Apaleo prod) · Orchestrator separation · HiveMemory algorithm · Article technique Mesh |
+| Phase 4 — Scale | 📋 Planned | Mews integration · Anima (Guest Context Node) · Orchestrator repo |
+
+Full roadmap: [Linear — Hospitalityagent](https://linear.app/hospitalityagent/team/HOS/all)
+
+Mesh architecture: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 
 ---
-Made with ❤️ for hotels, restaurants, and those who love them by Ivan de Murard
----
-*Aetherix - Contextual Intelligence for Hospitality Operations.*
+
+*Built by Ivan de Murard — Aetherix is one node of the Hospitality Agentic Mesh.*
