@@ -92,6 +92,13 @@ async def mcp_rpc(
         # so reading it from response headers at this point always returns "".
         request_id = str(uuid.uuid4())
         response.headers["x-request-id"] = request_id
+        if tool_name == "get_recommendations_with_memory_context":
+            response.headers["Deprecation"] = "true"
+            response.headers["Sunset"] = "2026-08-01"
+            response.headers["Link"] = (
+                '</mcp/v1/>; rel="successor-version", '
+                '<https://docs.aetherix.io/mcp/getting-started>; rel="deprecation"'
+            )
         try:
             result = await dispatch_tool(
                 tool_name, arguments, authorization, db,
