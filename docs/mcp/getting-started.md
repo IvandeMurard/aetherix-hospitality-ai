@@ -1,20 +1,33 @@
-# Aetherix MCP Server — Getting Started (v0)
+# Aetherix MCP Server — Getting Started
 
 > **Audience**: third-party agents, enterprise agent hubs, partner integrations.
-> **Status**: v0 — 3 tools, opaque bearer auth, single-tenant per token.
-> **Spec**: [ADR 0001](../adr/0001-aetherix-mcp-server-v0.md)
+> **v0**: 3 tools — stable, `get_recommendations_with_memory_context` deprecated.
+> **v1**: 3 atomic tools — `recall_memory` replaces `get_recommendations_with_memory_context`.
+> **Spec**: [ADR 0001](../adr/0001-aetherix-mcp-server-v0.md) · [ADR 0004](../adr/0004-orchestrator-separation.md)
 
 ---
 
 ## What this server exposes
 
-Three tools, agent-callable over MCP:
+### v1 — current (recommended)
 
-| Tool | Purpose |
-|------|---------|
-| `get_operational_predictions` | F&B covers forecast + staffing for a target date |
-| `get_recommendations_with_memory_context` | Contextualized advice pulling from operational memory |
-| `submit_feedback_to_memory` | Record manager outcome for a past recommendation |
+Endpoint: `POST /mcp/v1/`
+
+| Tool | Scope | Purpose |
+|------|-------|---------|
+| `get_operational_predictions` | `predict` | F&B covers forecast + staffing for a target date |
+| `recall_memory` | `memory:read` | Semantic recall from the property's operational memory |
+| `submit_feedback_to_memory` | `feedback` | Record manager outcome for a past recommendation |
+
+### v0 — stable, partially deprecated
+
+Endpoint: `POST /mcp/v0/`
+
+| Tool | Scope | Status |
+|------|-------|--------|
+| `get_operational_predictions` | `predict` | Stable |
+| `get_recommendations_with_memory_context` | `recommend` | **Deprecated** — use `recall_memory` on v1. Sunset: 2026-08-01. Response carries `Deprecation: true` header. |
+| `submit_feedback_to_memory` | `feedback` | Stable |
 
 Multi-tenant isolation is **enforced server-side**: the `hotel_id` is bound to the bearer token. Tool schemas do not accept `hotel_id` — attempting to pass it is silently ignored.
 
@@ -23,13 +36,48 @@ Multi-tenant isolation is **enforced server-side**: the `hotel_id` is bound to t
 ## Endpoint
 
 ```
-POST /mcp/v0/
+POST /mcp/v1/          ← recommended
+POST /mcp/v0/          ← maintained for backward compat
 Content-Type: application/json
 Accept: application/json
 Authorization: Bearer atx_<env>_<secret>
 ```
 
 The server speaks the MCP JSON-RPC 2.0 subset: `initialize`, `tools/list`, `tools/call`.
+
+### Tool schema — recall_memory (v1)
+
+```json
+{
+  "name": "recall_memory",
+  "inputSchema": {
+    "type": "object",
+    "required": ["query"],
+    "properties": {
+      "query":  { "type": "string", "maxLength": 500 },
+      "k":      { "type": "integer", "default": 5, "minimum": 1, "maximum": 20 }
+    }
+  }
+}
+```
+
+Response shape:
+```json
+{
+  "memory_hits": [
+    {
+      "pattern_id": "<uuid>",
+      "summary": "<reflection text, max 200 chars>",
+      "feedback": "followed | rejected | neutral | null",
+      "similarity": 0.87,
+      "source": "private | fb_pattern | recency_fallback",
+      "created_at": "2026-05-01T18:32:00"
+    }
+  ],
+  "source": "private | recency_fallback",
+  "count": 5
+}
+```
 
 ---
 
@@ -123,7 +171,8 @@ The raw token (`atx_prod_<secret>`) is given to the agent caller once; only the 
 
 **Scopes**:
 - `predict` → allows `get_operational_predictions`
-- `recommend` → allows `get_recommendations_with_memory_context`
+- `memory:read` → allows `recall_memory` (v1)
+- `recommend` → allows `get_recommendations_with_memory_context` (v0, deprecated)
 - `feedback` → allows `submit_feedback_to_memory`
 
 ---
@@ -135,6 +184,7 @@ Per-tenant, per-tool, sliding 1-minute window:
 | Tool | Limit |
 |------|-------|
 | `get_operational_predictions` | 60 req/min |
+| `recall_memory` | 60 req/min |
 | `get_recommendations_with_memory_context` | 30 req/min |
 | `submit_feedback_to_memory` | 20 req/min |
 
@@ -173,9 +223,11 @@ Errors are RFC 7807 Problem Details wrapped inside the MCP JSON-RPC error envelo
 
 ## Versioning
 
-- URL path carries the major version: `/mcp/v0/`.
-- Response header `x-aetherix-mcp-version: 0` on every response.
-- Breaking changes → `/mcp/v1/`. Additive changes (new optional fields, new tools) are allowed within v0.
+- URL path carries the major version: `/mcp/v0/`, `/mcp/v1/`.
+- Response header `x-aetherix-mcp-version: 0|1` on every response.
+- v1 removes `get_recommendations_with_memory_context` and adds `recall_memory` (scope `memory:read`).
+- Tokens with `recommend` scope continue to work on v0 until sunset (2026-08-01).
+- Migrate by replacing `recommend` scope → `memory:read` and calling `recall_memory` on `/mcp/v1/`.
 
 ---
 
@@ -202,5 +254,8 @@ Errors are RFC 7807 Problem Details wrapped inside the MCP JSON-RPC error envelo
 ## Further reading
 
 - [ADR 0001 — MCP Server v0](../adr/0001-aetherix-mcp-server-v0.md)
+- [ADR 0004 — Orchestrator separation](../adr/0004-orchestrator-separation.md)
 - `backend/app/mcp_server.py` — tool implementations
-- `backend/app/api/routes/mcp.py` — HTTP shim
+- `backend/app/api/routes/mcp.py` — v0 HTTP shim
+- `backend/app/api/routes/mcp_v1.py` — v1 HTTP shim
+- `backend/orchestrator/agent.py` — OrchestratorAgent
