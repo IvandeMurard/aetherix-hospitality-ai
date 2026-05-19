@@ -32,7 +32,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 SEED = int(os.getenv("DEMO_DATA_SEED", "42"))
 BASE_YEAR = int(os.getenv("DEMO_DATA_YEAR", "2025"))
-OUTPUT_PATH = Path(__file__).parent.parent / "demo_data" / "prophet_training.json"
+OUTPUT_PATH = Path(__file__).parent.parent.parent / "backend" / "data" / "demo" / "prophet_training.json"
 
 # Baseline dinner covers for a Paris 4* (60–80 range)
 BASE_COVERS = 68

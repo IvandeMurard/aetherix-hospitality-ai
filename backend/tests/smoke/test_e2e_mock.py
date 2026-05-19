@@ -1,4 +1,4 @@
-"""HOS-161 — CI-safe pytest mirror of scripts/smoke_test_e2e.py.
+"""HOS-161 — CI-safe pytest mirror of scripts/ci/smoke_test_e2e.py.
 
 All HTTP traffic is mocked. Steps 1, 3, 4, 5 are exercised; steps 2 and 6
 require a live staging environment and are skipped in CI.
@@ -20,11 +20,11 @@ import pytest
 
 # ---------------------------------------------------------------------------
 # Import the smoke script as a module without executing main().
-# Located at <repo>/scripts/smoke_test_e2e.py.
+# Located at <repo>/scripts/ci/smoke_test_e2e.py.
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_SCRIPT_PATH = _REPO_ROOT / "scripts" / "smoke_test_e2e.py"
+_SCRIPT_PATH = _REPO_ROOT / "scripts" / "ci" / "smoke_test_e2e.py"
 
 
 @pytest.fixture(scope="module")
@@ -132,7 +132,7 @@ def test_step1_boot_fails_when_worker_status_is_bad(smoke, monkeypatch):
 # Step 2 — only smoke-checked here; real probe is staging-only
 # ===========================================================================
 
-@pytest.mark.skip(reason="requires staging — see scripts/smoke_test_e2e.py step 2")
+@pytest.mark.skip(reason="requires staging — see scripts/ci/smoke_test_e2e.py step 2")
 def test_step2_apaleo_probe_staging_only():
     pass
 
