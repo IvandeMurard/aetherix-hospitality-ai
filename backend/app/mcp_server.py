@@ -26,6 +26,7 @@ from app.db.models import MCPApiToken, OperationalMemory
 from app.db.session import AsyncSessionLocal
 from app.mcp_core import (
     TOOLS_MANIFEST,
+    V1_TOOLS_MANIFEST,
     MCPAuthError,
     hash_token,
     require_scope,
@@ -172,6 +173,66 @@ async def tool_get_recommendations_with_memory_context(
     }
 
 
+async def tool_recall_memory(
+    hotel_id: str,
+    query: str,
+    db: AsyncSession,
+    embedding_provider: Any = None,
+    k: int = 5,
+) -> dict[str, Any]:
+    """Atomic memory recall — replaces the recall step of get_recommendations_with_memory_context."""
+    query = sanitize_notes(query, max_len=500)
+    if not query:
+        raise MCPAuthError(400, "invalid_input", "query is required")
+    k = max(1, min(20, int(k)))
+
+    memory_hits: list[dict[str, Any]] = []
+    source = "recency_fallback"
+
+    if embedding_provider is not None:
+        try:
+            query_vec = await embedding_provider.embed(query)
+            recall_svc = MemoryRecallService(db)
+            hits = await recall_svc.recall(hotel_id, query_vec, k=k)
+            if hits:
+                source = "private"
+                memory_hits = [
+                    {
+                        "pattern_id": str(h.id),
+                        "summary": h.reflection[:200],
+                        "feedback": h.manager_feedback,
+                        "similarity": round(h.similarity, 4),
+                        "source": h.source,
+                        "created_at": h.created_at.isoformat() if h.created_at else None,
+                    }
+                    for h in hits
+                ]
+        except Exception as exc:
+            logger.warning("recall_memory embedding failed, falling back to recency: %s", exc)
+
+    if not memory_hits:
+        result = await db.execute(
+            select(OperationalMemory)
+            .where(OperationalMemory.hotel_id == hotel_id)
+            .order_by(OperationalMemory.created_at.desc())
+            .limit(k)
+        )
+        rows = result.scalars().all()
+        memory_hits = [
+            {
+                "pattern_id": str(r.id),
+                "summary": (r.reflection or "")[:200],
+                "feedback": r.manager_feedback,
+                "similarity": None,
+                "source": "recency_fallback",
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+
+    return {"memory_hits": memory_hits, "source": source, "count": len(memory_hits)}
+
+
 async def tool_submit_feedback_to_memory(
     hotel_id: str,
     recommendation_id: str,
@@ -279,7 +340,8 @@ async def dispatch_tool(
     Emits one agent_action_log row per call (ADR 0003 D2), including auth_error
     and rate_limited paths — every served request produces exactly one row.
     """
-    if tool_name not in {t["name"] for t in TOOLS_MANIFEST}:
+    _all_tools = {t["name"] for t in TOOLS_MANIFEST} | {t["name"] for t in V1_TOOLS_MANIFEST}
+    if tool_name not in _all_tools:
         raise MCPAuthError(404, "not_found", f"Unknown tool: {tool_name}")
 
     # Pre-tool event: hotel_id + scopes unknown until verify_bearer succeeds.
@@ -334,6 +396,10 @@ async def dispatch_tool(
             elif tool_name == "get_recommendations_with_memory_context":
                 result = await tool_get_recommendations_with_memory_context(
                     tok.hotel_id, db=db, embedding_provider=embedding_provider, engine=engine, **args,
+                )
+            elif tool_name == "recall_memory":
+                result = await tool_recall_memory(
+                    tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
                 )
             elif tool_name == "submit_feedback_to_memory":
                 result = await tool_submit_feedback_to_memory(

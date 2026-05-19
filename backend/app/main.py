@@ -24,6 +24,7 @@ from app.api.routes import (
     demo,
     events,
     mcp,
+    mcp_v1,
     notifications,
     pms,
     predictions,
@@ -195,6 +196,8 @@ app.include_router(roi.router, prefix="/api/v1")
 app.include_router(receipts_route.router, prefix="/api/v1")
 # P1-2 Aetherix MCP Server v0 — inbound, agent-callable (ADR 0001 · HOS-71)
 app.include_router(mcp.router)
+# HOS-184 Aetherix MCP Server v1 — atomic tools (ADR-0004)
+app.include_router(mcp_v1.router)
 # Demo observability board — always registered, returns 503 when DEMO_MODE=false
 app.include_router(demo.router, prefix="/api/v1")
 # Story 4.3 (HOS-26): public Twilio callback — no /api/v1 or auth prefix
