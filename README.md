@@ -18,13 +18,13 @@
 
 ## What is Aetherix
 
-Aetherix is the **F&B operations node** of the Hospitality Agentic Mesh — a platform of specialized AI agents communicating exclusively via MCP (Model Context Protocol).
+Aetherix is a **Proactive Contextual Agentic Layer for F&B Operations**. It is the **F&B operations node** of the Hospitality Agentic Mesh: a platform of specialized contextual AI agents layers delivering intelligence and communicating via MCP (Model Context Protocol).
 
-It handles one domain with precision: **forecasting F&B covers, optimizing staffing, and delivering actionable recommendations** to hotel managers via WhatsApp. It learns from each property's real history, adapts through manager feedback, and exposes its capabilities as MCP tools callable by any orchestration agent.
+It handles one domain with precision: **forecasting F&B covers, optimizing staffing, and delivering actionable recommendations** to hotel managers via WhatsApp. It learns from each property's history, adapts continually through manager feedback, and exposes its capabilities as MCP tools callable by any orchestration agent.
 
 **Aetherix does not orchestrate. It executes.**
 
-The separation is intentional — each node in the Mesh has a strict bounded context. Aetherix owns F&B. An Orchestrator decides when to call it.
+The separation is intentional: each node (agent) in the Mesh (hive) has a strict bounded context. Aetherix owns F&B. An Orchestrator decides when to call it.
 
 ---
 
@@ -34,28 +34,29 @@ Aetherix is one node in a broader architecture designed to replace rigid hotel t
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                 Hospitality Agentic Mesh                 │
+│                 Hospitality Agentic Mesh                │
 │                                                         │
-│   ┌─────────────┐    MCP calls     ┌─────────────────┐ │
-│   │  Tacet      │ ──────────────→  │   Orchestrator  │ │
-│   │ Sensory Node│  room_risk_score  │ Supervisory Agent│ │
+│   ┌─────────────┐    MCP calls     ┌─────────────────┐  │
+│   │  Tacet      │ ──────────────→  │   Orchestrator  │  │
+│   │ Sensory Node│  room_risk_score │ Supervisory Agent│ │
 │   │ (env data)  │                  │  (routes, rules) │ │
-│   └─────────────┘                  └────────┬────────┘ │
+│   └─────────────┘                  └────────┬────────┘  │
 │                                             │           │
-│   ┌─────────────┐    MCP calls             │           │
-│   │  Apaleo PMS │ ──────────────→          │           │
+│   ┌─────────────┐    MCP calls             │            │
+│   │  Apaleo PMS │ ──────────────→          │            │
 │   │  Commerce   │  inventory, occ.          │           │
 │   │  Hub        │                           ▼           │
-│   └─────────────┘             ┌─────────────────────┐  │
+│   └─────────────┘             ┌─────────────────────┐   │
 │                                │   Aetherix          │  │
 │                                │   F&B Execution Node│  │
 │                                │   (this repo)       │  │
 │                                └──────────┬──────────┘  │
 │                                           │             │
 │   ┌─────────────┐                         │ WhatsApp    │
-│   │  Anima      │    Phase 4              ▼             │
-│   │ Guest Context│ ──────────→   Hotel Manager          │
-│   │  Node       │                                       │
+│   │   Anima     │    Phase 4              ▼             │
+│   │   Guest     │ ──────────→   Hotel Manager           │
+│   │  Context    │                                       │
+│   │   Node      │                                       │
 │   └─────────────┘                                       │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -302,4 +303,4 @@ Mesh architecture: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 
 ---
 
-**Built with <3 for hotels, restaurants, and those who love them by Ivan de Murard**
+**Built with ❤️ for hotels, restaurants, and those who love them by Ivan de Murard**
