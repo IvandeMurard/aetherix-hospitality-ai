@@ -1,4 +1,4 @@
-"""Tests for scripts/check_schema_drift.py — HOS-150 AC8.
+"""Tests for scripts/ci/check_schema_drift.py — HOS-150 AC8.
 
 Covers:
   - Static SQL parser (CREATE TABLE, ALTER TABLE ADD/DROP/RENAME COLUMN)
@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_SCRIPT = _REPO_ROOT / "scripts" / "check_schema_drift.py"
+_SCRIPT = _REPO_ROOT / "scripts" / "ci" / "check_schema_drift.py"
 
 # Load the script as a module without invoking main()
 spec = importlib.util.spec_from_file_location("check_schema_drift", _SCRIPT)
@@ -260,7 +260,7 @@ class TestApplyIgnores:
 
 class TestLoadIgnore:
     def test_real_ignore_file_loads(self):
-        path = _REPO_ROOT / "scripts" / "schema_drift_ignore.json"
+        path = _REPO_ROOT / "scripts" / "ci" / "schema_drift_ignore.json"
         if not path.exists():
             pytest.skip("schema_drift_ignore.json not present")
         ignored = csd.load_ignore(path)

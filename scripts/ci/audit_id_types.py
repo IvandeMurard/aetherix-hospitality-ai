@@ -29,7 +29,7 @@ from typing import List, Tuple
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-ROOT = Path(__file__).parent.parent
+ROOT = Path(__file__).parent.parent.parent  # scripts/ci/ → repo root
 SERVICES_DIR = ROOT / "backend" / "app" / "services"
 
 # ---------------------------------------------------------------------------

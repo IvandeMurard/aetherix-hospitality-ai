@@ -59,9 +59,9 @@ _train_auth = _require_mcp_scope(ADMIN_TRAIN_SCOPE)
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent  # backend/../..
-_DEMO_DATA = _REPO_ROOT / "demo_data" / "prophet_training.json"
-_MODEL_PATH = str(_REPO_ROOT / "demo_data" / "prophet_model.json")
+_BACKEND_ROOT = Path(__file__).parent.parent.parent.parent  # routes/ → backend/
+_DEMO_DATA = _BACKEND_ROOT / "data" / "demo" / "prophet_training.json"
+_MODEL_PATH = str(_BACKEND_ROOT / "data" / "demo" / "prophet_model.json")
 
 
 # ---------------------------------------------------------------------------

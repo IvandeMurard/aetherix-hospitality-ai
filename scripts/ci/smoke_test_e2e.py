@@ -45,7 +45,7 @@ import httpx
 # Load .env from repo root if present (Phase 0 convenience — no impact on CI mock).
 try:
     from dotenv import load_dotenv
-    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
     if _env_path.exists():
         load_dotenv(_env_path, override=False)
 except ImportError:
@@ -164,8 +164,8 @@ def step1_boot(client: httpx.Client, base_url: str) -> dict[str, Any]:
 
         # check_schema_drift — only invoked when DATABASE_URL is set.
         if os.getenv("DATABASE_URL"):
-            repo_root = Path(__file__).resolve().parent.parent
-            script = repo_root / "scripts" / "check_schema_drift.py"
+            repo_root = Path(__file__).resolve().parent.parent.parent
+            script = repo_root / "scripts" / "ci" / "check_schema_drift.py"
             if script.exists():
                 proc = subprocess.run(
                     [sys.executable, str(script)],
