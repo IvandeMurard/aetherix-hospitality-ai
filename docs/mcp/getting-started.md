@@ -1,35 +1,51 @@
-# Aetherix MCP Server — Getting Started (v0)
+# Aetherix MCP Server — Getting Started (v0 + v1)
 
 > **Audience**: third-party agents, enterprise agent hubs, partner integrations.
-> **Status**: v0 — 3 tools, opaque bearer auth, single-tenant per token.
-> **Spec**: [ADR 0001](../adr/0001-aetherix-mcp-server-v0.md)
+> **Status**: v0 (3 tools, ADR-0001) · v1 adds atomic `recall_memory` (ADR-0004).
+> **Specs**: [ADR 0001](../adr/0001-aetherix-mcp-server-v0.md) · [ADR 0004](../adr/0004-orchestrator-separation.md)
+
+---
+
+## Endpoints
+
+Two MCP surfaces are mounted side-by-side:
+
+| Path | Tools advertised | When to use |
+|------|------------------|-------------|
+| `/mcp/v0/` | 3 tools (predict · composite recommend · feedback) | Existing Claude Desktop / Apaleo Agent Hub consumers — stable |
+| `/mcp/v1/` | 4 tools (v0 + atomic `recall_memory`) | Orchestrators / agents that compose recall and predict explicitly |
+
+> **v1 is additive in Phase 3.** The composite `get_recommendations_with_memory_context` is still available on both versions. A future PR (HOS-184 phase 2) will deprecate it on v1 only and add a `Deprecation` header to its v0 response.
 
 ---
 
 ## What this server exposes
 
-Three tools, agent-callable over MCP:
+| Tool | v0 | v1 | Purpose |
+|------|----|----|---------|
+| `get_operational_predictions` | ✓ | ✓ | F&B covers forecast + staffing for a target date |
+| `get_recommendations_with_memory_context` | ✓ | ✓ (deprecation planned) | Composite recall + forecast bundle |
+| `submit_feedback_to_memory` | ✓ | ✓ | Record manager outcome for a past recommendation |
+| `recall_memory` | — | ✓ | **Atomic** semantic recall from operational memory — no forecast bundling |
 
-| Tool | Purpose |
-|------|---------|
-| `get_operational_predictions` | F&B covers forecast + staffing for a target date |
-| `get_recommendations_with_memory_context` | Contextualized advice pulling from operational memory |
-| `submit_feedback_to_memory` | Record manager outcome for a past recommendation |
+### When to call `recall_memory` instead of the composite
+
+The composite tool sequences embed → recall → forecast in a fixed pipe with no visibility into intermediate results. The atomic `recall_memory` returns only memory hits + `top_similarity`, letting an orchestrator decide whether to expand the window (e.g. retry with `k_memory=10` when similarity is low) before calling `get_operational_predictions`. This is the building block for the agentic loop introduced by ADR-0004.
 
 Multi-tenant isolation is **enforced server-side**: the `hotel_id` is bound to the bearer token. Tool schemas do not accept `hotel_id` — attempting to pass it is silently ignored.
 
 ---
 
-## Endpoint
+## Wire format
 
 ```
-POST /mcp/v0/
+POST /mcp/v0/   (or /mcp/v1/)
 Content-Type: application/json
 Accept: application/json
 Authorization: Bearer atx_<env>_<secret>
 ```
 
-The server speaks the MCP JSON-RPC 2.0 subset: `initialize`, `tools/list`, `tools/call`.
+The server speaks the MCP JSON-RPC 2.0 subset: `initialize`, `tools/list`, `tools/call`. The `x-aetherix-mcp-version` response header echoes the version of the endpoint hit (`0` or `1`).
 
 ---
 
@@ -114,7 +130,7 @@ VALUES (
   'hotel_xyz_uuid',
   encode(sha256('atx_prod_<secret>'::bytea), 'hex'),
   'atx_prod',
-  ARRAY['predict','recommend','feedback'],
+  ARRAY['predict','recommend','feedback','recall'],
   'Claude Desktop — Manager Alice'
 );
 ```
@@ -125,6 +141,9 @@ The raw token (`atx_prod_<secret>`) is given to the agent caller once; only the 
 - `predict` → allows `get_operational_predictions`
 - `recommend` → allows `get_recommendations_with_memory_context`
 - `feedback` → allows `submit_feedback_to_memory`
+- `recall` → allows `recall_memory` (v1 only)
+
+> **Note (ADR-0004):** `recall` is a distinct scope from `recommend`. Existing tokens scoped to `recommend` do **not** automatically gain access to the new atomic `recall_memory` tool — grants are explicit. Reissue or update the token's `scopes` array to include `recall` before consumers on v1 can use it.
 
 ---
 
@@ -137,6 +156,7 @@ Per-tenant, per-tool, sliding 1-minute window:
 | `get_operational_predictions` | 60 req/min |
 | `get_recommendations_with_memory_context` | 30 req/min |
 | `submit_feedback_to_memory` | 20 req/min |
+| `recall_memory` | 30 req/min |
 
 On breach, the server returns a JSON-RPC error with `data.status = 429` and `data.title = "rate_limited"`.
 
@@ -202,5 +222,8 @@ Errors are RFC 7807 Problem Details wrapped inside the MCP JSON-RPC error envelo
 ## Further reading
 
 - [ADR 0001 — MCP Server v0](../adr/0001-aetherix-mcp-server-v0.md)
+- [ADR 0004 — Orchestrator separation (v1 atomic tools)](../adr/0004-orchestrator-separation.md)
+- [Mesh architecture overview](../mesh-architecture.md)
 - `backend/app/mcp_server.py` — tool implementations
-- `backend/app/api/routes/mcp.py` — HTTP shim
+- `backend/app/api/routes/mcp.py` — HTTP shim (v0 + v1 router factory)
+- `backend/orchestrator/` — proto-orchestrator that consumes these tools

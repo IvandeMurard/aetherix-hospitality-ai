@@ -20,12 +20,18 @@ _TOOL_RATE_LIMITS = {
     "get_operational_predictions": 60,
     "get_recommendations_with_memory_context": 30,
     "submit_feedback_to_memory": 20,
+    # ADR-0004 / HOS-184: atomic memory recall, available alongside the
+    # composite v0 tool. The Orchestrator composes recall + predict explicitly.
+    "recall_memory": 30,
 }
 
 _TOOL_SCOPE = {
     "get_operational_predictions": "predict",
     "get_recommendations_with_memory_context": "recommend",
     "submit_feedback_to_memory": "feedback",
+    # ADR-0004: distinct scope from "recommend" so existing tokens do not
+    # silently gain new capability. Tokens must explicitly grant "recall".
+    "recall_memory": "recall",
 }
 
 # Separate admin scope for destructive / model-mutating operations (HOS-149 AC4)
@@ -142,6 +148,22 @@ TOOLS_MANIFEST: list[dict[str, Any]] = [
                 },
                 "actual_value": {"type": "number"},
                 "notes": {"type": "string", "maxLength": 1000},
+            },
+        },
+    },
+    {
+        # ADR-0004 · HOS-184 PR-A — atomic memory recall.
+        # Companion to get_operational_predictions. The Orchestrator composes
+        # both with full visibility into intermediate results, unlike the
+        # opaque get_recommendations_with_memory_context (deprecated in PR-B).
+        "name": "recall_memory",
+        "description": "Semantic recall from operational_memory for the authenticated property. Returns memory hits without forecast bundling.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["query"],
+            "properties": {
+                "query": {"type": "string", "maxLength": 500},
+                "k_memory": {"type": "integer", "default": 5, "minimum": 1, "maximum": 20},
             },
         },
     },

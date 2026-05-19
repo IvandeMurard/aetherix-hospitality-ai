@@ -194,7 +194,11 @@ app.include_router(roi.router, prefix="/api/v1")
 # P2-6 Receipt drill-down — MCP bearer + receipts:read scope (HOS-172)
 app.include_router(receipts_route.router, prefix="/api/v1")
 # P1-2 Aetherix MCP Server v0 — inbound, agent-callable (ADR 0001 · HOS-71)
-app.include_router(mcp.router)
+app.include_router(mcp.router_v0)
+# ADR-0004 · HOS-184 PR-A: v1 surface adds recall_memory atomic tool.
+# Phase 3: v1 manifest = v0 manifest + recall_memory (additive).
+# Phase 3 PR-B will drop get_recommendations_with_memory_context from v1.
+app.include_router(mcp.router_v1)
 # Demo observability board — always registered, returns 503 when DEMO_MODE=false
 app.include_router(demo.router, prefix="/api/v1")
 # Story 4.3 (HOS-26): public Twilio callback — no /api/v1 or auth prefix

@@ -172,6 +172,87 @@ async def tool_get_recommendations_with_memory_context(
     }
 
 
+async def tool_recall_memory(
+    hotel_id: str,
+    query: str,
+    db: AsyncSession,
+    embedding_provider: Any = None,
+    k_memory: int = 5,
+) -> dict[str, Any]:
+    """Atomic semantic recall from operational_memory (ADR-0004 · HOS-184 PR-A).
+
+    Companion to `get_operational_predictions`. Unlike
+    `get_recommendations_with_memory_context` (which bundles recall + forecast
+    + LLM reasoning into one opaque call), this tool returns ONLY memory hits.
+    The Orchestrator composes recall with predict explicitly, observing
+    intermediate results and adjusting parameters (e.g. widening k_memory
+    when top_similarity is low).
+
+    Cold-start fallback: when the embedding provider is unavailable or fails,
+    we fall back to recency (latest N rows). This mirrors the existing v0
+    composite tool so a single-tool migration is safe.
+    """
+    query = sanitize_notes(query, max_len=500)
+    if not query:
+        raise MCPAuthError(400, "invalid_input", "query is required")
+    k = max(1, min(20, int(k_memory)))
+
+    memory_hits_raw: list[dict[str, Any]] = []
+    source = "semantic_recall"
+
+    if embedding_provider is not None:
+        try:
+            query_vec = await embedding_provider.embed(query)
+            recall_svc = MemoryRecallService(db)
+            hits = await recall_svc.recall(hotel_id, query_vec, k=k)
+            memory_hits_raw = [
+                {
+                    "pattern_id": str(h.id),
+                    "summary": h.reflection[:200],
+                    "feedback": h.manager_feedback,
+                    "similarity": round(h.similarity, 4),
+                    "source": h.source,
+                    "created_at": h.created_at.isoformat() if h.created_at else None,
+                }
+                for h in hits
+            ]
+        except Exception as exc:
+            logger.warning("recall_memory semantic recall failed, falling back to recency: %s", exc)
+            memory_hits_raw = []
+
+    if not memory_hits_raw:
+        # Recency fallback — embedding unavailable, recall failed, or zero hits.
+        source = "recency_fallback"
+        result = await db.execute(
+            select(OperationalMemory)
+            .where(OperationalMemory.hotel_id == hotel_id)
+            .order_by(OperationalMemory.created_at.desc())
+            .limit(k)
+        )
+        rows = result.scalars().all()
+        memory_hits_raw = [
+            {
+                "pattern_id": str(r.id),
+                "summary": (r.reflection or "")[:200],
+                "feedback": r.manager_feedback,
+                "similarity": None,
+                "source": "recency_fallback",
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+
+    similarities = [h["similarity"] for h in memory_hits_raw if h["similarity"] is not None]
+    top_similarity = max(similarities) if similarities else None
+
+    return {
+        "memory_hits": memory_hits_raw,
+        "top_similarity": top_similarity,
+        "source": source,
+        "k_memory": k,
+    }
+
+
 async def tool_submit_feedback_to_memory(
     hotel_id: str,
     recommendation_id: str,
@@ -339,6 +420,11 @@ async def dispatch_tool(
                 result = await tool_submit_feedback_to_memory(
                     tok.hotel_id, db=db, embedding_provider=embedding_provider,
                     request_id=event.request_id, **args,
+                )
+            elif tool_name == "recall_memory":
+                # ADR-0004 · HOS-184 PR-A — atomic recall, no forecast bundling.
+                result = await tool_recall_memory(
+                    tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
                 )
             else:
                 raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")

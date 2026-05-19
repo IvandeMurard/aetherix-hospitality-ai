@@ -148,3 +148,6 @@ jobs:
       - name: Check schema drift (strict)
         working-directory: backend
         run: uv run python ../scripts/ci/check_schema_drift.py --strict --print-ignored
+
+      - name: Check orchestrator boundary (ADR-0004)
+        run: python scripts/ci/check_orchestrator_boundary.py

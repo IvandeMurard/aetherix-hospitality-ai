@@ -97,12 +97,14 @@ class TestScopeEnforcement:
 
 
 class TestToolsManifest:
-    def test_exposes_three_tools(self):
+    def test_exposes_expected_tools(self):
+        """v0 (3 tools, ADR-0001) + recall_memory (ADR-0004 PR-A) = 4."""
         names = [t["name"] for t in TOOLS_MANIFEST]
         assert "get_operational_predictions" in names
         assert "get_recommendations_with_memory_context" in names
         assert "submit_feedback_to_memory" in names
-        assert len(TOOLS_MANIFEST) == 3
+        assert "recall_memory" in names
+        assert len(TOOLS_MANIFEST) == 4
 
     def test_no_tool_exposes_hotel_id_input(self):
         """Critical — hotel_id must never be client-supplied (ADR D4)."""
@@ -118,6 +120,39 @@ class TestToolsManifest:
         for t in TOOLS_MANIFEST:
             assert t.get("description")
             assert t.get("inputSchema", {}).get("type") == "object"
+
+    def test_recall_memory_schema_shape(self):
+        """recall_memory advertises a query + optional k_memory, no target_date."""
+        tool = next(t for t in TOOLS_MANIFEST if t["name"] == "recall_memory")
+        props = tool["inputSchema"]["properties"]
+        assert "query" in props
+        assert "k_memory" in props
+        assert "target_date" not in props, (
+            "recall_memory is atomic — target_date belongs to get_operational_predictions"
+        )
+        assert tool["inputSchema"]["required"] == ["query"]
+        assert props["k_memory"].get("maximum") == 20
+
+
+class TestRecallMemoryScope:
+    """ADR-0004: recall_memory has its own scope, distinct from `recommend`.
+
+    Existing tokens scoped to `recommend` must NOT silently gain access to
+    `recall_memory` — scope grants are explicit.
+    """
+
+    def test_recall_scope_required(self):
+        with pytest.raises(MCPAuthError) as excinfo:
+            require_scope(["recommend"], "recall_memory")
+        assert excinfo.value.status == 403
+        assert "recall" in excinfo.value.detail
+
+    def test_recall_scope_granted(self):
+        require_scope(["recall"], "recall_memory")
+
+    def test_recommend_scope_does_not_grant_recall(self):
+        with pytest.raises(MCPAuthError):
+            require_scope(["predict", "recommend", "feedback"], "recall_memory")
 
 
 # ---------------------------------------------------------------------------
@@ -184,3 +219,120 @@ class TestTenantIsolationD4:
         arguments = {"query": "rainy saturday dinner"}
         filtered = {k: v for k, v in arguments.items() if k != "hotel_id"}
         assert filtered == arguments
+
+
+class TestRecallMemoryTool:
+    """Tier 2 — tool_recall_memory atomic recall (ADR-0004 · HOS-184 PR-A).
+
+    The DB-touching happy path is exercised by the existing v0 composite
+    tool tests; here we cover the new tool's input contract and the safe
+    early-exit paths that do not require a working DB session.
+    """
+
+    @_skip_if_no_server
+    @pytest.mark.asyncio
+    async def test_empty_query_raises_400(self):
+        from unittest.mock import MagicMock
+        db = MagicMock()
+        with pytest.raises(MCPAuthError) as excinfo:
+            await _server.tool_recall_memory("hotel-a", "", db=db)
+        assert excinfo.value.status == 400
+        assert "query is required" in excinfo.value.detail
+
+    @_skip_if_no_server
+    @pytest.mark.asyncio
+    async def test_whitespace_only_query_raises_400(self):
+        """Sanitizer strips whitespace; effectively-empty input must error."""
+        from unittest.mock import MagicMock
+        db = MagicMock()
+        with pytest.raises(MCPAuthError) as excinfo:
+            await _server.tool_recall_memory("hotel-a", "   \t  ", db=db)
+        assert excinfo.value.status == 400
+
+    @_skip_if_no_server
+    @pytest.mark.asyncio
+    async def test_k_memory_clamped_at_upper_bound(self):
+        """k_memory > 20 must be silently clamped, never amplified at the DB."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        # db.execute returns an empty rows iterable to trigger the recency
+        # fallback path. We only assert the returned k_memory field reflects
+        # the clamp — no DB content needed.
+        scalars = MagicMock()
+        scalars.all = MagicMock(return_value=[])
+        result_mock = MagicMock()
+        result_mock.scalars = MagicMock(return_value=scalars)
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=result_mock)
+
+        out = await _server.tool_recall_memory(
+            "hotel-a", "test query", db=db, embedding_provider=None, k_memory=999
+        )
+        assert out["k_memory"] == 20  # upper bound from max(1, min(20, k))
+        assert out["source"] == "recency_fallback"
+        assert out["memory_hits"] == []
+        assert out["top_similarity"] is None
+
+    @_skip_if_no_server
+    @pytest.mark.asyncio
+    async def test_k_memory_clamped_at_lower_bound(self):
+        from unittest.mock import AsyncMock, MagicMock
+        scalars = MagicMock()
+        scalars.all = MagicMock(return_value=[])
+        result_mock = MagicMock()
+        result_mock.scalars = MagicMock(return_value=scalars)
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=result_mock)
+
+        out = await _server.tool_recall_memory(
+            "hotel-a", "test", db=db, embedding_provider=None, k_memory=0
+        )
+        assert out["k_memory"] == 1
+
+    @_skip_if_no_server
+    @pytest.mark.asyncio
+    async def test_no_embedding_provider_falls_back_to_recency(self):
+        """When embedding_provider is None, we go straight to recency fallback."""
+        from unittest.mock import AsyncMock, MagicMock
+        scalars = MagicMock()
+        scalars.all = MagicMock(return_value=[])
+        result_mock = MagicMock()
+        result_mock.scalars = MagicMock(return_value=scalars)
+        db = MagicMock()
+        db.execute = AsyncMock(return_value=result_mock)
+
+        out = await _server.tool_recall_memory(
+            "hotel-a", "anything", db=db, embedding_provider=None
+        )
+        assert out["source"] == "recency_fallback"
+        # db.execute should have been called exactly once (the fallback query)
+        assert db.execute.await_count == 1
+
+
+class TestOrchestratorImportSurface:
+    """ADR-0004 — orchestrator/ must import cleanly and expose its public API.
+
+    This is a smoke test: importing the package alone validates the boundary
+    is respected (no app.services / app.db / app.api imports) AND the public
+    class is exposed.
+    """
+
+    def test_orchestrator_package_imports(self):
+        try:
+            from orchestrator import AetherixOrchestrator  # type: ignore[import-not-found]
+        except ImportError:
+            pytest.skip("orchestrator package not on sys.path in this test env")
+        assert AetherixOrchestrator is not None
+
+    def test_handle_request_is_pra_stub(self):
+        """PR-A stub: any call must raise NotImplementedError until PR-B."""
+        try:
+            from orchestrator import AetherixOrchestrator  # type: ignore[import-not-found]
+        except ImportError:
+            pytest.skip("orchestrator package not on sys.path in this test env")
+        orch = AetherixOrchestrator()
+        import asyncio
+        with pytest.raises(NotImplementedError):
+            asyncio.get_event_loop().run_until_complete(
+                orch.handle_request(query="test")
+            )
