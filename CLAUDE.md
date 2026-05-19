@@ -54,6 +54,7 @@
 | 16 | Schema drift gate CI obligatoire (Epic 9 retro 14/05/2026) | Invariant **"ORM = miroir exact des migrations"**. Tout merge bloqué si une colonne du modèle SQLAlchemy n'existe pas en DB (ou inverse). Découvert via Epic 9 (HOS-148) : 3 bugs silencieux résolus. Implémentation : `scripts/ci/check_schema_drift.py` + `scripts/ci/schema_drift_ignore.json`. Convention IDs : `docs/context/data-conventions.md`. |
 | 17 | Hébergement Fly.io (14/05/2026) | Backend déployé sur Fly.io, région `cdg` (Paris). 1 instance always-on (`min_machines_running=1`) — requis par APScheduler in-process. Image Docker Python 3.12 + uv multi-stage. Secrets via `flyctl secrets set` (jamais commités). Latence Paris ↔ Supabase Stockholm ~30ms (acceptable Phase 0). URL staging : `https://aetherix-backend.fly.dev`. Détail déploiement : `docs/secrets_handling.md`. Remplace l'ancienne contrainte "local Windows / GitHub uniquement". |
 | 18 | Phase 3 cut serré + portfolio reinforcement (17/05/2026) | Phase 3 scope = Pilot Validation **uniquement** (Track A) + Portfolio Reinforcement (Track B). Multi-hotel / Mews / cross-property dashboard / food waste → Phase 4 (Scale). Track B = over-engineering volontaire pour hiring signal : Hive Memory algorithm (k-means + shapelet + LLM persona, MCP tool exposé), Paris Open Data MCP node (`que-faire-a-paris` → pgvector → MCP tool callable par agents externes), 1 article technique public. Tacet MCP wrapping = repo séparé hors Linear Aetherix. Mews partnership form à soumettre Day 1 Phase 3 (latence partner approval). Détail → `docs/planning/phase-3-pilot-validation.md`. Epic 10 = HOS-174, 9 stories P3-1→P3-9. |
+| 19 | Orchestrateur séparé de Aetherix — ADR-0004 (18/05/2026) | Aetherix = nœud d'exécution F&B uniquement (forecast, staffing, memory, receipts). `AetherixEngine` ("Hybrid Hub") migre vers `backend/orchestrator/agent.py`. Interface = MCP uniquement, zéro import Python croisé. `get_recommendations_with_memory_context` dépréciée → 2 tools atomiques : `recall_memory` + `get_operational_predictions`. Orchestrateur = module Phase 3, repo séparé Phase 4. Anima/Guest Context Node = Phase 4. Détail → `docs/adr/0004-orchestrator-separation.md`. |
 
 ---
 
@@ -109,10 +110,12 @@ Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026
 
 ```
 backend/app/providers/         — abstraction LLM + Embedding (claude, mistral, gemini, fallback, factory)
-backend/app/services/          — orchestration IA et logique métier
+backend/app/services/          — exécution F&B (forecast, staffing, memory, receipts) — NE PAS y mettre de logique d'orchestration (ADR-0004)
 backend/app/integrations/      — Obsidian, Linear, Apaleo, Twilio, SendGrid
-backend/app/mcp_server.py      — MCP Server v0 (3 tools, HOS-71, PR #73)
+backend/app/mcp_server.py      — MCP Server v0 (3 tools, HOS-71, PR #73) — tools atomiques uniquement
+backend/orchestrator/          — proto-orchestrateur Phase 3 (AetherixEngine migré ici, ADR-0004)
 backend/app/middleware/        — agent_tracking.py (Agent SEO discovery + request_id, P1-5/HOS-72)
+docs/mesh-architecture.md     — SOURCE DE VÉRITÉ CROSS-REPOS (Mesh global : Aetherix + Tacet + Orchestrateur + Anima). Charger en priorité pour tout contexte architectural inter-nœuds.
 scripts/ops/veille_proactive.py    — monitoring hebdomadaire automatisé
 scripts/ci/audit_id_types.py      — audit statique des mismatches tenant_id/property_id/hotel_id (HOS-163)
 docs/context/data-conventions.md — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
