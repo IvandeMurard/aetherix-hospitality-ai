@@ -1,8 +1,9 @@
 # ADR 0004 — Orchestrator Separation: Aetherix as F&B Execution Node
 
+
 > **Status**: Accepted · **Date**: 2026-05-18 · **Author**: Architect (Sonnet)
 > **Context**: Phase 3 Agentic Mesh architecture — validated by hospitality.today "Six Layers" framework
-> **Linear**: HOS-186 · **Supersedes**: none · **Amends**: ADR 0001 (scope of `AetherixEngine`)
+> **Linear**: HOS-186 (ADR) · HOS-184 (implementation — PR #127) · **Supersedes**: none · **Amends**: ADR 0001 (scope of `AetherixEngine`)
 
 ---
 
@@ -186,3 +187,15 @@ No Aetherix code changes required when Tacet is added. This is the composability
 | D6 | AetherixEngine | Migrate to orchestrator | Delete (would lose logic), keep in app/services (defeats D1) |
 | D7 | Agentic loop | Build in orchestrator/agent.py | Build in app/services (same problem as current state) |
 | D8 | Tacet | MCP client in orchestrator | Python import (separate repo, impossible anyway) |
+
+---
+
+## 7. Implementation references
+
+- ackend/orchestrator/__init__.py + gent.py — OrchestratorAgent (HOS-184)
+- ackend/app/services/aetherix_engine.py — thin wrapper delegating to OrchestratorAgent
+- ackend/app/api/routes/mcp_v1.py — /mcp/v1/ HTTP shim
+- ackend/app/mcp_server.py — 	ool_recall_memory implementation
+- ackend/tests/orchestrator/test_agent.py — CI boundary test + unit tests
+- docs/mcp/getting-started.md — updated tool schemas + migration guide
+- CLAUDE.md Decision #19
