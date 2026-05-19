@@ -54,12 +54,77 @@ Le Hospitality Agentic Mesh est une plateforme de nœuds IA spécialisés, indé
 
 ### Anima — Guest Context Node
 **Repo :** à créer Phase 4
-**Rôle :** Mémoire relationnelle augmentée. Vectorise et maintient l'état émotionnel et logistique du guest : retard de vol, historique CRM, humeur inférée, statut VIP, préférences idiosyncratiques.
-**MCP tools cibles :**
-- `query_guest_profile(guest_id, context_query)` → profil contextuel + état actuel
-- `update_guest_state(guest_id, event)` → mise à jour post-interaction
-**Statut Phase 3 :** non codé. L'algorithme Hive Memory d'Aetherix (cross-hôtels F&B) est un embryon technologique de ce nœud — preuve de viabilité d'une mémoire persistante vectorielle.
-**Statut Phase 4 :** design quand 1er pilote réel → données CRM + PMS write disponibles.
+**Rôle :** Mémoire relationnelle augmentée par guest. Vectorise et maintient l'état émotionnel et logistique : retard de vol, historique CRM, humeur inférée, statut VIP, préférences idiosyncratiques, plaintes passées.
+**Principe directeur :** permettre à l'Orchestrateur de décider contextuellement *sans baisser les prix* — la bonne réponse au bon guest, au bon moment.
+
+#### Architecture mémoire — 4 couches temporelles
+
+Contrairement à Aetherix (mémoire opérationnelle largement long-terme — un feedback de 6 mois reste valide), Anima nécessite une distinction stricte entre couches temporelles. La décision "offrir un upgrade maintenant" dépend de QUELLE couche on interroge.
+
+| Couche | Storage | TTL | Contenu | Décisions qu'elle alimente |
+|--------|---------|-----|---------|---------------------------|
+| **1. Working memory** | Redis | Durée du séjour | "Vol en retard de 3h ce soir · vient de se plaindre du bruit · arrivé fatigué" | Immédiates : compensation, ton du message, geste opérationnel |
+| **2. Episodic memory** | PostgreSQL (time-filtered) | Séjour + 30j | "Ce séjour : 2× restaurant, menu végétarien, SPA mardi, demande oreillers" | Contextuelles : recommandations, upsell pertinent, late check-out |
+| **3. Semantic memory** | pgvector (permanent) | ∞ | "VIP depuis 2023 · 12 séjours · sensible bruit · 19°C · anniversaire juin · famille de 4" | Profil : priorité intervention, niveau de geste commercial, reconnaissance |
+| **4. Cross-guest intelligence** | Aggregations anonymisées | ∞ | "Guests de profil similaire valorisent F&B > SPA · demandent late check-out à 73%" | Segment : prédictions de préférences sans historique direct |
+
+**Sans cette distinction**, l'Orchestrateur doit soit tout charger (latence + bruit), soit décider sans le bon contexte (mauvaise décision). Avec, il interroge le scope strictement nécessaire.
+
+#### MCP tools cibles (Phase 4)
+
+```
+query_guest_profile(guest_id, context_query, scope) → ProfileSnapshot
+  scope: "working" | "current_stay" | "full_history" | "segment" | "all"
+  ProfileSnapshot: { working?, episodic?, semantic?, segment?, confidence }
+
+update_guest_state(guest_id, event) → { state_id, applied_to: [layers] }
+  event types: check_in, check_out, complaint, feedback, flight_status,
+               sentiment_signal, preference_observed
+
+get_emotional_risk(guest_id, stay_context) → { risk_score, drivers, suggested_actions }
+  drivers: liste structurée (fatigué, déçu_précédent, anniversaire_raté, etc.)
+```
+
+`scope` est le paramètre clé : l'Orchestrateur le choisit selon la décision à prendre. Charger `"all"` par défaut = anti-pattern (latence, leakage cross-couche).
+
+#### Sources de données (Phase 4)
+
+- **PMS write** (Apaleo / Mews) — check-in/out, room assignments, durée séjour
+- **CRM partenaire** (Duve, HiJiffy, Canary, Akia) — historique conversationnel, préférences déclarées
+- **Vol en temps réel** (FlightAware API ou équivalent) — retards, annulations
+- **Property Social Sentiment** (Phase 4 internal context) — reviews TripAdvisor/Booking propriété-spécifiques
+- **Feedback Aetherix** (`submit_feedback_to_memory`) — réactions managers, outcomes opérationnels guest-liés
+
+#### Stack cible
+
+| Couche | Technologie | Notes |
+|--------|------------|-------|
+| Working | Redis (Upstash) | TTL par séjour, sub-second access |
+| Episodic | PostgreSQL (Supabase) + index sur `guest_id`, `stay_id`, `timestamp` | Time-filtered queries, JSONB events |
+| Semantic | pgvector (Supabase) | Mistral 1024d embeddings, HNSW — même infra qu'Aetherix |
+| Segment | Materialized views + nightly k-means | Patterns inférés cross-guests anonymisés |
+| Interface | MCP server FastAPI | Pattern identique à Aetherix (bearer, hotel_id server-side) |
+
+#### Embryons technologiques — Phase 3
+
+Deux algorithmes existants servent de proof-of-viability pour Anima :
+
+- **HiveMemory** (Aetherix) — cross-hôtels F&B anonymisé (k-means + shapelet + LLM persona). Prouve la viabilité de l'agrégation pattern + mémoire persistante vectorielle au niveau hôtel. Sera adapté en *Cross-guest intelligence* (couche 4) d'Anima.
+- **SensoryMemory** (Tacet) — patterns environnementaux par zone. Prouve la viabilité du modèle épisodique time-filtered avec retrieval par scope.
+
+#### Prérequis (avant de builder)
+
+- [ ] 1er pilote Apaleo prod actif avec données guest réelles (Phase 3 Track A)
+- [ ] Accord partenariat CRM (Duve, HiJiffy ou Canary) — accès historique conversationnel
+- [ ] PMS write activé sur Apaleo prod (capacité de pousser des actions, pas juste lire)
+- [ ] **Analyse RGPD/CNIL formelle** : le profil émotionnel inféré = donnée personnelle sensible. Consentement explicite, retention policy, droit à l'oubli implémentés *avant* tout build.
+- [ ] DPIA (Data Protection Impact Assessment) si décisions automatisées affectent significativement le guest
+
+#### Statut
+
+- **Phase 3 :** conception uniquement (cette documentation). Aucun code.
+- **Phase 4 :** build après pilote réel + partenariat CRM + clearance RGPD.
+- **Phase 5 :** production multi-property + integration Orchestrator complète.
 
 ---
 
