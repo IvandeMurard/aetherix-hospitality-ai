@@ -117,8 +117,9 @@ backend/app/mcp_server.py      — MCP Server v0 (3 tools, HOS-71, PR #73) — t
 backend/orchestrator/          — proto-orchestrateur Phase 3 (AetherixEngine migré ici, ADR-0004)
 backend/app/middleware/        — agent_tracking.py (Agent SEO discovery + request_id, P1-5/HOS-72)
 docs/mesh-architecture.md     — SOURCE DE VÉRITÉ CROSS-REPOS (Mesh global : Aetherix + Tacet + Orchestrateur + Anima). Charger en priorité pour tout contexte architectural inter-nœuds.
-CASE_STUDY_UPDATE.md          — Prompt Lovable pour aligner le case study public (ivandemurard.com/aetherix) sur la vision Mesh (7 patches structurés).
+docs/marketing/CASE_STUDY_UPDATE.md — Prompt Lovable pour aligner le case study public (ivandemurard.com/aetherix) sur la vision Mesh (7 patches structurés).
 scripts/ops/veille_proactive.py    — monitoring hebdomadaire automatisé
+scripts/ops/sync_obsidian.ps1      — sync local du vault Obsidian (déplacé depuis .git-backup/)
 scripts/ci/audit_id_types.py      — audit statique des mismatches tenant_id/property_id/hotel_id (HOS-163)
 docs/context/data-conventions.md — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 docs/ARCHITECTURE.md           — design système (v0.2.0 — certaines sections obsolètes, se fier à ce fichier)
