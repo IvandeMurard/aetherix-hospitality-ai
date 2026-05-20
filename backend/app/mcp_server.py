@@ -38,6 +38,10 @@ from app.services.rate_limit import check_rate_limit_async
 
 logger = logging.getLogger(__name__)
 
+_ALL_TOOL_NAMES: frozenset[str] = frozenset(
+    {t["name"] for t in TOOLS_MANIFEST} | {t["name"] for t in V1_TOOLS_MANIFEST}
+)
+
 
 # ---------------------------------------------------------------------------
 # Auth — opaque bearer, hotel_id bound to token (ADR D3, D4)
@@ -340,8 +344,7 @@ async def dispatch_tool(
     Emits one agent_action_log row per call (ADR 0003 D2), including auth_error
     and rate_limited paths — every served request produces exactly one row.
     """
-    _all_tools = {t["name"] for t in TOOLS_MANIFEST} | {t["name"] for t in V1_TOOLS_MANIFEST}
-    if tool_name not in _all_tools:
+    if tool_name not in _ALL_TOOL_NAMES:
         raise MCPAuthError(404, "not_found", f"Unknown tool: {tool_name}")
 
     # Pre-tool event: hotel_id + scopes unknown until verify_bearer succeeds.

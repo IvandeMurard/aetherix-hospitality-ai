@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class OrchestratorAgent:
         reasoner: Any,
         staffer: Any,
         memory: Any,
-        profile_loader: Callable[[str], Any],
+        profile_loader: Callable[[str], Awaitable[Any]],
         constitution_builder: Optional[Callable[[Any, dict[str, Any]], Optional[str]]] = None,
     ) -> None:
         self._forecaster = forecaster
