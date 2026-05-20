@@ -1,4 +1,3 @@
-import logging
 from datetime import date
 from typing import Any, Dict, Optional
 
@@ -13,8 +12,6 @@ from app.services.rag_service import RAGService
 from app.services.reasoning_service import ReasoningService
 from app.services.staffing_service import StaffingService
 from orchestrator.agent import OrchestratorAgent
-
-logger = logging.getLogger(__name__)
 
 
 class AetherixEngine:
@@ -56,7 +53,7 @@ class AetherixEngine:
         await self._cache_recommendation(tenant_id, target_date, result)
         return result
 
-    async def _cache_recommendation(self, tenant_id: str, target_date: date, data: Dict):
+    async def _cache_recommendation(self, tenant_id: str, target_date: date, data: Dict) -> None:
         async with AsyncSessionLocal() as db:
             # Check if exists
             stmt = select(RecommendationCache).where(
