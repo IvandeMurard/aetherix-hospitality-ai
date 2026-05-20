@@ -35,6 +35,16 @@ out/
 backend/data/raw/*.csv
 _ai_workspace/
 
+# Linear audit output (regenerated on demand by scripts/linear_audit.py)
+linear_state.md
+
+# Ad-hoc DB snapshots (kept locally, never committed)
+pre-*-snapshot.sql
+*-snapshot.sql
+
+# Root OpenAPI dump (canonical copy lives in frontend/shared-data/openapi.json)
+/openapi.json
+
 # Claude Code agent worktrees
 .claude/worktrees/
 .claire/
