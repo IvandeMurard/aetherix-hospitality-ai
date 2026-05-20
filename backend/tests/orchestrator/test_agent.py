@@ -5,6 +5,7 @@ AC6 — unit tests with injected mock services
 """
 from __future__ import annotations
 
+import ast
 import pathlib
 from datetime import date
 from types import SimpleNamespace
@@ -18,13 +19,20 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def test_no_app_imports_in_orchestrator():
-    """Fail if any orchestrator/ file imports from app.*."""
+    """Fail if any orchestrator/ file imports from app.* (AST-based, ADR-0004)."""
     orch_root = pathlib.Path(__file__).parents[2] / "orchestrator"
-    violations = []
+    violations: list[str] = []
     for py_file in orch_root.rglob("*.py"):
-        content = py_file.read_text(encoding="utf-8")
-        if "from app." in content or "\nimport app." in content:
-            violations.append(str(py_file.relative_to(orch_root.parent)))
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        rel = str(py_file.relative_to(orch_root.parent))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.module and (node.module == "app" or node.module.startswith("app.")):
+                    violations.append(f"{rel}:{node.lineno} from {node.module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "app" or alias.name.startswith("app."):
+                        violations.append(f"{rel}:{node.lineno} import {alias.name}")
     assert not violations, (
         f"orchestrator/ must not import from app.*  (ADR-0004): {violations}"
     )
@@ -112,8 +120,6 @@ class TestOrchestratorAgentGetForecast:
             context={},
         )
         builder.assert_called_once()
-        _, kwargs = builder.call_args
-        # called as build_system_prompt(profile, forecast_context)
         assert builder.call_args[0][0] is fake_profile
 
     @pytest.mark.asyncio

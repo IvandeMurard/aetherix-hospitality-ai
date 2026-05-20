@@ -169,9 +169,11 @@ TOOLS_MANIFEST: list[dict[str, Any]] = [
     },
 ]
 
+_TOOLS_BY_NAME: dict[str, dict[str, Any]] = {t["name"]: t for t in TOOLS_MANIFEST}
+
 # v1 manifest: get_recommendations_with_memory_context replaced by recall_memory
 V1_TOOLS_MANIFEST: list[dict[str, Any]] = [
-    next(t for t in TOOLS_MANIFEST if t["name"] == "get_operational_predictions"),
+    _TOOLS_BY_NAME["get_operational_predictions"],
     RECALL_MEMORY_TOOL,
-    next(t for t in TOOLS_MANIFEST if t["name"] == "submit_feedback_to_memory"),
+    _TOOLS_BY_NAME["submit_feedback_to_memory"],
 ]
