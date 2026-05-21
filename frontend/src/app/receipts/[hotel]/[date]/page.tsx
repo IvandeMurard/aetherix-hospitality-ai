@@ -6,7 +6,19 @@ import { Badge } from '@/components/ui/badge';
 
 // ---------------------------------------------------------------------------
 // Types mirroring backend ReceiptPayload / ReceiptLine / MemoryHitSummary
+// and KPI endpoint (HOS-177)
 // ---------------------------------------------------------------------------
+
+interface DailyRate {
+  date: string;
+  rate: number | null;
+}
+
+interface TrustKpiData {
+  rolling_rate: number | null;
+  trend: 'up' | 'down' | 'flat';
+  daily: DailyRate[];
+}
 
 interface MemoryHitSummary {
   memory_id: string;
@@ -62,6 +74,7 @@ export default function ReceiptDrillDownPage({
   params: { hotel: string; date: string };
 }) {
   const [payload, setPayload] = useState<ReceiptPayload | null>(null);
+  const [trustKpi, setTrustKpi] = useState<TrustKpiData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -71,11 +84,11 @@ export default function ReceiptDrillDownPage({
       : null;
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-    const url = `${baseUrl}/api/v1/receipts/${params.hotel}/${params.date}`;
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const receiptUrl = `${baseUrl}/api/v1/receipts/${params.hotel}/${params.date}`;
+    const kpiUrl = `${baseUrl}/api/v1/kpi/${params.hotel}/recommendation_acceptance?days=7`;
 
-    fetch(url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
+    const receiptFetch = fetch(receiptUrl, { headers })
       .then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
@@ -83,7 +96,17 @@ export default function ReceiptDrillDownPage({
         }
         return res.json() as Promise<ReceiptPayload>;
       })
-      .then(setPayload)
+      .then(setPayload);
+
+    const kpiFetch = fetch(kpiUrl, { headers })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json() as TrustKpiData;
+        setTrustKpi(data);
+      })
+      .catch(() => undefined); // KPI card is non-blocking; silently skip on error
+
+    Promise.all([receiptFetch, kpiFetch])
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [params.hotel, params.date]);
@@ -119,6 +142,38 @@ export default function ReceiptDrillDownPage({
         </h1>
         <p className="text-sm text-muted-foreground">Hotel: {payload.hotel_id}</p>
       </div>
+
+      {/* Trust KPI — 7-day rolling acceptance rate (HOS-177) */}
+      {trustKpi && (
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+              7-Day Trust Rate
+            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-2xl font-bold">
+                {trustKpi.rolling_rate !== null
+                  ? `${(trustKpi.rolling_rate * 100).toFixed(0)}%`
+                  : '—'}
+              </p>
+              <Badge
+                variant={
+                  trustKpi.trend === 'up'
+                    ? 'default'
+                    : trustKpi.trend === 'down'
+                    ? 'destructive'
+                    : 'secondary'
+                }
+              >
+                {trustKpi.trend === 'up' ? '▲' : trustKpi.trend === 'down' ? '▼' : '—'}
+              </Badge>
+              {trustKpi.rolling_rate !== null && trustKpi.rolling_rate < 0.30 && (
+                <Badge variant="destructive" className="text-xs">below 30% threshold</Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
