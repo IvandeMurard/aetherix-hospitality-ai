@@ -16,13 +16,11 @@ Covered:
 from __future__ import annotations
 
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.workers.kpi_aggregator import (
-    _ALERT_MIN_DENOMINATOR,
-    _ALERT_THRESHOLD,
     _KPI_NAME,
     _check_and_emit_alerts,
     compute_rate,
