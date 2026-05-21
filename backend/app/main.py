@@ -23,6 +23,7 @@ from app.api.routes import (
     dashboard,
     demo,
     events,
+    kpi as kpi_route,
     mcp,
     mcp_v1,
     notifications,
@@ -48,6 +49,7 @@ from app.workers.agent_action_log_partition_rotation import (
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.event_sync import start_event_scheduler
+from app.workers.kpi_aggregator import register_kpi_aggregator_job
 from app.workers.memory_metrics import register_memory_metrics_job
 from app.workers.receipts_dispatcher import (
     register_receipt_dispatch_job,
@@ -118,6 +120,8 @@ async def lifespan(app: FastAPI):
     register_anomaly_scan_job(_scheduler)
     register_dispatch_job(_scheduler)
     register_memory_metrics_job(_scheduler)
+    # P3-3 — daily Trust-KPI aggregation at 02:30 UTC (after memory_metrics at 02:00).
+    register_kpi_aggregator_job(_scheduler)
     # HOS-150 AC4 — keep agent_action_log monthly partitions ahead of `now()`.
     register_partition_rotation_job(_scheduler)
     # HOS-156 — injected into the shared scheduler (no separate scheduler instances).
@@ -194,6 +198,8 @@ app.include_router(events.router, prefix="/api/v1")
 app.include_router(roi.router, prefix="/api/v1")
 # P2-6 Receipt drill-down — MCP bearer + receipts:read scope (HOS-172)
 app.include_router(receipts_route.router, prefix="/api/v1")
+# P3-3 Trust-KPI — recommendation_acceptance_rate timeseries (HOS-177)
+app.include_router(kpi_route.router, prefix="/api/v1")
 # P1-2 Aetherix MCP Server v0 — inbound, agent-callable (ADR 0001 · HOS-71)
 app.include_router(mcp.router)
 # HOS-184 Aetherix MCP Server v1 — atomic tools (ADR-0004)
