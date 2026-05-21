@@ -493,6 +493,24 @@ class OperationalMemory(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
+class KpiDaily(Base):
+    """Per-tenant daily KPI timeseries — HOS-177 (P3-3 Trust-KPI).
+
+    tenant_id maps to hotel_id in agent_action_log / operational_memory
+    (see docs/context/data-conventions.md and migration 20260521000000).
+    """
+
+    __tablename__ = "kpi_daily"
+
+    tenant_id = Column(String, primary_key=True, nullable=False)
+    kpi_date = Column(Date, primary_key=True, nullable=False)
+    kpi_name = Column(String, primary_key=True, nullable=False)
+    value = Column(Float, nullable=True)
+    numerator = Column(Integer, nullable=True)
+    denominator = Column(Integer, nullable=True)
+    computed_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+
 class AgentActionLog(Base):
     """One row per MCP tool call — billing + observability meter (ADR 0003 D1)."""
 
@@ -512,3 +530,4 @@ class AgentActionLog(Base):
     dedup_hit = Column(Boolean, nullable=True)
     top_similarity = Column(Float, nullable=True)
     request_id = Column(String, nullable=False, default="")
+    payload = Column(JSON, nullable=True)          # arbitrary event payload (e.g. kpi_alert rows)
