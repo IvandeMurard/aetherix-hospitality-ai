@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "apaleo": {
+      "command": "python",
+      "args": ["scripts/apaleo_mcp_proxy.py"]
+    }
+  }
+}
