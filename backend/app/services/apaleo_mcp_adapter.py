@@ -22,7 +22,6 @@ import logging
 from datetime import date
 from typing import Any
 
-from app.integrations.apaleo_logger import ApaleoWriteBlockedError
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
 from app.services.pms_sync import PMSAdapter
 
