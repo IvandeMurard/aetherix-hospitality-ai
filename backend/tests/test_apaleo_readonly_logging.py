@@ -9,7 +9,7 @@ Coverage:
   - ApaleoMCPClient     write-guard allows writes when APALEO_READONLY=false
   - ApaleoMCPClient     reads always pass through regardless of mode
   - ApaleoPMSAdapter    write-guard raises on update_staffing_in_pms (readonly)
-  - ApaleoMCPAdapter    ApaleoWriteBlockedError is re-raised (not swallowed)
+  - ApaleoMCPAdapter    update_staffing_in_pms is a no-op per Décision #21
 """
 from __future__ import annotations
 
@@ -348,32 +348,37 @@ class TestApaleoPMSAdapterWriteGuard:
 
 
 # ===========================================================================
-# ApaleoMCPAdapter — ApaleoWriteBlockedError re-raised (not swallowed)
+# ApaleoMCPAdapter — update_staffing_in_pms is a no-op (Décision #21)
+#
+# Décision #21 (CLAUDE.md, 26/05/2026): the Apaleo MCP server does not expose
+# a staffing-update tool. The adapter must NOT attempt the MCP call — it logs
+# a warning and returns False. The HOS-107 write-guard at the MCP client and
+# REST adapter level (see TestApaleoMCPClientWriteGuard and
+# TestApaleoPMSAdapterWriteGuard above) remains the source of truth for the
+# readonly invariant.
 # ===========================================================================
 
-class TestApaleoMCPAdapterWriteBlockedReraised:
-    async def test_write_blocked_error_propagates(
-        self, monkeypatch: pytest.MonkeyPatch
+class TestApaleoMCPAdapterStaffingNoOp:
+    async def test_returns_false_without_calling_mcp(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """ApaleoMCPAdapter must not catch ApaleoWriteBlockedError — it must re-raise."""
+        """update_staffing_in_pms must return False AND never invoke the MCP client."""
+        # Configured client so the early "not configured" branch is bypassed —
+        # we want to exercise the staffing-specific no-op path.
         mock_client = MagicMock(spec=ApaleoMCPClient)
         mock_client.is_configured = True
-        mock_client.call_tool = AsyncMock(
-            side_effect=ApaleoWriteBlockedError("blocked")
-        )
+        mock_client.call_tool = AsyncMock()  # would record any unexpected call
+
         adapter = ApaleoMCPAdapter(mcp_client=mock_client)
-        with pytest.raises(ApaleoWriteBlockedError):
-            await adapter.update_staffing_in_pms(
+        with caplog.at_level(logging.WARNING, logger="app.services.apaleo_mcp_adapter"):
+            result = await adapter.update_staffing_in_pms(
                 "MUC", date(2026, 3, 30), {"waiter": 2}
             )
 
-    async def test_generic_exception_returns_false(self) -> None:
-        """Generic transport errors must still return False (existing contract)."""
-        mock_client = MagicMock(spec=ApaleoMCPClient)
-        mock_client.is_configured = True
-        mock_client.call_tool = AsyncMock(side_effect=RuntimeError("network timeout"))
-        adapter = ApaleoMCPAdapter(mcp_client=mock_client)
-        result = await adapter.update_staffing_in_pms(
-            "MUC", date(2026, 3, 30), {}
-        )
         assert result is False
+        mock_client.call_tool.assert_not_awaited()
+        assert any(
+            "no staffing tool available" in r.message for r in caplog.records
+        ), "expected a warning explaining the no-op (Décision #21)"

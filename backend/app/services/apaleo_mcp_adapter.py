@@ -9,11 +9,11 @@ Decision HOS-101: MCP > API raw.
 Requires APALEO_MCP_SERVER_URL to be set (provided by Apaleo on alpha access).
 Falls back to safe defaults when not configured, so the pipeline is never blocked.
 
-MCP tool mapping (Apaleo Core API — 237 endpoints):
-    get_occupancy        → APALEO_GET_OCCUPANCY_METRICS
-    get_revenue          → APALEO_GET_REVENUE_METRICS
-    get_historical_data  → APALEO_GET_RESERVATIONS
-    update_staffing      → APALEO_UPDATE_SCHEDULE
+MCP tool mapping (Apaleo native PascalCase naming):
+    get_occupancy        → ListPropertyPerformanceReport  (soldCount/houseCount)
+    get_revenue          → ListRevenuesReport              (grossAmount.amount)
+    get_historical_data  → ListReservations                (reservations[])
+    update_staffing      → not available in Apaleo MCP     (returns False)
 """
 
 from __future__ import annotations
@@ -22,7 +22,6 @@ import logging
 from datetime import date
 from typing import Any
 
-from app.integrations.apaleo_logger import ApaleoWriteBlockedError
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
 from app.services.pms_sync import PMSAdapter
 
@@ -47,10 +46,15 @@ class ApaleoMCPAdapter(PMSAdapter):
             return 80
         try:
             data = await self._client.call_tool(
-                "APALEO_GET_OCCUPANCY_METRICS",
-                {"propertyId": property_id, "date": target_date.isoformat()},
+                "ListPropertyPerformanceReport",
+                {"property_id": property_id, "from_": target_date.isoformat(), "to": target_date.isoformat()},
             )
-            return int(data.get("occupancyPercent", data.get("occupancy", 80)))
+            report = data.get("data", {}) if isinstance(data, dict) else {}
+            house = int(report.get("houseCount", 0))
+            sold = int(report.get("soldCount", 0))
+            if house > 0:
+                return round(sold / house * 100)
+            return 80
         except Exception as exc:
             logger.error("ApaleoMCPAdapter.get_occupancy failed: %s", exc)
             return 80
@@ -63,23 +67,19 @@ class ApaleoMCPAdapter(PMSAdapter):
             return 0.0
         try:
             data = await self._client.call_tool(
-                "APALEO_GET_REVENUE_METRICS",
+                "ListRevenuesReport",
                 {
-                    "propertyId": property_id,
-                    "from": target_date.isoformat(),
+                    "property_id": property_id,
+                    "from_": target_date.isoformat(),
                     "to": target_date.isoformat(),
-                    "category": category,
                 },
             )
-            items: list[dict[str, Any]] = data.get("revenue", [])
-            if not items:
-                return float(data.get("totalRevenue", 0.0))
-            matched = [
-                float(i.get("amount", 0.0))
-                for i in items
-                if category.lower() in i.get("category", "").lower()
-            ]
-            return sum(matched) if matched else sum(float(i.get("amount", 0.0)) for i in items)
+            report = data.get("data", data) if isinstance(data, dict) else {}
+            if isinstance(report, list):
+                return sum(
+                    float(r.get("grossAmount", {}).get("amount", 0.0)) for r in report
+                )
+            return float(report.get("grossAmount", {}).get("amount", 0.0))
         except Exception as exc:
             logger.error("ApaleoMCPAdapter.get_revenue failed: %s", exc)
             return 0.0
@@ -92,17 +92,22 @@ class ApaleoMCPAdapter(PMSAdapter):
             return []
         try:
             data = await self._client.call_tool(
-                "APALEO_GET_RESERVATIONS",
+                "ListReservations",
                 {
-                    "propertyId": property_id,
-                    "from": start_date.isoformat(),
-                    "to": end_date.isoformat(),
-                    "pageSize": 500,
+                    "property_ids": [property_id],
+                    "date_filter": "Stay",
+                    "from_": f"{start_date.isoformat()}T00:00:00Z",
+                    "to": f"{end_date.isoformat()}T23:59:59Z",
+                    "status": ["Confirmed", "InHouse", "CheckedOut"],
+                    "page_size": 200,
                 },
             )
             if isinstance(data, list):
                 return data
-            return data.get("reservations", [])
+            inner = data.get("data", data) if isinstance(data, dict) else data
+            if isinstance(inner, list):
+                return inner
+            return inner.get("reservations", [])
         except Exception as exc:
             logger.error("ApaleoMCPAdapter.get_historical_data failed: %s", exc)
             return []
@@ -110,32 +115,11 @@ class ApaleoMCPAdapter(PMSAdapter):
     async def update_staffing_in_pms(
         self, property_id: str, target_date: date, staffing_deltas: dict[str, int]
     ) -> bool:
-        if not self._client.is_configured:
-            logger.warning("ApaleoMCPAdapter: not configured — staffing push skipped")
-            return False
-        try:
-            data = await self._client.call_tool(
-                "APALEO_UPDATE_SCHEDULE",
-                {
-                    "propertyId": property_id,
-                    "date": target_date.isoformat(),
-                    "deltas": staffing_deltas,
-                    "source": "Aetherix-AI",
-                },
-            )
-            success = bool(
-                data.get("success")
-                or data.get("status") in ("ok", "created", "updated", "accepted")
-            )
-            logger.info(
-                "ApaleoMCPAdapter.update_staffing: property=%s date=%s success=%s",
-                property_id, target_date, success,
-            )
-            return success
-        except ApaleoWriteBlockedError:
-            # Write-guard (HOS-107): re-raise so callers are explicitly aware
-            # that writes are disabled in Phase 0 — do not silently return False.
-            raise
-        except Exception as exc:
-            logger.error("ApaleoMCPAdapter.update_staffing_in_pms failed: %s", exc)
-            return False
+        # Apaleo MCP does not expose a staffing/schedule update tool.
+        # Writes are also blocked in Phase 0 (APALEO_READONLY=true, HOS-107).
+        logger.warning(
+            "ApaleoMCPAdapter.update_staffing_in_pms: no staffing tool available "
+            "in Apaleo MCP — property=%s date=%s",
+            property_id, target_date,
+        )
+        return False
