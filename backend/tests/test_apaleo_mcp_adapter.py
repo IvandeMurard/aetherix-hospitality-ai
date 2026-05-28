@@ -106,12 +106,12 @@ class TestGetOccupancy:
     async def test_returns_value_from_mcp(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
-        mock_mcp_client.call_tool.return_value = {"occupancyPercent": 75}
+        mock_mcp_client.call_tool.return_value = {"data": {"houseCount": 100, "soldCount": 75}}
         result = await adapter.get_occupancy("MUC", date(2026, 3, 29))
         assert result == 75
         mock_mcp_client.call_tool.assert_awaited_once_with(
-            "APALEO_GET_OCCUPANCY_METRICS",
-            {"propertyId": "MUC", "date": "2026-03-29"},
+            "ListPropertyPerformanceReport",
+            {"property_id": "MUC", "from_": "2026-03-29", "to": "2026-03-29"},
         )
 
     async def test_falls_back_on_mcp_error(
@@ -133,34 +133,33 @@ class TestGetOccupancy:
 # ---------------------------------------------------------------------------
 
 class TestGetRevenue:
-    async def test_returns_matching_category_sum(
+    async def test_returns_gross_amount(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
         mock_mcp_client.call_tool.return_value = {
-            "revenue": [
-                {"category": "F&B", "amount": 1200.0},
-                {"category": "Rooms", "amount": 4000.0},
-            ]
+            "data": {"grossAmount": {"amount": 5200.0, "currency": "EUR"}}
         }
-        result = await adapter.get_revenue("MUC", date(2026, 3, 29), "F&B")
-        assert result == 1200.0
+        result = await adapter.get_revenue("MUC", date(2026, 3, 29))
+        assert result == 5200.0
 
-    async def test_sums_all_when_no_category_match(
+    async def test_sums_list_response(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
         mock_mcp_client.call_tool.return_value = {
-            "revenue": [
-                {"category": "Rooms", "amount": 3000.0},
-                {"category": "Spa", "amount": 500.0},
+            "data": [
+                {"grossAmount": {"amount": 3000.0, "currency": "EUR"}},
+                {"grossAmount": {"amount": 500.0, "currency": "EUR"}},
             ]
         }
-        result = await adapter.get_revenue("MUC", date(2026, 3, 29), "F&B")
-        assert result == 3500.0  # no F&B match → sum all
+        result = await adapter.get_revenue("MUC", date(2026, 3, 29))
+        assert result == 3500.0
 
-    async def test_uses_totalRevenue_fallback(
+    async def test_uses_nested_data_key(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
-        mock_mcp_client.call_tool.return_value = {"totalRevenue": 9999.0}
+        mock_mcp_client.call_tool.return_value = {
+            "data": {"grossAmount": {"amount": 9999.0, "currency": "EUR"}}
+        }
         result = await adapter.get_revenue("MUC", date(2026, 3, 29))
         assert result == 9999.0
 
@@ -213,38 +212,17 @@ class TestGetHistoricalData:
 # ---------------------------------------------------------------------------
 
 class TestUpdateStaffingInPms:
-    async def test_returns_true_on_success(
+    async def test_always_returns_false(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
-        mock_mcp_client.call_tool.return_value = {"success": True}
+        # Apaleo MCP has no staffing/schedule update tool — always returns False.
         result = await adapter.update_staffing_in_pms(
             "MUC", date(2026, 3, 29), {"waiter": 2, "chef": 1}
         )
-        assert result is True
-        mock_mcp_client.call_tool.assert_awaited_once_with(
-            "APALEO_UPDATE_SCHEDULE",
-            {
-                "propertyId": "MUC",
-                "date": "2026-03-29",
-                "deltas": {"waiter": 2, "chef": 1},
-                "source": "Aetherix-AI",
-            },
-        )
-
-    async def test_accepts_status_ok(
-        self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
-    ) -> None:
-        mock_mcp_client.call_tool.return_value = {"status": "ok"}
-        assert await adapter.update_staffing_in_pms("MUC", date(2026, 3, 29), {}) is True
-
-    async def test_returns_false_on_error(
-        self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
-    ) -> None:
-        mock_mcp_client.call_tool.side_effect = Exception("network error")
-        result = await adapter.update_staffing_in_pms("MUC", date(2026, 3, 29), {})
         assert result is False
+        mock_mcp_client.call_tool.assert_not_awaited()
 
-    async def test_skips_when_not_configured(
+    async def test_returns_false_when_not_configured(
         self, unconfigured_adapter: ApaleoMCPAdapter
     ) -> None:
         result = await unconfigured_adapter.update_staffing_in_pms(
