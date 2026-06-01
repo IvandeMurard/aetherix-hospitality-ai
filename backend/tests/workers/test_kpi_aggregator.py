@@ -64,11 +64,17 @@ def _make_engine_mock(mv_rows: list[_FakeRow], rolling_rows: list[_FakeRow], ded
 
     execute_results = []
 
-    # Call 1: REFRESH MV → no result consumed
+    # Call 1: SELECT relispopulated → .scalar() truthy so the worker takes the
+    # CONCURRENTLY refresh path (MV already populated, the steady-state case)
+    populated_result = MagicMock()
+    populated_result.scalar.return_value = True
+    execute_results.append(populated_result)
+
+    # Call 2: REFRESH MV → no result consumed
     refresh_result = MagicMock()
     execute_results.append(refresh_result)
 
-    # Call 2: SELECT from recommendation_acceptance_daily
+    # Call 3: SELECT from recommendation_acceptance_daily
     mv_result = MagicMock()
     mv_result.fetchall.return_value = mv_rows
     execute_results.append(mv_result)
@@ -118,8 +124,8 @@ async def test_zero_recommendations_no_row_written():
     with patch("app.workers.kpi_aggregator.engine", engine_mock):
         await run_kpi_aggregation()
 
-    # REFRESH + MV SELECT + alert rolling SELECT (always runs, returns empty)
-    assert conn.execute.await_count == 3
+    # relispopulated SELECT + REFRESH + MV SELECT + alert rolling SELECT
+    assert conn.execute.await_count == 4
 
 
 # ---------------------------------------------------------------------------
@@ -137,11 +143,11 @@ async def test_single_tenant_upsert_called():
     with patch("app.workers.kpi_aggregator.engine", engine_mock):
         await run_kpi_aggregation()
 
-    # refresh + mv select + upsert = 3 calls, plus alert select = 4
-    assert conn.execute.await_count == 4
+    # relispopulated + refresh + mv select + upsert + alert select = 5
+    assert conn.execute.await_count == 5
 
-    # Check upsert call params
-    upsert_call = conn.execute.await_args_list[2]
+    # Check upsert call params (index 3: after relispopulated, refresh, mv select)
+    upsert_call = conn.execute.await_args_list[3]
     params = upsert_call.args[1]
     assert params["kpi_name"] == _KPI_NAME
     assert params["value"] == pytest.approx(1.0)
@@ -167,11 +173,11 @@ async def test_two_tenants_two_upserts():
     with patch("app.workers.kpi_aggregator.engine", engine_mock):
         await run_kpi_aggregation()
 
-    # refresh + mv select + 2 upserts + alert select = 5
-    assert conn.execute.await_count == 5
+    # relispopulated + refresh + mv select + 2 upserts + alert select = 6
+    assert conn.execute.await_count == 6
 
-    upsert_a = conn.execute.await_args_list[2].args[1]
-    upsert_b = conn.execute.await_args_list[3].args[1]
+    upsert_a = conn.execute.await_args_list[3].args[1]
+    upsert_b = conn.execute.await_args_list[4].args[1]
     assert upsert_a["tenant_id"] == "hotel_a"
     assert upsert_a["value"] == pytest.approx(0.5)
     assert upsert_b["tenant_id"] == "hotel_b"

@@ -63,6 +63,8 @@ FIXTURES: list[tuple[str, str]] = [
 
 async def main() -> int:
     try:
+        from sqlalchemy import text
+
         from app.db.models import AgentActionLog, OperationalMemory
         from app.db.session import AsyncSessionLocal
     except ImportError as exc:
@@ -79,6 +81,15 @@ async def main() -> int:
 
     inserted = 0
     async with AsyncSessionLocal() as session:
+        # Idempotency: clear any prior seed rows (tagged by the constant
+        # request_id prefix) so reruns don't accumulate duplicate fixtures.
+        await session.execute(
+            text(f"DELETE FROM agent_action_log WHERE request_id LIKE '{REQUEST_ID_PREFIX}%'")
+        )
+        await session.execute(
+            text(f"DELETE FROM operational_memory WHERE request_id LIKE '{REQUEST_ID_PREFIX}%'")
+        )
+
         for idx, (feedback, reflection) in enumerate(FIXTURES):
             request_id = f"{REQUEST_ID_PREFIX}{idx}"
             ts = base_ts + timedelta(minutes=idx * 5)
@@ -94,7 +105,11 @@ async def main() -> int:
                 memory_type="feedback",
                 tags=["hos190", "sandbox-seed"],
                 embedding=None,
-                embedding_pending=False,
+                # CHECK `embedding_or_pending` requires embedding IS NOT NULL OR
+                # embedding_pending = true. New rows start pending; the embedding
+                # worker fills the vector later. (embedding_pending=False here
+                # violated the constraint — fixed during HOS-190 AC6 validation.)
+                embedding_pending=True,
                 request_id=request_id,
                 created_at=ts,
             )
