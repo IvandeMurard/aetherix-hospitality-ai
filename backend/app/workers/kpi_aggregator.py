@@ -174,10 +174,27 @@ async def run_kpi_aggregation() -> None:
 
     try:
         async with engine.begin() as conn:
-            # Step 1: refresh the MV so today's slice is current
-            await conn.execute(
-                text("REFRESH MATERIALIZED VIEW CONCURRENTLY recommendation_acceptance_daily")
-            )
+            # Step 1: refresh the MV so today's slice is current.
+            # REFRESH ... CONCURRENTLY requires the MV to be already populated;
+            # on a fresh database it exists but has never been populated, so the
+            # first refresh must be non-concurrent (observed on Fly staging while
+            # closing HOS-190 AC6 — otherwise the cron silently never populates).
+            populated = (
+                await conn.execute(
+                    text(
+                        "SELECT relispopulated FROM pg_class "
+                        "WHERE oid = 'recommendation_acceptance_daily'::regclass"
+                    )
+                )
+            ).scalar()
+            if populated:
+                await conn.execute(
+                    text("REFRESH MATERIALIZED VIEW CONCURRENTLY recommendation_acceptance_daily")
+                )
+            else:
+                await conn.execute(
+                    text("REFRESH MATERIALIZED VIEW recommendation_acceptance_daily")
+                )
 
             # Step 2: aggregate yesterday's slice per tenant → upsert kpi_daily
             tenant_rows = await _aggregate_yesterday(conn, yesterday)
