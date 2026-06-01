@@ -55,7 +55,7 @@
 | 17 | Hébergement Fly.io (14/05/2026) | Backend déployé sur Fly.io, région `cdg` (Paris). 1 instance always-on (`min_machines_running=1`) — requis par APScheduler in-process. Image Docker Python 3.12 + uv multi-stage. Secrets via `flyctl secrets set` (jamais commités). Latence Paris ↔ Supabase Stockholm ~30ms (acceptable Phase 0). URL staging : `https://aetherix-backend.fly.dev`. Détail déploiement : `docs/secrets_handling.md`. Remplace l'ancienne contrainte "local Windows / GitHub uniquement". |
 | 18 | Phase 3 cut serré + portfolio reinforcement (17/05/2026) | Phase 3 scope = Pilot Validation **uniquement** (Track A) + Portfolio Reinforcement (Track B). Multi-hotel / Mews / cross-property dashboard / food waste → Phase 4 (Scale). Track B = over-engineering volontaire pour hiring signal : Hive Memory algorithm (k-means + shapelet + LLM persona, MCP tool exposé), Paris Open Data MCP node (`que-faire-a-paris` → pgvector → MCP tool callable par agents externes), 1 article technique public. Tacet MCP wrapping = repo séparé hors Linear Aetherix. Mews partnership form à soumettre Day 1 Phase 3 (latence partner approval). Détail → `docs/planning/phase-3-pilot-validation.md`. Epic 10 = HOS-174, 9 stories P3-1→P3-9. |
 | 19 | Orchestrateur séparé — Aetherix = F&B execution node (19/05/2026) | Aetherix bounded context = F&B uniquement (forecast, staffing, memory, receipts). `AetherixEngine` délègue à `OrchestratorAgent` (services injectés). **Règle CI** : zéro import `app.*` dans `orchestrator/` (enforced par `tests/orchestrator/test_agent.py`). MCP v1 (`/mcp/v1/`) : `get_recommendations_with_memory_context` → 2 outils atomiques (`recall_memory` scope `memory:read` + `get_operational_predictions`). v0 maintenu jusqu'au 2026-08-01 (Sunset header). Anima/Guest Context Node = Phase 4. `backend/orchestrator/` = module Phase 3, repo séparé Phase 4. ADR → `docs/adr/0004-orchestrator-separation.md`. |
-| 21 | Apaleo MCP — convention de nommage native (26/05/2026) | Les tools Apaleo MCP natifs utilisent le **PascalCase sans préfixe** (`ListReservations`, `ListPropertyPerformanceReport`, `ListRevenuesReport`) — pas la convention Composio (`APALEO_GET_*`). Toutes les réponses sont enveloppées dans `{"data": {...}}`. `update_staffing` n'existe pas côté Apaleo MCP (retourne False). Tests : 17/17. MCP proxy : `scripts/apaleo_mcp_proxy.py` → `.mcp.json`. |
+| 21 | Apaleo MCP — convention de nommage native (26/05/2026) | Les tools Apaleo MCP natifs utilisent le **PascalCase sans préfixe** (`ListReservations`, `ListPropertyPerformanceReport`, `ListRevenuesReport`) — pas la convention Composio (`APALEO_GET_*`). Toutes les réponses sont enveloppées dans `{"data": {...}}`. `update_staffing` n'existe pas côté Apaleo MCP (retourne False). Tests : 17/17. MCP proxy : `scripts/apaleo_mcp_proxy.py` → `.mcp.json`. **Sales evidence (28/05/2026)** : le playbook officiel Anthropic "AI for Hotel Owners" classe Apaleo dans le tier "API-First" recommandé (avec Mews) — direct talking point : *"Aetherix runs on one of the two PMS tiers the Anthropic playbook recommends."* À intégrer dans Agent Hub listing + deck pilot. |
 | 20 | Anima — architecture mémoire 4 couches + DPIA gate (19/05/2026) | Le Guest Context Node Anima (Phase 4) nécessite une séparation stricte des couches temporelles, contrairement à Aetherix (mémoire opérationnelle largement long-terme). Couches : **Working** (Redis · TTL séjour · décisions immédiates) · **Episodic** (PostgreSQL time-filtered · séjour + 30j · contextuelles) · **Semantic** (pgvector permanent · profil) · **Segment** (k-means anonymisé cross-guests). MCP tool `query_guest_profile` prend un paramètre `scope` obligatoire. **Gate non-négociable avant tout build :** analyse RGPD/CNIL + DPIA formelle (profil émotionnel = donnée personnelle sensible). HiveMemory (Aetherix) et SensoryMemory (Tacet) servent d'embryons technologiques. Détail → `docs/mesh-architecture.md` §2 Anima. |
 
 ---
@@ -79,7 +79,8 @@
 
 - [ ] **Embedding strategy** : pgvector vs Qdrant pour RAG (à re-évaluer Phase 4 quand multi-tenant + Hive Memory à scale ; pour l'instant pgvector reste suffisant)
 - [ ] **Pricing model** : par hôtel / par prédiction / hybrid — tracking Linear HOS-179 (P3-5), décision après 90j data pilote
-- [ ] **Hive Memory scope Phase 3 — proposition de swap (25/05/2026)** : remplacer "LLM persona generation" par **cold-start meta-learner** dans HOS-174 Track B. Rationale : prior bayésien Prophet construit depuis cohorte similaire (géo+segment+capacité) → pitch *"Day-1 MAPE ~22% au lieu de 90j d'attente"* = killer feature acquisition vs vague de concurrents adjacents (Jengu et al.). Persona reste valuable mais non-bloquant Phase 3. Federated hive + cohort signals + MCP-to-MCP consultation = roadmap Phase 4-5 (cf. mémoire `market_signals_2026Q2.md`). À trancher avant kickoff Sprint Phase 3.
+- [ ] **Apaleo Copilot scope F&B — canari à surveiller (01/06/2026)** : Apaleo confirmé first PMS MCP à ITB Berlin 2026 + démos booking apps ChatGPT natives. Risque que Copilot étende vers F&B forecasting / staffing → fermerait la niche Aetherix sur le PMS bedrock (Décisions #1, #7, #21). Triggers à monitorer : annonces Apaleo Copilot, releases MCP tools liés covers/staff, embauches Apaleo "operations AI". Mitigation : (a) shipper pilote HOS-176 Phase 3 avant Q4 2026, (b) outreach Apaleo Marketplace pour position de complément (pas concurrent), (c) accélérer Aetherix MCP v1 pour interop défensif. Story Linear URGENT-Apaleo-MCP-Server-eval à créer en session SM (mapping 235 tools natifs vs ceux qu'Aetherix consomme, livrable `docs/competitive/apaleo-mcp-mapping.md`). À ré-évaluer chaque mois en synthèse veille.
+- [x] **Hive Memory scope Phase 3 (RÉSOLU 28/05/2026 → ADR 0005)** : swap "LLM persona generation" → **cold-start meta-learner** ACCEPTÉ dans HOS-174 Track B. Architecture validée : cohort matching hybride (hard rules + embedding cosine), prior Prophet via `add_seasonality` + hyperparams calibrés, blending Bayesian model averaging (`n_eff_prior=30`, hard cutoff J+90), gate runtime auto-disable si Day-7 MAPE > 25%. Nouvelle table `hotel_cohort_features` (coefficients agrégés, opt-in tenant). MCP tool `query_cohort_prior` ajouté. Validation pré-pilote : LOO sur 5 sandbox properties. LLM persona déplacé Phase 4. Détail → `docs/adr/0005-cold-start-meta-learner.md`. Action SM : amender HOS-174 (P3-7 amend + P3-7b/7c new, +8 pts).
 - [x] **PMS priorité live (RÉSOLU 17/05/2026)** : Apaleo prod Phase 3 (1 design partner, HOS-176). Mews déplacé Phase 4 + form partner à soumettre Day 1 Phase 3 (latence approval).
 - [x] **MCP server (RÉSOLU 19/04/2026)** : FastAPI endpoint dédié retenu — `/mcp/v0` mounted sur l'app principale (lifespan partagé, ADR D2). Shippé via PR #73. Sidecar process rejeté (coût ops, pas de bénéfice latence observé).
 - [x] **Apaleo MCP direct (31/03/2026 — RÉSOLU)** : URL confirmée `https://mcp.apaleo.com/mcp/`, transport HTTP Streamable (SSE déprécié — notre `streamablehttp_client` est correct). Scope MCP activé sur le compte (code IIQJ). Auth OAuth2 bearer identique à la raw API. Activer via `POST /pms/sync?use_mcp=true` + `APALEO_MCP_SERVER_URL=https://mcp.apaleo.com/mcp/` dans `.env`.
@@ -111,24 +112,22 @@ Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026
 
 ## Fichiers clés
 
+**Code & scripts** (les chemins doc sont catalogués à part — voir ci-dessous) :
+
 ```
-backend/app/providers/         — abstraction LLM + Embedding (claude, mistral, gemini, fallback, factory)
-backend/app/services/          — exécution F&B (forecast, staffing, memory, receipts) — NE PAS y mettre de logique d'orchestration (ADR-0004)
-backend/app/integrations/      — Obsidian, Linear, Apaleo, Twilio, SendGrid
-backend/app/mcp_server.py      — MCP Server v0 (3 tools, HOS-71, PR #73) — tools atomiques uniquement
-backend/orchestrator/          — proto-orchestrateur Phase 3 (AetherixEngine migré ici, ADR-0004)
-backend/app/middleware/        — agent_tracking.py (Agent SEO discovery + request_id, P1-5/HOS-72)
-docs/mesh-architecture.md     — SOURCE DE VÉRITÉ CROSS-REPOS (Mesh global : Aetherix + Tacet + Orchestrateur + Anima). Charger en priorité pour tout contexte architectural inter-nœuds.
-docs/marketing/CASE_STUDY_UPDATE.md — Prompt Lovable pour aligner le case study public (ivandemurard.com/aetherix) sur la vision Mesh (7 patches structurés).
-scripts/ops/veille_proactive.py    — monitoring hebdomadaire automatisé
-scripts/ops/sync_obsidian.ps1      — sync local du vault Obsidian (déplacé depuis .git-backup/)
-scripts/ci/audit_id_types.py      — audit statique des mismatches tenant_id/property_id/hotel_id (HOS-163)
-docs/context/data-conventions.md — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
-docs/ARCHITECTURE.md           — design système (v0.2.0 — certaines sections obsolètes, se fier à ce fichier)
-docs/ROADMAP_NOW_NEXT_LATER.md — roadmap opérationnelle
-docs/context/                  — contexte détaillé par domaine
-.github/workflows/veille-hebdomadaire.yml — cron lundi 8h30
+backend/app/providers/    — abstraction LLM + Embedding (claude, mistral, gemini, fallback, factory)
+backend/app/services/     — exécution F&B (forecast, staffing, memory, receipts) — pas d'orchestration ici (ADR-0004)
+backend/app/integrations/ — Obsidian, Linear, Apaleo, Twilio, SendGrid
+backend/app/mcp_server.py — MCP Server v0 (3 tools, HOS-71, PR #73) — tools atomiques uniquement
+backend/orchestrator/     — proto-orchestrateur Phase 3 (AetherixEngine migré ici, ADR-0004)
+backend/app/middleware/   — agent_tracking.py (Agent SEO discovery + request_id, P1-5/HOS-72)
+scripts/ci/               — gates CI (schema drift Décision #16, audit_id_types HOS-163)
+scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian, validate_apaleo_sandbox, measure_mape_j1, seed_trust_kpi_sandbox, generate_demo_data)
+.github/workflows/        — CI + cron veille-hebdomadaire (lundi 8h30)
 ```
+
+> **📚 Documentation : cataloguée par sous-catégorie dans [`docs/INDEX.md`](docs/INDEX.md)** (architecture, context, planning, veille, marketing, MCP, metrics, security, deployment, demos, internal, BMad, Linear).
+> ⚡ À charger en priorité pour tout contexte inter-nœuds : `docs/mesh-architecture.md` — SOURCE DE VÉRITÉ CROSS-REPOS (Mesh : Aetherix + Tacet + Orchestrateur + Anima).
 
 ---
 
