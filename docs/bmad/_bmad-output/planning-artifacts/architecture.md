@@ -259,6 +259,144 @@ aetherix-mvp/
 - **Authentication:** `fastapi-backend/app/api/routes/auth.py` (fastapi-users) & `nextjs-frontend/src/app/(auth)/`
 - **Tenant Isolation (RLS):** Governed by Supabase directly, instantiated via JWTs passed from the `nextjs-frontend` to `fastapi-backend`.
 
+## LLM Provider Abstraction Layer (Epic 0 — Phase 0.5)
+
+_Added: 2026-04-07 — End-of-Epic architecture review, HOS-118._
+
+### Context
+
+Epic 0 introduces a provider abstraction so business services are decoupled from any specific AI vendor. The epic is **design-complete / ready-for-dev** as of the review date. The `backend/app/providers/` package does not yet exist in the codebase.
+
+### Design Decision: `typing.Protocol` over ABC
+
+**Selected:** `@runtime_checkable` Protocol (structural subtyping).
+
+**Rationale:**
+- Concrete providers (Claude, Mistral, future Gemini) do not share a base class — inheritance would couple unrelated vendor wrappers.
+- Test mocks are plain classes; no inheritance required.
+- `isinstance(provider, LLMProvider)` works at runtime for factory validation.
+
+**Rejected alternatives:**
+- `ABC` — forces inheritance at class definition time; tightly couples vendor implementations to our codebase.
+- DI framework (Dependency Injector, injector) — overkill for 2 provider types at this scale; FastAPI's `app.state` + `lifespan` is sufficient.
+
+**Known limitation:** `@runtime_checkable` `isinstance()` only checks attribute names, not async signatures. A sync `complete()` would pass the check. Mitigated by documentation; a mypy Protocol check catches this at static analysis time.
+
+### Directory Structure
+
+```
+backend/app/providers/
+├── __init__.py
+├── base.py              # LLMProvider + EmbeddingProvider Protocol definitions
+├── claude_provider.py   # ClaudeProvider(LLMProvider) — primary, wraps AsyncAnthropic
+├── mistral_provider.py  # MistralEmbeddingProvider(EmbeddingProvider) — primary, wraps Mistral
+└── factory.py           # get_llm_provider() + get_embedding_provider() — construction only
+
+backend/app/services/
+├── reasoning_service.py      # accepts LLMProvider via __init__ DI
+├── explainability_service.py # accepts LLMProvider via __init__ DI
+├── rag_service.py            # accepts EmbeddingProvider via __init__ DI
+└── memory_service.py         # accepts EmbeddingProvider via __init__ DI
+```
+
+### Protocol Definitions
+
+```python
+# backend/app/providers/base.py
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class LLMProvider(Protocol):
+    async def complete(
+        self,
+        messages: list[dict],
+        max_tokens: int = 500,
+        temperature: float = 0.3,
+        system: str | None = None,
+    ) -> str: ...
+
+    @property
+    def model_id(self) -> str: ...
+
+@runtime_checkable
+class EmbeddingProvider(Protocol):
+    async def embed(self, text: str) -> list[float]: ...
+
+    @property
+    def dimensions(self) -> int: ...
+```
+
+### Provider Lifecycle — Singleton via FastAPI `lifespan` (ADR #10)
+
+**Critical constraint:** `factory.py` is a construction function only — it must NOT be called repeatedly at request time. `AsyncAnthropic` holds an `httpx.AsyncClient` connection pool internally; per-request instantiation exhausts file descriptors under load.
+
+**Correct pattern:**
+
+```python
+# backend/app/main.py
+from contextlib import asynccontextmanager
+from app.providers.factory import get_llm_provider, get_embedding_provider
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.llm = get_llm_provider()
+    app.state.embedding = get_embedding_provider()
+    yield
+    # Clean shutdown — releases httpx connection pool
+    if hasattr(app.state.llm, "aclose"):
+        await app.state.llm.aclose()
+
+app = FastAPI(lifespan=lifespan)
+```
+
+Services receive the singleton at instantiation from `app.state`, not by calling `get_llm_provider()` themselves.
+
+**Required:** `ClaudeProvider` must expose `async def aclose()` wrapping `await self._client.aclose()` (httpx client cleanup). `MistralEmbeddingProvider` uses a sync client in executor — no async close needed, but the executor threadpool is GC'd automatically.
+
+### Embedding Dimension — Confirmed 1024
+
+Mistral `mistral-embed` outputs **1024-dimensional** vectors. The current `rag_service.py:23` declares `_EMBEDDING_DIM = 1536` — this is incorrect and will cause pgvector schema mismatches. The `vector(1024)` column definition must be verified in the DB migration before Epic 0 stories 0.3–0.4 run. `MistralEmbeddingProvider.dimensions` returns `1024`.
+
+### Async Executor Pattern for Mistral
+
+The sync `Mistral` client must be wrapped via:
+
+```python
+loop = asyncio.get_running_loop()  # NOT get_event_loop() — deprecated in Python 3.10+
+result = await loop.run_in_executor(None, self._client.embeddings.create, ...)
+```
+
+### Fallback Providers (Gemini, OpenAI) — Phase 2
+
+The epic correctly scopes only the interface and primary providers (Claude + Mistral). **Gemini/OpenAI providers are not part of Epic 0.** The factory raises `NotImplementedError` for unimplemented backends — this is intentional and correct. Adding a second provider in future requires: 1 new file in `providers/`, 1 new branch in `factory.py`, zero changes to `services/`.
+
+`gemini-2.0-flash` is the recommended fallback candidate when Phase 2 implements it, but requires explicit handling of Gemini's differing API contract (system instructions via `system_instruction=` config, not a system message role).
+
+### Pre-Phase-1 Blockers Identified
+
+| # | Issue | Severity | File |
+|---|-------|----------|------|
+| B1 | `rag_service.py` has two concatenated implementations (duplicate `from __future__ import annotations`) | BLOCKER | `services/rag_service.py` |
+| B2 | `memory_service.py` same corruption — two implementations merged | BLOCKER | `services/memory_service.py` |
+| B3 | `_EMBEDDING_DIM = 1536` vs Mistral 1024d — pgvector column mismatch | BLOCKER | `services/rag_service.py:23` |
+| B4 | `main.py` has duplicate import blocks + two `on_shutdown` handlers | RISK | `main.py` |
+| B5 | Provider factory must be wired as singleton in `lifespan`, not called per-request | RISK | `providers/factory.py` |
+
+Blockers B1–B3 must be resolved as part of Stories 0.4 (prerequisite cleanup). B4–B5 resolved in Story 0.2 `main.py` wiring task.
+
+### Configuration via Environment Variables
+
+```
+LLM_BACKEND        — "claude" (default) | future: "gemini" | "openai"
+LLM_MODEL          — "claude-sonnet-4-6" (default)
+EMBEDDING_BACKEND  — "mistral" (default) | future: "openai"
+EMBEDDING_MODEL    — "mistral-embed" (default)
+```
+
+Existing `ANTHROPIC_API_KEY` and `MISTRAL_API_KEY` unchanged.
+
+---
+
 ## Architecture Validation Results
 
 ### Coherence Validation ✅

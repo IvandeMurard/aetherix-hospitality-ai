@@ -24,23 +24,29 @@
 ## Overview
 
 The F&B Operations Agent is an AI-powered staffing forecasting system designed for restaurant operations managers.
-The architecture follows an **agentic-first experience** built on **API-first infrastructure**:
+The architecture follows an **agentic-first experience** built on **API-first infrastructure**, with a March 2026 strategic addition: **agent-callable primitive** via MCP Server.
 
-- **Agentic layer:** AI agent autonomously predicts staffing needs, generates reasoning, 
+- **Agentic layer:** AI agent autonomously predicts staffing needs, generates reasoning,
   and recommends actions. Manager approves rather than executes manually (human-in-the-loop).
-- **API layer:** RESTful APIs enable seamless integration with PMS systems (Mews, Apaleo) 
+- **API layer:** RESTful APIs enable seamless integration with PMS systems (Mews, Apaleo)
   and external services (PredictHQ, ElevenLabs, Claude AI).
+- **MCP layer (Phase 0.5):** Model Context Protocol server exposing core capabilities as
+  callable primitives for external AI agents (Claude Desktop, Codex, custom hotel agents).
 
-This dual approach aligns with hospitality's evolution toward **autonomous agent-driven operations** (as championed by Mews Operations Agent and Apaleo's AI-powered platform) while maintaining **interoperability** through open APIs.
+This triple approach aligns with hospitality's evolution toward **autonomous agent-driven operations** while positioning Aetherix as a **distribution-layer default** in the emerging agent ecosystem.
 
-**Agentic-first = User experience paradigm** (agents do work autonomously)  
+> "Distribution shifts from top of funnel to top of call stack." — Andrew Chen, a16z (March 2026)
+
+**Agentic-first = User experience paradigm** (agents do work autonomously)
 **API-first = Infrastructure paradigm** (systems integrate seamlessly)
+**Agent-callable = Distribution paradigm** (other agents choose Aetherix as their F&B tool)
 
 **Core Principles:**
 - **Human-in-the-loop:** Manager approves all predictions (augmented, not automated)
 - **Explainable AI:** Reasoning always visible (trust-building critical in hospitality)
 - **Dashboard-first:** Aetherix UI as primary interface; voice/chat planned for Phase 5
 - **PMS-agnostic:** Compatible with Mews, Apaleo, and any API-first PMS
+- **Agent-callable:** MCP Server exposes capabilities for consumption by AI agents
 
 ---
 
@@ -86,6 +92,8 @@ This dual approach aligns with hospitality's evolution toward **autonomous agent
 | RAG/Qdrant | 2 | ✅ Production |
 | Dashboard (Aetherix) | 3 | 🔄 MVP |
 | Feedback Loop | 3-4 | 🔄 Backend done |
+| **MCP Server** | **0.5** | **📋 Planned — HOS-xx** |
+| **Agent SEO Middleware** | **1** | **📋 Planned — HOS-xx** |
 | PMS Adapters | 5 | 📋 Planned |
 | Voice Interface | 5 | 📋 Planned |
 
@@ -937,6 +945,41 @@ Future: Microservices + Event-Driven
 - **Adoption:** Easier to adopt tool if feels safe (augmented not automated)
 
 **Trade-off:** Manual approval step vs full automation → Trust wins for MVP
+
+---
+
+### Decision 7: Agent-Callable Primitive via MCP (Phase 0.5)
+
+**Context:** Andrew Chen (a16z, March 2026) — agent-first distribution thesis
+
+**Decision:** Expose Aetherix core capabilities via an MCP (Model Context Protocol) server in addition to the REST API.
+
+**Rationale:**
+- **Distribution shift:** In an agent-first world, products are discovered and used via agent call stacks, not UIs
+- **Moat:** Being the default F&B hotel tool in agent prompts/templates is sticky and self-reinforcing
+- **Low cost:** MCP server is a thin adapter over existing FastAPI endpoints
+- **Timing:** Early adoption = default status; late = challenger in a locked ecosystem
+
+**Capabilities to expose (Phase 0.5):**
+```python
+# backend/app/mcp_server.py
+tools = [
+    "forecast_occupancy(hotel_id, date_range)"   # F&B demand predictions
+    "get_stock_alerts(hotel_id)"                  # critical inventory alerts
+    "get_fb_kpis(hotel_id, period)"              # structured KPIs
+    "recommend_menu(hotel_id, context)"           # adaptive menu recommendations
+]
+```
+
+**Agent SEO metrics to instrument from day 1 (Phase 1):**
+| Metric | Target |
+|--------|--------|
+| `tool_success_rate` | > 99.5% |
+| `p95_latency` | < 500ms |
+| `schema_stability` | 0 breaking changes/sprint |
+| `agent_retry_rate` | < 1% |
+
+**Trade-off:** Additional maintenance surface → mitigated by MCP being thin adapter, not separate service
 
 ---
 
