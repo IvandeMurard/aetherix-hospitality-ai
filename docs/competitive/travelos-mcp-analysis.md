@@ -9,7 +9,7 @@
 
 ## 0. Résumé exécutif
 
-Agentic Hospitality (Louisville, KY) a lancé **TravelOS MCP Server**, une couche d'infrastructure qui expose en temps réel l'inventaire d'un hôtel (disponibilités, tarifs, politiques) directement à l'intérieur des plateformes IA (ChatGPT Apps, assistants conversationnels, recherche générative), en se branchant sur le **CRS/PMS système de référence** sans replatforming.
+Agentic Hospitality (Louisville, KY) a lancé **TravelOS MCP Server**, une couche d'infrastructure qui expose en temps réel l'inventaire d'un hôtel (disponibilités, tarifs, politiques) directement à l'intérieur des plateformes IA (ChatGPT Apps, assistants conversationnels, recherche générative), en se branchant directement sur le **CRS/PMS (système de référence)** sans replatforming.
 
 Pour Aetherix, le produit est à la fois :
 
@@ -74,7 +74,7 @@ Pour Aetherix, le produit est à la fois :
 
 **Pourquoi « tendance semi-native » et pas gateway pur :** au-delà du passe-plat, ils ajoutent une couche d'**orchestration et de présentation** propre — *Agentic Booking Engine* (overlay conversationnel sur l'IBE existant), *Hotel Rich Cards*, personnalisation tarifaire loyalty-aware, et une **ChatGPT App** packagée. Ils ne se contentent pas de proxifier le PMS : ils façonnent l'expérience agentique. C'est ce qui les rend stratégiquement dangereux (ils possèdent l'interface), tout en restant techniquement non-natifs (ils ne remplacent pas le PMS).
 
-**Stack / dépendances (contexte) :** Google Cloud + Vertex AI (infra/IA), Brewer Digital (adaptateurs de schéma/intégration), Amadeus (CRS), Cloudbeds / Infor / Oracle Hospitality / Maestro (PMS), Okta-Auth0 (auth), PayPal-Braintree (paiement).
+**Stack / dépendances (contexte) :** Google Cloud + Vertex AI (infra/IA), Brewer Digital (adaptateurs de schéma/intégration), Amadeus (CRS), Cloudbeds / Infor / Oracle Hospitality / Maestro (PMS), Okta / Auth0 (auth), PayPal / Braintree (paiement).
 
 ---
 
@@ -85,7 +85,7 @@ Pour Aetherix, le produit est à la fois :
 ### ⚠️ Arguments « MENACE » (≥3)
 
 1. **Capture de la couche d'intermédiation IA avant les PMS.** TravelOS s'installe comme le pont hôtel↔IA pendant que les PMS n'exposent pas encore leur propre MCP. C'est précisément la position d'« intelligence layer » qu'Aetherix vise. Premier arrivé = standard de fait sur l'intégration ChatGPT/assistants.
-2. **Adjacence d'extension vers le F&B.** Leur architecture gateway sur PMS rend l'ajout de tools `get_outlets` / `book_table` / ancillaries techniquement trivial : les PMS qu'ils intègrent (Oracle, Infor, Cloudbeds) portent déjà des modules F&B/POS. Une extension de scope les met en concurrence frontale.
+2. **Adjacence d'extension vers le F&B.** Leur architecture gateway sur PMS rend l'ajout de tools F&B/ancillaires (hypothétiques, ex. `get_outlets` / `book_table`) techniquement trivial : les PMS qu'ils intègrent (Oracle, Infor, Cloudbeds) portent déjà des modules F&B/POS. Une extension de scope les met en concurrence frontale.
 3. **Avantage de distribution et de capital narratif.** Partenariat Google Cloud/Vertex, ChatGPT App publiée, forte présence presse sectorielle (Hospitality Net, Hotel Management, HFTP), récit « brands not intermediaries » qui résonne chez les hôteliers. Ils captent l'attention et les budgets « AI-native » avant nous.
 4. **Désintermédiation possible d'Aetherix.** Si l'hôtelier adopte TravelOS comme *le* point d'entrée agentique, Aetherix risque d'être relégué à un sous-traitant invisible derrière leur orchestration, perdant la relation directe et le contrôle de l'expérience.
 
@@ -94,7 +94,7 @@ Pour Aetherix, le produit est à la fois :
 1. **Périmètres complémentaires, zéro chevauchement de données aujourd'hui.** Eux = distribution chambre ; nous = exécution F&B. Aetherix peut se brancher comme **F&B intelligence/execution layer** dans leur agrégation — une pièce qui leur manque pour une expérience guest complète.
 2. **Philosophie d'architecture alignée.** « Étendre les systèmes existants sans les remplacer », non-agrégateur, hôtel maître de sa donnée et de sa marque : c'est notre thèse aussi. L'interopérabilité MCP-to-MCP est naturelle (leur tool de chambre + nos tools F&B sous une même conversation).
 3. **Ils ne veulent (visiblement) pas faire le F&B.** Le F&B est opérationnellement lourd (POS, cuisine, stocks, allergènes, timing service) — un terrain qu'une boîte « distribution-first » n'a aucun intérêt à internaliser tôt. Fenêtre pour devenir leur partenaire F&B de référence avant qu'ils ne soient tentés de le construire.
-4. **Effet de levier de distribution.** Un partenariat nous expose à leur base hôtelière et à leur surface ChatGPT App — accélérateur de go-to-market que nous ne pourrions pas répliquer seuls à ce stade.
+4. **Effet de levier de distribution.** Un partenariat nous expose à leur base hôtelière et à leur surface ChatGPT App — accélérateur de go-to-market que nous ne pourrions pas répliquer seuls à ce stade. *(C'est le revers positif de l'argument menace #3 : le même actif de distribution se retourne en notre faveur en cas de partenariat plutôt qu'en cas de concurrence — d'où un verdict piloté par le timing.)*
 
 ---
 
@@ -106,14 +106,15 @@ Pour Aetherix, le produit est à la fois :
 
 ## Annexe — Notes de fiabilité & sources
 
-**Écart à signaler :** le ticket HOS-198 date le lancement de « mai 2026 » ; la source primaire (communiqué Hospitality Net) indique **5 mars 2026**. Les articles de suivi (ChatGPT App, ~mai 2026) ont pu créer la confusion. Date de lancement retenue : **2026-03-05**.
+**Écart à signaler :** le ticket HOS-198 date le lancement de « mai 2026 » ; la source primaire (communiqué Hospitality Net) indique **5 mars 2026**, confirmé par la dateline verbatim du communiqué syndiqué : *« LOUISVILLE, Ky.––March 5, 2026––Agentic Hospitality announces the launch of its Travel Operating System (TravelOS) MCP Server »*. Les articles de suivi (ChatGPT App, ~mai 2026) ont probablement créé la confusion. **Date de lancement retenue : 2026-03-05** (année confirmée, pas seulement le jour/mois).
 
 **Limite méthodologique :** analyse construite à 100 % sur sources publiques (presse sectorielle + landing page). Aucune validation hands-on du serveur MCP (non self-serve, pas de dépôt GitHub). Les noms de tools en AC1 sont inférés, non officiels. Une v2 sera produite si l'activation team fournit la spec.
 
 ### Sources
 
-- [Hospitality Net — Agentic Hospitality Launches TravelOS MCP Server (source primaire, lancement)](https://www.hospitalitynet.org/news/4131210/agentic-hospitality-launches-travelos-mcp-server-enabling-agentic-hotel-distribution-inside-ai-platforms) — consulté 2026-06-03
-- [Hospitality Net — TravelOS MCP + ChatGPT App: Brands, Not Intermediaries](https://www.hospitalitynet.org/news/4132086/agentic-hospitalitys-travelos-mcp-chatgpt-app-is-putting-brands-not-intermediaries-at-the-center-of-ai-bookings) — consulté 2026-06-03
+- [Hospitality Net — Agentic Hospitality Launches TravelOS MCP Server (source primaire, lancement)](https://www.hospitalitynet.org/news/4131210/agentic-hospitality-launches-travelos-mcp-server-enabling-agentic-hotel-distribution-inside-ai-platforms) — publié 2026-03-05, consulté 2026-06-03
+- [No Vacancy News — Agentic Hospitality Launches TravelOS MCP Server (syndication, dateline confirmée)](https://novacancynews.com/agentic-hospitality-launches-travelos-mcp-server-enabling-agentic-hotel-distribution-inside-ai-platforms/) — publié 2026-03-05, consulté 2026-06-03
+- [Hospitality Net — TravelOS MCP + ChatGPT App: Brands, Not Intermediaries](https://www.hospitalitynet.org/news/4132086/agentic-hospitalitys-travelos-mcp-chatgpt-app-is-putting-brands-not-intermediaries-at-the-center-of-ai-bookings) — suivi (~mai 2026), consulté 2026-06-03
 - [Hospitality Net — AI-Driven Discovery + TravelOS + Google Tracking Models](https://www.hospitalitynet.org/news/4131989/agentic-hospitality-ai-driven-discovery-travelos-new-tracking-models-from-google-are-signaling-a-shift-beyond-traditional-hotel-metrics) — consulté 2026-06-03
 - [Hotel Management — Agentic Hospitality adds infrastructure for AI booking platforms](https://www.hotelmanagement.net/tech/agentic-hospitality-launches-infrastructure-connect-hotels-ai-booking-platforms) — consulté 2026-06-03
 - [HFTP — New AI Powerhouse Emerges for Hotels: Meet Agentic Hospitality](https://www.hftp.org/news/4128574/new-ai-powerhouse-emerges-for-hotels-meet-agentic-hospitality) — consulté 2026-06-03
