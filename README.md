@@ -273,6 +273,26 @@ Aetherix uses a two-layer memory system:
 
 ---
 
+## Evaluation by design
+
+Aetherix treats evaluation as a contract, not an afterthought.
+
+**The reliability bar.** *"Working"* is proven on a test set. *"Reliable"* is proven in production. Five dimensions, checked before every ship:
+
+| Dimension | Question we answer before merge |
+|---|---|
+| **Edge behavior** | Did we test out-of-distribution inputs — or only the happy path? |
+| **Graceful degradation** | Does the agent say *"I don't know"* explicitly when uncertain — or does it improvise? |
+| **Observability** | Can we see in production what the model actually does? |
+| **Reproducibility** | Same input tomorrow → same output? |
+| **Distribution shift resilience** | Are we alerted if production inputs drift from training data? |
+
+**The contract.** A versioned golden dataset (`eval/golden_dataset.jsonl`) and per-layer failure thresholds (`eval/FAILURE_THRESHOLDS.md`) define what *"bad output"* means before code is written. Any change to forecast services, providers, memory, or prompts requires updated examples + green eval pipeline before merge — CI gate, alongside the schema drift gate.
+
+**Inspiration.** Framework adopted from Qonto's *"AI @ Qonto: shipper et évaluer l'IA en production"* (Marianne Borzic Ducournau, Head of AI Products). Cited and extended for Aetherix's PMS+POS-aware F&B forecasting context. Detailed REX (retour d'expérience) article coming end of Phase 3.
+
+---
+
 ## Security
 
 | Area | Approach |
