@@ -22,7 +22,7 @@ Aetherix is a **Proactive Contextual Agentic Layer for F&B Operations**. It is t
 
 It handles one domain with precision: **forecasting F&B covers, optimizing staffing, and delivering actionable recommendations** to hotel managers via WhatsApp. It learns from each property's history, adapts continually through manager feedback, and exposes its capabilities as MCP tools callable by any orchestration agent.
 
-**Aetherix does not orchestrate. It executes.**
+**Aetherix does not orchestrate. It recommends. The manager validates**
 
 The separation is intentional: each node (agent) in the Mesh (hive) has a strict bounded context. Aetherix owns F&B. An Orchestrator decides when to call it.
 
