@@ -22,15 +22,15 @@ services:
       - ./backend:/app
       - ./scripts:/scripts
       - fastapi-venv:/app/.venv
-      - ./local-shared-data:/app/shared-data
-      # Obsidian vault — OneDrive-synced local knowledge base
-      # Windows host path uses forward slashes; adjust if vault moves.
-      - "C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitality:/vault"
+      - ./frontend/shared-data:/app/shared-data
+      # Obsidian vault — bind-mount via env var so any host path works.
+      # Set OBSIDIAN_VAULT_PATH in .env to your local vault path.
+      - "${OBSIDIAN_VAULT_PATH:-/tmp/vault}:/vault"
     depends_on:
       - db
 
   db:
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
@@ -43,7 +43,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   db_test:
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
@@ -69,7 +69,6 @@ services:
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules
-      - ./local-shared-data:/app/shared-data
     depends_on:
       - backend
 

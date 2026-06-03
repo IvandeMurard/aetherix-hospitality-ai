@@ -1,5 +1,6 @@
-import uuid
 import os
+import uuid
+
 from fastapi import Depends
 from fastapi_users import FastAPIUsers
 from fastapi_users.authentication import (
@@ -7,6 +8,7 @@ from fastapi_users.authentication import (
     BearerTransport,
     JWTStrategy,
 )
+
 from app.db.models import User
 from app.services.users import get_user_manager
 

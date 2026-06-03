@@ -1,17 +1,25 @@
-from anthropic import AsyncAnthropic
-import os
-from typing import Dict, List, Optional
+from __future__ import annotations
+
+import asyncio
+import logging
 from datetime import date
+from typing import Dict, List, Optional
+
+from app.core.demo_events import demo_emit
+from app.providers.base import LLMProvider
+from app.providers.factory import get_llm_provider
+
+logger = logging.getLogger(__name__)
+
 
 class ReasoningService:
     """
     Service for generating explainable AI reasoning using Claude.
     Explains Prophet's numerical forecast using RAG patterns and external context.
     """
-    
-    def __init__(self):
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.claude = AsyncAnthropic(api_key=api_key) if api_key else None
+
+    def __init__(self, llm: LLMProvider | None = None) -> None:
+        self._llm: LLMProvider = llm or get_llm_provider()
 
     async def generate_explanation(
         self,
@@ -21,37 +29,64 @@ class ReasoningService:
         service_type: str,
         context: Dict,
         similar_patterns: List[Dict],
-        cognitive_context: Optional[str] = None
+        cognitive_context: Optional[str] = None,
+        is_mock: bool = False,
+        system_prompt: Optional[str] = None,
     ) -> Dict:
-        """Calls Claude to explain the prediction rationale."""
-        if not self.claude:
-            return {"summary": "Claude API key missing. Numerical forecast only.", "confidence_factors": []}
+        """Calls the LLM provider to explain the prediction rationale.
 
-        prompt = self._build_prompt(predicted_covers, confidence, target_date, service_type, context, similar_patterns, cognitive_context)
-        
+        Args:
+            system_prompt: Optional agent constitution system prompt built by
+                ``AgentConstitutionService.build_system_prompt()``. When provided,
+                passed as ``system=`` to the LLM provider (ClaudeProvider passes it
+                as the top-level Anthropic ``system`` field). When None, the LLM
+                receives only the user-turn prompt — heuristic fallback path unchanged.
+        """
+        prompt = self._build_prompt(
+            predicted_covers, confidence, target_date, service_type, context,
+            similar_patterns, cognitive_context, is_mock=is_mock,
+        )
+
         try:
-            message = await self.claude.messages.create(
-                model="claude-3-5-haiku-20241022",
-                max_tokens=300,
-                temperature=0.3,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            explanation = message.content[0].text.strip()
-            return {
-                "summary": explanation,
-                "confidence_factors": self._extract_factors(context, similar_patterns)
+            llm_kwargs: Dict = {
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 300,
+                "temperature": 0.3,
             }
+            if system_prompt is not None:
+                llm_kwargs["system"] = system_prompt
+
+            explanation = await self._llm.complete(**llm_kwargs)
+            # Task 3 (Prompt A): debug log — first 200 chars of Claude reasoning
+            logger.debug("Claude reasoning: %s", explanation[:200])
+            # Demo board: highlight Claude Sonnet node after LLM response
+            asyncio.create_task(demo_emit("claude"))
+            return {
+                "summary": explanation.strip(),
+                "confidence_factors": self._extract_factors(context, similar_patterns),
+                "claude_used": True,
+            }
+        except RuntimeError:
+            # API key not configured — silent heuristic fallback, no alarm
+            return self._heuristic_explanation(
+                predicted_covers, confidence, target_date, service_type, context, similar_patterns
+            )
         except Exception as e:
-            import asyncio
             from app.services.ops_dispatcher import dispatch_error
             asyncio.ensure_future(dispatch_error(
-                title="Reasoning service failure — Claude API error",
+                title="Reasoning service failure — LLM provider error",
                 detail=f"Exception: {e}\nDate: {target_date} | Service: {service_type} | Covers: {predicted_covers}",
-                tags=["claude", "reasoning"],
+                tags=["llm", "reasoning"],
             ))
-            return {"summary": f"Reasoning failed: {str(e)}", "confidence_factors": []}
+            return {
+                **self._heuristic_explanation(
+                    predicted_covers, confidence, target_date, service_type, context, similar_patterns
+                ),
+                "claude_used": False,
+                "fallback_reason": str(e),
+            }
 
-    def _build_prompt(self, predicted, confidence, dt, svc, context, patterns, cognitive_context) -> str:
+    def _build_prompt(self, predicted, confidence, dt, svc, context, patterns, cognitive_context, is_mock: bool = False) -> str:
         patterns_text = ""
         for p in patterns:
             # Handle different pattern structures (Qdrant payload vs mock)
@@ -65,8 +100,12 @@ class ReasoningService:
             patterns_text = "No similar historical patterns found."
         
         cognition_text = f"\nLEARNINGS FROM PAST INTERACTIONS:\n{cognitive_context}\n" if cognitive_context else ""
-        
-        return f"""You are an expert restaurant operations assistant. 
+        mock_warning = (
+            "\n⚠️ WARNING: The Prophet model has not been trained yet. "
+            "This prediction is a placeholder mock value and should NOT be acted upon.\n"
+        ) if is_mock else ""
+
+        return f"""You are an expert restaurant operations assistant.{mock_warning}
 Prophet (ML model) predicted {predicted} covers for {dt.strftime('%A, %B %d')} ({svc}) with {int(confidence*100)}% confidence.
 
 SIMILAR PATTERNS:
@@ -83,7 +122,67 @@ Keep it actionable for a manager.
 
     def _extract_factors(self, context, patterns) -> List[str]:
         factors = []
-        if context.get('weather'): factors.append(f"Weather: {context['weather'].get('condition')}")
-        if context.get('events'): factors.append(f"{len(context['events'])} events nearby")
-        if patterns: factors.append("Historical pattern matching")
+        if context.get('weather'):
+            factors.append(f"Weather: {context['weather'].get('condition')}")
+        if context.get('events'):
+            factors.append(f"{len(context['events'])} events nearby")
+        if patterns:
+            factors.append("Historical pattern matching")
         return factors
+
+    def _heuristic_explanation(
+        self,
+        predicted: int,
+        confidence: float,
+        dt: date,
+        svc: str,
+        context: Dict,
+        patterns: List[Dict],
+    ) -> Dict:
+        """Rule-based explanation used when Claude is unavailable.
+
+        Produces a human-readable summary using only the data already in hand —
+        no LLM call required. This ensures the /predict endpoint always returns
+        an actionable reasoning block.
+        """
+        day_name = dt.strftime("%A")
+        conf_pct = int(confidence * 100)
+
+        # Pattern anchor sentence
+        if patterns:
+            best = patterns[0]
+            payload = best.get("payload", best)
+            hist_covers = payload.get("actual_covers", payload.get("covers", "?"))
+            hist_date = payload.get("date", "a similar past date")
+            pattern_note = (
+                f"Historical data shows {hist_covers} covers on {hist_date} "
+                f"under similar conditions."
+            )
+        else:
+            pattern_note = "No close historical pattern available for direct comparison."
+
+        # Context modifiers
+        weather = context.get("weather", {})
+        weather_note = ""
+        if weather.get("condition"):
+            weather_note = f" Current weather is {weather['condition']}."
+
+        events = context.get("events", [])
+        event_note = ""
+        if events:
+            event_note = f" {len(events)} nearby event(s) may drive additional demand."
+
+        occ = context.get("occupancy")
+        occ_note = f" Hotel occupancy is at {int(occ * 100)}%." if occ else ""
+
+        summary = (
+            f"Prophet forecasts {predicted} covers for {svc} on {day_name} "
+            f"with {conf_pct}% confidence. "
+            f"{pattern_note}{weather_note}{event_note}{occ_note}"
+        ).strip()
+
+        return {
+            "summary": summary,
+            "confidence_factors": self._extract_factors(context, patterns),
+            "claude_used": False,
+        }

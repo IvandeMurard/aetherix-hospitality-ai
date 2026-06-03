@@ -1,10 +1,13 @@
 import abc
+import asyncio
 import hashlib
-from typing import List, Dict, Any, Optional
-from datetime import datetime, date
-from app.db.session import AsyncSessionLocal
+from datetime import date
+from typing import Any, Dict, List
+
+from app.core.demo_events import demo_emit
 from app.db.models import PMSSyncLog
-from sqlalchemy.future import select
+from app.db.session import AsyncSessionLocal
+
 
 class PMSAdapter(abc.ABC):
     """Base class for all Property Management System (PMS) adapters."""
@@ -94,7 +97,7 @@ class PMSSyncService:
         """Orchestrate the sync and storage of data for a specific day."""
         occupancy = await self.adapter.get_occupancy(property_id, target_date)
         revenue = await self.adapter.get_revenue(property_id, target_date, category="F&B")
-        
+
         # Story 2.2: Persist sync result to Supabase
         async with AsyncSessionLocal() as session:
             sync_log = PMSSyncLog(
@@ -107,6 +110,9 @@ class PMSSyncService:
             session.add(sync_log)
             await session.commit()
 
+        # Story 2.4: Recalculate captation baseline on every new data ingestion
+        await self._trigger_captation_recalculation(property_id)
+
         result = {
             "property_id": property_id,
             "date": target_date.isoformat(),
@@ -114,8 +120,8 @@ class PMSSyncService:
             "fb_revenue": revenue,
         }
 
-        from app.services.ops_dispatcher import dispatch_report
-        from app.integrations.obsidian import VAULT_FOLDERS
+        from app.integrations.obsidian import VAULT_FOLDERS  # noqa: PLC0415
+        from app.services.ops_dispatcher import dispatch_report  # noqa: PLC0415
         await dispatch_report(
             title=f"PMS Sync — {property_id} — {target_date.isoformat()}",
             content=(
@@ -130,4 +136,27 @@ class PMSSyncService:
             folder=VAULT_FOLDERS["sync_logs"],
             tags=["pms-sync", property_id],
         )
+        # Demo board: highlight PMS Sync node after successful sync
+        asyncio.create_task(demo_emit("pms_sync"))
         return result
+
+    async def _trigger_captation_recalculation(self, property_id: str) -> None:
+        """Re-compute the captation baseline after each successful sync.
+
+        Errors are caught and logged so they never block the sync response.
+        """
+        import logging  # noqa: PLC0415
+        _log = logging.getLogger(__name__)
+
+        from app.services.captation_service import (  # noqa: PLC0415
+            CaptationService,
+            InsufficientDataError,
+        )
+
+        try:
+            async with AsyncSessionLocal() as session:
+                await CaptationService().calculate_baseline(property_id, session)
+        except InsufficientDataError as exc:
+            _log.debug("Captation baseline skipped (not enough data): %s", exc)
+        except Exception as exc:  # pylint: disable=broad-except
+            _log.warning("Captation baseline recalculation failed for %s: %s", property_id, exc)
