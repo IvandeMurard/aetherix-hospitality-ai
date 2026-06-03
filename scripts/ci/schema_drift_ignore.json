@@ -1,0 +1,81 @@
+{
+  "_doc": [
+    "HOS-150 AC8 — acknowledged schema drifts. Each entry below is a known",
+    "drift that the static checker would otherwise flag. Shrink this list",
+    "as follow-up PRs land migrations or align the ORM. Do NOT add new",
+    "entries without a Linear ticket number in the `reason` field."
+  ],
+  "tables": {
+    "users": {
+      "missing_table": true,
+      "reason": "Created by fastapi-users at first run; no Supabase migration. Track in HOS-150 follow-up."
+    },
+    "pms_sync_logs": {
+      "missing_table": true,
+      "reason": "ORM-only since Story 2.2; never had a migration. Backfill needed."
+    },
+    "captation_baselines": {
+      "missing_table": true,
+      "reason": "ORM-only since Story 2.4; never had a migration. PR2 (HOS-150 AC6) consumes this table — first user must seed manually until migration lands."
+    },
+    "local_events": {
+      "missing_table": true,
+      "reason": "ORM-only; PredictHQ ingestion table never migrated."
+    },
+    "recommendation_cache": {
+      "missing_table": true,
+      "reason": "ORM-only; legacy table from pre-receipts era."
+    },
+    "training_runs": {
+      "missing_table": true,
+      "reason": "ORM-only; Prophet training metadata. Backfill needed."
+    },
+    "restaurant_profiles": {
+      "orm_only": [
+        "agent_tone_profile",
+        "avg_spend_per_cover",
+        "latitude",
+        "longitude",
+        "owner_id",
+        "pms_property_id",
+        "pms_type",
+        "staff_hourly_rate"
+      ],
+      "db_only": [
+        "average_ticket",
+        "breakeven_covers",
+        "created_by",
+        "labor_cost_target_pct",
+        "min_boh_staff",
+        "min_foh_staff",
+        "rate_host",
+        "rate_kitchen",
+        "rate_runner",
+        "rate_server",
+        "target_covers"
+      ],
+      "reason": "Migration 20250203000000 has never been extended despite ORM accreting columns through Phase 0/1. Bidirectional drift — ORM and original migration have diverged. Backfill migration needed."
+    },
+    "demand_anomalies": {
+      "db_only": [
+        "anomaly_type",
+        "created_at",
+        "event_factors",
+        "expected_covers",
+        "headcount_delta",
+        "predicted_covers",
+        "updated_at",
+        "weather_factors"
+      ],
+      "reason": "Migration 20260323000000 created richer schema than the ORM model surfaces; ORM uses fewer fields than the DB stores."
+    },
+    "fb_patterns": {
+      "db_only": ["payload"],
+      "reason": "Migration 20260323230000 added `payload JSONB` for Qdrant compat; ORM model never adopted it."
+    },
+    "operational_memory": {
+      "db_only": ["content"],
+      "reason": "False positive from static parser unioning two migrations. Migration 20260323240000 (current) defines `reflection`; legacy 20260327000000 still has `content NOT NULL` which would fail in a fresh DB anyway. Cleanup tracked in HOS-150 follow-up — drop the duplicate CREATE TABLE in 20260327000000."
+    }
+  }
+}

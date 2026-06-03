@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aetherix — Demo Pipeline Board</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 32px 16px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    #status {
+      font-size: 0.78rem;
+      color: #64748b;
+      margin-bottom: 28px;
+    }
+    #status.connected  { color: #22c55e; }
+    #status.error      { color: #ef4444; }
+
+    /* ── SVG diagram ──────────────────────────────────────────────────── */
+    svg {
+      max-width: 520px;
+      width: 100%;
+      overflow: visible;
+    }
+
+    /* Node rectangles — state controlled via data-state attribute */
+    .node rect {
+      rx: 8;
+      ry: 8;
+      stroke: #1e293b;
+      stroke-width: 1.5;
+      transition: fill 0.35s ease, filter 0.35s ease;
+    }
+    .node[data-state="inactive"]    rect { fill: #374151; }
+    .node[data-state="in-progress"] rect { fill: #3b82f6; filter: drop-shadow(0 0 8px #3b82f680); }
+    .node[data-state="done"]        rect { fill: #22c55e; filter: drop-shadow(0 0 6px #22c55e60); }
+    .node[data-state="fallback"]    rect { fill: #f97316; }
+    .node[data-state="error"]       rect { fill: #ef4444; }
+
+    .node text {
+      fill: #f1f5f9;
+      font-size: 12px;
+      font-weight: 500;
+      text-anchor: middle;
+      dominant-baseline: central;
+      pointer-events: none;
+      transition: opacity 0.35s;
+    }
+    .node[data-state="inactive"] text { fill: #94a3b8; }
+
+    /* Side labels (PredictHQ, WeatherAPI) */
+    .side-label {
+      fill: #64748b;
+      font-size: 11px;
+      font-weight: 400;
+    }
+
+    /* Connector lines */
+    line, path {
+      stroke: #334155;
+      stroke-width: 1.5;
+      fill: none;
+    }
+
+    /* Arrow markers */
+    marker path { fill: #334155; stroke: none; }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 28px;
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Aetherix — Pipeline Board</h1>
+<div id="status">Connecting…</div>
+
+<!--
+  Topology (top → bottom):
+
+  Cron ──> [mcp_probe] ──> Apaleo MCP Server
+                                │
+                           [pms_sync]
+                                │
+  PredictHQ ──> [context_assembly] <── WeatherAPI
+                                │
+                           [rag]
+                                │
+                           [prophet]
+                                │
+                           [claude]
+                                │
+                           [staffing]
+                                │
+                           [whatsapp]
+                                │
+                        Sophie — F&B Kleber
+
+  SVG coordinate system: viewBox="0 0 480 680"
+  Main column x = 240 (centre).
+  Node width = 180, height = 40.
+  Vertical gap between nodes = 80px.
+-->
+
+<svg viewBox="0 0 480 680" xmlns="http://www.w3.org/2000/svg" aria-label="Aetherix pipeline diagram">
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" />
+    </marker>
+  </defs>
+
+  <!-- ── Vertical connector lines (centre column x=240) ────────────── -->
+  <!-- Cron → mcp_probe top -->
+  <line x1="240" y1="24" x2="240" y2="48" marker-end="url(#arrow)" />
+  <!-- mcp_probe → pms_sync -->
+  <line x1="240" y1="90" x2="240" y2="148" marker-end="url(#arrow)" />
+  <!-- pms_sync → context_assembly (not a stage node — implicit) -->
+  <!-- pms_sync bottom → rag top via context assembly label -->
+  <line x1="240" y1="190" x2="240" y2="228" marker-end="url(#arrow)" />
+  <!-- rag → prophet -->
+  <line x1="240" y1="310" x2="240" y2="388" marker-end="url(#arrow)" />
+  <!-- prophet → claude -->
+  <line x1="240" y1="430" x2="240" y2="468" marker-end="url(#arrow)" />
+  <!-- claude → staffing -->
+  <line x1="240" y1="510" x2="240" y2="548" marker-end="url(#arrow)" />
+  <!-- staffing → whatsapp -->
+  <line x1="240" y1="590" x2="240" y2="628" marker-end="url(#arrow)" />
+
+  <!-- PredictHQ side arrow → context assembly (x=80 → x=150, y=269) -->
+  <line x1="80" y1="269" x2="148" y2="269" marker-end="url(#arrow)" />
+  <!-- WeatherAPI side arrow → context assembly (x=400 → x=332, y=269) -->
+  <line x1="400" y1="269" x2="332" y2="269" marker-end="url(#arrow)" />
+
+  <!-- ── "Cron" starter label ──────────────────────────────────────── -->
+  <text x="240" y="16" text-anchor="middle" font-size="11" fill="#475569">Cron / Manual Trigger</text>
+
+  <!-- ── Stage nodes ──────────────────────────────────────────────── -->
+
+  <!-- mcp_probe  y=50–90 -->
+  <g class="node" id="mcp_probe" data-state="inactive">
+    <rect x="150" y="50" width="180" height="40" />
+    <text x="240" y="70">MCP Probe → Apaleo</text>
+  </g>
+
+  <!-- pms_sync  y=150–190 -->
+  <g class="node" id="pms_sync" data-state="inactive">
+    <rect x="150" y="150" width="180" height="40" />
+    <text x="240" y="170">PMS Sync</text>
+  </g>
+
+  <!-- Context Assembly label (not a tracked stage — informational) -->
+  <text x="240" y="222" text-anchor="middle" font-size="11" fill="#475569">Context Assembly</text>
+  <line x1="150" y1="225" x2="330" y2="225" stroke="#1e293b" />
+
+  <!-- PredictHQ side node (tracked as "predicthq") -->
+  <g class="node" id="predicthq" data-state="inactive">
+    <rect x="2" y="249" width="110" height="40" />
+    <text x="57" y="269">PredictHQ</text>
+  </g>
+
+  <!-- WeatherAPI side label (no stage — informational only) -->
+  <text class="side-label" x="403" y="273">WeatherAPI</text>
+
+  <!-- rag  y=270–310 -->
+  <g class="node" id="rag" data-state="inactive">
+    <rect x="150" y="270" width="180" height="40" />
+    <text x="240" y="290">pgvector RAG</text>
+  </g>
+
+  <!-- prophet  y=390–430 -->
+  <g class="node" id="prophet" data-state="inactive">
+    <rect x="150" y="390" width="180" height="40" />
+    <text x="240" y="410">Prophet + Capture Rate</text>
+  </g>
+
+  <!-- claude  y=470–510 -->
+  <g class="node" id="claude" data-state="inactive">
+    <rect x="150" y="470" width="180" height="40" />
+    <text x="240" y="490">Claude Sonnet</text>
+  </g>
+
+  <!-- staffing  y=550–590 -->
+  <g class="node" id="staffing" data-state="inactive">
+    <rect x="150" y="550" width="180" height="40" />
+    <text x="240" y="570">Staffing Service</text>
+  </g>
+
+  <!-- whatsapp  y=630–670 -->
+  <g class="node" id="whatsapp" data-state="inactive">
+    <rect x="150" y="630" width="180" height="40" />
+    <text x="240" y="650">WhatsApp / Twilio</text>
+  </g>
+
+  <!-- Sophie persona label -->
+  <text x="240" y="676" text-anchor="middle" font-size="11" fill="#475569">Sophie — F&amp;B Kleber</text>
+</svg>
+
+<!-- ── Legend ───────────────────────────────────────────────────────── -->
+<div class="legend">
+  <div class="legend-item"><span class="legend-dot" style="background:#374151"></span>Inactive</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#3b82f6"></span>In progress</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#22c55e"></span>Done</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#f97316"></span>Fallback</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#ef4444"></span>Error</div>
+</div>
+
+<script>
+  /* ── SSE subscription ─────────────────────────────────────────────── */
+  const statusEl = document.getElementById('status');
+
+  function highlight(nodeId, state) {
+    const node = document.getElementById(nodeId);
+    if (node) {
+      node.setAttribute('data-state', state);
+    }
+  }
+
+  function resetAll() {
+    const nodes = ['mcp_probe', 'pms_sync', 'predicthq', 'rag', 'prophet', 'claude', 'staffing', 'whatsapp'];
+    nodes.forEach(id => highlight(id, 'inactive'));
+  }
+
+  // Page reload always resets to inactive (CSS default handles initial state,
+  // but explicit reset guards against back-forward cache restoring a stale DOM)
+  resetAll();
+
+  // Derive SSE URL from current page host so demo_board.html works when served
+  // from any host without hardcoding localhost.
+  const sseUrl = (window.location.protocol === 'file:')
+    ? 'http://localhost:8000/api/v1/demo/stream'
+    : '/api/v1/demo/stream';
+
+  const es = new EventSource(sseUrl);
+
+  es.onopen = () => {
+    statusEl.textContent = 'Connected — waiting for pipeline events…';
+    statusEl.className = 'connected';
+  };
+
+  es.onmessage = (event) => {
+    const raw = event.data.trim();
+    if (!raw || raw.startsWith(':')) return; // keepalive comment
+
+    if (raw.endsWith('_done')) {
+      const nodeId = raw.slice(0, -5); // strip "_done"
+      highlight(nodeId, 'done');
+    } else {
+      highlight(raw, 'in-progress');
+    }
+  };
+
+  es.onerror = () => {
+    statusEl.textContent = 'SSE disconnected — reload to reconnect. (DEMO_MODE=false?)';
+    statusEl.className = 'error';
+    es.close();
+  };
+</script>
+</body>
+</html>

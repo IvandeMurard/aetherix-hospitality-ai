@@ -1,0 +1,62 @@
+"""Application-level configuration constants for Aetherix backend.
+
+Values here are the system defaults; individual properties can override
+avg_spend_per_cover and staff_hourly_rate via the properties table
+(added in migration 20260323100000_add_roi_config_to_properties.sql).
+
+[Source: story 3.3b AC 7]
+"""
+from __future__ import annotations
+
+import os as _os
+
+# ---------------------------------------------------------------------------
+# ROI Calculator defaults  (Story 3.3b)
+# ---------------------------------------------------------------------------
+
+#: Default average revenue per cover (£) used when the property has no
+#: per-property override set.
+DEFAULT_AVG_SPEND_PER_COVER: float = 40.0
+
+#: Default hourly cost per additional front-of-house staff member (£).
+DEFAULT_STAFF_HOURLY_RATE: float = 14.0
+
+#: Default captation rate — fraction of the excess demand that the property
+#: is expected to capture when fully staffed.
+DEFAULT_CAPTATION_RATE: float = 0.7
+
+# ─── Twilio (SMS + WhatsApp) ─────────────────────────────────────────────────
+TWILIO_ACCOUNT_SID: str = _os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN: str = _os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_FROM_NUMBER: str = _os.getenv("TWILIO_FROM_NUMBER", "")   # E.164 e.g. +15005550006
+TWILIO_WHATSAPP_FROM: str = _os.getenv("TWILIO_WHATSAPP_FROM", "")  # whatsapp:+14155238886
+
+# ─── SendGrid (Email) ────────────────────────────────────────────────────────
+SENDGRID_API_KEY: str = _os.getenv("SENDGRID_API_KEY", "")
+SENDGRID_FROM_EMAIL: str = _os.getenv("SENDGRID_FROM_EMAIL", "noreply@aetherix.io")
+
+# ─── Story 4.3 (HOS-26): Twilio Inbound Webhook ──────────────────────────────
+# Set to "true" in CI / test environments to bypass HMAC-SHA1 signature
+# validation on POST /webhooks/twilio/inbound.
+TWILIO_SKIP_SIGNATURE_VALIDATION: bool = (
+    _os.getenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "false").lower() == "true"
+)
+
+# Public base URL used to reconstruct the HMAC-signed URL behind a reverse proxy.
+# Example: "https://api.aetherix.com"
+# When set, overrides X-Forwarded-Proto / X-Forwarded-Host header inference.
+TWILIO_WEBHOOK_BASE_URL: str = _os.getenv("TWILIO_WEBHOOK_BASE_URL", "")
+
+# ─── Phase 2 Receipts (P2-3) ─────────────────────────────────────────────────
+# Hour (0–23) at which the daily Receipt is dispatched, in RECEIPT_TIMEZONE.
+RECEIPT_DISPATCH_HOUR: int = int(_os.getenv("RECEIPT_DISPATCH_HOUR", "18"))
+# IANA timezone name for receipt dispatch scheduling (e.g. "Europe/Paris").
+RECEIPT_TIMEZONE: str = _os.getenv("RECEIPT_TIMEZONE", "UTC")
+# Base URL of the frontend — used to build deep links in WhatsApp messages.
+FRONTEND_BASE_URL: str = _os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+
+# ─── Demo Mode ────────────────────────────────────────────────────────────────
+# When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
+# and loads synthetic Prophet training data from demo_data/prophet_training.json.
+# All demo_emit() calls are no-ops when false.
+DEMO_MODE: bool = _os.getenv("DEMO_MODE", "false").lower() == "true"

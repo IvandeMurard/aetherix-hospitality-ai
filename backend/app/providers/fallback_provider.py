@@ -1,0 +1,123 @@
+"""FallbackLLMProvider — automatic failover between two LLMProvider instances.
+
+When the primary provider fails with a *transient* error (5xx, timeout, network)
+this composite transparently retries the same call on the fallback provider.
+Client errors (HTTP 4xx) are re-raised immediately — the same malformed request
+would fail identically on the fallback, making failover wasteful and misleading.
+
+Activation:
+    Set ``LLM_FALLBACK_BACKEND=gemini`` alongside ``LLM_BACKEND=claude`` in
+    the environment.  The factory will automatically wrap the primary provider
+    in a ``FallbackLLMProvider`` — no code changes needed.
+
+Failure semantics:
+    - Transient errors from the primary trigger failover and a WARNING log.
+    - Non-transient (4xx) errors are re-raised immediately with an ERROR log.
+    - If the fallback also fails, its exception propagates to the caller.
+    - Both provider identities are recorded in ``model_id`` for observability.
+"""
+from __future__ import annotations
+
+import logging
+
+from app.providers.base import LLMProvider
+
+logger = logging.getLogger(__name__)
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    """Return True for errors that warrant failover to the backup provider.
+
+    HTTP 4xx errors (bad request, auth failure, context too long, invalid input)
+    indicate a malformed or rejected request — the identical call will fail on
+    the fallback too, so failover only costs money without fixing anything.
+
+    5xx errors, timeouts, and network-level errors may resolve on a different
+    backend and are worth retrying.
+    """
+    for attr in ("status_code", "http_status"):
+        status = getattr(exc, attr, None)
+        if isinstance(status, int):
+            return status >= 500  # 4xx → False (don't fallback), 5xx → True
+    # No HTTP status code → network/timeout/config error → assume transient
+    return True
+
+
+class FallbackLLMProvider:
+    """Composite LLMProvider: tries *primary*, falls back to *fallback* on transient errors.
+
+    Args:
+        primary:  The preferred provider (e.g. ``ClaudeProvider``).
+        fallback: The backup provider (e.g. ``GeminiProvider``).
+    """
+
+    def __init__(self, primary: LLMProvider, fallback: LLMProvider) -> None:
+        self._primary = primary
+        self._fallback = fallback
+
+    async def complete(
+        self,
+        messages: list[dict],
+        max_tokens: int = 500,
+        temperature: float = 0.3,
+        system: str | None = None,
+    ) -> str:
+        """Try primary provider; on transient errors, transparently retry with fallback.
+
+        4xx client errors (bad request, invalid input, context too long) are
+        re-raised immediately — they indicate a request problem that the fallback
+        cannot fix.
+
+        Args:
+            messages:    OpenAI-style message list.
+            max_tokens:  Maximum tokens to generate.
+            temperature: Sampling temperature.
+            system:      Optional system instruction.
+
+        Returns:
+            The first successful text response (primary or fallback).
+
+        Raises:
+            Exception: Non-transient (4xx) errors from the primary, or the
+                       fallback's exception if both providers fail.
+        """
+        try:
+            return await self._primary.complete(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system,
+            )
+        except Exception as primary_exc:
+            if not _is_transient_error(primary_exc):
+                logger.error(
+                    "FallbackLLMProvider: primary %s raised non-transient error "
+                    "(%s status=%s) — NOT falling back",
+                    self._primary.model_id,
+                    type(primary_exc).__name__,
+                    getattr(
+                        primary_exc,
+                        "status_code",
+                        getattr(primary_exc, "http_status", "n/a"),
+                    ),
+                )
+                raise
+            logger.warning(
+                "FallbackLLMProvider: primary provider %s failed (%s: %s) — "
+                "retrying with fallback %s",
+                self._primary.model_id,
+                type(primary_exc).__name__,
+                primary_exc,
+                self._fallback.model_id,
+            )
+            return await self._fallback.complete(
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system,
+            )
+
+    @property
+    def model_id(self) -> str:
+        """Composite identifier showing both providers for observability."""
+        return f"{self._primary.model_id}→{self._fallback.model_id}"

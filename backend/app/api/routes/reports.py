@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends, Query
 from datetime import date, timedelta
+
+from fastapi import APIRouter, Query
+
 from app.services.reporting_service import ReportingService
 
 router = APIRouter(prefix="/reports", tags=["insights"])

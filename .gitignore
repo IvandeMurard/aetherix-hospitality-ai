@@ -20,8 +20,10 @@ out/
 # IDEs
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
+*.bak
 .DS_Store
 
 # Database
@@ -31,3 +33,22 @@ out/
 # Misc
 .obsidian/
 backend/data/raw/*.csv
+_ai_workspace/
+
+# Linear audit output (regenerated on demand by scripts/linear_audit.py)
+linear_state.md
+
+# Ad-hoc DB snapshots (kept locally, never committed)
+pre-*-snapshot.sql
+*-snapshot.sql
+
+# Root OpenAPI dump (canonical copy lives in frontend/shared-data/openapi.json)
+/openapi.json
+
+# Claude Code agent worktrees
+.claude/worktrees/
+.claire/
+
+# Stray Obsidian vault path (Windows path written literally on Linux)
+C:\\Users\\
+.claude/
