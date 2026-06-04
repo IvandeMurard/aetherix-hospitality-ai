@@ -90,6 +90,10 @@ CREATE TABLE IF NOT EXISTS staffing_recommendations (
     window_end TEXT NOT NULL,
     roi_net REAL,
     roi_labor_cost REAL,
+    predicted_covers REAL,
+    actual_covers REAL,
+    actual_covers_source TEXT,
+    actual_covers_at TEXT,
     status TEXT NOT NULL DEFAULT 'ready_to_push',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -344,6 +348,25 @@ async def test_run_for_property_creates_recommendation(session: AsyncSession):
     )).fetchone()
     assert row is not None
     assert row[1] == "ready_to_push"
+
+
+@pytest.mark.asyncio
+async def test_run_for_property_persists_predicted_covers(session: AsyncSession):
+    """HOS-200 AC3: expected_demand is persisted as predicted_covers so real
+    MAPE can be computed once the manager reports actual covers."""
+    aid = _anomaly_id()
+    tid = _tenant_id()
+    await _insert_anomaly(session, anomaly_id=aid, tenant_id=tid, expected_demand=130.0)
+
+    svc = RecommendationFormatterService()
+    await svc.run_for_property(session, property_id="prop-001")
+
+    row = (await session.execute(
+        text("SELECT predicted_covers FROM staffing_recommendations WHERE anomaly_id = :aid"),
+        {"aid": aid},
+    )).fetchone()
+    assert row is not None
+    assert float(row[0]) == 130.0
 
 
 @pytest.mark.asyncio

@@ -144,7 +144,7 @@ class RecommendationFormatterService:
                        direction, triggering_factors,
                        roi_revenue_opp, roi_labor_cost, roi_net,
                        window_start, window_end,
-                       deviation_pct
+                       deviation_pct, expected_demand
                 FROM demand_anomalies
                 WHERE property_id = :property_id
                   AND status = 'roi_positive'
@@ -196,7 +196,7 @@ class RecommendationFormatterService:
                        direction, triggering_factors,
                        roi_revenue_opp, roi_labor_cost, roi_net,
                        window_start, window_end,
-                       deviation_pct
+                       deviation_pct, expected_demand
                 FROM demand_anomalies
                 WHERE status = 'roi_positive'
                 ORDER BY window_start
@@ -249,6 +249,7 @@ class RecommendationFormatterService:
             window_start,
             window_end,
             deviation_pct,
+            expected_demand,
         ) = row
 
         # Guard: window times are required
@@ -282,6 +283,10 @@ class RecommendationFormatterService:
         revenue_opp_f = float(roi_revenue_opp) if roi_revenue_opp is not None else 0.0
         labor_cost_f = float(roi_labor_cost) if roi_labor_cost is not None else 0.0
         roi_net_f = float(roi_net) if roi_net is not None else 0.0
+        # Story 10.10 (HOS-200): persist the model's forecast next to the
+        # recommendation so real MAPE can be computed once the manager reports
+        # actual covers. expected_demand is the anomaly's forecast for the window.
+        predicted_covers_f = float(expected_demand) if expected_demand is not None else None
 
         # Normalise window datetimes to plain datetime for strftime
         ws = window_start if isinstance(window_start, datetime) else datetime.fromisoformat(str(window_start))
@@ -312,17 +317,18 @@ class RecommendationFormatterService:
                         (id, tenant_id, property_id, anomaly_id,
                          message_text, triggering_factor, recommended_headcount,
                          window_start, window_end,
-                         roi_net, roi_labor_cost,
+                         roi_net, roi_labor_cost, predicted_covers,
                          status, created_at, updated_at)
                     VALUES
                         (:id, :tenant_id, :property_id, :anomaly_id,
                          :message_text, :triggering_factor, :recommended_headcount,
                          :window_start, :window_end,
-                         :roi_net, :roi_labor_cost,
+                         :roi_net, :roi_labor_cost, :predicted_covers,
                          'ready_to_push', :now, :now)
                     ON CONFLICT (anomaly_id) DO UPDATE SET
                         status = 'ready_to_push',
                         message_text = EXCLUDED.message_text,
+                        predicted_covers = EXCLUDED.predicted_covers,
                         updated_at = EXCLUDED.updated_at
                     """
                 ),
@@ -338,6 +344,7 @@ class RecommendationFormatterService:
                     "window_end": we.isoformat(),
                     "roi_net": roi_net_f,
                     "roi_labor_cost": labor_cost_f,
+                    "predicted_covers": predicted_covers_f,
                     "now": now.isoformat(),
                 },
             )
