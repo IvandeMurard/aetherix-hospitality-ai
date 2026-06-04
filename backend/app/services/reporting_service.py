@@ -1,5 +1,5 @@
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List
 
 import pandas as pd  # For easy data manipulation
@@ -13,18 +13,23 @@ class ReportingService:
     Performance Reporting Layer (Phase 3).
     Calculates MAPE and Financial ROI for the "Friday Audit".
     """
-    
+
     def __init__(self, db_service=None):
-        self.db = db_service # Mocking DB access for now
+        # AsyncSession when wired from the route (real pilot data); None in
+        # contexts without a DB, where we fall back to the demo mock.
+        self.db = db_service
 
     async def generate_weekly_metrics(self, tenant_id: str, week_start: date) -> Dict[str, Any]:
         """
         Calculates MAPE and labor savings for a given tenant's week.
         """
-        # 1. Fetch historical predictions vs actuals
-        # In a real scenario, this would query Supabase/PostgreSQL
-        data = self._get_mock_weekly_data(tenant_id, week_start)
-        
+        # 1. Fetch real prediction-vs-actual rows (Story 10.10 / HOS-200).
+        #    Falls back to the demo mock only when no ground-truth rows exist
+        #    yet (gated on actual_covers IS NULL — AC4).
+        data = await self._get_weekly_data(tenant_id, week_start)
+        if not data:
+            data = self._get_mock_weekly_data(tenant_id, week_start)
+
         df = pd.DataFrame(data)
         
         # 2. Calculate MAPE (Mean Absolute Percentage Error)
@@ -109,6 +114,60 @@ class ReportingService:
         quiet_savings = df[df['actual_covers'] < 100].shape[0] * 120.0 # £120 per quiet day
         
         return surge_savings + quiet_savings
+
+    async def _get_weekly_data(self, tenant_id: str, week_start: date) -> List[Dict]:
+        """Fetch real prediction-vs-actual rows for the week (Story 10.10 / HOS-200).
+
+        Reads `staffing_recommendations` where `actual_covers IS NOT NULL`
+        (ground truth persisted from manager feedback) AND `predicted_covers
+        IS NOT NULL`, for the 7-day window starting at `week_start`. Returns one
+        dict per recommendation: ``{date, actual_covers, predicted_covers}``.
+
+        Returns an empty list when no DB session is wired or no ground-truth rows
+        exist yet — the caller then gates onto the demo mock (AC4).
+        """
+        if self.db is None:
+            return []
+
+        # Local imports keep the module importable without the ORM/DB stack
+        # (e.g. pure mock-data unit tests).
+        from sqlalchemy import select
+
+        from app.db.models import StaffingRecommendation
+
+        week_end = week_start + timedelta(days=7)
+        window_start = datetime.combine(week_start, time.min, tzinfo=timezone.utc)
+        window_end = datetime.combine(week_end, time.min, tzinfo=timezone.utc)
+
+        result = await self.db.execute(
+            select(StaffingRecommendation)
+            .where(StaffingRecommendation.tenant_id == tenant_id)
+            .where(StaffingRecommendation.actual_covers.isnot(None))
+            .where(StaffingRecommendation.predicted_covers.isnot(None))
+            .where(StaffingRecommendation.window_start >= window_start)
+            .where(StaffingRecommendation.window_start < window_end)
+            .order_by(StaffingRecommendation.window_start)
+        )
+        rows = result.scalars().all()
+
+        data: List[Dict] = []
+        for r in rows:
+            ws = r.window_start
+            data.append(
+                {
+                    "date": ws.date() if hasattr(ws, "date") else ws,
+                    "actual_covers": float(r.actual_covers),
+                    "predicted_covers": float(r.predicted_covers),
+                }
+            )
+
+        logger.info(
+            "reporting_service._get_weekly_data: tenant=%s week_start=%s real_rows=%d",
+            tenant_id,
+            week_start,
+            len(data),
+        )
+        return data
 
     def _get_mock_weekly_data(self, tenant_id: str, week_start: date) -> List[Dict]:
         """Simulates DB result for the pilot audit (with surge/quiet days)."""
