@@ -282,7 +282,8 @@ class TestPMSSyncAutoRecalculation:
         service = PMSSyncService(adapter)
 
         # dispatch_report is imported locally in sync_daily_data; patch its source module.
-        # VAULT_FOLDERS is missing from obsidian.py (pre-existing bug) — create it.
+        # Override VAULT_FOLDERS so this test doesn't depend on a real vault layout
+        # (now defined in obsidian.py — HOS-211).
         with (
             patch.object(service, "_trigger_captation_recalculation", new_callable=AsyncMock) as mock_trigger,
             patch("app.services.pms_sync.AsyncSessionLocal") as mock_session_cls,
