@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AgentActionLog, OperationalMemory
+from app.db.models import AgentActionLog, OperationalMemory, StaffingRecommendation
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
 
@@ -484,6 +484,70 @@ class ReceiptsService:
             stripped[:80],
         )
         return intent
+
+    # -----------------------------------------------------------------------
+    # P3-10 (HOS-200): persist manager-reported actual covers — close the
+    # prediction → recommendation → feedback → actual outcome loop.
+    # -----------------------------------------------------------------------
+    async def persist_actual_covers(
+        self,
+        recommendation: StaffingRecommendation,
+        actual_value: float,
+        *,
+        request_id: str = "",
+        observed_on: date | None = None,
+    ) -> OperationalMemory:
+        """Persist a manager's ground-truth covers correction.
+
+        Story 10.10 (HOS-200). Called from the Twilio inbound handler when
+        `parse_inbound` returns a ``structured_correction`` with a numeric
+        ``actual_value``.
+
+        AC1 — writes ``actual_covers`` onto the matched StaffingRecommendation,
+        stamping ``actual_covers_source = "manager_feedback"`` and
+        ``actual_covers_at = now()``.
+        AC2 — appends a ``ground_truth`` row to ``operational_memory`` with a
+        ``"actual covers X vs predicted Y on DATE"`` reflection, tagged
+        ``["ground_truth", "covers_correction"]`` and linked via ``request_id``.
+
+        The caller owns the transaction (commit happens upstream so the
+        recommendation update and the memory write land atomically). Returns the
+        created OperationalMemory row.
+        """
+        now = datetime.now(tz=timezone.utc)
+
+        # AC1 — ground truth onto the recommendation
+        recommendation.actual_covers = actual_value
+        recommendation.actual_covers_source = "manager_feedback"
+        recommendation.actual_covers_at = now
+
+        # AC2 — ground_truth memory row (no embedding: factual, not retrieved by
+        # similarity — written pending like other non-embedded rows, ADR D9).
+        predicted = recommendation.predicted_covers
+        on_date = observed_on or now.date()
+        reflection = (
+            f"actual covers {actual_value} vs predicted {predicted} on {on_date}"
+        )
+        memory = OperationalMemory(
+            hotel_id=recommendation.tenant_id,
+            reflection=reflection,
+            memory_type="ground_truth",
+            tags=["ground_truth", "covers_correction"],
+            embedding_pending=True,
+            request_id=request_id,
+        )
+        self.db.add(memory)
+        await self.db.flush()
+
+        logger.info(
+            "receipts.persist_actual_covers: rec=%s actual=%s predicted=%s hotel_id=%s memory_id=%s",
+            recommendation.id,
+            actual_value,
+            predicted,
+            recommendation.tenant_id,
+            memory.id,
+        )
+        return memory
 
     async def weekly_digest(
         self, hotel_id: str, week_end: date
