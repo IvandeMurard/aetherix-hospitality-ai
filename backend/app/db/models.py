@@ -340,6 +340,16 @@ class StaffingRecommendation(Base):
     actioned_at = Column(DateTime(timezone=True), nullable=True)
     action = Column(String(10), nullable=True)  # accepted | rejected
 
+    # Story 10.10 (HOS-200): close the prediction → outcome loop.
+    # predicted_covers is copied from demand_anomalies.expected_demand at
+    # formatting time; actual_covers is reported by the manager via WhatsApp
+    # feedback. Both are needed to compute real MAPE (Story 10.12 / HOS-202).
+    # Mirror of migration 20260603120000 (schema drift gate — Décision #16).
+    predicted_covers = Column(Numeric(10, 2), nullable=True)
+    actual_covers = Column(Numeric(10, 2), nullable=True)
+    actual_covers_source = Column(String, nullable=True)  # manager_feedback | pos_data (Phase 4)
+    actual_covers_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
