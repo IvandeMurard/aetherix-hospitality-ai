@@ -14,6 +14,8 @@
   <img src="https://img.shields.io/badge/License-MIT-22C55E?style=flat" alt="License MIT" />
 </p>
 
+(Loom introduction video coming soon)
+
 ---
 
 ## What is Aetherix
