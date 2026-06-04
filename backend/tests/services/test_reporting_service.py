@@ -122,3 +122,20 @@ class TestGenerateWeeklyMetrics:
         result = await svc.generate_weekly_metrics(TENANT, WEEK_START)
 
         assert result["metrics"]["total_covers"] == 945
+
+    @pytest.mark.asyncio
+    async def test_dispatch_ops_runs_without_importerror(self, tmp_path, monkeypatch):
+        """HOS-211 regression: the **real** _dispatch_ops must not crash.
+
+        Before the fix, `from app.integrations.obsidian import VAULT_FOLDERS`
+        raised ImportError → generate_weekly_metrics 500'd. Here _dispatch_ops is
+        deliberately NOT patched; the Obsidian write goes to a temp vault and the
+        mock-data MAPE (~2.4%) stays under the Linear-alert threshold.
+        """
+        monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+        svc = ReportingService()  # no db → demo mock path
+        result = await svc.generate_weekly_metrics(TENANT, WEEK_START)
+
+        assert result["metrics"]["total_covers"] == 945
+        # The weekly-audit note was actually written to the vault.
+        assert list(tmp_path.rglob("*.md")), "expected a weekly-audit note to be written"
