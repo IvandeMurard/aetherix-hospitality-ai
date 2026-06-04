@@ -41,8 +41,13 @@ def _make_log_row(status: str = "ok") -> Any:
     return row
 
 
-def _make_db(log_rows: list, mv_row: tuple | None = (5, 2.5)) -> Any:
-    """Mock AsyncSession with two execute() results: log rows + MV row."""
+def _make_db(
+    log_rows: list,
+    mv_row: tuple | None = (5, 2.5),
+    rec_rows: list | None = None,
+) -> Any:
+    """Mock AsyncSession with three execute() results: log rows + MV row +
+    StaffingRecommendation (predicted, actual) rows for the HOS-202 MAPE query."""
     db = AsyncMock()
 
     # First execute: agent_action_log SELECT
@@ -53,7 +58,11 @@ def _make_db(log_rows: list, mv_row: tuple | None = (5, 2.5)) -> Any:
     mv_result = MagicMock()
     mv_result.fetchone.return_value = mv_row
 
-    db.execute = AsyncMock(side_effect=[log_result, mv_result])
+    # Third execute: staffing_recommendations (predicted_covers, actual_covers)
+    rec_result = MagicMock()
+    rec_result.all.return_value = rec_rows or []
+
+    db.execute = AsyncMock(side_effect=[log_result, mv_result, rec_result])
     return db
 
 
@@ -189,6 +198,70 @@ class TestWeeklyDigest:
 
 
 # ---------------------------------------------------------------------------
+# HOS-202 (P3-12) — real MAPE in the weekly digest
+# ---------------------------------------------------------------------------
+
+class TestWeeklyDigestMape:
+    @pytest.mark.asyncio
+    async def test_mape_computed_from_actual_covers(self):
+        """AC2: 5 (predicted, actual) rows → MAPE = mean(|a-p|/a) × 100."""
+        rec_rows = [
+            (100, 100),  # 0.0000
+            (150, 140),  # 0.0714
+            (80, 100),   # 0.2000
+            (120, 130),  # 0.0769
+            (200, 180),  # 0.1111
+        ]
+        db = _make_db([_make_log_row("ok")], rec_rows=rec_rows)
+        svc = ReceiptsService(db, llm=AsyncMock())
+
+        payload = await svc.weekly_digest(HOTEL, WEEK_END)
+
+        assert payload.cover_observations == 5
+        assert payload.mape_week == pytest.approx(9.2, abs=0.05)
+        assert payload.predicted_covers_week == 650
+        assert payload.actual_covers_week == 650
+
+    @pytest.mark.asyncio
+    async def test_no_actuals_gives_none_mape(self):
+        """AC5: 0 cover observations → mape_week None, no crash."""
+        db = _make_db([_make_log_row("ok")], rec_rows=[])
+        svc = ReceiptsService(db, llm=AsyncMock())
+
+        payload = await svc.weekly_digest(HOTEL, WEEK_END)
+
+        assert payload.mape_week is None
+        assert payload.predicted_covers_week is None
+        assert payload.actual_covers_week is None
+        assert payload.cover_observations == 0
+
+    @pytest.mark.asyncio
+    async def test_fewer_than_three_observations_suppresses_mape(self):
+        """AC1/AC5: < 3 observations → mape_week None but sums still populated."""
+        db = _make_db([_make_log_row("ok")], rec_rows=[(100, 100), (150, 140)])
+        svc = ReceiptsService(db, llm=AsyncMock())
+
+        payload = await svc.weekly_digest(HOTEL, WEEK_END)
+
+        assert payload.cover_observations == 2
+        assert payload.mape_week is None
+        assert payload.predicted_covers_week == 250
+        assert payload.actual_covers_week == 240
+
+    @pytest.mark.asyncio
+    async def test_zero_actual_row_excluded_from_mape(self):
+        """AC2: rows with actual_covers == 0 are skipped (no division by zero)."""
+        rec_rows = [(50, 0), (100, 100), (150, 140), (80, 100)]
+        db = _make_db([_make_log_row("ok")], rec_rows=rec_rows)
+        svc = ReceiptsService(db, llm=AsyncMock())
+
+        payload = await svc.weekly_digest(HOTEL, WEEK_END)
+
+        assert payload.cover_observations == 3  # the (50, 0) row dropped
+        assert payload.mape_week is not None
+
+
+# ---------------------------------------------------------------------------
 # 7–8. compose_weekly_narrative
 # ---------------------------------------------------------------------------
 
@@ -231,6 +304,60 @@ class TestComposeWeeklyNarrative:
 
         assert WEEK_END.isoformat() in result
         assert "20" in result  # total_agent_actions in fallback
+
+    def _payload_with_mape(self, mape: float | None, observations: int) -> WeeklyDigestPayload:
+        return WeeklyDigestPayload(
+            hotel_id=HOTEL,
+            week_start=date(2026, 5, 12),
+            week_end=WEEK_END,
+            total_agent_actions=20,
+            tool_success_rate_pct=95.0,
+            agent_error_count=1,
+            memory_writes_week=8,
+            memory_pending_pct=0.0,
+            mape_week=mape,
+            predicted_covers_week=650 if observations else None,
+            actual_covers_week=650 if observations else None,
+            cover_observations=observations,
+        )
+
+    @pytest.mark.asyncio
+    async def test_prompt_injects_mape(self):
+        """AC3: the MAPE figure reaches the LLM prompt."""
+        db = AsyncMock()
+        mock_llm = AsyncMock()
+        mock_llm.complete = AsyncMock(return_value="digest")
+        svc = ReceiptsService(db, llm=mock_llm)
+
+        await svc.compose_weekly_narrative(self._payload_with_mape(10.5, 5), "Grand Hôtel")
+
+        user_msg = mock_llm.complete.await_args.kwargs["messages"][0]["content"]
+        assert "MAPE 10.5%" in user_msg
+        assert "5 observations" in user_msg
+
+    @pytest.mark.asyncio
+    async def test_fallback_includes_mape(self):
+        """AC3: MAPE also surfaces in the non-LLM fallback (deterministic)."""
+        db = AsyncMock()
+        mock_llm = AsyncMock()
+        mock_llm.complete = AsyncMock(side_effect=RuntimeError("timeout"))
+        svc = ReceiptsService(db, llm=mock_llm)
+
+        result = await svc.compose_weekly_narrative(self._payload_with_mape(10.5, 5), "Grand Hôtel")
+
+        assert "10.5%" in result
+
+    @pytest.mark.asyncio
+    async def test_insufficient_data_message(self):
+        """AC3/AC5: mape_week None → 'insufficient data' guidance, no number."""
+        db = AsyncMock()
+        mock_llm = AsyncMock()
+        mock_llm.complete = AsyncMock(side_effect=RuntimeError("timeout"))
+        svc = ReceiptsService(db, llm=mock_llm)
+
+        result = await svc.compose_weekly_narrative(self._payload_with_mape(None, 0), "Grand Hôtel")
+
+        assert "insufficient data" in result.lower()
 
 
 # ---------------------------------------------------------------------------
