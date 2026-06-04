@@ -19,10 +19,20 @@ Covered:
 """
 from __future__ import annotations
 
+import uuid as _uuid
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import pytest
+import pytest_asyncio
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
+from app.db.models import Base, OperationalMemory, StaffingRecommendation
 from app.services.receipts import ReceiptsService
 
 # ---------------------------------------------------------------------------
@@ -211,3 +221,107 @@ class TestConfidenceThreshold:
         llm_json = '{"intent":"free_form","confidence":0.9,"outcome":"modified","actual_value":null,"notes":"test"}'
         result = await _service(llm_response=llm_json).parse_inbound("clear message")
         assert result.requires_confirmation is False
+
+
+# ===========================================================================
+# HOS-200 (Story 10.10 / P3-10) — persist_actual_covers
+#
+# Closes the prediction → recommendation → feedback → actual outcome loop.
+# These use a real in-memory SQLite session (the parse_inbound tests above are
+# pure-mock; do not fold these into them). Section is intentionally appended at
+# the end of the file to avoid colliding with the parse_inbound regex/Haiku zone.
+# (Imports for this section live in the top-of-file import block — E402.)
+# ===========================================================================
+
+
+@pytest_asyncio.fixture
+async def db_session():
+    """Fresh in-memory SQLite DB with the full ORM schema."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with factory() as s:
+        yield s
+    await engine.dispose()
+
+
+async def _seed_recommendation(
+    session: AsyncSession,
+    *,
+    tenant_id: str = "hotel_p2",
+    predicted_covers: float | None = 140.0,
+) -> StaffingRecommendation:
+    now = datetime.now(tz=timezone.utc)
+    rec = StaffingRecommendation(
+        id=_uuid.uuid4(),
+        tenant_id=tenant_id,
+        property_id=_uuid.uuid4(),
+        anomaly_id=_uuid.uuid4(),
+        message_text="Add 2 servers for dinner.",
+        triggering_factor="Tech conference",
+        recommended_headcount=2,
+        window_start=now,
+        window_end=now,
+        predicted_covers=predicted_covers,
+        status="dispatched",
+    )
+    session.add(rec)
+    await session.commit()
+    return rec
+
+
+class TestPersistActualCovers:
+    @pytest.mark.asyncio
+    async def test_structured_correction_persists_actual_covers(self, db_session):
+        """AC5: parse_inbound("dinner covers 60") → actual_value == 60.0 →
+        StaffingRecommendation.actual_covers == 60 + one ground_truth memory row."""
+        rec = await _seed_recommendation(db_session, predicted_covers=140.0)
+        svc = ReceiptsService(db_session, llm=AsyncMock())
+
+        # The parser leg (unchanged, regex path) yields the numeric correction.
+        feedback = await svc.parse_inbound("dinner covers 60")
+        assert feedback.intent == "structured_correction"
+        assert feedback.actual_value == 60.0
+
+        await svc.persist_actual_covers(rec, feedback.actual_value, request_id="req-1")
+        await db_session.commit()
+
+        # AC1 — recommendation now carries the ground truth.
+        refreshed = (
+            await db_session.execute(
+                select(StaffingRecommendation).where(
+                    StaffingRecommendation.id == rec.id
+                )
+            )
+        ).scalars().one()
+        assert float(refreshed.actual_covers) == 60.0
+        assert refreshed.actual_covers_source == "manager_feedback"
+        assert refreshed.actual_covers_at is not None
+
+        # AC2 — exactly one ground_truth memory row, linked + tagged.
+        mem_rows = (
+            await db_session.execute(
+                select(OperationalMemory).where(
+                    OperationalMemory.memory_type == "ground_truth"
+                )
+            )
+        ).scalars().all()
+        assert len(mem_rows) == 1
+        mem = mem_rows[0]
+        assert mem.hotel_id == "hotel_p2"
+        assert mem.request_id == "req-1"
+        assert mem.tags == ["ground_truth", "covers_correction"]
+        assert "actual covers 60.0 vs predicted 140" in mem.reflection
+
+    @pytest.mark.asyncio
+    async def test_reflection_handles_missing_predicted_covers(self, db_session):
+        """predicted_covers may be NULL on older rows — reflection still writes."""
+        rec = await _seed_recommendation(db_session, predicted_covers=None)
+        svc = ReceiptsService(db_session, llm=AsyncMock())
+
+        mem = await svc.persist_actual_covers(rec, 80.0, request_id="req-2")
+        await db_session.commit()
+
+        assert "actual covers 80.0 vs predicted None" in mem.reflection
+        assert float(rec.actual_covers) == 80.0

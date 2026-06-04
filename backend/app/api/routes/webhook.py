@@ -346,6 +346,10 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
         if recommendation_id:
             from app.mcp_server import tool_submit_feedback_to_memory
 
+            # Shared request_id links the feedback row and the P3-10 ground_truth
+            # row written below for the same inbound correction.
+            req_id = str(_uuid.uuid4())
+
             notes_text = feedback.notes
             if feedback.actual_value is not None:
                 notes_text = f"actual={feedback.actual_value} {notes_text}".strip()
@@ -358,7 +362,22 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
                     db=db,
                     actual_value=feedback.actual_value,
                     notes=notes_text,
+                    request_id=req_id,
                 )
+
+                # P3-10 (HOS-200): persist the manager's ground-truth covers onto
+                # the recommendation + a ground_truth memory row, in the same txn.
+                if (
+                    feedback.intent == "structured_correction"
+                    and feedback.actual_value is not None
+                    and recommendation is not None
+                ):
+                    await service.persist_actual_covers(
+                        recommendation,
+                        feedback.actual_value,
+                        request_id=req_id,
+                    )
+
                 await db.commit()
                 logger.info(
                     "_bg_receipt_feedback: memory written hotel_id=%s result=%s confidence=%.2f",
