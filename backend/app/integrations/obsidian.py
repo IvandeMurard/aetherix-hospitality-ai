@@ -4,6 +4,21 @@ import re
 from datetime import datetime
 from pathlib import Path
 
+# Logical vault sub-folders for ops dispatch targets. Single source of truth —
+# consumed by ops_dispatcher (alerts/reports), pms_sync (sync_logs) and
+# reporting_service (reports). Paths are relative to OBSIDIAN_VAULT_PATH;
+# write_note() creates them on demand.
+#
+# HOS-211: this constant was imported by those callers but never defined here,
+# so reporting_service._dispatch_ops raised ImportError → GET /reports/weekly
+# returned 500 (the ops_dispatcher imports sat inside try/except and failed
+# silently instead). Defined here once to fix all consumers.
+VAULT_FOLDERS: dict[str, str] = {
+    "reports": "AI Reports/Operational",  # weekly audits, ROI digests
+    "alerts": "AI Reports/Alerts",        # error + anomaly mirrors of Linear issues
+    "sync_logs": "AI Reports/Sync Logs",  # PMS sync run logs
+}
+
 
 def _vault() -> Path:
     path = os.environ.get("OBSIDIAN_VAULT_PATH", "/vault")
