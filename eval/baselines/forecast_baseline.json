@@ -1,0 +1,226 @@
+{
+  "layer": "forecast",
+  "method": "stratified scattered-holdout, edge-case-weighted \u2014 surfaces per-category weakness; NOT the D\u00e9cision #14 contiguous-30d gate (15.09%)",
+  "overall_mape_j1_holdout": 0.2782,
+  "per_category_mape": {
+    "event_day": 0.2094,
+    "normal_day": 0.3013,
+    "weather_anomaly": 0.3235
+  },
+  "per_category_count": {
+    "event_day": 6,
+    "normal_day": 10,
+    "weather_anomaly": 4
+  },
+  "interval_coverage_pct": 0.1,
+  "tolerance_pass_rate": 0.45,
+  "scenario_count": 20,
+  "seed": 42,
+  "regressors": [
+    "weather_score",
+    "event_impact",
+    "occupancy"
+  ],
+  "scenarios": [
+    {
+      "id": "fcst-normal-001",
+      "category": "normal_day",
+      "expected": 90.0,
+      "yhat": 79.3,
+      "abs_pct_err": 0.1186,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": true,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-normal-002",
+      "category": "normal_day",
+      "expected": 84.0,
+      "yhat": 78.9,
+      "abs_pct_err": 0.0609,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": true,
+      "interval_hit": true
+    },
+    {
+      "id": "fcst-normal-003",
+      "category": "normal_day",
+      "expected": 88.0,
+      "yhat": 104.0,
+      "abs_pct_err": 0.1823,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-normal-004",
+      "category": "normal_day",
+      "expected": 68.0,
+      "yhat": 91.6,
+      "abs_pct_err": 0.3472,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-normal-005",
+      "category": "normal_day",
+      "expected": 86.0,
+      "yhat": 98.4,
+      "abs_pct_err": 0.1438,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": true,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-normal-006",
+      "category": "normal_day",
+      "expected": 82.0,
+      "yhat": 93.0,
+      "abs_pct_err": 0.1341,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": true,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-normal-007",
+      "category": "normal_day",
+      "expected": 104.0,
+      "yhat": 116.2,
+      "abs_pct_err": 0.1171,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": true,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-normal-008",
+      "category": "normal_day",
+      "expected": 82.0,
+      "yhat": 63.4,
+      "abs_pct_err": 0.2268,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-normal-009",
+      "category": "normal_day",
+      "expected": 115.0,
+      "yhat": 83.0,
+      "abs_pct_err": 0.278,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-normal-010",
+      "category": "normal_day",
+      "expected": 51.0,
+      "yhat": 122.6,
+      "abs_pct_err": 1.4045,
+      "tolerance_pct": 0.15,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-event-001",
+      "category": "event_day",
+      "expected": 104.0,
+      "yhat": 82.0,
+      "abs_pct_err": 0.2119,
+      "tolerance_pct": 0.2,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-event-002",
+      "category": "event_day",
+      "expected": 116.0,
+      "yhat": 99.3,
+      "abs_pct_err": 0.1443,
+      "tolerance_pct": 0.2,
+      "tolerance_pass": true,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-event-003",
+      "category": "event_day",
+      "expected": 121.0,
+      "yhat": 118.6,
+      "abs_pct_err": 0.02,
+      "tolerance_pct": 0.2,
+      "tolerance_pass": true,
+      "interval_hit": true
+    },
+    {
+      "id": "fcst-event-004",
+      "category": "event_day",
+      "expected": 120.0,
+      "yhat": 78.5,
+      "abs_pct_err": 0.3458,
+      "tolerance_pct": 0.2,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-event-005",
+      "category": "event_day",
+      "expected": 144.0,
+      "yhat": 94.2,
+      "abs_pct_err": 0.3458,
+      "tolerance_pct": 0.2,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-event-006",
+      "category": "event_day",
+      "expected": 113.0,
+      "yhat": 134.3,
+      "abs_pct_err": 0.1886,
+      "tolerance_pct": 0.2,
+      "tolerance_pass": true,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-weather-001",
+      "category": "weather_anomaly",
+      "expected": 81.0,
+      "yhat": 109.5,
+      "abs_pct_err": 0.3515,
+      "tolerance_pct": 0.18,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-weather-002",
+      "category": "weather_anomaly",
+      "expected": 110.0,
+      "yhat": 80.6,
+      "abs_pct_err": 0.2671,
+      "tolerance_pct": 0.18,
+      "tolerance_pass": false,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-weather-003",
+      "category": "weather_anomaly",
+      "expected": 91.0,
+      "yhat": 103.1,
+      "abs_pct_err": 0.1325,
+      "tolerance_pct": 0.18,
+      "tolerance_pass": true,
+      "interval_hit": false
+    },
+    {
+      "id": "fcst-weather-004",
+      "category": "weather_anomaly",
+      "expected": 97.0,
+      "yhat": 44.3,
+      "abs_pct_err": 0.543,
+      "tolerance_pct": 0.18,
+      "tolerance_pass": false,
+      "interval_hit": false
+    }
+  ]
+}
