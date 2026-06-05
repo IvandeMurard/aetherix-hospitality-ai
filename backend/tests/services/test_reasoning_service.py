@@ -197,3 +197,56 @@ class TestReasoningServiceHeuristic:
         )
         assert "120" in result["summary"]
         assert "dinner" in result["summary"].lower()
+
+
+# ---------------------------------------------------------------------------
+# HOS-201 (P3-11) — named events in the forecast explanation
+# ---------------------------------------------------------------------------
+
+class TestNamedEvents:
+    def _build(self, events: list) -> str:
+        service = ReasoningService(llm=_mock_llm())
+        ctx = {"weather": {"condition": "sunny"}, "events": events, "occupancy": 0.8}
+        return service._build_prompt(
+            150, 0.85, _DATE, "dinner", ctx, _PATTERNS, None,
+        )
+
+    def test_prompt_names_events_ac_example_fields(self):
+        """AC1: events with name/distance_km render as a named, located line."""
+        prompt = self._build(
+            [{"name": "PSG vs Arsenal", "distance_km": 2.1, "category": "Sports"}]
+        )
+        assert "PSG vs Arsenal" in prompt
+        assert "2.1 km" in prompt
+        assert "events nearby" not in prompt  # the old opaque count is gone
+
+    def test_prompt_names_events_real_ingestion_fields(self):
+        """AC3: real local_events dicts use title/category/phq_attendance."""
+        prompt = self._build([
+            {"title": "Concert Bercy", "category": "Music", "phq_attendance": 15000},
+            {"title": "Tech conference", "category": "Conferences", "phq_attendance": 4000},
+        ])
+        assert "Concert Bercy" in prompt
+        assert "Music" in prompt
+        assert "~15,000 expected" in prompt
+        assert "Tech conference" in prompt
+
+    def test_prompt_empty_events_fallback(self):
+        """AC2: empty events → 'No events nearby' fallback."""
+        prompt = self._build([])
+        assert "No events nearby" in prompt
+
+    def test_heuristic_names_events(self):
+        """AC4: the heuristic fallback names events consistently."""
+        service = ReasoningService(llm=_mock_llm())
+        ctx = {
+            "weather": {"condition": "rain"},
+            "events": [{"title": "PSG vs Arsenal", "category": "Sports"}],
+            "occupancy": 0.9,
+        }
+        result = service._heuristic_explanation(
+            predicted=180, confidence=0.9, dt=_DATE, svc="dinner",
+            context=ctx, patterns=_PATTERNS,
+        )
+        assert "PSG vs Arsenal" in result["summary"]
+        assert "nearby event(s)" not in result["summary"]  # old count phrasing gone
