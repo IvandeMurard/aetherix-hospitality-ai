@@ -1,0 +1,119 @@
+# Aetherix Eval-by-Design
+
+Evaluation-as-a-contract for the AI/ML layers of Aetherix.
+Foundation laid by **EVAL-0 (HOS-204)**; runners land in EVAL-1…EVAL-5.
+
+> **Reference:** [ADR-0007](../docs/adr/0007-evaluation-by-design.md) ·
+> CLAUDE.md Décision #22 · PM brief `docs/planning/evaluation-by-design.md`.
+
+---
+
+## The contract
+
+**Any change that touches the model, the LLM, memory, providers, or prompts does
+not merge without updating `eval/golden_dataset.jsonl` and a green eval run.**
+
+This mirrors the schema-drift gate (Décision #16): a hard, blocking CI gate.
+The set of paths that trigger it is defined in ADR-0007 §D2.a (`EVAL_TRIGGER_PATHS`)
+— forecasting/parser/recommendation/memory services, `app/providers/`,
+`backend/app/prompts/`, and the eval dataset + thresholds themselves.
+
+Failure thresholds (the per-layer "bad output" definitions) live in
+[`FAILURE_THRESHOLDS.md`](./FAILURE_THRESHOLDS.md). Changing a threshold is an
+explicit decision: PR + CLAUDE.md trace.
+
+### `eval-exempt` label (override)
+
+A PR may carry the **`eval-exempt`** label to skip the gate. Authorised
+exemptions (SM rejects abuse — human review, not an auto-check):
+
+| Label | Scope |
+|---|---|
+| `refactor` | Pure rename / move, no model-logic change |
+| `doc` | `*.md`, `docs/**` only |
+| `infra` | `.github/`, `fly.toml`, `Dockerfile`, deploy scripts |
+| `ci-only` | `scripts/ci/*` (except `check_eval_coverage.py` itself → full run) |
+| `test-only` | `backend/tests/` only |
+
+---
+
+## Dataset: `golden_dataset.jsonl`
+
+One JSONL file, one scenario per line, poly-schema discriminated by `category`
+(ADR-0007 §D1). Single file = trivial grep/diff in PR review + native git
+versioning.
+
+**Top-level fields (every line):**
+
+| Field | Notes |
+|---|---|
+| `schema_version` | semver; bump = separate PR + migration script |
+| `id` | kebab-case, unique, prefixed by layer (`fcst-`, `parser-`, `reco-`, `recpt-`, `drift-`, `lat-`) |
+| `category` | one of the 11-category taxonomy (below) |
+| `layer` | `forecast` \| `recommendation` \| `receipt` \| `parser` \| `drift` \| `latency` |
+| `created_at` | ISO date added to the dataset |
+| `author` | git user short |
+| `input` | payload — shape depends on category/layer |
+| `expected` | ground truth or accept-band |
+| `failure_trigger` | human-readable condition that makes this scenario FAIL |
+| `notes` | rationale / provenance |
+
+### Category taxonomy (11 — ADR-0007 §D1)
+
+| Code | Min (full) | Phase-3 EVAL-0 min |
+|---|---|---|
+| `normal_day` | 15 | 10 |
+| `event_day` | 8 | 6 |
+| `weather_anomaly` | 5 | 3 |
+| `ota_cancellation_wave` | 3 | — (Sprint N+2) |
+| `weekend_weekday_split` | 5 | — |
+| `service_stratification` | 5 | — |
+| `closure_day` | 3 | — |
+| `holiday_eve` | 4 | — |
+| `breakfast_dinner_mix_shift` | 3 | — |
+| `ood_edge` | 5 | 3 (incl. abstention cases) |
+| `parser_intent` | 15 | 12 |
+| `pos_anomaly` | 0 (forward-compat ADR-0006) | 0 |
+
+**EVAL-0 ships the AC0.1 "unblocking minimum"** (6 categories ≥ 40 scenarios) —
+enough to unblock EVAL-1 / EVAL-2 / EVAL-4. Full 71-scenario coverage (AC0.2) is
+a Sprint N+2 milestone (blocks EVAL-3 / EVAL-5 only).
+
+### Provenance of `expected` values
+
+- **forecast** scenarios are grounded in **real** values from
+  `backend/data/demo/prophet_training.json` (the synthetic 2025 training series:
+  `ds`, `y` covers, `weather_score`, `event_impact`, `occupancy`). `expected.covers`
+  is the actual `y` for that date — not invented. (The model predicts aggregate
+  covers `y`; the `covers_dinner`/`covers_breakfast` split shown in the ADR
+  example is a Phase-4 refinement once per-service data exists.)
+- **parser_intent** scenarios are deterministic from `ReceiptsService.parse_inbound`
+  behaviour (Décision #15) and are authoritative.
+- **recommendation / receipt abstention** scenarios encode the `AgentAbstention`
+  contract (ADR-0007 §D6) — the expected `abstention_reason` is the contract,
+  implemented in EVAL-2 (HOS-206).
+
+---
+
+## Validate the dataset
+
+```bash
+python scripts/eval/validate_dataset.py
+```
+
+Checks: JSONL parses, schema fields present, `id` unique + kebab-case, `category`
+in taxonomy, `layer` valid, and per-category minimum counts for the EVAL-0
+milestone. Exit 0 = valid. Wired into CI (`eval-dataset` job).
+
+---
+
+## Roadmap (ADR-0007 §8)
+
+| Story | Adds |
+|---|---|
+| **EVAL-0** (this) | dataset + thresholds + validator + prompt extraction |
+| EVAL-1 | `scripts/eval/eval_forecast.py` stratified MAPE + CI regression gate |
+| EVAL-2 | `AgentAbstention` contract + WhatsApp variants + telemetry |
+| EVAL-3 | distribution-shift detector + cold-start auto-disable hook |
+| EVAL-4 | Haiku parser accuracy + `FakeIntentClassifier` |
+| EVAL-5 | latency SLO bench + dashboard MV |
