@@ -148,3 +148,20 @@ jobs:
       - name: Check schema drift (strict)
         working-directory: backend
         run: uv run python ../scripts/ci/check_schema_drift.py --strict --print-ignored
+
+  # ---------------------------------------------------------------------------
+  # HOS-204 (EVAL-0) — golden dataset validation: JSONL schema, unique kebab-case
+  # ids, known category/layer, per-category min counts (AC0.1). Stdlib only.
+  # ---------------------------------------------------------------------------
+  eval-dataset:
+    name: eval-dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate golden dataset
+        run: python scripts/eval/validate_dataset.py
