@@ -12,6 +12,40 @@ from app.providers.factory import get_llm_provider
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Event formatting (HOS-201 / P3-11) — named events instead of a bare count.
+# ---------------------------------------------------------------------------
+# Audited shape of context["events"] entries (producer: event_ingestion.py
+# local_events rows / schemas.events). Available keys:
+#   title, category, rank, local_rank, phq_attendance, start_dt, end_dt,
+#   latitude, longitude, raw_labels   (some callers also use `name` / `type`).
+# There is no precomputed distance-to-hotel yet, so `distance_km` is rendered
+# only when a producer supplies it; otherwise we lead with name + category +
+# expected attendance — the strongest trust signals actually available.
+
+def _event_label(event: Dict) -> str:
+    """Human-readable label for one event dict (defensive across producers)."""
+    name = event.get("title") or event.get("name") or event.get("type") or "Event"
+    bits: List[str] = []
+    distance = event.get("distance_km")
+    if isinstance(distance, (int, float)):
+        bits.append(f"{distance:.1f} km")
+    category = event.get("category")
+    if category:
+        bits.append(str(category))
+    attendance = event.get("phq_attendance")
+    if isinstance(attendance, (int, float)) and attendance:
+        bits.append(f"~{int(attendance):,} expected")
+    return f"{name} ({', '.join(bits)})" if bits else str(name)
+
+
+def _format_events_block(events: List[Dict]) -> str:
+    """Named, bulleted event list for the reasoning prompt (AC1/AC2)."""
+    if not events:
+        return "No events nearby"
+    return "\n".join(f"  • {_event_label(e)}" for e in events)
+
+
 class ReasoningService:
     """
     Service for generating explainable AI reasoning using Claude.
@@ -105,6 +139,10 @@ class ReasoningService:
             "This prediction is a placeholder mock value and should NOT be acted upon.\n"
         ) if is_mock else ""
 
+        # HOS-201: name the events so the explanation cites concrete drivers
+        # ("PSG vs Arsenal") instead of an opaque "2 events nearby".
+        events_block = _format_events_block(context.get('events', []))
+
         return f"""You are an expert restaurant operations assistant.{mock_warning}
 Prophet (ML model) predicted {predicted} covers for {dt.strftime('%A, %B %d')} ({svc}) with {int(confidence*100)}% confidence.
 
@@ -113,7 +151,8 @@ SIMILAR PATTERNS:
 
 CONTEXT:
 WEATHER: {context.get('weather', {}).get('condition')}
-EVENTS: {len(context.get('events', []))} events nearby
+EVENTS:
+{events_block}
 {cognition_text}
 TASK: Write a 2-sentence explanation for WHY this prediction is plausible. 
 Factor in the 'Learnings' if provided (e.g. if the manager previously noted a certain effect).
@@ -170,7 +209,9 @@ Keep it actionable for a manager.
         events = context.get("events", [])
         event_note = ""
         if events:
-            event_note = f" {len(events)} nearby event(s) may drive additional demand."
+            # HOS-201: name the events here too, consistent with _build_prompt.
+            named = ", ".join(_event_label(e) for e in events)
+            event_note = f" Nearby events ({named}) may drive additional demand."
 
         occ = context.get("occupancy")
         occ_note = f" Hotel occupancy is at {int(occ * 100)}%." if occ else ""
