@@ -1,5 +1,12 @@
 """measure_mape_j1.py — HOS-190 AC3 gate measurement (Décision #14).
 
+.. deprecated:: HOS-205 (EVAL-1)
+   This remains the canonical **Décision #14 gate** metric (contiguous-30d
+   out-of-sample MAPE, 15.09%). For the *stratified per-category* eval driven by
+   ``eval/golden_dataset.jsonl`` (edge-case-weighted, regression-gated), use
+   ``scripts/eval/eval_forecast.py`` / ``python -m scripts.eval.run_all``.
+   The two are complementary, not interchangeable.
+
 Computes **out-of-sample** MAPE J+1 on the synthetic 365-day dataset by training
 Prophet on days 1–335 and predicting days 336–365, then comparing predicted vs
 actual covers.
