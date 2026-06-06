@@ -35,6 +35,14 @@ class AgentEvent:
     embedding_latency_ms: Optional[int] = None
     dedup_hit: Optional[bool] = None
     top_similarity: Optional[float] = None
+    # HOS-206 (EVAL-2 / ADR-0007 §6.a) — abstention + eval telemetry. Persisted
+    # by the abstention-emission path wired in the EVAL-2 service half (HOS-206b);
+    # the columns exist as of migration 20260605000000.
+    abstention_reason: Optional[str] = None
+    abstention_context: Optional[dict] = None
+    abstention_layer: Optional[str] = None
+    eval_run_id: Optional[str] = None
+    drift_score: Optional[dict] = None
 
 
 async def emit_agent_event(event: AgentEvent, db: AsyncSession) -> None:
