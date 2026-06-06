@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AgentActionLog, OperationalMemory
+from app.db.models import AgentActionLog, OperationalMemory, StaffingRecommendation
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
 
@@ -179,6 +179,13 @@ class WeeklyDigestPayload(BaseModel):
     memory_writes_week: int
     memory_pending_pct: float  # 0–100; 0.0 if no MV data
 
+    # P3-12 (HOS-202): real forecast accuracy from ground-truth actual_covers
+    # (manager feedback persisted by HOS-200). MAPE is the Level-1 product KPI.
+    mape_week: Optional[float] = None          # None when < 3 cover observations
+    predicted_covers_week: Optional[int] = None
+    actual_covers_week: Optional[int] = None
+    cover_observations: int = 0
+
 
 _WEEKLY_NARRATIVE_SYSTEM = """\
 You are the Aetherix F&B operations agent composing a weekly KPI digest for a hotel manager.
@@ -190,7 +197,10 @@ Tone rules (OQ4 — PM-locked 19/04/2026):
 - End with explicit trend indicator: Trending Up / Stable / Trending Down
 - End with a single proactive follow-up offer
 - Maximum 6 bullet points
-- No emojis, no markdown headers, plain text only\
+- No emojis, no markdown headers, plain text only
+- Forecast-accuracy framing (when MAPE is present): MAPE < 15% → present it as concrete
+  evidence of forecasting value; 15–22% → present it neutrally; > 22% → present it
+  honestly and note it may not be representative yet (early sample)\
 """
 
 _WEEKLY_NARRATIVE_PROMPT = """\
@@ -202,9 +212,26 @@ Agent activity this week:
 - Errors / non-ok calls: {error_count}
 - Memory writes (new feedback & reflections): {memory_writes}
 - Memory pending embedding: {memory_pending:.1f}%
+- {mape_line}
 
 Write the weekly digest now.\
 """
+
+
+def _format_mape_line(payload: "WeeklyDigestPayload") -> str:
+    """Render the forecast-accuracy line for the weekly digest (HOS-202, AC3).
+
+    Shared by the LLM prompt and the non-LLM fallback so MAPE always surfaces.
+    """
+    if payload.mape_week is None:
+        return (
+            "Forecast accuracy: insufficient data (< 3 cover observations) "
+            "— share actuals via WhatsApp after each service."
+        )
+    return (
+        f"Forecast accuracy this week: MAPE {payload.mape_week:.1f}% "
+        f"({payload.cover_observations} observations)"
+    )
 
 
 _OQ4_SYSTEM = """\
@@ -485,6 +512,70 @@ class ReceiptsService:
         )
         return intent
 
+    # -----------------------------------------------------------------------
+    # P3-10 (HOS-200): persist manager-reported actual covers — close the
+    # prediction → recommendation → feedback → actual outcome loop.
+    # -----------------------------------------------------------------------
+    async def persist_actual_covers(
+        self,
+        recommendation: StaffingRecommendation,
+        actual_value: float,
+        *,
+        request_id: str = "",
+        observed_on: date | None = None,
+    ) -> OperationalMemory:
+        """Persist a manager's ground-truth covers correction.
+
+        Story 10.10 (HOS-200). Called from the Twilio inbound handler when
+        `parse_inbound` returns a ``structured_correction`` with a numeric
+        ``actual_value``.
+
+        AC1 — writes ``actual_covers`` onto the matched StaffingRecommendation,
+        stamping ``actual_covers_source = "manager_feedback"`` and
+        ``actual_covers_at = now()``.
+        AC2 — appends a ``ground_truth`` row to ``operational_memory`` with a
+        ``"actual covers X vs predicted Y on DATE"`` reflection, tagged
+        ``["ground_truth", "covers_correction"]`` and linked via ``request_id``.
+
+        The caller owns the transaction (commit happens upstream so the
+        recommendation update and the memory write land atomically). Returns the
+        created OperationalMemory row.
+        """
+        now = datetime.now(tz=timezone.utc)
+
+        # AC1 — ground truth onto the recommendation
+        recommendation.actual_covers = actual_value
+        recommendation.actual_covers_source = "manager_feedback"
+        recommendation.actual_covers_at = now
+
+        # AC2 — ground_truth memory row (no embedding: factual, not retrieved by
+        # similarity — written pending like other non-embedded rows, ADR D9).
+        predicted = recommendation.predicted_covers
+        on_date = observed_on or now.date()
+        reflection = (
+            f"actual covers {actual_value} vs predicted {predicted} on {on_date}"
+        )
+        memory = OperationalMemory(
+            hotel_id=recommendation.tenant_id,
+            reflection=reflection,
+            memory_type="ground_truth",
+            tags=["ground_truth", "covers_correction"],
+            embedding_pending=True,
+            request_id=request_id,
+        )
+        self.db.add(memory)
+        await self.db.flush()
+
+        logger.info(
+            "receipts.persist_actual_covers: rec=%s actual=%s predicted=%s hotel_id=%s memory_id=%s",
+            recommendation.id,
+            actual_value,
+            predicted,
+            recommendation.tenant_id,
+            memory.id,
+        )
+        return memory
+
     async def weekly_digest(
         self, hotel_id: str, week_end: date
     ) -> WeeklyDigestPayload:
@@ -530,6 +621,45 @@ class ReceiptsService:
         memory_writes = int(mv_row[0]) if mv_row else 0
         memory_pending_pct = float(mv_row[1]) if mv_row else 0.0
 
+        # 3. Forecast accuracy (HOS-202 / P3-12): real MAPE from ground-truth
+        # actual_covers persisted via manager feedback (HOS-200). Only rows with
+        # both predicted and actual present, and actual != 0 (MAPE divides by it).
+        rec_result = await self.db.execute(
+            select(
+                StaffingRecommendation.predicted_covers,
+                StaffingRecommendation.actual_covers,
+            )
+            .where(StaffingRecommendation.tenant_id == hotel_id)
+            .where(StaffingRecommendation.actual_covers.isnot(None))
+            .where(StaffingRecommendation.predicted_covers.isnot(None))
+            .where(StaffingRecommendation.window_start >= day_start)
+            .where(StaffingRecommendation.window_start <= day_end)
+        )
+        observations = [
+            (float(p), float(a))
+            for p, a in rec_result.all()
+            if p is not None and a is not None and float(a) != 0.0
+        ]
+        cover_observations = len(observations)
+        if cover_observations == 0:
+            mape_week = None
+            predicted_covers_week = None
+            actual_covers_week = None
+        else:
+            predicted_covers_week = round(sum(p for p, _ in observations))
+            actual_covers_week = round(sum(a for _, a in observations))
+            # < 3 observations is too thin to publish an accuracy number (AC5).
+            mape_week = (
+                round(
+                    sum(abs(a - p) / a for p, a in observations)
+                    / cover_observations
+                    * 100,
+                    1,
+                )
+                if cover_observations >= 3
+                else None
+            )
+
         return WeeklyDigestPayload(
             hotel_id=hotel_id,
             week_start=week_start,
@@ -539,6 +669,10 @@ class ReceiptsService:
             agent_error_count=error_count,
             memory_writes_week=memory_writes,
             memory_pending_pct=round(memory_pending_pct, 1),
+            mape_week=mape_week,
+            predicted_covers_week=predicted_covers_week,
+            actual_covers_week=actual_covers_week,
+            cover_observations=cover_observations,
         )
 
     async def compose_weekly_narrative(
@@ -560,6 +694,7 @@ class ReceiptsService:
             error_count=payload.agent_error_count,
             memory_writes=payload.memory_writes_week,
             memory_pending=payload.memory_pending_pct,
+            mape_line=_format_mape_line(payload),
         )
 
         try:
@@ -582,7 +717,8 @@ class ReceiptsService:
                 f"{payload.tool_success_rate_pct:.0f}% success rate\n"
                 f"• {payload.agent_error_count} error(s) this week\n"
                 f"• {payload.memory_writes_week} memory write(s), "
-                f"{payload.memory_pending_pct:.0f}% pending embedding"
+                f"{payload.memory_pending_pct:.0f}% pending embedding\n"
+                f"• {_format_mape_line(payload)}"
             )
 
         return narrative.strip()
