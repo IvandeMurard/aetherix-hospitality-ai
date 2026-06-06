@@ -541,3 +541,11 @@ class AgentActionLog(Base):
     top_similarity = Column(Float, nullable=True)
     request_id = Column(String, nullable=False, default="")
     payload = Column(JSON, nullable=True)          # arbitrary event payload (e.g. kpi_alert rows)
+
+    # HOS-206 (EVAL-2 / ADR-0007 §6.a) — abstention + eval telemetry.
+    # Mirror of migration 20260605000000 (schema drift gate — Décision #16).
+    abstention_reason = Column(String, nullable=True)    # AbstentionReason | null
+    abstention_context = Column(JSONB, nullable=True)
+    abstention_layer = Column(String, nullable=True)     # forecast|recommendation|receipt|parser
+    eval_run_id = Column(UUID(as_uuid=True), nullable=True)
+    drift_score = Column(JSONB, nullable=True)
