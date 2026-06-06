@@ -1,9 +1,8 @@
 # CLAUDE.md — Aetherix
 
 > Source de vérité partagée. Chargé automatiquement à chaque session.
-> **Règle :** ce fichier = facts de session uniquement (stack, décisions, fichiers, env vars, protocoles). Tout contexte narratif → `docs/context/`. Ne jamais dépasser ~150 lignes.
-> Mettre à jour après chaque décision architecturale : ajouter une ligne dans §Décisions architecturales, déplacer le détail dans `docs/context/` si > 2 lignes.
-> Contexte détaillé → `docs/context/`
+> **Règle :** ce fichier = facts de session + INDEX uniquement. Détail décisions → `docs/context/decisions-architecturales.md` (22 décisions architecturales) + `docs/context/open-decisions.md` (décisions ouvertes + archive résolues). Cible ≤ 150 lignes.
+> Mettre à jour après chaque décision : ajouter une ligne d'INDEX ici + le détail complet dans le sous-fichier correspondant.
 
 ---
 
@@ -32,103 +31,95 @@
 
 ---
 
-## Décisions architecturales (ne pas remettre en question sans raison)
+## Décisions architecturales — INDEX
 
-| # | Décision | Résumé |
-|---|---------|--------|
-| 1 | Claude Sonnet > Mistral/GPT | Meilleur reasoning, 200K ctx, explainability critique |
-| 2 | Architecture mémoire 2 couches | Private Memory (pgvector/hôtel) + Hive Memory (cross-hôtels anonymisé). Backboard réévaluer Phase 3+. Détail → `docs/context/memory-architecture.md` |
-| 3 | pgvector > Qdrant > Pinecone | Suffisant <50K patterns, 1 requête SQL, compatible latency MCP <500ms |
-| 4 | Voice opt-in (pas voice-first) | Trop risqué en démo, clavier = fallback fiable |
-| 5 | Reasoning collapsible par défaut | Réduction charge cognitive |
-| 6 | Pas d'auto-actions (Phase MVP) | 63% managers veulent contrôle humain |
-| 7 | Apaleo read-only Phase 0 | Pas d'écriture sur réservations tant que l'outil n'est pas mature. Loguer toutes les actions agent |
-| 8 | Thin Frontend | Logique IA dans backend, dashboard = visualisation uniquement |
-| 9 | Multi-LLM via `LLMProvider` abstrait | Swap Claude → Gemini → GPT sans réécriture. Claude reste provider principal |
-| 10 | Provider singleton via `lifespan` FastAPI | `LLMProvider` + `EmbeddingProvider` instanciés une fois au démarrage, stockés dans `app.state`. Factory = construction uniquement. Providers closés proprement (`aclose()`) au shutdown. Détail → `docs/bmad/_bmad-output/planning-artifacts/architecture.md` |
-| 11 | Démo — stratégie données hybride | Apaleo sandbox = mock hôtel complet (5 properties, 100 réservations réelles BER/LND/MUC/PAR/VIE) — source primaire pour tests pipeline E2E et challenge de l'agent. Dataset synthétique 365j conservé pour training Prophet (DEMO_MODE=true). Script `scripts/ops/generate_demo_data.py` → `backend/data/demo/prophet_training.json`. Détail → `docs/context/demo-apaleo.md` |
-| 12 | MCP Server Apaleo — probe suffisant pour candidature | `GET /pms/mcp/probe` (endpoint existant) prouve la connexion MCP native — suffit pour la démo Apaleo. HOS-71 (Aetherix MCP Server complet) = Phase 0.5, post-candidature. |
-| 13 | Pipeline Prophet — gap training identifié | `ApaleoMCPAdapter.get_historical_data()` → `DataTransformer.stay_records_to_prophet()` → `PredictionEngine.train()` : briques existent, orchestrateur manquant. Débloquer via `POST /api/v1/predictions/train` ou worker de démarrage. |
-| 14 | Phase 0 DoD amendée — MCP Server v0 inclus | Suite directive PM 17/04/2026 (tweet Benioff "headless for agents"): ship Aetherix MCP Server v0 (HOS-71, 3 tools) est désormais un critère de validation Phase 0, APRÈS gate MAPE interne. Si MAPE > 22%, pivot avant ship MCP. Détail → `docs/planning/phase-0-1-execution-plan.md` |
-| 15 | Phase 2 "Receipts" — scope locké 19/04/2026 | Channel = WhatsApp primary + email opt-in (SendGrid). Inbound classifier = Haiku, log confidence, auto-`modified` si <0.6. Auth web drill-down = MCP bearer + scope `receipts:read`. Tone = terse + sharp bullets + luxury feel (driver principal, données quantitatives, evidence historique, confidence, follow-up proactif). Gate = two-track : (a) technical-ship sur Apaleo Sandbox (round-trip daily Receipt + feedback→memory + 4 Sundays digest) ; (b) trust-signal (US-7 ablation) reporté au premier pilote réel. Détail → `docs/planning/phase-2-agent-receipts.md` |
-| 16 | Schema drift gate CI obligatoire (Epic 9 retro 14/05/2026) | Invariant **"ORM = miroir exact des migrations"**. Tout merge bloqué si une colonne du modèle SQLAlchemy n'existe pas en DB (ou inverse). Découvert via Epic 9 (HOS-148) : 3 bugs silencieux résolus. Implémentation : `scripts/ci/check_schema_drift.py` + `scripts/ci/schema_drift_ignore.json`. Convention IDs : `docs/context/data-conventions.md`. |
-| 17 | Hébergement Fly.io (14/05/2026) | Backend déployé sur Fly.io, région `cdg` (Paris). 1 instance always-on (`min_machines_running=1`) — requis par APScheduler in-process. Image Docker Python 3.12 + uv multi-stage. Secrets via `flyctl secrets set` (jamais commités). Latence Paris ↔ Supabase Stockholm ~30ms (acceptable Phase 0). URL staging : `https://aetherix-backend.fly.dev`. Détail déploiement : `docs/secrets_handling.md`. Remplace l'ancienne contrainte "local Windows / GitHub uniquement". |
-| 18 | Phase 3 cut serré + portfolio reinforcement (17/05/2026) | Phase 3 scope = Pilot Validation **uniquement** (Track A) + Portfolio Reinforcement (Track B). Multi-hotel / Mews / cross-property dashboard / food waste → Phase 4 (Scale). Track B = over-engineering volontaire pour hiring signal : Hive Memory algorithm (k-means + shapelet + LLM persona, MCP tool exposé), Paris Open Data MCP node (`que-faire-a-paris` → pgvector → MCP tool callable par agents externes), 1 article technique public. Tacet MCP wrapping = repo séparé hors Linear Aetherix. Mews partnership form à soumettre Day 1 Phase 3 (latence partner approval). Détail → `docs/planning/phase-3-pilot-validation.md`. Epic 10 = HOS-174, 9 stories P3-1→P3-9. |
-| 19 | Orchestrateur séparé — Aetherix = F&B execution node (19/05/2026) | Aetherix bounded context = F&B uniquement (forecast, staffing, memory, receipts). `AetherixEngine` délègue à `OrchestratorAgent` (services injectés). **Règle CI** : zéro import `app.*` dans `orchestrator/` (enforced par `tests/orchestrator/test_agent.py`). MCP v1 (`/mcp/v1/`) : `get_recommendations_with_memory_context` → 2 outils atomiques (`recall_memory` scope `memory:read` + `get_operational_predictions`). v0 maintenu jusqu'au 2026-08-01 (Sunset header). Anima/Guest Context Node = Phase 4. `backend/orchestrator/` = module Phase 3, repo séparé Phase 4. ADR → `docs/adr/0004-orchestrator-separation.md`. |
-| 21 | Apaleo MCP — convention de nommage native (26/05/2026) | Les tools Apaleo MCP natifs utilisent le **PascalCase sans préfixe** (`ListReservations`, `ListPropertyPerformanceReport`, `ListRevenuesReport`) — pas la convention Composio (`APALEO_GET_*`). Toutes les réponses sont enveloppées dans `{"data": {...}}`. `update_staffing` n'existe pas côté Apaleo MCP (retourne False). Tests : 17/17. MCP proxy : `scripts/apaleo_mcp_proxy.py` → `.mcp.json`. **Sales evidence (28/05/2026)** : le playbook officiel Anthropic "AI for Hotel Owners" classe Apaleo dans le tier "API-First" recommandé (avec Mews) — direct talking point : *"Aetherix runs on one of the two PMS tiers the Anthropic playbook recommends."* À intégrer dans Agent Hub listing + deck pilot. |
-| 22 | Eval-by-design gate CI obligatoire (04/06/2026) | Suite Qonto talk *"AI @ Qonto: shipper et évaluer l'IA en production"* + BMad meta-gap identifié (BMM Dev Agent DoD ne couvre pas la reliability AI/ML — *"tests pass = working"* est insuffisant pour AI/ML products). Invariant **"Une story qui touche le modèle, le LLM, la memory, les providers, ou les prompts ne merge pas sans `eval/golden_dataset.jsonl` mis à jour + eval pipeline green."** Pattern analogue à Décision #16 schema drift gate (hard gate, blocking merge). Implémentation : `scripts/ci/check_eval_coverage.py` + override label PR `eval-exempt` (refactor / doc / infra-only). Failure thresholds documentés par layer dans `eval/FAILURE_THRESHOLDS.md` (forecast MAPE, parser accuracy, memory recall, LLM reasoning, latency SLO, distribution shift). Framework adopté : Qonto *"Working vs Reliable"* 5 dimensions + *"Eval as a Contract"*. Stories Phase 3 = EVAL-0 (foundation BLOCKING) + EVAL-1 à EVAL-5 (5 dimensions). Stories Phase 4 = EVAL-6 à EVAL-10 (LLM-as-judge, human eval loops, adversarial probes étendus, cost tracking, A/B framework). Détail brief PM → `docs/planning/evaluation-by-design.md`, **ADR validé → `docs/adr/0007-evaluation-by-design.md`** (Q1-Q7 tranchés ; schéma `golden_dataset.jsonl` poly + 11 catégories ; spec `scripts/ci/check_eval_coverage.py` + `scripts/eval/*.py` ; DDL Supabase 5 objets — ALTER `agent_action_log` +5 colonnes, tables `eval_runs`/`eval_baselines`, MV `distribution_shift_daily`/`abstention_daily` ; sentinel `AgentAbstention` Union-typed pas de cascade auto ; cascade drift WARN/FAIL par feature KS/Wasserstein/PSI ; story breakdown 6×Phase 3 ≈11j sur 3 sprints, pilot gate = EVAL-0+1+2+4). Asset REX Phase 3 Track B : article *"How we extended BMad-Method with Evaluation-by-Design for AI/ML products"* à rédiger post-EVAL-0..5 shippés. |
-| 20 | Anima — architecture mémoire 4 couches + DPIA gate (19/05/2026) | Le Guest Context Node Anima (Phase 4) nécessite une séparation stricte des couches temporelles, contrairement à Aetherix (mémoire opérationnelle largement long-terme). Couches : **Working** (Redis · TTL séjour · décisions immédiates) · **Episodic** (PostgreSQL time-filtered · séjour + 30j · contextuelles) · **Semantic** (pgvector permanent · profil) · **Segment** (k-means anonymisé cross-guests). MCP tool `query_guest_profile` prend un paramètre `scope` obligatoire. **Gate non-négociable avant tout build :** analyse RGPD/CNIL + DPIA formelle (profil émotionnel = donnée personnelle sensible). HiveMemory (Aetherix) et SensoryMemory (Tacet) servent d'embryons technologiques. Détail → `docs/mesh-architecture.md` §2 Anima. |
+> Détail complet : [`docs/context/decisions-architecturales.md`](docs/context/decisions-architecturales.md)
+> Ne pas remettre en question sans raison documentée. Ajouter une nouvelle décision = ligne ici + détail dans le sous-fichier.
+
+| # | Décision | Date |
+|---|---|---|
+| 1 | Claude Sonnet > Mistral/GPT | — |
+| 2 | Architecture mémoire 2 couches (Private + Hive) | — |
+| 3 | pgvector > Qdrant > Pinecone | — |
+| 4 | Voice opt-in (pas voice-first) | — |
+| 5 | Reasoning collapsible par défaut | — |
+| 6 | Pas d'auto-actions (Phase MVP) | — |
+| 7 | Apaleo read-only Phase 0 | — |
+| 8 | Thin Frontend | — |
+| 9 | Multi-LLM via `LLMProvider` abstrait | — |
+| 10 | Provider singleton via `lifespan` FastAPI | — |
+| 11 | Démo — stratégie données hybride (Apaleo sandbox + synthétique) | — |
+| 12 | MCP Server Apaleo — probe suffisant pour candidature | — |
+| 13 | Pipeline Prophet — gap training identifié | — |
+| 14 | Phase 0 DoD amendée — MCP Server v0 inclus | 17/04/2026 |
+| 15 | Phase 2 "Receipts" — scope locké | 19/04/2026 |
+| 16 | Schema drift gate CI obligatoire | 14/05/2026 |
+| 17 | Hébergement Fly.io | 14/05/2026 |
+| 18 | Phase 3 cut serré + portfolio reinforcement | 17/05/2026 |
+| 19 | Orchestrateur séparé — Aetherix = F&B execution node | 19/05/2026 |
+| 20 | Anima — architecture mémoire 4 couches + DPIA gate | 19/05/2026 |
+| 21 | Apaleo MCP — convention nommage native + sales evidence Anthropic | 26/05/2026 |
+| 22 | Eval-by-design gate CI obligatoire (Qonto + BMad meta-fix) | 04/06/2026 |
 
 ---
 
 ## Roadmap
 
-| Phase | Statut | Contenu |
-|-------|--------|---------|
-| Phase 0 (validation harness) | 🔨 In Progress | Backtest pipeline + ROI simulator + MCP Server v0 (HOS-71) livrés. MAPE J+1 mesurée sur données synthétiques (run 2026-05-21) : **15.09%** — gate 22% PASS ✅, cible interne 15% quasi-atteinte (delta 0.09pp). Seed=42, holdout 30j, regressors weather+events+occupancy. Première mesure sur données réelles design partner = étape Phase 3 pilote. |
-| Phase 1 | ✅ Done (19/04/2026) | MCP Server v0 + ADR 0003 observability (agent_action_log, Redis rate-limiter, MV refresh) + memory instrumentation (Mistral 1024d embeddings, 2-pass dedup). PR #73 merged. |
-| Phase 0 (deploy) | ✅ Done (15/05/2026) | Staging Fly.io live (`aetherix-backend.fly.dev`). Smoke test E2E 5/5 PASS (Apaleo skip). Epic 9 hardening fermé (14 stories + 3 sub-HOS-159). Sécurité : HOS-111 RLS 14/14 tables + HOS-112 webhook HMAC. Reste gates non-techniques : sign-off PM runbook + pre-pilot checklist. |
-| Phase 2 | ✅ Done (17/05/2026) | Agent "Receipts" — 7 stories P2-1→P2-7 mergées. Daily Receipt + WhatsApp + email + inbound feedback parser (Haiku) + weekly KPI digest + web drill-down + Track A gate. Track B (trust-KPI) reporté Phase 3. |
-| Phase 3 | Planifié (kickoff 17/05/2026) | Pilot Validation + Portfolio Reinforcement. Track A : 1 design partner Apaleo prod + US-7 ablation (trust-KPI) + pricing decision + Apaleo Agent Hub listing. Track B (slight over-engineering volontaire) : Hive Memory algorithm v1 + Paris Open Data MCP node + technical write-up. Epic 10 = HOS-174, 9 stories P3-1→P3-9. Détail → `docs/planning/phase-3-pilot-validation.md` |
-| Phase 4 | Renuméroté — Scale & Distribution | Mews integration (PMS #2, form partner à lancer Day 1 Phase 3), cross-property dashboard (HOS-95-98 existants), food waste KPI instrumentation, multi-tenant production hardening au-delà du 1er pilote |
-| Phase 5 | Vision long-terme (ex-Phase 4) | Agentic Hospitality Mesh — Revenue Orchestration Agent + MCP-native design pipeline. Détail → `docs/context/vision-future.md` |
-| Phase MCP | ✅ Intégré Phase 0/1 | MCP Server v0 shipped (HOS-71). v1 (FastMCP SDK) quand besoin progress/capability-negotiation. |
+| Phase | Statut | Highlights |
+|---|---|---|
+| Phase 0 (validation harness) | 🔨 In Progress | Backtest pipeline + MCP v0 livrés. MAPE J+1 synthétique **15.09%** — gate 22% PASS ✅. Réel = Phase 3 pilote. |
+| Phase 1 | ✅ Done (19/04/2026) | MCP Server v0 + ADR 0003 observability + memory instrumentation. PR #73 merged. |
+| Phase 0 (deploy) | ✅ Done (15/05/2026) | Staging Fly.io live. Smoke E2E 5/5 PASS. RLS 14/14 + webhook HMAC. |
+| Phase 2 | ✅ Done (17/05/2026) | Agent "Receipts" P2-1 → P2-7 mergées. Daily + WhatsApp + email + inbound parser + weekly digest. |
+| Phase 3 | Kickoff 17/05/2026 | Pilot Validation + Portfolio Reinforcement. Détail → `docs/planning/phase-3-pilot-validation.md` + `docs/planning/phase-3-sprint-plan.md`. |
+| Phase 4 | Scale & Distribution | Mews integration · POS ingestion · **Federated HiveMemory ship (announced Phase 3)** · cross-property dashboard · food waste KPI · multi-tenant. |
+| Phase 5 | Vision long-terme | Agentic Hospitality Mesh — Revenue Orchestration Agent + MCP-native design pipeline + Aetherix Voice (Lore-inspired). Détail → `docs/context/vision-future.md`. |
 
 ---
 
-## Décisions ouvertes (à trancher)
+## Décisions ouvertes — INDEX
 
-- [ ] **Embedding strategy** : pgvector vs Qdrant pour RAG (à re-évaluer Phase 4 quand multi-tenant + Hive Memory à scale ; pour l'instant pgvector reste suffisant)
-- [ ] **Pricing model** : par hôtel / par prédiction / hybrid — tracking Linear HOS-179 (P3-5), décision après 90j data pilote
-- [ ] **Apaleo Copilot scope F&B — canari à surveiller (01/06/2026)** : Apaleo confirmé first PMS MCP à ITB Berlin 2026 + démos booking apps ChatGPT natives. Risque que Copilot étende vers F&B forecasting / staffing → fermerait la niche Aetherix sur le PMS bedrock (Décisions #1, #7, #21). Triggers à monitorer : annonces Apaleo Copilot, releases MCP tools liés covers/staff, embauches Apaleo "operations AI". Mitigation : (a) shipper pilote HOS-176 Phase 3 avant Q4 2026, (b) outreach Apaleo Marketplace pour position de complément (pas concurrent), (c) accélérer Aetherix MCP v1 pour interop défensif. Story Linear URGENT-Apaleo-MCP-Server-eval à créer en session SM (mapping 235 tools natifs vs ceux qu'Aetherix consomme, livrable `docs/competitive/apaleo-mcp-mapping.md`). **✅ Mapping livré (HOS-197, 2026-06-03)** → [`docs/competitive/apaleo-mcp-mapping.md`](docs/competitive/apaleo-mcp-mapping.md) : 235 tools classés **5 consommés / 44 border-zone F&B / 186 inutilisés** (partition vérifiée live) ; leading indicators LI-1→LI-5 (diff mensuel `scripts/list_apaleo_tools.py` = early-warning sur nouveaux tools covers/staffing) ; reco MCP v1 = accélérer HOS-71 v1 (`get_operational_predictions`, primitive prédictive F&B absente des 235 tools Apaleo) comme défense interop. À ré-évaluer chaque mois en synthèse veille.
-- [x] **Hive Memory scope Phase 3 (RÉSOLU 28/05/2026 → ADR 0005)** : swap "LLM persona generation" → **cold-start meta-learner** ACCEPTÉ dans HOS-174 Track B. Architecture validée : cohort matching hybride (hard rules + embedding cosine), prior Prophet via `add_seasonality` + hyperparams calibrés, blending Bayesian model averaging (`n_eff_prior=30`, hard cutoff J+90), gate runtime auto-disable si Day-7 MAPE > 25%. Nouvelle table `hotel_cohort_features` (coefficients agrégés, opt-in tenant). MCP tool `query_cohort_prior` ajouté. Validation pré-pilote : LOO sur 5 sandbox properties. LLM persona déplacé Phase 4. Détail → `docs/adr/0005-cold-start-meta-learner.md`. Action SM : amender HOS-174 (P3-7 amend + P3-7b/7c new, +8 pts).
-- [x] **PMS priorité live (RÉSOLU 17/05/2026)** : Apaleo prod Phase 3 (1 design partner, HOS-176). Mews déplacé Phase 4 + form partner à soumettre Day 1 Phase 3 (latence approval).
-- [x] **MCP server (RÉSOLU 19/04/2026)** : FastAPI endpoint dédié retenu — `/mcp/v0` mounted sur l'app principale (lifespan partagé, ADR D2). Shippé via PR #73. Sidecar process rejeté (coût ops, pas de bénéfice latence observé).
-- [x] **Apaleo MCP direct (31/03/2026 — RÉSOLU)** : URL confirmée `https://mcp.apaleo.com/mcp/`, transport HTTP Streamable (SSE déprécié — notre `streamablehttp_client` est correct). Scope MCP activé sur le compte (code IIQJ). Auth OAuth2 bearer identique à la raw API. Activer via `POST /pms/sync?use_mcp=true` + `APALEO_MCP_SERVER_URL=https://mcp.apaleo.com/mcp/` dans `.env`.
-- [x] **ROI dashboard vs WhatsApp (RÉSOLU implicitement post-Phase 1)** : WhatsApp primary retenu (cf. Decision #15 OQ1 — Receipts channel = WhatsApp + email opt-in). Dashboard différé Phase 3+ si adoption le justifie.
-- [ ] **Food waste tracking** : instrumenter predicted prep vs actual waste par service comme KPI produit différenciant — ~25% gaspillage moyen en hôtellerie FR (ADEME/Accor), ~115g/couvert. Opportunité : la plupart des hôtels ne mesurent pas précisément → notre modèle crée cette donnée comme sous-produit du forecasting. Décision : intégrer en Phase 4 comme feature ROI (€ gaspillés évités) ou Phase 5 avec POS data ? À trancher avec PM.
+> Détail complet + archive résolues : [`docs/context/open-decisions.md`](docs/context/open-decisions.md)
+> Convention : ligne d'index = 1-ligne summary. Le détail (rationale, alternatives, échéance, dépendances) vit dans le sous-fichier.
+
+| Statut | Décision | Trigger / échéance |
+|---|---|---|
+| 🟡 Open | Embedding strategy (pgvector vs Qdrant) | Phase 4 trigger multi-tenant scale |
+| 🟡 Open | Pricing model (HOS-179 P3-5) | Post-90j data pilote |
+| 🟡 Open | Apaleo Copilot scope F&B (canari) | Monitoring mensuel via watchlist |
+| 🟡 Open | Food waste tracking | À trancher Phase 4 vs Phase 5 |
+| 🟡 Open | Graphe de contexte (Phase 4) — Apache AGE | Brief ADR-0008 futur |
+| 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0009 futur |
+
+Resolved decisions archive (Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.
 
 ---
 
 ## KPI framework produit (référence)
 
-Trois niveaux de mesure de la valeur, basés sur l'analyse du marché (Mars 2026).
-**Principe de stickiness :** ces KPIs ne sont pas seulement mesurés — ils sont publiés activement au manager (alertes WhatsApp + éventuellement dashboard) pour rendre la valeur visible sur le P&L et créer un coût de migration psychologique élevé.
+Trois niveaux de mesure de la valeur. **Principe de stickiness :** publiés activement au manager (WhatsApp + dashboard) pour rendre la valeur visible sur le P&L.
 
-**Niveau 1 — Product Truth (accuracy)**
-- `MAPE` sur couverts dîner, petit-déj, check-ins — cible < 15%
-- `staffing_prediction_accuracy` — % de recommandations staff alignées avec la réalité
-
-**Niveau 2 — Operational Impact (business value)**
-- `labor_cost_variance` — coût réel vs baseline (cible : -3% à -8%)
-- `understaffing_incidents` — incidents par semaine (attente check-in, délais service)
-- `food_waste_per_cover` — tendance vs baseline (à instrumenter en Phase 4)
-
-**Niveau 3 — Adoption (product health)**
-- `recommendation_acceptance_rate` — % de recommandations suivies (alerte si < 30% → problème de trust)
-- `weekly_operational_usage` — % managers consultant le forecast avant de planifier
-- `planning_time_saved` — temps économisé vs planning manuel
+**Niveau 1 — Product Truth (accuracy)** : `MAPE` couverts cible < 15% · `staffing_prediction_accuracy`
+**Niveau 2 — Operational Impact (business value)** : `labor_cost_variance` (-3% à -8%) · `understaffing_incidents` · `food_waste_per_cover`
+**Niveau 3 — Adoption (product health)** : `recommendation_acceptance_rate` (alerte si < 30%) · `weekly_operational_usage` · `planning_time_saved`
 
 ---
 
 ## Fichiers clés
 
-**Code & scripts** (les chemins doc sont catalogués à part — voir ci-dessous) :
-
 ```
-backend/app/providers/    — abstraction LLM + Embedding (claude, mistral, gemini, fallback, factory)
-backend/app/services/     — exécution F&B (forecast, staffing, memory, receipts) — pas d'orchestration ici (ADR-0004)
+backend/app/providers/    — abstraction LLM + Embedding (claude, mistral, gemini, fallback)
+backend/app/services/     — exécution F&B (forecast, staffing, memory, receipts) — pas d'orchestration (ADR-0004)
 backend/app/integrations/ — Obsidian, Linear, Apaleo, Twilio, SendGrid
-backend/app/mcp_server.py — MCP Server v0 (3 tools, HOS-71, PR #73) — tools atomiques uniquement
-backend/orchestrator/     — proto-orchestrateur Phase 3 (AetherixEngine migré ici, ADR-0004)
-backend/app/middleware/   — agent_tracking.py (Agent SEO discovery + request_id, P1-5/HOS-72)
-scripts/ci/               — gates CI (schema drift Décision #16, audit_id_types HOS-163)
-scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian, validate_apaleo_sandbox, measure_mape_j1, seed_trust_kpi_sandbox, generate_demo_data)
+backend/app/mcp_server.py — MCP Server v0 (HOS-71, PR #73) — tools atomiques uniquement
+backend/orchestrator/     — proto-orchestrateur Phase 3 (AetherixEngine migré, ADR-0004)
+backend/app/middleware/   — agent_tracking.py (Agent SEO + request_id, P1-5/HOS-72)
+scripts/ci/               — gates CI (schema drift #16, eval-by-design #22, audit_id_types HOS-163)
+scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian, validate_apaleo_sandbox, measure_mape_j1, generate_demo_data)
 .github/workflows/        — CI + cron veille-hebdomadaire (lundi 8h30)
 ```
 
-> **📚 Documentation : cataloguée par sous-catégorie dans [`docs/INDEX.md`](docs/INDEX.md)** (architecture, context, planning, veille, marketing, MCP, metrics, security, deployment, demos, internal, BMad, Linear).
-> ⚡ À charger en priorité pour tout contexte inter-nœuds : `docs/mesh-architecture.md` — SOURCE DE VÉRITÉ CROSS-REPOS (Mesh : Aetherix + Tacet + Orchestrateur + Anima).
+> **📚 Documentation** : catalogue par sous-catégorie dans [`docs/INDEX.md`](docs/INDEX.md). À charger en priorité pour contexte inter-nœuds : `docs/mesh-architecture.md` (SOURCE DE VÉRITÉ CROSS-REPOS Aetherix + Tacet + Orchestrateur + Anima).
 
 ---
 
@@ -142,11 +133,9 @@ OBSIDIAN_VAULT_PATH   — C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitalit
 APALEO_CLIENT_ID      — OAuth2
 APALEO_CLIENT_SECRET  — OAuth2
 COMPOSIO_API_KEY      — Apaleo MCP via Composio (Inventory API uniquement)
-COMPOSIO_USER_ID      —
-COMPOSIO_MCP_URL      —
 SUPABASE_URL          — PostgreSQL + pgvector
 SUPABASE_KEY          — Anon key
-DATABASE_URL          — asyncpg DSN (postgresql+asyncpg://...)
+DATABASE_URL          — asyncpg DSN
 MISTRAL_API_KEY       — Embeddings 1024d (mistral-embed)
 LLM_BACKEND           — "claude" (défaut) | "gemini" | "openai"
 LLM_MODEL             — "claude-sonnet-4-6" (défaut)
@@ -157,38 +146,13 @@ REDIS_URL             — Upstash (session state)
 
 ---
 
-## Linear
+## Linear · Obsidian · BMad
 
-**Workspace :** Hospitalityagent — toutes les issues dans HOS, jamais dans ivanportfolio/Tacet.
-**Team ID :** `2f6bb5e2-d735-4769-9377-11fe186aa0ad`
-**Vérification session :** `list_teams` → doit retourner "Hospitalityagent". Si "Tacet" → reconnecter dans claude.ai Settings → Integrations → redémarrer Claude Desktop.
-**Conventions Epic/Story (DoD, labels, statuts) :** `docs/context/linear-conventions.md` — protocole obligatoire pour toute création.
-**Audit :** `python scripts/linear_audit.py > linear_state.md` (read-only, fin de sprint).
+**Linear** — Workspace `Hospitalityagent`, team `2f6bb5e2-d735-4769-9377-11fe186aa0ad`. Conventions Epic/Story → `docs/context/linear-conventions.md`. Verify session : `list_teams` doit retourner "Hospitalityagent".
 
----
+**Obsidian** — Vault `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`.
 
-## Obsidian
-
-**Vault :** `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality`
-**MCP :** Claude Desktop (`claude_desktop_config.json`) + Claude Code (`~/.claude.json`)
-**Reports :** `AI Reports/Intelligence/` — rapports veille automatisés
-
----
-
-## BMad — Modes de session
-
-Déclare le mode en début de conversation. Chaque agent charge son propre fichier de contexte.
-
-| Mode | Activer avec | Agent file |
-|------|-------------|-----------|
-| Veille | "Veille" ou partager un lien | `docs/context/veille.md` |
-| SM (Bob) | "SM", "Scrum" | `docs/bmad/_bmad/bmm/agents/sm.md` |
-| Dev (Amelia) | "Dev", "Développement" | `docs/bmad/_bmad/bmm/agents/dev.md` |
-| Architect | "Architect", "Architecture" | `docs/bmad/_bmad/bmm/agents/architect.md` |
-| PM | "PM", "Product" | `docs/bmad/_bmad/bmm/agents/pm.md` |
-| Analyst (Mary) | "Analyst", "Analyse" | `docs/bmad/_bmad/bmm/agents/analyst.md` |
-| QA | "QA", "Tests" | `docs/bmad/_bmad/bmm/agents/qa.md` |
-| Tech Writer | "Tech Writer", "Doc" | `docs/bmad/_bmad/bmm/agents/tech-writer/tech-writer.md` |
+**BMad modes** — Déclare en début de conversation. Veille · SM (Bob) · Dev (Amelia) · Architect (Winston) · PM · Analyst (Mary) · QA · Tech Writer. Files in `docs/bmad/_bmad/bmm/agents/`.
 
 ---
 
@@ -201,17 +165,16 @@ Déclare le mode en début de conversation. Chaque agent charge son propre fichi
 5. Commit + Push sur la branche désignée (`claude/<story-suffix>`)
 6. Ouvrir une PR contre `main`
 7. Marquer la Linear issue → Done + poster l'URL PR en commentaire
-8. **Eval gate (Décision #22)** : si la story touche `app/services/{forecast,staffing,recommendation,memory,inbound_parser}*`, `app/providers/`, ou les prompts → mettre à jour `eval/golden_dataset.jsonl` avec ≥1 scenario couvrant le changement + exécuter `make eval` localement, CI doit être green (`scripts/ci/check_eval_coverage.py` validé). Exception possible via label PR `eval-exempt` réservé aux changes refactor / doc / infra-only.
+8. **Eval gate (Décision #22)** : si la story touche `app/services/{forecast,staffing,recommendation,memory,inbound_parser}*`, `app/providers/`, ou les prompts → mettre à jour `eval/golden_dataset.jsonl` avec ≥ 1 scenario + `make eval` green + `scripts/ci/check_eval_coverage.py` validé. Exception via label PR `eval-exempt` (refactor / doc / infra-only).
 
-**Gate de merge :** CI vert (incl. schema drift gate Décision #16 + eval-by-design gate Décision #22) → merge manuel SM (sans revue de code).
-**Gates supérieurs :** Fin d'Epic → revue d'architecture. Pré-pilote → QA sign-off propriété hôtelière réelle.
+**Gate de merge :** CI vert (schema drift #16 + eval-by-design #22) → merge manuel SM. **Gates supérieurs :** Fin d'Epic → revue d'architecture. Pré-pilote → QA sign-off propriété réelle.
 
-**Règle de contexte :** toute décision, contrainte ou blocage découvert pendant l'implémentation → commenter sur la Linear issue. Si la décision devient une contrainte permanente cross-cutting → promouvoir en une ligne dans §Décisions architecturales ci-dessus. Ne pas écrire de contexte story-specific dans CLAUDE.md ou docs/context/.
+**Règle de contexte :** décisions / contraintes / blocages story-specific → commentaire sur Linear issue. Cross-cutting permanent → ligne d'index dans CLAUDE.md §Décisions architecturales + détail dans `docs/context/decisions-architecturales.md`. Ne pas écrire contexte story-specific ici.
 
 ---
 
 ## Points d'attention
 
-1. `docs/ARCHITECTURE.md` daté fév. 2026 — sections Streamlit/Render.com = ancienne stack. Se fier à ce CLAUDE.md.
+1. `docs/ARCHITECTURE.md` daté fév. 2026 — sections Streamlit/Render.com obsolètes. Se fier à ce CLAUDE.md.
 2. `.env.example` racine = ancien backend (`archive/legacy-backend`).
-3. Hébergement staging = Fly.io (`cdg`, Paris) — voir Décision #17. Dev local Windows pour scripts utilitaires (`veille_proactive`, MCP Obsidian).
+3. Hébergement staging = Fly.io `cdg` (Décision #17). Dev local Windows pour scripts utilitaires.
