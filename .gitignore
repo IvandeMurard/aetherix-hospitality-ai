@@ -52,3 +52,6 @@ pre-*-snapshot.sql
 # Stray Obsidian vault path (Windows path written literally on Linux)
 C:\\Users\\
 .claude/
+
+# Eval run artifacts (baselines are tracked; reports are generated)
+eval/reports/
