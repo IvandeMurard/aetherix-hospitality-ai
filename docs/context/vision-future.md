@@ -96,6 +96,68 @@ Quand Phase 3 est validée et qu'on amorce Phase 4 :
 
 ---
 
+## Phase 4 — Federated HiveMemory (narrative announcée Phase 3)
+
+**Décision PM 04/06/2026** : avancer la communication de la 2e couche mémoire (Hive cross-hôtels anonymisée — Décision #2) à *"announced Phase 3, shipped Phase 4"*. Motivation : Meuze.ai revendique federated learning live en production. Pour ne pas paraître en retard dans les sales conversations, communiquer Federated HiveMemory comme roadmap publique dès Phase 3 (design doc public + LOO validation visible) tout en shippant prod en Phase 4.
+
+**Architecture cible (référence ADR-0005 cold-start meta-learner + future ADR-0008 graphe de contexte) :**
+
+- **Per-tenant isolation** : raw data ne quitte jamais le tenant hôtel. Compliance RGPD by design (anticipée pour design partners enterprise type Accor / Marriott).
+- **Anonymized cohort patterns** : seuls les coefficients agrégés (saisonnalité Prophet, hyperparams calibrés, shapelets) traversent — pas de bookings ou couverts identifiables.
+- **Day-1 unlock** : un nouvel hôtel onboardé démarre avec un prior bayésien Prophet construit depuis sa cohorte similaire (géo + segment + capacité + saisonnalité). MAPE Day-1 cible ~22% au lieu de 90j d'attente.
+- **Cohort sharpening continu** : chaque recommendation accepted / rejected / modified par un manager sharpens le pattern de la cohorte pour tous les membres. Network effect.
+- **MCP tool exposé** : `query_cohort_prior` callable par n'importe quel orchestrateur agent externe via MCP (cohérent Décision #19 séparation).
+
+**Narrative marketing** : voir `docs/marketing/positioning-snippets.md` snippet H-7 + section "Federated cohort intelligence framing".
+
+**Validation pré-pilote** : LOO sur 5 sandbox properties Apaleo (BER / LND / MUC / PAR / VIE — cf. Décision #11). Gate runtime auto-disable si Day-7 MAPE > 25% (ADR-0005).
+
+**Pré-requis Phase 4** : (a) graphe de contexte tranché (décision ouverte 04/06) pour cohort matching v2 multi-dim, (b) ADR-0006 POS tranché (impact features cohort).
+
+---
+
+## Aetherix Voice — Tacit Knowledge Capture (Phase 5+ inspiration Lore)
+
+**Origine** : convergence thèse "knowledge extraction = the real bottleneck" (Mira Murati, Hyperspell, GBrain, @t_blom — tous 06/2026) + projet personnel Lore (hackathon Speechmatics × AI Collective Paris, Feb 2026, github.com/IvandeMurard/Lore).
+
+**Thèse** : RAG retrieves what you put in. Le vrai unlock = extraire activement le tacit que les seniors n'ont jamais écrit. Lore l'a démontré sur aviation maintenance (techniciens seniors avant retraite). Aetherix peut l'appliquer à hospitality.
+
+**Cible en hospitality — corrigé 04/06** :
+
+| Profil | Savoir tacit critique | Codification existante | Priorité capture |
+|---|---|---|---|
+| **General Manager** | Relations corporate clients · quirks bâtiment · politique syndicale · histoire de la maison · qui décide quoi dans le groupe | Quasi-zéro | **Priorité 1** |
+| **Senior concierge** | Préférences guests récurrents · réseau restaurants/taxis/théâtres · coutumes par nationalité · alertes tacites | Quasi-zéro | **Priorité 1** |
+| **Maître d'hôtel** | Pattern services · staff coordination · gestion edge cases salle | Moyenne (briefings oraux, SOPs F&B partiels) | Priorité 2 |
+| **Chef de cuisine** | Recettes · supplier specs · menu engineering | Forte (recettes écrites, SOPs, fiches techniques) | Priorité 3 |
+
+**Justification cible GM + concierge** : c'est là que la valeur (tacit non-codifié) × urgence (départs retraite, mobilité) est la plus haute. Chef knowledge est plus codifié (recettes, fiches techniques) → moindre urgence d'extraction.
+
+**Conception (Phase 5+, pas avant)** :
+
+- **Mode capture** : GM ou concierge senior débriefe Aetherix par voix après interaction marquante (corporate guest difficile, événement spécial, edge case). Aetherix interview activement — questions de follow-up, flag d'ambiguïté, contexte structuré (guest_id × season × event_type × intervention).
+- **Mode query** : staff junior interroge Aetherix par voix devant le client / au bureau. Réponse en 3 couches : (1) SOP officielle, (2) wisdom contextuelle des seniors, (3) historique spécifique de ce guest / cette catégorie.
+- **Mode log** : voice-first logging d'intervention pour persistence.
+
+**Pattern adopté de Lore** : "Aetherix never contradicts a SOP. It completes it."
+
+**Pré-requis architecturaux** :
+- Graphe de contexte (cf. débat Phase 4 — décision ouverte à ouvrir)
+- Voice stack (Speechmatics + Claude voice mode quand mature ; Décision #4 actuelle = voice opt-in pas voice-first, à revisiter Phase 5)
+- Knowledge graph relationnel (guest × season × event × intervention × senior)
+- Contradiction detection (si GM A et GM B disagree sur un même guest type → flag, pas average)
+- Confidence scoring (observations confirmées par 4 staff sur 3 ans > note isolée)
+
+**Asset cross-projet** : Lore prouve qu'Ivan a anticipé la thèse "knowledge extraction" avant qu'elle ne devienne consensus marché 06/2026. À surfacer dans deck investisseur + Apaleo Agent Hub listing + Phase 3 Track B technical write-up (footnote parallel work).
+
+**Phasing** :
+- Phase 5+ — pas avant pilote validé Phase 3 + multi-tenant Phase 4 stable
+- Pré-requis : graphe de contexte Phase 4 livré + Décision #4 voice révisée
+- Validation : pilote dédié sur 1 hôtel "design partner senior" (établissement avec GM 20+ ans d'ancienneté qui accepte d'être enregistré)
+
+---
+
 ## Notes de mise à jour
 
 - 2026-04-25 — Création initiale, extraction depuis note "Vision Avenir" personnelle.
+- 2026-06-04 — Ajout section *"Aetherix Voice — Tacit Knowledge Capture (Phase 5+ inspiration Lore)"* suite veille convergence thèse knowledge extraction + correction cible chef → GM/concierge.

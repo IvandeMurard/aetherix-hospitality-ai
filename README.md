@@ -317,7 +317,7 @@ Aetherix treats evaluation as a contract, not an afterthought.
 | Phase 0 deploy | ✅ Done | Fly.io staging live · RLS 14/14 · webhook HMAC |
 | Phase 2 — Receipts | ✅ Done | Daily Receipt · WhatsApp · inbound feedback · weekly digest |
 | Phase 3 — Pilot | 🔨 In Progress | Design partner (Apaleo prod) · Orchestrator separation · HiveMemory algorithm · Article technique Mesh |
-| Phase 4 — Scale | 📋 Planned | Mews integration · POS/RMS/Social Sentiment ingestion · Anima (Guest Context Node) · Orchestrator repo |
+| Phase 4 — Scale | 📋 Planned | Mews integration · POS ingestion · **Federated HiveMemory ship** (announced Phase 3) · RMS / Social Sentiment · Anima (Guest Context Node) · Orchestrator repo |
 
 Full roadmap: [Linear — Hospitalityagent](https://linear.app/hospitalityagent/team/HOS/all)
 
