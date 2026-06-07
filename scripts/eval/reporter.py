@@ -19,6 +19,47 @@ def _pct(x: float | None) -> str:
 
 
 def render_markdown(result: dict, diff: dict) -> str:
+    if result.get("layer") == "parser":
+        return _render_parser_md(result, diff)
+    return _render_forecast_md(result, diff)
+
+
+def _render_parser_md(result: dict, diff: dict) -> str:
+    from .fake_intent_classifier import INTENTS
+
+    lines = [
+        "# Eval report — parser",
+        "",
+        f"- **Accuracy**: {_pct(result['accuracy'])}  ·  n={result['n']}  ·  backend={result['backend']}",
+        "",
+        "## Per-intent",
+        "",
+        "| Intent | precision | recall | support |",
+        "|---|---|---|---|",
+    ]
+    for intent in INTENTS:
+        m = result["per_intent"][intent]
+        lines.append(
+            f"| {intent} | {_pct(m['precision'])} | {_pct(m['recall'])} | {m['support']} |"
+        )
+    lines += ["", "## Confusion matrix (rows = true, cols = predicted)", "",
+              "| true ↓ / pred → | " + " | ".join(INTENTS) + " |",
+              "|---|" + "---|" * len(INTENTS)]
+    cm = result["confusion_matrix"]
+    for t in INTENTS:
+        lines.append(f"| {t} | " + " | ".join(str(cm[t][p]) for p in INTENTS) + " |")
+
+    lines.append("")
+    if not diff.get("has_baseline"):
+        lines.append("> No baseline yet — this run establishes it.")
+    elif diff.get("regressed"):
+        lines.append(f"> ⚠️ **Accuracy regressed {diff['accuracy_delta_pp']}pp vs baseline.**")
+    else:
+        lines.append("> ✅ No accuracy regression > 2pp vs baseline.")
+    return "\n".join(lines) + "\n"
+
+
+def _render_forecast_md(result: dict, diff: dict) -> str:
     layer = result["layer"]
     lines = [
         f"# Eval report — {layer}",
