@@ -33,8 +33,13 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import AgentActionLog, OperationalMemory, StaffingRecommendation
+from app.i18n.abstention_messages import DEFAULT_LOCALE, localized_message
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
+from app.services.abstention import AgentAbstention
+
+# Below this inbound-parser confidence the parser abstains (ADR-0007 §D6 / Décision #15).
+_PARSER_ABSTAIN_THRESHOLD = 0.6
 
 logger = logging.getLogger(__name__)
 
@@ -511,6 +516,68 @@ class ReceiptsService:
             stripped[:80],
         )
         return intent
+
+    # -----------------------------------------------------------------------
+    # P3-11b (HOS-217 / EVAL-2): AgentAbstention contract — parser low-confidence
+    # + the 3 manager-facing WhatsApp variants (ADR-0007 §D6). The reason code is
+    # ALWAYS resolved through the i18n mapping — never shown raw (PM caveat).
+    # -----------------------------------------------------------------------
+    @staticmethod
+    def abstention_for_feedback(feedback: FeedbackIntent) -> Optional[AgentAbstention]:
+        """Map a low-confidence inbound parse to an AgentAbstention (additive).
+
+        Returns ``None`` when the parse is confident enough to act on. Does not
+        change ``parse_inbound`` — callers opt in.
+        """
+        if feedback.confidence < _PARSER_ABSTAIN_THRESHOLD:
+            return AgentAbstention(
+                reason="parser_low_confidence",
+                layer="parser",
+                context={"confidence": feedback.confidence, "intent": feedback.intent},
+                human_message=localized_message("parser_low_confidence"),
+            )
+        return None
+
+    @staticmethod
+    def _full_abstention_variant(
+        forecast_reason: str,
+        reco_reason: str,
+        locale: str = DEFAULT_LOCALE,
+        drill_down_url: str = "",
+    ) -> str:
+        """Variant 1 (ADR §D6.d): forecast + reco both unknown."""
+        link = drill_down_url or "l'historique de l'établissement"
+        return (
+            "Bonjour. Ce matin, les données insuffisantes empêchent de générer "
+            f"un Receipt fiable. {localized_message(reco_reason, locale)} "
+            f"Vous pouvez consulter {link}."
+        )
+
+    @staticmethod
+    def _partial_abstention_variant(
+        forecast_summary: str,
+        reco_reason: str,
+        locale: str = DEFAULT_LOCALE,
+    ) -> str:
+        """Variant 2 (ADR §D6.d): forecast OK, recommendation abstained."""
+        return (
+            f"Bonjour, voici les prévisions du jour : {forecast_summary}. "
+            "Aetherix n'est pas confiant pour recommander un staffing aujourd'hui. "
+            f"{localized_message(reco_reason, locale)} "
+            "Suggestion : maintenir le staffing standard."
+        )
+
+    @staticmethod
+    def _drift_alert_variant(
+        normal_body: str,
+        drift_reason: str,
+        locale: str = DEFAULT_LOCALE,
+    ) -> str:
+        """Variant 3 (ADR §D6.d): forecast + reco normal, but drift detected."""
+        return (
+            f"{normal_body}\n\n"
+            f"Avis qualité : {localized_message(drift_reason, locale)}"
+        )
 
     # -----------------------------------------------------------------------
     # P3-10 (HOS-200): persist manager-reported actual covers — close the
