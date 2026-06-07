@@ -15,6 +15,9 @@ BASELINES_DIR = _ROOT / "eval" / "baselines"
 # AC10 — fail threshold: > 3pp per-category MAPE regression vs baseline.
 REGRESSION_PP = 0.03
 
+# EVAL-4 (HOS-208) — fail threshold: parser accuracy drop > 2pp vs baseline.
+PARSER_ACCURACY_DROP_PP = 0.02
+
 
 def baseline_path(layer: str) -> Path:
     return BASELINES_DIR / f"{layer}_baseline.json"
@@ -32,6 +35,22 @@ def save_baseline(layer: str, result: dict) -> Path:
     path = baseline_path(layer)
     path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def diff_parser(result: dict, baseline: dict | None) -> dict:
+    """Parser accuracy regression vs baseline (EVAL-4 — drop > 2pp = regression)."""
+    if not baseline:
+        return {"has_baseline": False, "regressed": False, "accuracy_delta_pp": None}
+    cur = result.get("accuracy")
+    base = baseline.get("accuracy")
+    if cur is None or base is None:
+        return {"has_baseline": True, "regressed": False, "accuracy_delta_pp": None}
+    delta = cur - base
+    return {
+        "has_baseline": True,
+        "regressed": delta < -PARSER_ACCURACY_DROP_PP,
+        "accuracy_delta_pp": round(delta * 100, 2),
+    }
 
 
 def diff_forecast(result: dict, baseline: dict | None) -> dict:

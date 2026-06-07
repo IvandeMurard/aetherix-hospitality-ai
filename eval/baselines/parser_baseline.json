@@ -1,0 +1,40 @@
+{
+  "layer": "parser",
+  "accuracy": 1.0,
+  "n": 16,
+  "per_intent": {
+    "accepted": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "support": 5
+    },
+    "rejected": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "support": 5
+    },
+    "modified": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "support": 6
+    }
+  },
+  "confusion_matrix": {
+    "accepted": {
+      "accepted": 5,
+      "rejected": 0,
+      "modified": 0
+    },
+    "rejected": {
+      "accepted": 0,
+      "rejected": 5,
+      "modified": 0
+    },
+    "modified": {
+      "accepted": 0,
+      "rejected": 0,
+      "modified": 6
+    }
+  },
+  "backend": "fake"
+}
