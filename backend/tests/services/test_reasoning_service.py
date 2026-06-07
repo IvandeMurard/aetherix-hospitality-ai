@@ -250,3 +250,54 @@ class TestNamedEvents:
         )
         assert "PSG vs Arsenal" in result["summary"]
         assert "nearby event(s)" not in result["summary"]  # old count phrasing gone
+
+
+# ---------------------------------------------------------------------------
+# HOS-215 (P3-11b) — event distance-to-hotel (haversine) in the explanation
+# ---------------------------------------------------------------------------
+
+_HOTEL_PARIS = (48.8566, 2.3522)
+
+
+class TestEventDistance:
+    def _build(self, events: list, hotel=_HOTEL_PARIS) -> str:
+        service = ReasoningService(llm=_mock_llm())
+        ctx = {
+            "weather": {"condition": "sunny"},
+            "events": events,
+            "occupancy": 0.8,
+            "hotel_latitude": hotel[0] if hotel else None,
+            "hotel_longitude": hotel[1] if hotel else None,
+        }
+        return service._build_prompt(150, 0.85, _DATE, "dinner", ctx, _PATTERNS, None)
+
+    def test_distance_rendered_in_prompt(self):
+        """AC5 (demo-ready): a Paris event ~2.1 km from the hotel renders '2.1 km'."""
+        prompt = self._build(
+            [{"title": "PSG vs Arsenal", "category": "Sports",
+              "latitude": 48.8566 + 0.018886, "longitude": 2.3522}]
+        )
+        assert "PSG vs Arsenal" in prompt
+        assert "2.1 km" in prompt
+
+    def test_events_sorted_nearest_first(self):
+        """AC4: the closest event leads in the rendered block."""
+        prompt = self._build([
+            {"title": "Far Concert", "latitude": 48.8566 + 0.05, "longitude": 2.3522},
+            {"title": "Near Match", "latitude": 48.8566 + 0.009, "longitude": 2.3522},
+        ])
+        assert prompt.index("Near Match") < prompt.index("Far Concert")
+
+    def test_missing_event_coords_no_crash_no_km(self):
+        """AC3: an event without coords still renders, with no distance."""
+        prompt = self._build([{"title": "Mystery Gala", "category": "Gala"}])
+        assert "Mystery Gala" in prompt
+        assert "km" not in prompt
+
+    def test_no_hotel_coords_is_noop(self):
+        prompt = self._build(
+            [{"title": "PSG vs Arsenal", "latitude": 48.87, "longitude": 2.35}],
+            hotel=None,
+        )
+        assert "PSG vs Arsenal" in prompt
+        assert "km" not in prompt

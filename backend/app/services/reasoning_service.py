@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from app.core.demo_events import demo_emit
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
+from app.services.geo import enrich_events_with_distance
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,9 @@ logger = logging.getLogger(__name__)
 # local_events rows / schemas.events). Available keys:
 #   title, category, rank, local_rank, phq_attendance, start_dt, end_dt,
 #   latitude, longitude, raw_labels   (some callers also use `name` / `type`).
-# There is no precomputed distance-to-hotel yet, so `distance_km` is rendered
-# only when a producer supplies it; otherwise we lead with name + category +
-# expected attendance — the strongest trust signals actually available.
+# `distance_km` is computed by HOS-215 (enrich_events_with_distance) from the
+# event's lat/long vs the hotel's, when context carries hotel coordinates;
+# otherwise we lead with name + category + expected attendance.
 
 def _event_label(event: Dict) -> str:
     """Human-readable label for one event dict (defensive across producers)."""
@@ -141,7 +142,13 @@ class ReasoningService:
 
         # HOS-201: name the events so the explanation cites concrete drivers
         # ("PSG vs Arsenal") instead of an opaque "2 events nearby".
-        events_block = _format_events_block(context.get('events', []))
+        # HOS-215: enrich with distance-to-hotel + sort nearest-first (closest leads).
+        events = enrich_events_with_distance(
+            context.get('events', []),
+            context.get('hotel_latitude'),
+            context.get('hotel_longitude'),
+        )
+        events_block = _format_events_block(events)
 
         return f"""You are an expert restaurant operations assistant.{mock_warning}
 Prophet (ML model) predicted {predicted} covers for {dt.strftime('%A, %B %d')} ({svc}) with {int(confidence*100)}% confidence.
@@ -206,10 +213,14 @@ Keep it actionable for a manager.
         if weather.get("condition"):
             weather_note = f" Current weather is {weather['condition']}."
 
-        events = context.get("events", [])
+        # HOS-201/215: name + distance, nearest-first — consistent with _build_prompt.
+        events = enrich_events_with_distance(
+            context.get("events", []),
+            context.get("hotel_latitude"),
+            context.get("hotel_longitude"),
+        )
         event_note = ""
         if events:
-            # HOS-201: name the events here too, consistent with _build_prompt.
             named = ", ".join(_event_label(e) for e in events)
             event_note = f" Nearby events ({named}) may drive additional demand."
 

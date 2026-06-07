@@ -73,6 +73,12 @@ class OrchestratorAgent:
         system_prompt: Optional[str] = None
         try:
             profile = await self._profile_loader(tenant_id)
+            if profile is not None:
+                # HOS-215: surface hotel coordinates in the context so the
+                # reasoning layer can compute event distance-to-hotel. Plain dict
+                # assignment — no app.* import (Décision #19).
+                context.setdefault("hotel_latitude", getattr(profile, "latitude", None))
+                context.setdefault("hotel_longitude", getattr(profile, "longitude", None))
             if profile is not None and self._constitution_builder is not None:
                 similar_text = (
                     "\n".join(
