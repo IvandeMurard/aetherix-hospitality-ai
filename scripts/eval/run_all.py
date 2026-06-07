@@ -15,10 +15,11 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import baselines, eval_forecast, reporter
+from . import baselines, eval_forecast, eval_parser, reporter
 from .loader import DEFAULT_DATASET
 
-_RUNNERS = {"forecast": eval_forecast.run}
+_RUNNERS = {"forecast": eval_forecast.run, "parser": eval_parser.run}
+_DIFFS = {"forecast": baselines.diff_forecast, "parser": baselines.diff_parser}
 
 
 def main() -> int:
@@ -56,16 +57,24 @@ def main() -> int:
             print(f"[eval] {layer}: baseline frozen -> {path}")
 
         baseline = baselines.load_baseline(layer)
-        diff = baselines.diff_forecast(result, baseline)
+        diff = _DIFFS[layer](result, baseline)
         paths = reporter.write_reports(result, diff, args.json_out, args.md_out)
 
-        mape = result["overall_mape_j1_holdout"]
-        print(
-            f"[eval] {layer}: overall MAPE {mape * 100:.2f}% · "
-            f"coverage {(result['interval_coverage_pct'] or 0) * 100:.1f}% · "
-            f"regressions {len(diff['regressions'])} -> {paths['md']}"
-        )
-        if args.strict and diff["regressions"]:
+        if layer == "forecast":
+            summary = (
+                f"overall MAPE {(result['overall_mape_j1_holdout'] or 0) * 100:.2f}% · "
+                f"coverage {(result['interval_coverage_pct'] or 0) * 100:.1f}% · "
+                f"regressions {len(diff['regressions'])}"
+            )
+        else:  # parser
+            summary = (
+                f"accuracy {(result['accuracy'] or 0) * 100:.1f}% · n={result['n']} · "
+                f"regressed={diff['regressed']}"
+            )
+        print(f"[eval] {layer}: {summary} -> {paths['md']}")
+
+        regressed = bool(diff.get("regressions")) or diff.get("regressed", False)
+        if args.strict and regressed:
             exit_code = 1
 
     return exit_code
