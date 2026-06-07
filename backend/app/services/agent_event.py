@@ -51,11 +51,15 @@ async def emit_agent_event(event: AgentEvent, db: AsyncSession) -> None:
         INSERT INTO agent_action_log (
             hotel_id, tool_name, scopes, status, error_code,
             latency_ms, embedding_latency_ms, dedup_hit, top_similarity,
-            request_id
+            request_id,
+            abstention_reason, abstention_context, abstention_layer,
+            eval_run_id, drift_score
         ) VALUES (
             :hotel_id, :tool_name, :scopes, :status, :error_code,
             :latency_ms, :embedding_latency_ms, :dedup_hit, :top_similarity,
-            :request_id
+            :request_id,
+            :abstention_reason, :abstention_context, :abstention_layer,
+            :eval_run_id, :drift_score
         )
     """)
     try:
@@ -70,6 +74,19 @@ async def emit_agent_event(event: AgentEvent, db: AsyncSession) -> None:
             "dedup_hit": event.dedup_hit,
             "top_similarity": event.top_similarity,
             "request_id": event.request_id or "",
+            # HOS-217 (EVAL-2) — abstention + eval telemetry. JSONB fields are
+            # json-encoded strings; Postgres assignment-casts text→jsonb on INSERT
+            # (no explicit ::jsonb cast, keeping the SQLite test path working).
+            "abstention_reason": event.abstention_reason,
+            "abstention_context": (
+                json.dumps(event.abstention_context)
+                if event.abstention_context is not None else None
+            ),
+            "abstention_layer": event.abstention_layer,
+            "eval_run_id": event.eval_run_id,
+            "drift_score": (
+                json.dumps(event.drift_score) if event.drift_score is not None else None
+            ),
         })
     except Exception as exc:
         logger.warning("emit_agent_event failed (non-blocking): %s", exc)

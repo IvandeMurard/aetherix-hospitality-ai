@@ -1,10 +1,15 @@
 import asyncio
 import math
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 from pydantic import BaseModel
 
 from app.core.demo_events import demo_emit
+from app.i18n.abstention_messages import localized_message
+from app.services.abstention import AgentAbstention
+
+# Below this forecast confidence the recommendation abstains (ADR-0007 §D6).
+_CONFIDENCE_ABSTAIN_THRESHOLD = 0.5
 
 
 class StaffingConfig(BaseModel):
@@ -23,7 +28,27 @@ class StaffingConfig(BaseModel):
 class StaffingService:
     """Calculates staffing requirements based on demand."""
 
-    async def calculate_recommendation(self, predicted_covers: int, config: Optional[StaffingConfig] = None) -> Dict:
+    async def calculate_recommendation(
+        self,
+        predicted_covers: int,
+        config: Optional[StaffingConfig] = None,
+        confidence: Optional[float] = None,
+    ) -> Union[Dict, AgentAbstention]:
+        # ADR-0007 §D6 — graceful degradation: when the upstream forecast is too
+        # uncertain, abstain rather than emit a confident-looking staffing number.
+        # `confidence` is optional/additive: existing callers that don't pass it
+        # keep the previous behaviour (no abstention).
+        if confidence is not None and confidence < _CONFIDENCE_ABSTAIN_THRESHOLD:
+            return AgentAbstention(
+                reason="confidence_below_threshold",
+                layer="recommendation",
+                context={
+                    "forecast_confidence": confidence,
+                    "covers_predicted": predicted_covers,
+                },
+                human_message=localized_message("confidence_below_threshold"),
+            )
+
         cfg = config or StaffingConfig()
 
         servers = math.ceil(predicted_covers / cfg.covers_per_server)
