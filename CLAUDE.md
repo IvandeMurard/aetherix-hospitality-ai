@@ -1,7 +1,7 @@
 # CLAUDE.md — Aetherix
 
 > Source de vérité partagée. Chargé automatiquement à chaque session.
-> **Règle :** ce fichier = facts de session + INDEX uniquement. Détail décisions → `docs/context/decisions-architecturales.md` (22 décisions architecturales) + `docs/context/open-decisions.md` (décisions ouvertes + archive résolues). Cible ≤ 150 lignes.
+> **Règle :** ce fichier = facts de session + INDEX uniquement. Détail décisions → `docs/context/decisions-architecturales.md` (24 décisions architecturales) + `docs/context/open-decisions.md` (décisions ouvertes + archive résolues). Cible ≤ 150 lignes.
 > Mettre à jour après chaque décision : ajouter une ligne d'INDEX ici + le détail complet dans le sous-fichier correspondant.
 
 ---
@@ -60,6 +60,8 @@
 | 20 | Anima — architecture mémoire 4 couches + DPIA gate | 19/05/2026 |
 | 21 | Apaleo MCP — convention nommage native + sales evidence Anthropic | 26/05/2026 |
 | 22 | Eval-by-design gate CI obligatoire (Qonto + BMad meta-fix) | 04/06/2026 |
+| 23 | POS integration scope + adapter pattern (Phase 4) | 06/06/2026 |
+| 24 | Graphe de contexte Postgres recursive CTE (Phase 4) — Path C retenu cash-driven, AGE bloqué Supabase | 06/06/2026 |
 
 ---
 
@@ -84,14 +86,12 @@
 
 | Statut | Décision | Trigger / échéance |
 |---|---|---|
-| 🟡 Open | Embedding strategy (pgvector vs Qdrant) | Phase 4 trigger multi-tenant scale |
 | 🟡 Open | Pricing model (HOS-179 P3-5) | Post-90j data pilote |
 | 🟡 Open | Apaleo Copilot scope F&B (canari) | Monitoring mensuel via watchlist |
 | 🟡 Open | Food waste tracking | À trancher Phase 4 vs Phase 5 |
-| 🟡 Open | Graphe de contexte (Phase 4) — Apache AGE | Brief ADR-0008 futur |
 | 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0009 futur |
 
-Resolved decisions archive (Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.
+Resolved decisions archive (Graphe de contexte Apache AGE 06/06, POS integration scope 06/06, Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.
 
 ---
 

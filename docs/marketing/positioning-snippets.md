@@ -17,6 +17,7 @@
 | H-5 | F&B intelligence app on top of your PMS — native to Mews and Apaleo. | Vs Mews OS (verticalization PMS) |
 | H-6 | Hotel-native, PMS+POS-aware cross-property intelligence. | Vs Meuze.ai (F&B for restaurants/QSR) |
 | H-7 | Federated by design — your hotel inherits the cohort's operational wisdom from Day 1, your raw data stays in your tenant. | Hive Memory Federated narrative — counter Meuze.ai's live federated claim (announced Phase 3, shipped Phase 4) |
+| H-8 | OtelAI manages 6 departments. Aetherix masters one — F&B. When 30-45% of operating costs depend on a single forecast, specialist beats generalist. | Anti multi-department generalist platforms (OtelAI, TH1.ai, Venli, AeroGuest) — vertical depth > horizontal breadth on operational decisions |
 
 ## Human-AI collaboration framing — "Tandem bike" (Murati frame)
 
@@ -58,6 +59,28 @@
 **Cross-project narrative (use in About / founder bio):**
 
 > *"In February 2026, I built Lore — a voice AI that captures the tacit expertise of senior aviation maintenance technicians before they retire. The pattern: RAG isn't enough. You have to actively extract what seniors never thought to write down. Aetherix applies the same thesis to hospitality F&B: Private Memory + manager feedback = continuous capture of the tacit knowledge that's nowhere in the PMS."*
+
+## Specialist vs Generalist framing — vertical depth on operational decisions
+
+**Source narrative:** Veille 06-08 a identifié 4 multi-departmental AI ops platforms (OtelAI, TH1.ai, Venli, AeroGuest) qui se positionnent generalists. Aetherix doit clarifier le frame inverse : specialist beats generalist quand les enjeux sont opérationnels et financiers.
+
+**Snippet copy (full version — deck pilot, Apaleo Marketplace, technical-buyer page):**
+
+> *"Multi-departmental AI platforms (OtelAI, TH1.ai, Venli) promise to manage 5-6 departments at once. Aetherix masters one — F&B operations. When 30-45% of operating costs depend on a single forecast accuracy, and when 25% of food prep ends as waste, specialist depth beats horizontal breadth. Generalists answer 'good enough across the board.' Specialists deliver decisions that change the P&L."*
+
+**Variant (shorter, 1-liner — landing / Agent Hub listing):**
+
+> *"OtelAI manages 6 departments. Aetherix masters one — F&B. When 30-45% of operating costs depend on a single forecast, specialist beats generalist."*
+
+**Variant (specialist + framework — combine with Eval-as-Contract for technical buyers):**
+
+> *"F&B operations is not a feature to bolt onto a guest comm platform. It's a discipline: time-series forecasting, occupancy correlation, manager feedback memory, cohort intelligence. Aetherix is built for that discipline — and proves it ships reliable predictions under an Eval-by-Design contract."*
+
+**4 surfaces this framing covers:**
+- **Buyer education** (mid-market buyers see 4 multi-dept platforms, need decision framework)
+- **Sales objection handling** (*"why not buy all-in-one OtelAI?"* → spec ic answer ready)
+- **Apaleo Marketplace listing copy** (differentiate from Venli adjacent)
+- **Phase 3 pilot conversations** (Aetherix doesn't compete with multi-dept platforms, it complements or replaces F&B partial coverage)
 
 ## Federated cohort intelligence framing — "Hive Memory"
 
