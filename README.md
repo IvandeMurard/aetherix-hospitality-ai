@@ -67,8 +67,8 @@ Aetherix is one node in a broader architecture designed to replace rigid hotel t
 |------|------|--------|
 | **Aetherix** | F&B execution — forecast, staffing, memory, receipts | ✅ Live (staging) |
 | **Tacet** | Environmental signals — weather, noise, open data → scores | 🔨 Phase 3 |
-| **Orchestrator** | Supervisory agent — MCP routing, business rules, agentic loop | 📐 Phase 3 stub |
-| **Anima** | Guest context — emotional state, CRM, flight delays → profile | 📋 Phase 4 |
+| **Orchestrator** | Supervisory agent — MCP routing, business rules, agentic loop | 📐 Phase 3 stub → separate repo Phase 4 (ADR-0004) |
+| **Anima** | Guest context — emotional state, CRM, flight delays → profile | 📋 Phase 4 (4-layer memory + DPIA gate non-negotiable, Décision #20) |
 
 ---
 
@@ -267,11 +267,13 @@ aetherix/
 
 ## Memory architecture
 
-Aetherix uses a two-layer memory system:
+Aetherix learns. Two layers today, a third layer designed for Phase 4.
 
-**Private Memory (per-hotel)** — `operational_memory` table in pgvector. Stores manager feedback, outcomes, and patterns specific to each property. Used to personalize every recommendation.
+**Private Memory (per-hotel) — the agent gets to know your property.** Every manager interaction — accepted, rejected, modified — becomes a signal Aetherix learns from. Over weeks, the agent understands this hotel's specific patterns: which Saturday nights are exceptional, which corporate clients drive room-service spikes, which local events the manager systematically over-staffs. The recommendation that arrives at 6am on day 90 is sharper than the one on day 7 *(operational_memory table, pgvector with Mistral 1024d embeddings)*.
 
-**HiveMemory (cross-hotel)** — anonymized pattern aggregation across properties (k-means clustering + LLM persona generation). Hotels learn from each other without sharing raw data. Phase 3 Track B.
+**HiveMemory (cross-hotel, announced Phase 3 → shipped Phase 4) — your hotel inherits the wisdom of similar properties.** A breakfast-heavy 100-room hotel onboarded in Paris starts Day-1 with predictions calibrated by other Paris hotels already on Aetherix — not from a blank slate. Cold-start eliminated. Raw data stays in each hotel's tenant — only anonymized patterns travel *(cohort matching with hard rules + embedding cosine, Bayesian Prophet prior with model averaging, runtime auto-disable if accuracy degrades — ADR-0005)*.
+
+**Context Graph (Phase 4) — operational relationships made explicit.** A graph layer extends pgvector with explicit relationships (`hotel × event × weather × time × outcome`, `senior intervention × edge case × resolution`). Unlocks cohort matching v2 (multi-dimensional path traversal beyond cosine similarity), memory recall via graph traversal, and forms the foundation for the Anima Guest Context Node *(Postgres recursive CTE — Apache AGE deferred until Supabase managed support — ADR-0008, Path C cash-driven Phase 4)*.
 
 ---
 
@@ -317,7 +319,7 @@ Aetherix treats evaluation as a contract, not an afterthought.
 | Phase 0 deploy | ✅ Done | Fly.io staging live · RLS 14/14 · webhook HMAC |
 | Phase 2 — Receipts | ✅ Done | Daily Receipt · WhatsApp · inbound feedback · weekly digest |
 | Phase 3 — Pilot | 🔨 In Progress | Design partner (Apaleo prod) · Orchestrator separation · HiveMemory algorithm · Article technique Mesh |
-| Phase 4 — Scale | 📋 Planned | Mews integration · POS ingestion · **Federated HiveMemory ship** (announced Phase 3) · RMS / Social Sentiment · Anima (Guest Context Node) · Orchestrator repo |
+| Phase 4 — Scale | 📋 Planned | Mews integration · **POS ingestion** (adapter pattern, ADR-0006) · **Federated HiveMemory ship** (announced Phase 3, ADR-0005) · **Context Graph layer** (Postgres CTE, ADR-0008) · RMS / Social Sentiment · **Anima Guest Context Node** (Décision #20, DPIA gate required) · **Orchestrator separate repo** (ADR-0004) |
 
 Full roadmap: [Linear — Hospitalityagent](https://linear.app/hospitalityagent/team/HOS/all)
 

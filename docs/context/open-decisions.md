@@ -8,13 +8,6 @@
 
 ## Actives
 
-### Embedding strategy (pgvector vs Qdrant)
-
-**Statut :** Open
-**Trigger :** Phase 4 — multi-tenant + Hive Memory à scale
-**Rationale :** pgvector reste suffisant < 50K patterns et < 50 hôtels. Phase 4 = re-évaluer si scale impose.
-**Décision binaire :** rester pgvector OU migrer Qdrant managed.
-
 ### Pricing model (HOS-179 P3-5)
 
 **Statut :** Open
@@ -26,24 +19,41 @@
 
 **Reco interne :** $500-$2,500/property/mois selon scope modules activés.
 
-### Apaleo Copilot scope F&B (canari à surveiller)
+### Apaleo Copilot scope F&B (canari à surveiller) — 🚨 FIRED 06-08
 
-**Statut :** Open — monitor récurrent perpétuel (pas décision closeable)
-**Date documentation :** 01/06/2026
-**Risque :** Apaleo confirmé first PMS MCP à ITB Berlin 2026 + démos booking apps ChatGPT natives. Si Copilot étend vers F&B forecasting / staffing → ferme la niche Aetherix sur le PMS bedrock (Décisions #1, #7, #21).
-**Triggers à monitorer (mensuel) :**
-- Annonces Apaleo Copilot
-- Releases MCP tools liés covers / staff
-- Embauches Apaleo *"operations AI"*
+**Statut :** Open — **canari FIRED** (veille hebdo 06-08-2026). Monitor cadence ↑ : bi-hebdo au lieu de mensuel jusqu'à clarification scénario.
 
-**Mitigation :**
-- (a) Shipper pilote HOS-176 Phase 3 avant Q4 2026
-- (b) Outreach Apaleo Marketplace pour position de complément
-- (c) Accélérer Aetherix MCP v1 pour interop défensif
+**Date documentation :** 01/06/2026 · **Trigger fired :** 08/06/2026
 
-**État actuel :** ✅ Mapping livré (HOS-197, 2026-06-03) → [`docs/competitive/apaleo-mcp-mapping.md`](../competitive/apaleo-mcp-mapping.md) — 235 tools classés (5 consommés / 44 border-zone F&B / 186 inutilisés), leading indicators LI-1 → LI-5, reco MCP v1 = accélérer HOS-71 v1 (`get_operational_predictions`).
+**Status update 06-08 :** Apaleo a officiellement lancé son AI Copilot (Hospitality Net mai 2026). Scope actuel = chat interface embedded + check arrivals + extend stays + plan housekeeping + resolve overbookings + assign rooms. **F&B explicite pas encore**, mais expansion technique triviale depuis cette base.
 
-**Aussi présent dans :** `docs/context/monitoring-watchlist.md` W2 comme monitor récurrent perpétuel (cf. également W1 Conduit.ai depuis 04/06).
+**Scénarios à 3-6 mois (analyse PM 06-08) :**
+- **(A) 30%** — reste ops-front, F&B safe pour Aetherix
+- **(B) 50%** — F&B "lite" (résumé historique, info menu, pas predictive) → Aetherix différencié sur predictive + reasoning + memory
+- **(C) 20%** — F&B forecasting / staffing predictive natif → niche fermée sur PMS bedrock, pivot urgent requis
+
+**Trigger d'escalade vers Scénario C :**
+- Embauches Apaleo "operations AI" mentionnant F&B / forecasting / data science
+- Partnership annoncé avec Meuze.ai-like ou similaire predictive F&B
+- Release notes Copilot avec `forecast_covers`, `predict_staffing`, ou tools équivalents
+
+**Risque historique (reformulation) :** Apaleo confirmé first PMS MCP à ITB Berlin 2026 + démos booking apps ChatGPT natives. Si Copilot étend vers F&B forecasting / staffing → ferme la niche Aetherix sur le PMS bedrock (Décisions #1, #7, #21).
+
+**Triggers monitoring (cadence ↑ bi-hebdo, vs mensuel pré-fire) :**
+- Release notes Apaleo Copilot — nouveaux tools chaque sprint Apaleo
+- Embauches Apaleo "operations AI" / "F&B product" / "data science F&B"
+- Modifications Marketplace (modules F&B natifs ou third-party endorsed)
+- Communications product Apaleo mentionnant "covers" / "staffing prediction" / "F&B forecasting"
+
+**Mitigation activée 06-08 :**
+- ✅ Audit fonctionnel Copilot via session SM Linear story flaggée (livrable `docs/competitive/apaleo-copilot-functional-audit.md` + reco scope MCP v1 différenciateur)
+- (a) Shipper pilote HOS-176 Phase 3 avant Q4 2026 — déjà roadmap
+- (b) Outreach Apaleo Marketplace pour position de complément (pas concurrent) — à confirmer
+- (c) Accélérer Aetherix MCP v1 (`get_operational_predictions` = primitive prédictive F&B absente des 235 tools Apaleo natifs, différenciateur défensif identifié HOS-197)
+
+**État actuel mapping :** ✅ Mapping livré (HOS-197, 2026-06-03) → [`docs/competitive/apaleo-mcp-mapping.md`](../competitive/apaleo-mcp-mapping.md) — 235 tools classés (5 consommés / 44 border-zone F&B / 186 inutilisés), leading indicators LI-1 → LI-5, reco MCP v1 = accélérer HOS-71 v1 (`get_operational_predictions`).
+
+**Aussi présent dans :** `docs/context/monitoring-watchlist.md` W2 (status FIRED 06-08, cadence bi-hebdo).
 
 ### Food waste tracking
 
@@ -53,32 +63,24 @@
 **Option A — Phase 4 :** feature ROI (€ gaspillés évités) calculé sur predicted prep vs actual covers post-service.
 **Option B — Phase 5 :** intégrer POS data pour mesure précise vs juste predicted.
 
-### Graphe de contexte — Phase 4 priority (04/06/2026)
+### Graphe de contexte Q1 backend — amendment 06/06/2026 (sous-décision ADR-0008)
 
-**Statut :** Open
-**Trigger :** Brief ADR-0008 futur. Pré-requis : cadrage POS tranché (impact schema).
-**Origine :** Convergence thèse *"knowledge extraction = real bottleneck"* (Mira Murati Thinking Machines + Hyperspell + GBrain + projet personnel Lore) + débat session PM 04/06.
+**Statut :** Open — sous-décision résiduelle ADR-0008 (§13). Architecture §2 D2-D7 **tranchée Accepted**, seul le **backend hosting Apache AGE** reste à arbitrer.
 
-**Scope proposé :** Ajouter une couche graphe explicite au-dessus de pgvector existant.
-- `hotel × event × weather × time × outcome`
-- `senior × tacit_pattern × edge_case`
+**Trigger :** Vérification R6 ADR-0008 post-rédaction (06/06/2026) — Apache AGE **non supporté** Supabase managed (vérifié via GitHub Discussion supabase/#40285 + Supabase docs extensions, jun 2026 = pas dans la liste pre-approved, extension C non-trusted, pas de roadmap).
 
-**Reco implémentation :** **Apache AGE** (extension Postgres-native sur Supabase, pas Neo4j séparé — cohérence Décision #3 pgvector).
+**Paths forward (PM decision required avant SM Linear kickoff) :**
 
-**Effort estimé :** ~2 sprints Phase 4
-- Schema 1-2j
-- Migration backfill 3-5j
-- Memory recall integration 5-7j
-- Eval gate Décision #22 2-3j
+- **Path A — Fly Postgres dédié + `postgres_fdw`** *(reco Architect §13.4)* — +$15-30/mois, cohérent Décision #17 Fly.io, +2j effort, single network hop intra-region cdg.
+- **Path B — Neo4j Aura** — +$65/mois, viole Décision #3 frame stricte Postgres-native, +3-5j effort transport layer refactor.
+- **Path C — Postgres recursive CTE fallback §R6** — $0, +1 sprint refactor, perd Cypher + expressivité limitée queries 3-hop.
+- ~~Path D — Attendre Supabase AGE support~~ — bloque Phase 4 calendar, rejeté.
 
-**Unlocks :**
-- Cohort matching ADR-0005 v2 (relations multi-dim vs cosine statique)
-- Memory recall path-find (event A → reaction typique B dans cohorte)
-- HiveMemory federated plus expressif
-- Foundation Anima Phase 4 Guest Context Node
-- Knowledge graph Lore-style (cf. `docs/context/vision-future.md` Aetherix Voice Phase 5+)
+**Reco Architect :** Path A.
 
-**Sources :** `docs/competitive/conduit-ai-analysis.md` + `memory/market_signals_2026Q2.md` section 04/06.
+**Échéance :** avant SM Linear kickoff Phase 4 (TODO checklist ADR-0008 §14).
+
+**Référence :** `docs/adr/0008-context-graph.md` §13 amendment complet.
 
 ### Interaction model — event-driven Phase 4-5 (04/06/2026)
 
@@ -102,6 +104,50 @@
 ---
 
 ## Resolved (archive)
+
+### [x] Graphe de contexte Postgres recursive CTE — RÉSOLU 06/06/2026 → ADR-0008 (Path C accepted)
+
+**Décision :** Phase 4 confirmé · **Tech retenue = Postgres recursive CTE sur Supabase managed** (Path C, PM sign-off 06/06/2026 pour raison financière) · Apache AGE rejeté car non supporté Supabase managed jun 2026 (vérifié GitHub Discussion supabase/#40285 + Supabase docs extensions) · Reco Architect initiale = Path A (Fly Postgres dédié + AGE + FDW, +$15-30/mois) non-suivie pour cash discipline pre-pilote · Schema = 8 node tables + 9 edge tables `aetherix_graph.*` + RLS Postgres natives 17 policies · Coexistence permanente pgvector + CTE (pas de cutover — pgvector reste source recall sémantique flou, CTE source recall relationnel/path via single-transaction `WITH RECURSIVE` + UNION ALL avec pgvector cosine) · `MemoryRecallService.recall()` étendu backward-compat param `recall_strategy: Literal["cosine_only","path_find","hybrid","cohort_traversal"]` default `"cosine_only"` zéro régression callers Phase 0-3 · Cohort matching v3 multi-dim path traversal (γ × cos_pms + δ × cos_pos + ε × path_match_score) extension ADR-0006 D4 · Forward-compat schema Anima Phase 4 (`Guest`/`Stay`/`Sentiment` réservés non créés, DPIA gate reste blocker Anima) · MCP tool atomique `query_context_graph(query_type, depth)` scope `graph:read` whitelist 6 query types Phase 4 (templates SQL CTE, pas Cypher) · Tenant isolation RLS Postgres natives (simplifié vs Path A `_inject_tenant_filter`) + canary eval `graph-tenant-isolation-001` blocking + `GRAPH_BACKEND=disabled` kill-switch · SLO latence p95 amendé < 1200ms (vs 800ms Path A — verbosité CTE acceptable cash-driven trade-off).
+
+**Réversibilité Phase 5+** : si Supabase ajoute support Apache AGE (monitor `docs/context/monitoring-watchlist.md` WT1 trimestriel + cron `check-supabase-apache-age-compatibility`), Path A redevient option viable. Migration CTE schema → AGE Cypher MERGE documentée ADR-0008 §16, effort estimé 1-2 sprints.
+
+**Date :** 06/06/2026 (session Architect Opus dédiée, brief PM 04/06 — formalisation + résolution + amendment Path C même session, pré-requis ADR-0006 POS tranché 06/06 même journée).
+
+**Rationale :** (a) Convergence thèse *"knowledge extraction = the real bottleneck"* (Mira Murati Thinking Machines + Hyperspell + GBrain + projet personnel Lore — `memory/market_signals_2026Q2.md` 04/06) ; (b) Cohort matching v2 ADR-0006 = late-fusion **scalar** insuffisant pour traverser *"event A causé outcome B chez hôtel co-cohorte 18 mois plus tôt"* — graphe = relations explicites traversables ; (c) Foundation Anima Phase 4 Guest Context Node (Décision #20 4 couches) nécessite relations explicites guest × stay × event × intervention ; (d) Aetherix Voice Phase 5+ (Lore-inspired tacit knowledge capture, `docs/context/vision-future.md`) pré-requis knowledge graph relationnel.
+
+**Story breakdown Phase 4 (Path C amendé)** : 6 stories, **26 points**, ~6-7 sprint-weeks single-dev. P4-GRAPH-1 → P4-GRAPH-6 (vs 5 stories / 21 pts Path A initial — +1 story / +5 pts surcoût refactor CTE accepté PM). Sequencing Phase 4 = POS d'abord (semaines 1-4 via ADR-0006), GRAPH ensuite (semaines 5-11).
+
+**Application downstream :**
+- CLAUDE.md §Décisions architecturales ligne d'index #24 (libellé *"Postgres recursive CTE"*)
+- `docs/context/decisions-architecturales.md` H3 §24 détail complet amendé Path C (Q1-Q7 + DDL 17 tables `aetherix_graph.*` + cohort v3 + Anima forward-compat + 6 query types CTE templates + eval gate `context_graph_query`)
+- `docs/adr/0008-context-graph.md` document canonique (Accepted Path C, 9 risques + amendment §13 PM sign-off + §16 patterns CTE override D1/D2/D4/D6)
+- `docs/context/memory-architecture.md` section ajoutée "Couche graphe Phase 4 (ADR-0008)" amendée Path C
+- `docs/context/monitoring-watchlist.md` WT1 — réouvrir Path A si Supabase ajoute AGE Phase 5+
+- Cron `check-supabase-apache-age-compatibility` (1er trim 9h) — notification user si statut change
+- Débloque Anima Phase 4 (forward-compat schema réservé `Guest`/`Stay`/`Sentiment`) · Aetherix Voice Phase 5+ (expressivité CTE inférieure à Cypher reconnue, à reconsidérer si AGE disponible Phase 5+)
+
+**Variables env nouvelles (Path C)** : `GRAPH_BACKEND` (default `postgres_cte` Phase 4 | `apache_age` Phase 5+ option si WT1 trigger | `disabled` kill-switch). Pas de `GRAPH_DATABASE_URL` ni `GRAPH_FDW_ENABLED` (Path C = même DB Supabase).
+
+**Trade-off PM documenté** : raison financière (Path A +$15-30/mois × multi-tenant Phase 5+ vs Path C $0). Effort dev +1 sprint refactor accepté. Expressivité Cypher manquante = limitation connue, mitigée via WT1 watchlist trimestrielle pour réouvrir Path A si Supabase débloque AGE.
+
+### [x] POS integration scope + adapter pattern — RÉSOLU 06/06/2026 → ADR-0006
+
+**Décision :** Phase 4 confirmé · Tier 1 vendors = Lightspeed K-Series (pick #1) + Oracle Micros Simphony (pick #2 conditionnel) · Pattern = `POSProvider` Protocol dans `backend/app/providers/pos/` + adapter par vendor (cohérent Décision #9 `LLMProvider` jurisprudence) · Read-only Phase 4 via `POS_READONLY=true` default + `POSWriteBlockedError` (cohérent Décision #7) · Impact ADR-0005 = table sœur `hotel_cohort_features_pos` avec 3 features POS-driven (item-mix Dirichlet 9-dim, ticket-size quantiles per service, time-of-day 168 buckets) + late-fusion blending.
+
+**Date :** 06/06/2026 (formalisation + résolution même session — pas de passage §Actives intermédiaire car brief PM 04/06 a tranché directement la session Architect Opus dédiée)
+
+**Rationale :** (a) Meuze.ai *"POS-only restaurants"* confirmé 01/06 — défense narrative *"PMS+POS-aware cross-property intelligence"* (snippet H-6) requiert ship Phase 4 ; (b) ADR-0008 graphe de contexte bloqué tant que schema POS non tranché ; (c) ADR-0005 cohort v1 PMS-only insuffisant pour discriminer boutique BER 80 chambres breakfast-heavy vs même profil PMS dinner-heavy.
+
+**Story breakdown Phase 4 :** 6 stories, 24 points, ~6 sprint-weeks single-dev (P4-POS-1 → P4-POS-6).
+
+**Application downstream :**
+- CLAUDE.md §Décisions architecturales ligne d'index #23
+- `docs/context/decisions-architecturales.md` H3 §23 détail complet (Q1-Q4 + DDL + Protocol + story breakdown + eval gate `pos_anomaly`)
+- `docs/adr/0006-pos-integration.md` document canonique (Accepted, 8 risques + DoD opérationnel)
+- Débloque open decision *"Graphe de contexte — Phase 4 priority"* (cf. §Actives — pré-requis POS marked DÉBLOQUÉ)
+- Étend open decision *"Food waste tracking"* Option B (mesure précise via POS items vs forecast — débloquée Phase 4 si pilote ship POS)
+
+**Variables env nouvelles :** `POS_BACKEND` (default `mock`), `POS_READONLY` (default `true`), `LIGHTSPEED_CLIENT_ID/SECRET`, `MICROS_TENANT_ID/CLIENT_ID/CLIENT_SECRET` (conditionnel Phase 4.4).
 
 ### [x] Federated Hive timing — RÉSOLU 04/06/2026
 
