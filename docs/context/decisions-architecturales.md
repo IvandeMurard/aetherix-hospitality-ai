@@ -1,6 +1,6 @@
 # Décisions architecturales — Aetherix
 
-> Source de vérité détaillée des 22 décisions architecturales. CLAUDE.md ne contient que l'index 1-ligne.
+> Source de vérité détaillée des 24 décisions architecturales. CLAUDE.md ne contient que l'index 1-ligne.
 > **Convention update :** ne jamais remettre en question sans raison documentée. Ajouter une nouvelle décision = ligne d'index dans CLAUDE.md + section détail H3 ici.
 > **Cross-référence :** `docs/context/open-decisions.md` (décisions en débat avant arbitrage) · `docs/adr/` (ADR validés pour décisions techniques durables).
 
@@ -116,6 +116,58 @@ Pattern analogue à Décision #16 schema drift gate (hard gate, blocking merge).
 - **ADR validé** → `docs/adr/0007-evaluation-by-design.md` (Q1-Q7 tranchés : schéma `golden_dataset.jsonl` poly + 11 catégories ; spec `scripts/ci/check_eval_coverage.py` + `scripts/eval/*.py` ; DDL Supabase 5 objets — ALTER `agent_action_log` +5 colonnes, tables `eval_runs` / `eval_baselines`, MV `distribution_shift_daily` / `abstention_daily` ; sentinel `AgentAbstention` Union-typed pas de cascade auto ; cascade drift WARN/FAIL par feature KS / Wasserstein / PSI ; story breakdown 6×Phase 3 ≈ 11j sur 3 sprints, pilot gate = EVAL-0+1+2+4)
 
 **Asset REX Phase 3 Track B :** article *"How we extended BMad-Method with Evaluation-by-Design for AI/ML products"* à rédiger post-EVAL-0..5 shippés.
+
+### 23 — POS integration scope + adapter pattern (Phase 4) (06/06/2026)
+
+Trigger : (a) Meuze.ai *"POS-only restaurants"* concurrent identifié 01/06 — défense narrative *"PMS+POS-aware cross-property intelligence"* (snippet H-6) requiert ship POS Phase 4 (pas 5) ; (b) ADR-0008 graphe de contexte (open decision 04/06) bloqué tant que schema features POS-driven non tranché ; (c) ADR-0005 cohort matching v1 PMS-only insuffisant pour discriminer hôtels même profil PMS / F&B opposé.
+
+**Q1 vendors prioritaires Phase 4** — **Tier 1** : Lightspeed K-Series (pick #1 — REST moderne + EU fort + Mews Marketplace officiel + ICP boutique pilote) ; Oracle Micros Simphony (pick #2 conditionnel, gate post-validation Lightspeed). **Tier 2 defer** : Toast / Square / Tiller. **Tier 3 skip** : Revel / TouchBistro / CashPad / NCR Aloha / Sage / Adyen POS.
+
+**Q2 phase** — Phase 4 confirmé. Repousser = laisser fenêtre Meuze pivot hôtels + décrédibiliser snippet H-6 + bloquer ADR-0008.
+
+**Q3 pattern** — Nouvelle abstraction `POSProvider` Protocol dans `backend/app/providers/pos/` (cohérent Décision #9 `LLMProvider` jurisprudence) + un adapter par vendor. Read-only Phase 4 via `POS_READONLY=true` default + `POSWriteBlockedError` (analogue Décision #7 + `ApaleoWriteBlockedError`). Rejeté : single MCP client générique, mega-class multi-vendor switch, refactor `app/integrations/`.
+
+**Q4 impact ADR-0005 cohort matching** — Promu v1 → v2 via table sœur `hotel_cohort_features_pos` (FK 1:1, opt-in tenant). 3 features POS-driven : `item_category_mix_distribution` (Dirichlet 9-dim), `ticket_size_distribution` (quantiles per service slot), `time_of_day_intensity` (covers histogram 168 buckets). Late-fusion blending α × cos_pms + β × cos_pos. Gate runtime auto-disable si Day-7 MAPE_v2 > MAPE_v1.
+
+**Schema unifié** : `pos_outlet` + `pos_transaction` (discriminator `pos_provider` enum) + `pos_item`. Idempotence via `UNIQUE (pos_provider, vendor_transaction_id)`. Field `cover_source` (`pos_pos_count` / `pms_service_count` / `manual_input`) résout R3 cover-count divergence PMS vs POS. RLS 3/3 policies.
+
+**Eval gate Décision #22** : `pos_anomaly` (réservé ADR-0007 D1 forward-compat) à populer Story P4-POS-6 — min 8 scenarios (cover-mismatch, late-ticket, void-spike, item-mix-shift, outlet-offline, ticket-size-tail, room-charge-orphan, modifier-explosion). `check_eval_coverage.py` enforce ≥ 5 scenarios si touche `app/providers/pos/*`.
+
+**Story breakdown Phase 4** : 6 stories, 24 points, ~6 sprint-weeks single-dev. P4-POS-1 Protocol + Mock · P4-POS-2 migration + RLS · P4-POS-3 Lightspeed adapter · P4-POS-4 Micros stub conditionnel · P4-POS-5 cohort features v2 + LOO · P4-POS-6 `pos_anomaly` + thresholds.
+
+**Variables env nouvelles** : `POS_BACKEND` (default `mock`), `POS_READONLY` (default `true`), `LIGHTSPEED_CLIENT_ID/SECRET`, `MICROS_TENANT_ID/CLIENT_ID/CLIENT_SECRET` (conditionnel).
+
+**Document canonique** : `docs/adr/0006-pos-integration.md` (Q1-Q4 tranchés, 8 risques, DDL Supabase, Protocol code, story breakdown, DoD opérationnel).
+
+**Débloque** : ADR-0008 graphe de contexte (open decision 04/06/2026) · open decision *"Food waste tracking"* Option B mesure précise.
+
+### 24 — Graphe de contexte Postgres recursive CTE (Phase 4) (06/06/2026)
+
+Trigger : (a) convergence session PM 04/06 thèse *"knowledge extraction = the real bottleneck"* (Mira Murati Thinking Machines + Hyperspell + GBrain + projet personnel Lore — `memory/market_signals_2026Q2.md`) ; (b) cohort matching v2 ADR-0006 = late-fusion **scalar** (`α × cos_pms + β × cos_pos`), insuffisant pour traverser *"event A causé outcome B chez hôtel co-cohorte 18 mois plus tôt"* ; (c) foundation Anima Phase 4 (Décision #20 — 4 couches Working/Episodic/Semantic/Segment) nécessite des relations explicites guest × stay × event × intervention ; (d) Aetherix Voice Phase 5+ (Lore-inspired tacit knowledge capture, `docs/context/vision-future.md`) pré-requis knowledge graph.
+
+**Q1 choix tech — Path C ACCEPTED (PM sign-off 06/06/2026)** — **Postgres recursive CTE sur Supabase managed** (pas Apache AGE — confirmé non supporté Supabase managed jun 2026 via GitHub Discussion supabase/#40285 + Supabase docs extensions, vérifié cette session). Reco Architect initiale = Path A (Fly Postgres dédié + Apache AGE + `postgres_fdw`, +$15-30/mois). **PM tranche Path C** pour raison financière (cash discipline pre-pilote, $0 incrément hosting). Trade-offs acceptés : +1 sprint refactor effort (story breakdown 6 stories / 26 pts vs 5 / 21 pts Path A initial), expressivité réduite vs Cypher sur queries 3-hop (latence p95 attendue 1200ms vs 800ms Path A), pas de migration triviale vers Neo4j Phase 5+. Compensations Path C : 100% cohérent stack Décisions #3 + #17 (single vendor Supabase), RLS Postgres natives (simplifient tenant isolation vs `_inject_tenant_filter` Cypher injection Path A), schema drift gate Décision #16 intégral (pas d'exception nécessaire). **Réversibilité** : si Supabase ajoute support AGE (monitor WT1 watchlist trimestriel), Path A redevient option viable Phase 5+ — migration CTE schema → AGE Cypher MERGE déjà documentée ADR-0008 §16 (effort estimé 1-2 sprints).
+
+**Q2 schema définitif (Path C CTE)** — 8 node types matérialisés en **8 tables `aetherix_graph.node_*`** + 9 edge types matérialisés en **9 tables `aetherix_graph.edge_*`** (cf. ADR-0008 §16.2 DDL complet). Pattern : chaque node table a `hotel_id` (FK + RLS native) ; chaque edge table a `from_*` / `to_*` FK vers node tables + UNIQUE constraint sur paire idempotente (upsert via `INSERT ... ON CONFLICT DO UPDATE`). Indexes B-tree sur (`hotel_id`, `date`), (`from_*`, `to_*`), et properties query-fréquentes. ORM SQLAlchemy mirror obligatoire (17 modèles dans `backend/app/models/graph/`) — cohérent Décision #16 schema drift gate, pas d'exception nécessaire. Migration Alembic versioned.
+
+**Q3 migration path** — Coexistence permanente pgvector + AGE. pgvector reste source de vérité **recall sémantique flou** (cosine top-k payload). AGE source de vérité **recall relationnel/path**. Phase 4.0 setup + mock, Phase 4.1 backfill batch script `scripts/ops/backfill_context_graph.py --hotel-id` (cible ~50K-150K nodes / hôtel après 3y backfill, ~5-15 min single-property), Phase 4.2 worker nightly `refresh_context_graph_nightly` 03:00 cdg + dual-read, Phase 4.3 coexistence permanente — pas de cutover. `MemoryRecallService.recall()` étendu backward-compat avec param `recall_strategy: Literal["cosine_only","path_find","hybrid","cohort_traversal"]`, default `"cosine_only"` (zéro régression callers Phase 0-3).
+
+**Q4 cohort matching v3** — Promotion ADR-0006 D4 late-fusion **scalar** → **multi-dim path traversal**. Score final = `γ × cos_pms + δ × cos_pos + ε × path_match_score` avec `γ+δ+ε = 1`, calibré pilote. Path patterns : `(:Hotel)-[:BELONGS_TO_COHORT]->(:Cohort)<-[:BELONGS_TO_COHORT]-(other:Hotel)-[:PRODUCED]->(:Outcome)<-[:CAUSED]-(:Event)` (event outcome history), `(:SeniorIntervention)-[:INTERVENED_ON]->(:Recommendation)-[:SUGGESTED]->(:Outcome)` filtré `manager_feedback='followed'` (senior wisdom validated). Gate runtime auto-disable v3 si Day-7 MAPE_v3 > MAPE_v2 — fallback v2 ADR-0006.
+
+**Q5 foundation Anima Phase 4** — Le graphe Aetherix Phase 4 **ne contient pas** de données guest (DPIA gate Décision #20). Mais **réserve** 3 node types (`Guest`, `Stay`, `Sentiment`) + 4 edge types (`HAS_STAY`, `EXPERIENCED`, `EXPRESSED`, `MATCHES_SEGMENT`) **non créés** Phase 4, **documentés** forward-compat Anima Phase 4 quand DPIA passé. Pré-figure le MCP tool `query_guest_profile(scope)` Anima : `scope` Anima = Cypher temporal filter (`WHERE s.start_at > NOW() - INTERVAL '24 hours'` → Working / `INTERVAL '30 days'` → Episodic / permanent → Semantic / via `MATCHES_SEGMENT` → Segment). `EXPERIENCED` edge connecte `Stay` Anima → `Outcome` Aetherix = lingua franca cross-nœud Mesh.
+
+**Q6 MCP tools exposés (Path C)** — Un seul nouveau MCP tool `query_context_graph(query_type, depth, ...)` exposé à `/mcp/v1/`, scope `graph:read`. Whitelist 6 query types Phase 4 implémentés comme **templates SQL recursive CTE** versionnés dans `backend/app/services/context_graph_queries/` (1 fichier `.sql` par query type). **SQL arbitraire interdit MCP** (analogue Cypher interdiction Path A). Écritures via service interne uniquement (worker / backfill, pas MCP). **Tenant isolation = RLS Postgres natives** (17 policies sur tables `aetherix_graph.*`, pattern `current_setting('app.tenant_id')`) — simplifié vs Path A (pas de `_inject_tenant_filter` Python décorator nécessaire). Scenario eval canary `graph-tenant-isolation-001` blocking + env kill-switch `GRAPH_BACKEND=disabled` runtime rollback. SLO latence p95 amendé **< 1200ms** (vs 800ms Path A initial — verbosité CTE + recursive depth absorption documentée acceptable).
+
+**Q7 eval gate Décision #22** — Nouvelle catégorie `context_graph_query` taxonomy ADR-0007 D1, layer `graph`. Min 10 scenarios initiaux. Thresholds : `precision@5 senior_wisdom_path` WARN < 0.7 / FAIL < 0.55 ; band coverage `cohort_outcome_band` WARN < 0.75 / FAIL < 0.60 ; latency p95 `query_context_graph` WARN > 800ms / FAIL > 1500ms ; cross-tenant leak = 1 leak → FAIL immédiat blocking. `scripts/ci/check_eval_coverage.py` étendu avec `backend/app/services/context_graph_service.py` trigger path, require ≥ 5 scenarios `context_graph_query` si touché.
+
+**Story breakdown Phase 4 (Path C amendé §13.8 ADR-0008)** : **6 stories, 26 points**, ~6-7 sprint-weeks single-dev. P4-GRAPH-1 schema 17 tables FK + RLS + ORM + drift check · P4-GRAPH-2 backfill script + ingest sources · P4-GRAPH-3 worker nightly + `ContextGraphService` Python + 6 query types CTE templates · P4-GRAPH-4 `MemoryRecallService` extension hybrid CTE + pgvector · P4-GRAPH-5 MCP tool `query_context_graph` whitelist + RLS-based tenant isolation · P4-GRAPH-6 eval gate `context_graph_query` 10 scenarios + `FAILURE_THRESHOLDS.md` graph section (latence p95 < 1200ms).
+
+**Variables env nouvelles (Path C)** : `GRAPH_BACKEND` (default `postgres_cte` Phase 4 | `apache_age` Phase 5+ si Supabase ajoute support — cf. WT1 watchlist | `disabled` kill-switch). Pas de `GRAPH_DATABASE_URL`, pas de `GRAPH_FDW_ENABLED` (Path C = même DB Supabase).
+
+**Document canonique** : `docs/adr/0008-context-graph.md` (Q1-Q7 tranchés Status Path C accepted, 9 risques + amendment §13 PM sign-off, §16 patterns CTE override D1/D2/D4/D6 incluant DDL 17 tables + recursive CTE recall hybrid + 6 query types translation Cypher → CTE, story breakdown 6×26pts, DoD opérationnel).
+
+**Pré-requis externe vérifié** : ADR-0006 POS accepted 06/06/2026 (schema POS = source `Outcome` node + cohort features v2 base v3 graph extension).
+
+**Débloque** : Anima Phase 4 Guest Context Node (forward-compat schema D5, DPIA gate reste blocker Anima ADR séparé) · Aetherix Voice Phase 5+ (Lore-inspired knowledge graph relationnel).
 
 ---
 
