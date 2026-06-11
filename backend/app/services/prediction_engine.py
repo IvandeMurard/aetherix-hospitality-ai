@@ -164,3 +164,7 @@ class PredictionEngine:
         with open(path, 'r') as f:
             self.model = model_from_json(f.read())
         self.is_trained = True
+        # Restore the regressor list from the deserialized model. Without this,
+        # predict() omits the regressor columns the model expects and Prophet
+        # raises "Regressor '<name>' missing from dataframe" on every loaded model.
+        self.regressors = list(getattr(self.model, "extra_regressors", {}).keys())
