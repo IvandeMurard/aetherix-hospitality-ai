@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "apaleo-pms": {
+      "command": "pwsh",
+      "args": [
+        "-NoProfile",
+        "-File",
+        "archive/legacy-scripts/mcp_servers/run_apaleo_mcp.ps1"
+      ]
+    }
+  }
+}
