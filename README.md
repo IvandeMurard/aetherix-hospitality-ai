@@ -74,11 +74,11 @@ Aetherix is one node in a broader architecture designed to replace rigid hotel t
 
 ## Why it exists
 
-Hotels waste ~25% of the food they produce. Labor costs represent 30–45% of F&B operating expenses. Daily staffing decisions remain manual, repetitive, and error-prone — made by gut feel at 8am with no data.
+**Problem**: Demand anticipation by hotel F&B managers remains a daily, manual, repetitive, and error‑prone process, relying on limited data, disparate tools, and Excel sheets. As a result, hotels waste a significant share of the food they purchase, labor accounts for roughly 25–35% of F&B operating expenses, and over‑ or understaffing directly impacts both employee and guest experience.
 
-**Key insight:** The bottleneck is not data — hotels have PMS data. The bottleneck is synthesis: combining occupancy, weather, local events, and property-specific capture rates into a recommendation that actually fits *this* hotel's reality.
+**Key insight:** The bottleneck is not data, hotels have PMS data. The bottleneck is synthesis: combining internal context (occupancy, property-specific capture rates, POS and PMS data) with the external context (weather, local events, social media) into a recommendation that actually fits *this* hotel's reality.
 
-Aetherix builds that synthesis automatically, learns from manager feedback, and delivers it where managers already work — WhatsApp, not another dashboard.
+Aetherix builds that synthesis automatically, learns from manager feedback, and delivers it where managers already work via: WhatsApp, existing tools and PMS, or MCP. Not another dashboard.
 
 **Goal:** Reduce food waste and labor inefficiencies while giving managers more time to focus on their guests.
 
