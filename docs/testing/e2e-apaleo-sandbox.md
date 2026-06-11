@@ -90,10 +90,11 @@ curl -s http://localhost:8000/health    # -> {"status":"ok"}
 > racine, sinon « Application startup failed ». En générer un :
 > `python -c "import secrets; print(secrets.token_hex(32))"`.
 
-### 3.2 Forger un token MCP (scope `predict`)
+### 3.2 Forger un token MCP (scopes `predict` + `admin:train`)
 
-L'endpoint `POST /api/v1/predictions/predict` exige un bearer avec scope `predict`.
-Le hash stocké = `sha256(raw)` (`app/mcp_core.py::hash_token`). Insertion directe :
+L'endpoint `POST /api/v1/predictions/predict` exige un bearer avec scope `predict` ;
+`POST /api/v1/predictions/train` exige `admin:train`. Le hash stocké = `sha256(raw)`
+(`app/mcp_core.py::hash_token`). Insertion directe :
 
 ```bash
 RAW="aetherix-e2e-sandbox-predict-token"
@@ -101,11 +102,31 @@ HASH=$(printf '%s' "$RAW" | sha256sum | cut -d' ' -f1)
 docker compose exec -T db psql -U postgres -d aetherix -c \
  "INSERT INTO mcp_api_tokens (id, hotel_id, token_hash, token_prefix, scopes, label, created_at)
   VALUES (uuid_generate_v4(), 'tenant_sandbox', '$HASH', '${RAW:0:12}',
-          ARRAY['predict','recommend','feedback'], 'e2e-sandbox', now())
+          ARRAY['predict','recommend','feedback','admin:train'], 'e2e-sandbox', now())
   ON CONFLICT (token_hash) DO NOTHING;"
 ```
 
-### 3.3 Appeler l'endpoint
+### 3.3 Entraîner Prophet (pour `is_mock=false` — démo polie)
+
+Sans modèle entraîné, `/predict` renvoie `is_mock=true` (placeholder) et **Claude
+refuse** de le présenter comme un forecast. Entraîner d'abord sur les données démo
+(365 jours, aucun credential requis) — le modèle est sauvé sur disque et **rechargé
+au démarrage** par chaque worker (restart-resilience, voir §4) :
+
+```bash
+printf '%s' '{"property_id":"tenant_sandbox","data_source":"synthetic"}' > /tmp/train_body.json
+curl -s -w "\nHTTP %{http_code}\n" -X POST http://localhost:8000/api/v1/predictions/train \
+  -H "Authorization: Bearer $RAW" -H "Content-Type: application/json" \
+  --data-binary @/tmp/train_body.json
+# -> 200, "Prophet model trained on 365 days ... is_mock will be False"
+```
+
+> ⚠️ **Multi-workers** : `start.sh` lance uvicorn `--workers 4`. `/train` n'entraîne
+> que le worker qui répond. Le modèle étant persisté, **redémarrer le backend**
+> (`docker compose restart backend`) après le 1ᵉʳ `/train` pour que les 4 workers
+> rechargent le modèle et renvoient `is_mock=false` de façon cohérente.
+
+### 3.4 Appeler l'endpoint
 
 ```bash
 printf '%s' '{"hotel_id":"tenant_sandbox","target_date":"2026-03-13","service_type":"dinner","context":{"occupancy":0.08,"weather":{"condition":"Light rain, 12C"},"events":[]}}' > /tmp/e2e_body.json
@@ -133,6 +154,9 @@ Attendu : **HTTP 200**, `predicted_covers`, `confidence`, `claude_used: true`,
 | `400 error parsing the body` | accents corrompus par Git-Bash | corps ASCII ou `--data-binary @fichier.json` |
 | migration 1 échoue (`uuid_generate_v4`) | extension `uuid-ossp` absente → cascade | `setup_local_e2e.sh` l'active |
 | `can't open file '/app/C:/Program Files/Git/...'` | conversion de chemin MSYS | préfixer `MSYS_NO_PATHCONV=1`, chemin `//scripts/...` |
+| `is_mock` incohérent (true/false alterné) | uvicorn `--workers 4` ; `/train` n'entraîne qu'un worker | redémarrer le backend après le 1ᵉʳ `/train` (reload modèle sur tous les workers) |
+| `500 Regressor 'weather_score' missing` | `load_model()` ne restaurait pas `self.regressors` | corrigé : régresseurs relus depuis `model.extra_regressors` |
+| mojibake `â€"` / `Â°` dans le reasoning | re-décodage cp1252 lors d'un pipe `python -m json.tool` sous Git-Bash | artefact d'**affichage** ; le payload JSON est du UTF-8 correct (vérifié U+2014/U+00B0) |
 
 ### Ce que l'e2e valide réellement
 
@@ -144,10 +168,16 @@ No-op par design : dans `AetherixEngine`, `RAGService`/`MemoryService` sont
 construits **sans session** (`db=None`) → récupération patterns/mémoire renvoie vide.
 C'est le comportement de l'engine en production ; l'e2e le reproduit fidèlement.
 
-Observation : avec `is_mock=True` (Prophet non entraîné) + le system prompt « agent
-constitution », **Claude refuse explicitement** de présenter la valeur mock comme un
-forecast plausible. La couture e2e est validée, mais c'est un signal **prompt
-engineering** à traiter séparément (entraîner Prophet et/ou ajuster le system prompt).
+Démo polie (résolu 2026-06-11) : avec `is_mock=True` (Prophet non entraîné) + le
+system prompt « agent constitution », **Claude refusait** de présenter la valeur mock
+comme un forecast. Corrigé en entraînant Prophet (§3.3) → `is_mock=false` →
+reasoning cohérent. Voir la preuve capturée : [`evidence/e2e-demo-2026-06-11.md`](./evidence/e2e-demo-2026-06-11.md).
+
+Deux fixes de correctness révélés par cet e2e (commités avec) :
+- `AetherixEngine` n'exposait pas `.forecaster` → `POST /train` était cassé (AttributeError).
+- `AetherixEngine` ne rechargeait pas le modèle persisté au boot (restart-resilience
+  promise mais absente), et `PredictionEngine.load_model()` ne restaurait pas
+  `self.regressors` → `500 Regressor missing` sur tout modèle chargé.
 
 ---
 

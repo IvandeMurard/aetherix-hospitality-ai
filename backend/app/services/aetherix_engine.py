@@ -1,4 +1,6 @@
+import logging
 from datetime import date
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from sqlalchemy.future import select
@@ -13,6 +15,12 @@ from app.services.reasoning_service import ReasoningService
 from app.services.staffing_service import StaffingService
 from orchestrator.agent import OrchestratorAgent
 
+logger = logging.getLogger(__name__)
+
+# Persisted Prophet model (written by POST /api/v1/predictions/train). Kept in sync
+# with predictions.py::_MODEL_PATH — both resolve to backend/data/demo/prophet_model.json.
+_DEMO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "data" / "demo" / "prophet_model.json")
+
 
 class AetherixEngine:
     """F&B execution node — delegates orchestration to OrchestratorAgent (ADR-0004).
@@ -24,11 +32,23 @@ class AetherixEngine:
 
     def __init__(self):
         forecaster = PredictionEngine()
+        # Restart-resilience (Décision #13): reload the persisted Prophet model if
+        # present so is_mock=False survives process restarts. Non-fatal on failure.
+        try:
+            forecaster.load_model(_DEMO_MODEL_PATH)
+            if forecaster.is_trained:
+                logger.info("Prophet model reloaded from %s", _DEMO_MODEL_PATH)
+        except Exception:
+            logger.warning("Prophet model reload skipped (non-fatal)", exc_info=True)
         rag = RAGService()
         reasoner = ReasoningService()
         staffer = StaffingService()
         memory = MemoryService()
         constitution_svc = AgentConstitutionService()
+
+        # Exposed so POST /api/v1/predictions/train can (re)train the live singleton
+        # (the OrchestratorAgent below shares this exact instance by reference).
+        self.forecaster = forecaster
 
         self._agent = OrchestratorAgent(
             forecaster=forecaster,
