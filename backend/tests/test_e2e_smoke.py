@@ -93,8 +93,14 @@ def _predict_client(monkeypatch) -> TestClient:
     # HOS-149: bypass MCP bearer auth — smoke tests exercise business logic, not auth.
     app.dependency_overrides[_predict_auth] = lambda: fake_tok
     # HOS-151: predict() depends on get_db — override to avoid a real DB connection.
+    # HOS-225: predict() now queries RestaurantProfile to enrich local events;
+    # return a result that yields no profile so enrichment is a no-op here.
     async def _noop_db():
-        yield AsyncMock()
+        db = MagicMock()
+        no_profile = MagicMock()
+        no_profile.scalars.return_value.first.return_value = None
+        db.execute = AsyncMock(return_value=no_profile)
+        yield db
     app.dependency_overrides[get_db] = _noop_db
     return TestClient(app)
 
