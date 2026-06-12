@@ -22,7 +22,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.future import select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
