@@ -19,6 +19,7 @@ from app.db.models import CaptationBaseline, MCPApiToken, RestaurantProfile, Tra
 from app.db.session import get_db
 from app.mcp_core import ADMIN_TRAIN_SCOPE, MCPAuthError
 from app.mcp_server import verify_bearer
+from app.services.events_enrichment import enrich_events_context
 
 logger = logging.getLogger(__name__)
 
@@ -111,12 +112,6 @@ async def get_property_prediction(
     engine = request.app.state.engine
     prediction_date = target_date or date.today()
 
-    context = {
-        "weather": {"condition": "Clear", "temp": 22},
-        "events": [],
-        "occupancy": 0.85
-    }
-
     result = await db.execute(
         select(RestaurantProfile).where(RestaurantProfile.owner_id == current_user["id"])
     )
@@ -126,6 +121,14 @@ async def get_property_prediction(
         raise HTTPException(status_code=404, detail="No restaurant profile linked to this user.")
 
     property_id = profile.tenant_id
+
+    # HOS-225: wire real local events (PredictHQ, HOS-84) into the forecast
+    # context so reasoning cites concrete drivers instead of "events: []".
+    context = {
+        "weather": {"condition": "Clear", "temp": 22},
+        "events": await enrich_events_context(db, profile, prediction_date),
+        "occupancy": 0.85,
+    }
 
     try:
         result = await engine.get_forecast(property_id, prediction_date, service_type, context)
@@ -145,6 +148,7 @@ async def predict(
     body: PredictRequest,
     response: Response,
     tok: MCPApiToken = Depends(_predict_auth),
+    db: AsyncSession = Depends(get_db),
 ):
     """MCP-callable endpoint: given a hotel_id and date, returns a structured
     demand forecast with LLM reasoning (Claude Sonnet) or a heuristic fallback
@@ -172,6 +176,16 @@ async def predict(
         "events": [],
         "occupancy": None,
     }
+
+    # HOS-225: enrich with real local events only when the caller didn't supply
+    # them. An explicit non-empty `events` list is respected (back-compat: MCP
+    # callers that pass their own context stay authoritative).
+    if not ctx.get("events"):
+        prof_result = await db.execute(
+            select(RestaurantProfile).where(RestaurantProfile.tenant_id == hotel_id)
+        )
+        profile = prof_result.scalars().first()
+        ctx = {**ctx, "events": await enrich_events_context(db, profile, body.target_date)}
 
     try:
         result = await engine.get_forecast(hotel_id, body.target_date, body.service_type, ctx)

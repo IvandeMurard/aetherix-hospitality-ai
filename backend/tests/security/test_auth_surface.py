@@ -132,8 +132,14 @@ def _make_predictions_app(
     # HOS-157: engine injected from app.state (no module-level singleton)
     app.state.engine = MagicMock()
     # HOS-151: avoid real DB connections in unit tests
+    # HOS-225: predict() queries RestaurantProfile for event enrichment — return
+    # a result yielding no profile so enrichment is a no-op in auth-surface tests.
     async def _noop_db():
-        yield _AsyncMock()
+        db = MagicMock()
+        no_profile = MagicMock()
+        no_profile.scalars.return_value.first.return_value = None
+        db.execute = _AsyncMock(return_value=no_profile)
+        yield db
     app.dependency_overrides[get_db] = _noop_db
     if predict_dep_override is not None:
         app.dependency_overrides[_predict_auth] = predict_dep_override
