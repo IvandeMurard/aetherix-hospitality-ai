@@ -94,6 +94,7 @@ get_emotional_risk(guest_id, stay_context) → { risk_score, drivers, suggested_
 - **Vol en temps réel** (FlightAware API ou équivalent) — retards, annulations
 - **Property Social Sentiment** (Phase 4 internal context) — reviews TripAdvisor/Booking propriété-spécifiques
 - **Feedback Aetherix** (`submit_feedback_to_memory`) — réactions managers, outcomes opérationnels guest-liés
+- **Guest feedback at scale** (Customer Alliance ou équivalent, partenariat Phase 4-5 à explorer) — *"guest context at scale"* multilingual structuré continu. Per Nicholas Reid (juin 2026) : feedback = double-sided dans agentic stack — **output** (evaluation layer : did agent's actions land?) + **input** (steering signal : where to point attention?). Complémentaire de la mémoire interne Anima ; couvre le côté *"how it landed with the guest"* qui n'est pas dans le world model Mews. Boucle complète possible : Customer Alliance capture *"breakfast queue too long"* → Anima alimente Aetherix → ajustement staffing forecast → exécution → Customer Alliance confirme amélioration. Partenariat possible Phase 4-5 (pas concurrent — Anima = operator-side context, Customer Alliance = guest-side context).
 
 #### Stack cible
 

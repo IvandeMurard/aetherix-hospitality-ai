@@ -221,6 +221,77 @@
 
 ---
 
+## Mesh-wide monitoring — Anima · Tacet (scope élargi 2026-06-15)
+
+Reminder PM 06-15 : la veille hebdo Cowork couvre tous les nodes du Mesh, pas seulement Aetherix. Anima (Guest Context Node) en particulier nécessite veille active sur architectures agentiques + guest context platforms (PoC hackathon livré juin 2026, cf. Décision #20). Tacet (Sensory Node) = light scope, proactif uniquement si contenu pertinent partagé.
+
+### Anima (Guest Context Node) — surveillance priorité 1
+
+**Scope** : architectures agentiques · multi-agent frameworks · world models hospitality · guest feedback platforms · DPIA/RGPD case studies guest data.
+
+**Repo séparé** : `C:\Users\ivand\OneDrive\Documents\anima-poc` (PoC hackathon juin 2026, Managed Agents + Fable 5).
+
+#### W-Anima-1 — Customer Alliance (partenaire potentiel Phase 4-5)
+
+**Profil rapide** : guest feedback platform repositionnée "guest context at scale" (multilingual, structuré, continu). Per Nicholas Reid (juin 2026) : feedback = double-sided dans agentic stack (evaluation layer + steering signal).
+**Status** : **partenaire potentiel, PAS concurrent**. Couvre côté guest-side context qu'Anima ne capture pas en interne. Boucle complète possible : Customer Alliance → Anima → Aetherix → exécution → Customer Alliance confirme.
+**Référence** : `docs/mesh-architecture.md` §Anima Sources de données Phase 4.
+
+**Triggers à monitorer (trimestriel)** :
+- API / MCP server Customer Alliance disponible publiquement
+- Partnerships PMS public (Apaleo / Mews integration)
+- Funding rounds visibles
+- Roadmap publique mentionning agent integration
+
+**Action si trigger** : outreach exploratoire partnership Phase 4-5.
+
+#### W-Anima-2 — Architectures agentiques + world models hospitality
+
+**Profil rapide** : surveillance générale des publications, frameworks et papers sur agents IA, multi-agent orchestration, world models hospitality, agentic stacks.
+
+**Sources prioritaires à scanner** :
+- Anthropic Managed Agents updates (Anima PoC stack — Fable 5, claude-fable-5)
+- Multi-agent framework releases (LangGraph evolutions, CrewAI, Microsoft Autogen, OpenAI Agents SDK)
+- World model publications hospitality (Mews position paper *"hospitality doesn't have a software problem"* à trouver URL prochaine veille)
+- Customer-context platforms agentic (HiJiffy AI agents, Duve, Akia, Canary expansion AI agents)
+- Academic papers : agentic memory architectures, scope-gated retrieval, DPIA/AI-Act compliance
+
+**Triggers à monitorer (chaque lundi)** :
+- Nouveau framework agentic majeur release (impact Anima architecture)
+- World model paper hospitality publié (alignement vocabulaire stratégique)
+- DPIA/AI-Act case study guest data (impact Décision #20 gate)
+- Partnership Anthropic × hospitality (signal écosystème)
+
+**Mitigation pré-cadrée** : aligner narrative Anima sur consensus émergent (cf. snippet H-9 *"operator intelligence layer"* pour analogue) · monitor compatibilité PoC hackathon stack avec frameworks émergents.
+
+### Tacet (Sensory Node) — surveillance priorité 3 (light, proactif)
+
+**Scope** : environmental data agents · IoT hospitality · sensor data platforms · Paris Open Data MCP nodes.
+
+**Repo séparé** : hors Linear Aetherix (Décision #18).
+
+**Cadence** : **proactif uniquement** — pas de scan systématique chaque lundi. Activé si Ivan partage proactivement du contenu pertinent (papier, post, partnership) OU si signal majeur croise watchlist Aetherix (e.g. Apaleo expose sensor data API native).
+
+**Triggers** :
+- Paris Open Data nouveaux datasets utiles (events, météo détaillée)
+- IoT hospitality platforms launching MCP servers
+- Sensor data agentic frameworks (rare mais à monitorer trimestriel)
+
+**Mitigation** : reste hors-scope opérationnel jusqu'à Phase 3 Track B livré (HOS-174 MCP node Paris Open Data).
+
+### Cross-cutting (thèses marché)
+
+**Knowledge extraction thesis** (5 voix consolidées 06/2026 : Murati · Hyperspell · Blomfield · Anthropic playbook · **Garry Tan YC president**) → Aetherix Private Memory + Hive + cold-start + Graphe CTE = aligned consensus marché.
+
+**MCP industry consensus** (Aven · Booking · Expedia · Turkish · Amadeus · Sabre adopting per Skift) → MCP devient table stakes, plus différenciateur unique. À monitor pour signal F&B specific.
+
+**PMS verticalization vs hub model** : 2 stratégies opposées identifiées
+- Mews OS Unfold 2026 + Cloudbeds Ask Signals = verticalization walled garden
+- Apaleo Agent Hub + RentalReady (philosophy Lavie juin 2026) = hub model intégrations
+- Aetherix aligned avec hub model (MCP-native + Apaleo Marketplace strategy)
+
+---
+
 ## Process Cowork — intégration veille hebdo
 
 **Suggestion add à prompt Cowork lundi matin** :
