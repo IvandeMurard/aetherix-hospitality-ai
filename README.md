@@ -102,7 +102,7 @@ flowchart LR
 | 🍽️ **Aetherix** | F&B execution: forecasting, staffing, memory, receipts | ✅ **Live (staging)** |
 | 🌦️ **Tacet** | Sensory: weather, noise, open data, structured risk scores | 🔨 Phase 3 |
 | 🧭 **Orchestrator** | Supervisory: MCP routing, business rules, agentic loop | 📐 Phase 3 stub, separate repo Phase 4 |
-| 💛 **Anima** | Guest context: emotional state, CRM, flight delays, profile | 🧪 PoC shipped (Anthropic hackathon, Jun 2026) · production Phase 4 (DPIA-gated) |
+| 💛 **Anima** | Guest Cognition Layer: emotional state, CRM, flight delays, 4-layer profile · outcome-capture instrumented Phase 4 · HiveMemory v2 / Learning Engine Phase 5 | 🧪 PoC shipped (Anthropic hackathon, Jun 2026) · production Phase 4 (DPIA-gated) |
 
 Full vision: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 
@@ -220,7 +220,7 @@ flowchart TD
 | 3 — Pilot | 🔨 | Design partner · Orchestrator separation · HiveMemory algorithm |
 | 4 — Scale | 📋 | Mews · POS ingestion · Federated HiveMemory · Context Graph · Anima |
 
-Architecture decisions (25 documented): [`docs/context/decisions-architecturales.md`](docs/context/decisions-architecturales.md) · Roadmap: [Linear](https://linear.app/hospitalityagent/team/HOS/all)
+Architecture decisions (26 documented): [`docs/context/decisions-architecturales.md`](docs/context/decisions-architecturales.md) · Roadmap: [Linear](https://linear.app/hospitalityagent/team/HOS/all)
 
 ---
 

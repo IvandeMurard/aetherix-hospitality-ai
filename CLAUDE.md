@@ -63,6 +63,7 @@
 | 23 | POS integration scope + adapter pattern (Phase 4) | 06/06/2026 |
 | 24 | Graphe de contexte Postgres recursive CTE (Phase 4) — Path C retenu cash-driven, AGE bloqué Supabase | 06/06/2026 |
 | 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — exécution Étape 2 (post-pilote OU pré-fundraise) | 16/06/2026 |
+| 26 | Anima = Guest Cognition Layer · confidence-weighted claims (schema, pas couche) · Segment double portée (local + Hive prior) · Learning Engine tier Mesh séparé · outcome-capture instrumentation Phase 4 | 17/06/2026 |
 
 ---
 
@@ -91,6 +92,10 @@
 | 🟡 Open | Apaleo Copilot scope F&B (canari) | Monitoring mensuel via watchlist |
 | 🟡 Open | Food waste tracking | À trancher Phase 4 vs Phase 5 |
 | 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0009 futur |
+| 🟡 Open | Politique exploration éthique (Anima / Learning Engine) | Design Learning Engine Phase 5 |
+| 🟡 Open | Reward multi-objectif (CSAT vs marge vs fidélisation) | Design Learning Engine Phase 5 |
+| 🟡 Open | Méthode off-policy evaluation (IPW / DR / DR-Learner) | Volume données post-pilote Phase 4 |
+| 🟡 Open | Floor k-anonymat couche Segment | Avant build Segment production (Epic 4) |
 
 Resolved decisions archive (Graphe de contexte Apache AGE 06/06, POS integration scope 06/06, Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.
 

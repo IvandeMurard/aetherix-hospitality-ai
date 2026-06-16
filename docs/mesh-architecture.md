@@ -52,10 +52,11 @@ Le Hospitality Agentic Mesh est une plateforme de nœuds IA spécialisés, indé
 
 ---
 
-### Anima — Guest Context Node
+### Anima — Guest Cognition Layer
 **Repo :** à créer Phase 4
-**Rôle :** Mémoire relationnelle augmentée par guest. Vectorise et maintient l'état émotionnel et logistique : retard de vol, historique CRM, humeur inférée, statut VIP, préférences idiosyncratiques, plaintes passées.
+**Rôle :** Couche cognitive individuelle par guest. Maintient et consolide l'état émotionnel, logistique et relationnel : retard de vol, historique CRM, humeur inférée, statut VIP, préférences idiosyncratiques, plaintes passées. Chaque claim est confidence-weighted (cf. ADR-0011 D2).
 **Principe directeur :** permettre à l'Orchestrateur de décider contextuellement *sans baisser les prix* — la bonne réponse au bon guest, au bon moment.
+**Périmètre strict (ADR-0011 D1) :** compréhension individuelle uniquement. Pas de policy, de fédération, ni de décision — ces responsabilités appartiennent au Hive/Mesh et à l'Orchestrateur.
 
 #### Architecture mémoire — 4 couches temporelles
 
@@ -66,7 +67,7 @@ Contrairement à Aetherix (mémoire opérationnelle largement long-terme — un 
 | **1. Working memory** | Redis | Durée du séjour | "Vol en retard de 3h ce soir · vient de se plaindre du bruit · arrivé fatigué" | Immédiates : compensation, ton du message, geste opérationnel |
 | **2. Episodic memory** | PostgreSQL (time-filtered) | Séjour + 30j | "Ce séjour : 2× restaurant, menu végétarien, SPA mardi, demande oreillers" | Contextuelles : recommandations, upsell pertinent, late check-out |
 | **3. Semantic memory** | pgvector (permanent) | ∞ | "VIP depuis 2023 · 12 séjours · sensible bruit · 19°C · anniversaire juin · famille de 4" | Profil : priorité intervention, niveau de geste commercial, reconnaissance |
-| **4. Cross-guest intelligence** | Aggregations anonymisées | ∞ | "Guests de profil similaire valorisent F&B > SPA · demandent late check-out à 73%" | Segment : prédictions de préférences sans historique direct |
+| **4. Segment** (double portée) | Aggregations anonymisées | ∞ | **Local :** "Guests similaires à cet hôtel : 73% late check-out, F&B > SPA" · **Hive prior (Phase 5) :** "Même profil, tous hôtels réseau" | Prédictions sans historique direct · premier séjour traité comme habitué · Hive prior = 80% avant séjours, 20% après accumulation guest |
 
 **Sans cette distinction**, l'Orchestrateur doit soit tout charger (latence + bruit), soit décider sans le bon contexte (mauvaise décision). Avec, il interroge le scope strictement nécessaire.
 
@@ -75,7 +76,9 @@ Contrairement à Aetherix (mémoire opérationnelle largement long-terme — un 
 ```
 query_guest_profile(guest_id, context_query, scope) → ProfileSnapshot
   scope: "working" | "current_stay" | "full_history" | "segment" | "all"
-  ProfileSnapshot: { working?, episodic?, semantic?, segment?, confidence }
+  ProfileSnapshot: { working?, episodic?, semantic?, segment? }
+  # Claims Semantic : confidence-weighted { value, confidence, evidence_count, last_confirmed, decay_rate }
+  # scope="all" = anti-pattern (latence + leakage) — loggé comme warning
 
 update_guest_state(guest_id, event) → { state_id, applied_to: [layers] }
   event types: check_in, check_out, complaint, feedback, flight_status,
