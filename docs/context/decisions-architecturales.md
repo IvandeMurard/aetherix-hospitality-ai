@@ -169,6 +169,18 @@ Trigger : (a) convergence session PM 04/06 thèse *"knowledge extraction = the r
 
 **Débloque** : Anima Phase 4 Guest Context Node (forward-compat schema D5, DPIA gate reste blocker Anima ADR séparé) · Aetherix Voice Phase 5+ (Lore-inspired knowledge graph relationnel).
 
+### 25 — Multi-repo strategy + governance (16/06/2026)
+
+Séparation **vitrine publique** (vision Mesh) / **execution nodes privés**. Méta-repo `hospitality-agentic-mesh` (PUBLIC, MIT) = README vision + `mesh-architecture.md` (migré) + ADRs cross-cutting (0004, 0010) + reusable workflows CI. Chaque nœud (Aetherix, Tacet, Orchestrator, Anima) = repo privé propriétaire.
+
+**Q1+Q5 — contradiction du brief résolue :** Aetherix se scinde en deux entités GitHub — `aetherix-hospitality-ai` (stub public **archivé**, conserve stars/historique + sert le redirect banner) + `aetherix` (privé, code F&B actif). Seule topologie satisfaisant à la fois IP privée (Q1) et redirect public (Q5). Divergence nulle (stub read-only).
+
+**Q3 — push-back Architect sur convention PM #5 :** BMad référencé par **URL** (pas submodule par défaut) ; submodule uniquement si une tooling *exécute* les fichiers BMad. **Q4 :** reusable workflows GitHub depuis méta-repo public (schema-drift #16, eval-gate #22, lint, security-scan) — appelables sans grant car repo public. **Q6 :** Étape 1 = status quo · **Étape 1.5** = refonte README vision-first (exception sanctionnée, additive) · **Étape 2** = sprint migration 3-5j au trigger (pilote livré + NDA OU pré-fundraise). **Q7 :** secrets runtime Fly intouchés, seuls les GitHub Actions secrets à recréer dans le repo privé. **Q8 :** méta-repo `CLAUDE.md` séparé (cross-cutting) + scinder l'index actuel Étape 2.
+
+**Numérotation :** cette décision = #25. Le « Eval rollout discipline » spéculé #25 dans `market_signals_2026Q2.md` prendra #26 s'il est formalisé.
+
+**Document canonique :** [`docs/adr/0010-multi-repo-strategy.md`](../adr/0010-multi-repo-strategy.md) (Q1-Q9 tranchées, plan migration séquencé, specs submodule + reusable workflow + redirect banner, DoD). Brief d'entrée `-DRAFT` supprimé (superseded).
+
 ---
 
 ## Notes de maintenance
