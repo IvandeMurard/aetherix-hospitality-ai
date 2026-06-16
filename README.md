@@ -51,7 +51,7 @@ After 90 days on a live property:
 | Planning time | From hours to one validated message |
 | Forecast accuracy (J+1) | 15.09% MAPE (synthetic backtest, 22% gate PASS) |
 
-**The system learns your property.** On Day 1, Aetherix calibrates from similar properties in the Mesh. By Day 90, it knows yours: which Saturdays spike, which corporate clients drive room service, which events the manager always over-staffs for. A new property never starts from a blank slate.
+**The system learns your property.** On Day 1, Aetherix ingests your PMS and POS history and starts calibrating to your property's real patterns immediately. Where historical data is sparse (new property, new service, no POS yet), HiveMemory fills the gap with anonymized patterns from similar properties in the Mesh — without sharing raw data. By Day 90, the system knows yours specifically: which Saturdays spike, which corporate clients drive room service, which events the manager always over-staffs for.
 
 ---
 
