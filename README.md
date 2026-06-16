@@ -191,7 +191,7 @@ flowchart TD
 | 3 — Pilot | 🔨 | Design partner · Orchestrator separation · HiveMemory algorithm |
 | 4 — Scale | 📋 | Mews · POS ingestion · Federated HiveMemory · Context Graph · Anima |
 
-Architecture decisions (24 documented) → [`docs/context/decisions-architecturales.md`](docs/context/decisions-architecturales.md) · Roadmap → [Linear](https://linear.app/hospitalityagent/team/HOS/all)
+Architecture decisions (25 documented) → [`docs/context/decisions-architecturales.md`](docs/context/decisions-architecturales.md) · Roadmap → [Linear](https://linear.app/hospitalityagent/team/HOS/all)
 
 ---
 
