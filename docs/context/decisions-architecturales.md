@@ -91,7 +91,9 @@ Le Guest Context Node Anima (Phase 4) nécessite une séparation stricte des cou
 - **Semantic** — pgvector permanent · profil
 - **Segment** — k-means anonymisé cross-guests
 
-MCP tool `query_guest_profile` prend un paramètre `scope` obligatoire. **Gate non-négociable avant tout build :** analyse RGPD/CNIL + DPIA formelle (profil émotionnel = donnée personnelle sensible). HiveMemory (Aetherix) et SensoryMemory (Tacet) servent d'embryons technologiques. Détail → `docs/mesh-architecture.md` §2 Anima.
+MCP tool `query_guest_profile` prend un paramètre `scope` obligatoire. **Gate non-négociable avant tout build :** analyse RGPD/CNIL + DPIA formelle (profil émotionnel = donnée personnelle sensible). HiveMemory (Aetherix) et SensoryMemory (Tacet) servent d'embryons technologiques. PoC hackathon (juin 2026, synthétique, jetable) a validé l'architecture 4-couches + scope-gating + split *Anima informe / Orchestrateur décide*. Détail → `docs/mesh-architecture.md` §2 Anima.
+
+**Amendé par Décision #26 (17/06/2026) :** Anima renommée "Guest Cognition Layer" · Segment enrichie double portée (local + Hive prior) · `ProfileSnapshot` confidence-weighted (schema, pas couche) · Learning Engine = tier Mesh séparé (pas 5e couche) · instrumentation outcome-capture Phase 4. DPIA gate et 4 couches **inchangés**. Détail complet → `docs/adr/0011-learning-engine-hive-v2.md`.
 
 ### 21 — Apaleo MCP — convention de nommage native + sales evidence (26/05/2026, sales 28/05/2026)
 
@@ -180,6 +182,30 @@ Séparation **vitrine publique** (vision Mesh) / **execution nodes privés**. M�
 **Numérotation :** cette décision = #25. Le « Eval rollout discipline » spéculé #25 dans `market_signals_2026Q2.md` prendra #26 s'il est formalisé.
 
 **Document canonique :** [`docs/adr/0010-multi-repo-strategy.md`](../adr/0010-multi-repo-strategy.md) (Q1-Q9 tranchées, plan migration séquencé, specs submodule + reusable workflow + redirect banner, DoD). Brief d'entrée `-DRAFT` supprimé (superseded).
+
+### 26 — Anima : Guest Cognition Layer + confidence-weighted claims + Segment dual-scope + HiveMemory v2 (Learning Engine tier Mesh) (17/06/2026)
+
+**Trigger :** post-hackathon Anima PoC (juin 2026) + revue architecture multi-parties (sessions 13/06–17/06) — trois évolutions par rapport à Décision #20.
+
+**D1 — Rename Anima "Guest Cognition Layer" :** les quatre couches étaient toujours cognitives, pas juste du stockage. "Mémoire" sous-vend. Garde anti-god-object non-négociable : Anima = compréhension individuelle uniquement. Pas de policy, pas de fédération, pas de décision.
+
+Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What have we learned from similar situations?*) · **Aetherix/Orchestrateur** (*What should we do now?*).
+
+**D2 — Confidence-weighted claims :** discipline de schema `ProfileSnapshot`, pas une couche. Champs `confidence / evidence_count / last_confirmed / decay_rate` sur toute claim Semantic. Terme "belief" rejeté (incompatible fiabilité produit). L'Orchestrateur pondère automatiquement les claims stales via ces champs.
+
+**D3 — Segment double portée :** couche Segment = deux fonctions explicites : **Local** ("guests like this, at this hotel" — cohortes anonymisées propriété, nightly recompute) + **Hive prior** ("guests like this, across all network hotels" — agrégats fédérés, Phase 5). Similarité inter-hotels apprise (embeddings metadata hotel), pas hard-codée. Partial pooling hiérarchique + détection divergence (safety valve negative transfer). Shift 80/20 → 20/80 (Hive prior → Guest knowledge) au fil des séjours : analogue concierge expérimenté.
+
+**D4 — Learning Engine tier Mesh séparé (Phase 5) + instrumentation Phase 4 :** policy/outcome learning = tier Mesh distinct, pas une 5e couche Anima. Dès Phase 4 : logger triple **de-identified** `(context-features, action, propensity, outcome)` à chaque décision Orchestrateur, dans un store séparé d'Anima (personal-data-free by construction). `propensity` non-négociable pour off-policy evaluation future (IPW / doubly-robust). HiveMemory v2 (Phase 5) : partage de priors/policies appris, pas de données.
+
+**D5 — Reframing moat :** le moat est la position dans la boucle act-and-measure (seul acteur qui agit + capture + attribue causalement + fédère), pas la taille du corpus.
+
+**Vision validée (3 niveaux) :** "Comprend comme un humain" (Anima) · "Mesure comme une machine" (outcome capture) · "Apprend comme un réseau" (HiveMemory v2 / Learning Engine Phase 5).
+
+**Story 3.5 (HOS-246) :** outcome-capture instrumentation — actionnable Phase 4.
+
+**Décisions ouvertes déplacées open-decisions.md :** politique exploration éthique · reward multi-objectif · méthode off-policy evaluation · floor k-anonymat Segment.
+
+**Document canonique :** `docs/adr/0011-learning-engine-hive-v2.md`.
 
 ---
 
