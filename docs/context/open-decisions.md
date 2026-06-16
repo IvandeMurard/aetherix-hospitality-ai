@@ -105,6 +105,16 @@
 
 ## Resolved (archive)
 
+### [x] Multi-repo strategy + governance — RÉSOLU 16/06/2026 → ADR-0010 (Décision #25)
+
+**Décision :** méta-repo public `hospitality-agentic-mesh` (MIT, vitrine vision Mesh) + execution nodes privés (Aetherix, Tacet, Orchestrator, Anima). Aetherix scindé en stub public archivé (`aetherix-hospitality-ai`, redirect) + repo privé actif (`aetherix`) — résout la contradiction brief Q1 (IP privée) ↔ Q5 (redirect public). BMad par URL (pas submodule par défaut, push-back Architect sur convention PM #5). Reusable workflows CI exposés par le méta-repo public (schema-drift #16, eval-gate #22). `mesh-architecture.md` migré vers méta-repo. Conventions PM #1-7 (06-15) + Q1-Q9 tranchées.
+
+**Phasing :** Étape 1 = status quo (rien ne bouge maintenant) · **Étape 1.5** = refonte README vision-first (exception sanctionnée, additive, faite 16/06) · **Étape 2** = sprint migration 3-5j déclenché au trigger (pilote Phase 3 livré + design partner NDA, OU pré-approche investisseurs Phase 4).
+
+**Date :** 16/06/2026 (Architect-finalisé, PM sign-off). **Document canonique :** `docs/adr/0010-multi-repo-strategy.md`.
+
+**Application downstream :** CLAUDE.md §Décisions architecturales #25 · `docs/context/decisions-architecturales.md` H3 §25 · README refondu (Étape 1.5) · Linear epic Étape 2 (migration sprint) à créer · numérotation : « Eval rollout discipline » spéculé → #26 si formalisé.
+
 ### [x] Graphe de contexte Postgres recursive CTE — RÉSOLU 06/06/2026 → ADR-0008 (Path C accepted)
 
 **Décision :** Phase 4 confirmé · **Tech retenue = Postgres recursive CTE sur Supabase managed** (Path C, PM sign-off 06/06/2026 pour raison financière) · Apache AGE rejeté car non supporté Supabase managed jun 2026 (vérifié GitHub Discussion supabase/#40285 + Supabase docs extensions) · Reco Architect initiale = Path A (Fly Postgres dédié + AGE + FDW, +$15-30/mois) non-suivie pour cash discipline pre-pilote · Schema = 8 node tables + 9 edge tables `aetherix_graph.*` + RLS Postgres natives 17 policies · Coexistence permanente pgvector + CTE (pas de cutover — pgvector reste source recall sémantique flou, CTE source recall relationnel/path via single-transaction `WITH RECURSIVE` + UNION ALL avec pgvector cosine) · `MemoryRecallService.recall()` étendu backward-compat param `recall_strategy: Literal["cosine_only","path_find","hybrid","cohort_traversal"]` default `"cosine_only"` zéro régression callers Phase 0-3 · Cohort matching v3 multi-dim path traversal (γ × cos_pms + δ × cos_pos + ε × path_match_score) extension ADR-0006 D4 · Forward-compat schema Anima Phase 4 (`Guest`/`Stay`/`Sentiment` réservés non créés, DPIA gate reste blocker Anima) · MCP tool atomique `query_context_graph(query_type, depth)` scope `graph:read` whitelist 6 query types Phase 4 (templates SQL CTE, pas Cypher) · Tenant isolation RLS Postgres natives (simplifié vs Path A `_inject_tenant_filter`) + canary eval `graph-tenant-isolation-001` blocking + `GRAPH_BACKEND=disabled` kill-switch · SLO latence p95 amendé < 1200ms (vs 800ms Path A — verbosité CTE acceptable cash-driven trade-off).
