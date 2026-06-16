@@ -82,6 +82,96 @@
 
 **Référence :** `docs/adr/0008-context-graph.md` §13 amendment complet.
 
+### Politique d'exploration éthique (Anima / Learning Engine) (17/06/2026)
+
+**Statut :** Open — Phase 5 (pas urgent Phase 4)
+**Origine :** ADR-0011 D4 — décision explicitement déférée
+**Trigger :** Kickoff Learning Engine Phase 5
+
+**Tension centrale :** un Learning Engine qui apprend "quelle action → quel résultat" a besoin d'*explorer* — parfois délibérément ne pas donner l'action optimale connue pour tester une alternative. En hôtellerie, cela signifie expérimenter sur l'expérience d'un guest réel.
+
+**Conflict avec :**
+- "Every guest deserves the best" — la culture hospitalité s'oppose à l'idée d'offrir délibérément un moindre geste
+- Décision #6 (no auto-actions) — les actions restent human-in-the-loop, donc "explorer" requiert que le manager accepte consciemment une recommandation sous-optimale
+- DPIA gate (Décision #20) — exploration automatisée sur des données individuelles sensibles
+
+**Options à trancher Phase 5 :**
+- **(A)** Exploration uniquement sur des cohortes / off-policy (jamais d'exploration dirigée sur un guest identifié) — plus lent à apprendre, DPIA-safe
+- **(B)** Exploration opt-in property (l'hôtel accepte explicitement un budget d'exploration en échange d'apprentissage accéléré) — contractuel, transparent
+- **(C)** Exploration purement via variation naturelle (log propensity des décisions existantes, pas d'exploration forcée) — IPW / doubly-robust suffit si propensity est loggée depuis Phase 4
+
+**Reco préliminaire :** Option C est la moins risquée et couvre le cas Phase 5 sans violation DPIA. Options A/B à reconsidérer si volume insuffisant après 12 mois.
+
+**Dépendances :** ADR-0011 D4 (propensity logging) · Décision #6 · DPIA gate Décision #20
+
+---
+
+### Définition multi-objectif du reward (Learning Engine) (17/06/2026)
+
+**Statut :** Open — Phase 5 (pas urgent Phase 4)
+**Origine :** ADR-0011 — décision explicitement déférée
+**Trigger :** Design Learning Engine Phase 5
+
+**Tension centrale :** "ce qui fonctionne" n'est pas une seule métrique. Les trois objectifs naturels sont en conflit partiel :
+
+| Objectif | Signal proxy | Tension |
+|----------|-------------|---------|
+| Guest satisfaction | CSAT · NPS · complaint absence | Maximiser CSAT peut coûter de la marge (geste commercial inutile) |
+| Marge opérationnelle | RevPAR · F&B margin | Optimiser marge peut nuire au guest (sous-geste) |
+| Fidélisation | Repeat booking · segment upgrade | Long-terme (mois) vs signal immédiat (heure) |
+
+**Options à trancher Phase 5 :**
+- **(A)** Scalarisation pondérée (α × CSAT + β × marge + γ × fidélisation) — simple, opaque, poids à calibrer par property
+- **(B)** Pareto front (multi-objectif non-scalaire) — correct conceptuellement, difficile à expliquer au manager
+- **(C)** Contrainte : maximiser CSAT sous contrainte de marge minimale par catégorie de geste — lisible par un opérateur hôtelier
+
+**Reco préliminaire :** Option C — naturel pour un hôtelier ("on peut offrir un snack si marge restante > X%"), auditables par le manager.
+
+**Dépendances :** KPI framework CLAUDE.md §KPI · pricing model (open decision HOS-179) · résultats pilote Phase 3
+
+---
+
+### Méthode off-policy evaluation (Learning Engine) (17/06/2026)
+
+**Statut :** Open — Phase 5 (mais propensity logging = Phase 4, cf. HOS-247)
+**Origine :** ADR-0011 D4 — décision explicitement déférée
+**Trigger :** Design Learning Engine Phase 5
+
+**Contexte :** "snack → NPS +12" n'est estimable causalement que si l'on corrige le biais de sélection (le staff offrait des snacks aux guests qui semblaient déjà satisfaits). La propensity loggée dès Phase 4 (HOS-247) permet d'appliquer des estimateurs off-policy.
+
+**Candidats :**
+- **IPW (Inverse Propensity Weighting)** — simple, instable si propensity proche de 0 ou 1
+- **Doubly Robust (DR)** — combine model-based + IPW, plus stable, plus complexe
+- **DR-Learner (Causal Forest)** — hétérogénéité conditionnelle de l'effet (quel geste pour *quel* profil de guest), le plus expressif mais data-hungry
+
+**Critère de choix :** volume de triples par cellule (context × action). Avec < 500 triples par cellule : IPW. > 2000 : DR. > 10K et hétérogénéité hypothétisée : DR-Learner.
+
+**Dépendances :** volume de données pilote Phase 3-4 · propensity logging HOS-247 (Phase 4 gate) · définition reward (open decision ci-dessus)
+
+---
+
+### Floor k-anonymat couche Segment (17/06/2026)
+
+**Statut :** Open — à trancher avant build Segment Phase 4
+**Origine :** ADR-0011 D3 — décision explicitement déférée
+**Trigger :** Build couche Segment production (Epic 4, HOS-231)
+
+**Enjeu :** la couche Segment produit des agrégats de cohortes anonymisés. Si une cohorte est trop petite, les agrégats peuvent être suffisamment distinctifs pour ré-identifier un guest individuel (ex : "business traveler, late arrival, suite, anniversaire demain" = 1 seule personne sur la période).
+
+**DPIA link :** ce floor est à la fois un contrôle privacy et le mécanisme qui rend la Hive prior RGPD-safe (Décision #20 + ADR-0011 D3).
+
+**Options :**
+- **(A)** Floor k=5 — minimum usuel de k-anonymat, très restrictif pour petits hôtels
+- **(B)** Floor k=10 — pratique courante en analytics santé / RH — conservateur
+- **(C)** Floor adaptatif selon taille property : k=5 (> 200 chambres) / k=10 (< 200 chambres) — proportionnel au risque de ré-identification
+- **(D)** Différentielle privacy (DP-noise) à la place du floor — plus rigoureux, significativement plus complexe, standard ML fédéré
+
+**Reco préliminaire :** Option C pour Phase 4 local. Option D à évaluer si la Hive prior fédérée Phase 5 nécessite des garanties formelles pour les régulateurs.
+
+**Dépendances :** DPIA gate Décision #20 · Epic 2 compliance gate (HOS-229) · Hive prior Phase 5 design
+
+---
+
 ### Interaction model — event-driven Phase 4-5 (04/06/2026)
 
 **Statut :** Open — pas urgent
