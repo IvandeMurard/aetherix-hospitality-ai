@@ -62,6 +62,7 @@
 | 22 | Eval-by-design gate CI obligatoire (Qonto + BMad meta-fix) | 04/06/2026 |
 | 23 | POS integration scope + adapter pattern (Phase 4) | 06/06/2026 |
 | 24 | Graphe de contexte Postgres recursive CTE (Phase 4) — Path C retenu cash-driven, AGE bloqué Supabase | 06/06/2026 |
+| 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — exécution Étape 2 (post-pilote OU pré-fundraise) | 16/06/2026 |
 
 ---
 
