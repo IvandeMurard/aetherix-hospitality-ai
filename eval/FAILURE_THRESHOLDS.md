@@ -147,6 +147,31 @@ ops alert; Tier 1 is a routine manager caveat (no ops noise).
 
 ---
 
+## Output sanity bounds on recommendations — HOS-252 (Epic 12 G-5)
+
+Centralized guard ensuring a recommendation is *physically sane* before dispatch
+(no "30 servers for 12 covers"). Enforced via
+`backend/app/services/output_sanity.py`, applied in
+`staffing_service.calculate_recommendation`. Out of bounds → clamp/flag + route
+to human, never a silent dispatch (AC2). Shares the property-capacity ceiling
+with G-3 (`feedback_guard.capacity_ceiling`). Config-driven.
+
+| Bound | Rule | Env var | Default |
+|---|---|---|---|
+| Capacity | covers above `total_seats × turns × mult` are **clamped** to the ceiling + routed to human | `FEEDBACK_COVERS_CAPACITY_MULTIPLIER` (shared with G-3) | `1.5` |
+| Headcount delta | headcount above `baseline × mult` → **flag** + route to human | `OUTPUT_SANITY_MAX_HEADCOUNT_DELTA_MULT` | `3.0` |
+| Budget (absorbed) | projected daily labor cost above the daily budget → **flag** | `StaffingConfig.labor_budget_gbp_per_day` | `1200` |
+
+The former ad-hoc budget alert in `staffing_service` is **absorbed** into this
+guard (AC5 — single source, no double logic). On any breach a typed trip row is
+written per flag to `agent_action_log` (`status="tool_error"`, `error_code` ∈
+{`output_over_capacity`, `output_absurd_delta`, `labor_budget_exceeded`},
+`tool_name="output.sanity"`) and a `dispatch_anomaly` ops alert is raised (AC3 /
+NFR2). Capacity is only enforced when the property's seats are known
+(degrade-open, same as G-3).
+
+---
+
 ## Coverage thresholds (eval gate — ADR-0007 §D3)
 
 Coverage = % of taxonomy categories with ≥ 1 PASS scenario in the current run.
