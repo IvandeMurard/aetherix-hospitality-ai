@@ -55,6 +55,27 @@ RECEIPT_TIMEZONE: str = _os.getenv("RECEIPT_TIMEZONE", "UTC")
 # Base URL of the frontend — used to build deep links in WhatsApp messages.
 FRONTEND_BASE_URL: str = _os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 
+# ─── Epic 12 G-1 — Heartbeat / dead-man's switch (HOS-248) ───────────────────
+# All values are config-driven (env vars) — no redeploy needed to retune.
+# Thresholds are documented in eval/HEARTBEAT_THRESHOLDS.md ("the contract").
+# How often the dead-man's-switch monitor polls for stale scheduled jobs (min).
+HEARTBEAT_MONITOR_INTERVAL_MIN: int = int(_os.getenv("HEARTBEAT_MONITOR_INTERVAL_MIN", "15"))
+# Debounce: suppress repeat alerts for the same job within this cooldown (min).
+HEARTBEAT_ALERT_COOLDOWN_MIN: int = int(_os.getenv("HEARTBEAT_ALERT_COOLDOWN_MIN", "60"))
+# Max tolerated gap since the last *successful* run, per scheduled job (minutes).
+# receipt_dispatcher fires daily → 26h (24h cadence + 2h grace).
+HEARTBEAT_WINDOW_RECEIPT_DISPATCHER_MIN: int = int(
+    _os.getenv("HEARTBEAT_WINDOW_RECEIPT_DISPATCHER_MIN", "1560")
+)
+# weekly_digest fires every Sunday → 8 days (7d cadence + 1d grace).
+HEARTBEAT_WINDOW_WEEKLY_DIGEST_MIN: int = int(
+    _os.getenv("HEARTBEAT_WINDOW_WEEKLY_DIGEST_MIN", "11520")
+)
+# dispatch_worker fires every 2 min → 15 min (cadence + ample grace for NFR2).
+HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN: int = int(
+    _os.getenv("HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN", "15")
+)
+
 # ─── Demo Mode ────────────────────────────────────────────────────────────────
 # When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
 # and loads synthetic Prophet training data from demo_data/prophet_training.json.
