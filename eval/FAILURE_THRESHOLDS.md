@@ -86,6 +86,38 @@ plausible (the guard never blocks legitimate feedback on an infra hiccup).
 
 ---
 
+## Agent error-rate / LLM-timeout alerting — HOS-249 (Epic 12 G-2)
+
+Turns `agent_action_log` from a passive register into an alarm. A rolling-window
+monitor (`backend/app/workers/error_rate_monitor.py`, registered on the shared
+scheduler) evaluates the last `ERROR_RATE_WINDOW_MIN` minutes on each poll and
+trips an ops alert (Linear, via `ops_dispatcher.dispatch_anomaly`) on breach.
+All config-driven (`backend/app/core/config.py`) — no redeploy.
+
+| Signal | Rule | Env var | Default |
+|---|---|---|---|
+| Non-ok rate (AC1) | `count(status != "ok") / total` over window, **only when** `total ≥ min samples` | `ERROR_RATE_NONOK_THRESHOLD` | `0.20` |
+| — min samples gate | rate check skipped below this many rows (low-volume false-alarm guard) | `ERROR_RATE_MIN_SAMPLES` | `20` |
+| Tool failures (AC2) | absolute count of `status="tool_error"` over window | `ERROR_RATE_TOOL_FAILURE_THRESHOLD` | `10` |
+| LLM timeouts (AC2) | absolute count of rows whose `error_code` matches the timeout substring | `ERROR_RATE_LLM_TIMEOUT_THRESHOLD` | `5` |
+| — timeout match | case-insensitive substring identifying a timeout `error_code` | `ERROR_RATE_TIMEOUT_ERROR_SUBSTR` | `timeout` |
+
+| Knob | Env var | Default | Notes |
+|---|---|---|---|
+| Poll interval | `ERROR_RATE_MONITOR_INTERVAL_MIN` | `15` | How often the window is evaluated |
+| Window width | `ERROR_RATE_WINDOW_MIN` | `60` | Rolling window evaluated each poll |
+| Alert debounce | `ERROR_RATE_ALERT_COOLDOWN_MIN` | `60` | Suppresses repeat alerts per metric (AC3) |
+
+**On any breach**: a typed trip row is written to `agent_action_log`
+(`status="tool_error"`, `error_code` ∈ {`error_rate_spike`, `tool_failure_spike`,
+`llm_timeout_spike`}, `tool_name="monitor.error_rate"`, `hotel_id="_system"`) and a
+`dispatch_anomaly` ops alert is raised (AC4 / NFR2). The monitor excludes its own
+trip rows from the window so an alert can't feed back into the next evaluation.
+The count checks fire regardless of volume (an absolute failure spike matters even
+at low traffic); only the *rate* check is gated on min samples.
+
+---
+
 ## Coverage thresholds (eval gate — ADR-0007 §D3)
 
 Coverage = % of taxonomy categories with ≥ 1 PASS scenario in the current run.
