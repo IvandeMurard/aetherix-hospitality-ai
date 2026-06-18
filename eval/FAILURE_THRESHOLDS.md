@@ -118,6 +118,35 @@ at low traffic); only the *rate* check is gated on min samples.
 
 ---
 
+## Confidence-tiered forecast guardrail at dispatch — HOS-251 (Epic 12 G-4)
+
+Generalizes the ADR-0005 cold-start auto-disable (degrade, don't extinguish) to
+the dispatch path. **Never blanks a recommendation** (Décision #6 HITL-always) —
+it produces a confidence *indicator*, not a switch. Enforced via
+`backend/app/services/forecast_guardrail.py`, applied in
+`aetherix_engine.get_forecast`. All config-driven (`backend/app/core/config.py`).
+
+| Tier | Trigger | Behaviour | Env var | Default |
+|---|---|---|---|---|
+| Nominal | `confidence ≥ WARN` and `live_mape ≤ MAPE_CATASTROPHE` | recommendation dispatched as-is | — | — |
+| **Tier 1** | `confidence < WARN` | dispatched **+ confidence caveat** (AgentAbstention flag `confidence_below_threshold`); covers unchanged | `FORECAST_CONFIDENCE_WARN` | `0.6` |
+| **Tier 2** | `confidence < CATASTROPHE` **or** `live_mape > MAPE_CATASTROPHE` | **baseline fallback** (tagged), staffing recomputed on baseline; flag `cold_start_meta_learner_drift` | `FORECAST_CONFIDENCE_CATASTROPHE` / `FORECAST_MAPE_CATASTROPHE` | `0.4` / `35` |
+
+Baseline source (Tier 2): `context["baseline_covers"]` → `context["recent_avg_covers"]`
+→ `FORECAST_BASELINE_DEFAULT_COVERS` (default `0` = disabled) → degrade to the
+Prophet point estimate (still delivered + tagged, never silent). The catastrophe
+confidence floor sits below Prophet's `0.5` confidence floor by default, so Tier 2
+is driven mainly by the live-MAPE breach; a richer trailing baseline + live-MAPE
+feed are a follow-up once EVAL-3/5 latency/MAPE telemetry is wired in.
+
+**On any non-nominal verdict**: a typed row is written to `agent_action_log`
+(`status="tool_error"`, `error_code`/`abstention_reason` = the tier reason,
+`abstention_layer="forecast"`, `tool_name="forecast.guardrail"`) so it feeds the
+Epic 11 abstention metrics (NFR2). Tier 2 additionally raises a `dispatch_anomaly`
+ops alert; Tier 1 is a routine manager caveat (no ops noise).
+
+---
+
 ## Coverage thresholds (eval gate — ADR-0007 §D3)
 
 Coverage = % of taxonomy categories with ≥ 1 PASS scenario in the current run.
