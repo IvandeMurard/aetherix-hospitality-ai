@@ -107,6 +107,38 @@ async def test_aberrant_value_rejected_not_propagated(db_session):
 
 
 @pytest.mark.asyncio
+async def test_aberrant_value_rejected_when_turns_unconfigured(db_session):
+    # Property with seats known but turns NULL (incompletely-onboarded / migrated
+    # profile) → turns_sum == 0. The capacity ceiling must still be enforced via
+    # the default-turns fallback, not bypassed (HOS-250 QA-S4 hardening).
+    db_session.add(
+        RestaurantProfile(
+            id=_uuid.uuid4(),
+            tenant_id="hotel_g3",
+            property_name="Test Hotel",
+            outlet_name="Test Restaurant",
+            total_seats=50,  # ceiling via default turns = 50 × 3 × 1.5 = 225
+            turns_breakfast=None,
+            turns_lunch=None,
+            turns_dinner=None,
+        )
+    )
+    await db_session.commit()
+    rec = await _seed_recommendation(db_session)
+    svc = ReceiptsService(db_session, llm=AsyncMock())
+
+    with (
+        patch("app.services.ops_dispatcher.dispatch_error", AsyncMock()),
+        patch("app.services.ops_dispatcher.dispatch_anomaly", AsyncMock()),
+    ):
+        result = await svc.persist_actual_covers(rec, 5000.0, request_id="req-null-turns")
+        await db_session.commit()
+
+    assert result is None
+    assert rec.actual_covers is None
+
+
+@pytest.mark.asyncio
 async def test_plausible_value_persists_as_before(db_session):
     await _seed_profile(db_session)
     rec = await _seed_recommendation(db_session)

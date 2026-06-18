@@ -347,36 +347,46 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
             from app.mcp_server import tool_submit_feedback_to_memory
 
             # Shared request_id links the feedback row and the P3-10 ground_truth
-            # row written below for the same inbound correction.
+            # row for the same inbound correction.
             req_id = str(_uuid.uuid4())
 
-            notes_text = feedback.notes
-            if feedback.actual_value is not None:
-                notes_text = f"actual={feedback.actual_value} {notes_text}".strip()
-
             try:
-                result = await tool_submit_feedback_to_memory(
-                    hotel_id=hotel_id,
-                    recommendation_id=recommendation_id,
-                    outcome=feedback.outcome,
-                    db=db,
-                    actual_value=feedback.actual_value,
-                    notes=notes_text,
-                    request_id=req_id,
-                )
-
-                # P3-10 (HOS-200): persist the manager's ground-truth covers onto
-                # the recommendation + a ground_truth memory row, in the same txn.
+                # HOS-250: run the plausibility guard FIRST. persist_actual_covers
+                # bounds the value and returns None when it is rejected. The numeric
+                # must clear the guard before it is allowed into the (embedded,
+                # retrievable) feedback memory below — otherwise a rejected/aberrant
+                # value still poisons the model via the feedback path even though
+                # the ground-truth write was blocked.
+                covers_rejected = False
                 if (
                     feedback.intent == "structured_correction"
                     and feedback.actual_value is not None
                     and recommendation is not None
                 ):
-                    await service.persist_actual_covers(
+                    persisted = await service.persist_actual_covers(
                         recommendation,
                         feedback.actual_value,
                         request_id=req_id,
                     )
+                    covers_rejected = persisted is None
+
+                # Only carry the numeric correction into feedback memory when it
+                # passed the guard. A rejected value still records the manager's
+                # qualitative note, minus the implausible number.
+                memory_actual = None if covers_rejected else feedback.actual_value
+                notes_text = feedback.notes
+                if memory_actual is not None:
+                    notes_text = f"actual={memory_actual} {notes_text}".strip()
+
+                result = await tool_submit_feedback_to_memory(
+                    hotel_id=hotel_id,
+                    recommendation_id=recommendation_id,
+                    outcome=feedback.outcome,
+                    db=db,
+                    actual_value=memory_actual,
+                    notes=notes_text,
+                    request_id=req_id,
+                )
 
                 await db.commit()
                 logger.info(
