@@ -100,6 +100,30 @@ FEEDBACK_HISTORICAL_MULTIPLIER: float = float(
     _os.getenv("FEEDBACK_HISTORICAL_MULTIPLIER", "3.0")
 )
 
+# ─── Epic 12 G-2 — Agent error-rate / LLM-timeout alerting (HOS-249) ──────────
+# Turns agent_action_log from a passive record into an alarm: a rolling-window
+# monitor trips an ops alert (Linear, dispatch_anomaly) when the non-ok rate,
+# tool-failure count or LLM-timeout count breaches a config-driven threshold.
+# Documented in eval/FAILURE_THRESHOLDS.md. All config-driven (no redeploy).
+# How often the rolling-window monitor polls (minutes).
+ERROR_RATE_MONITOR_INTERVAL_MIN: int = int(_os.getenv("ERROR_RATE_MONITOR_INTERVAL_MIN", "15"))
+# Width of the rolling window evaluated on each poll (minutes).
+ERROR_RATE_WINDOW_MIN: int = int(_os.getenv("ERROR_RATE_WINDOW_MIN", "60"))
+# Minimum number of rows in the window before the *rate* check is evaluated —
+# avoids false alarms when volume is tiny (1 error out of 2 calls != a spike).
+ERROR_RATE_MIN_SAMPLES: int = int(_os.getenv("ERROR_RATE_MIN_SAMPLES", "20"))
+# AC1: non-ok fraction (status != "ok") over the window above this → alert.
+ERROR_RATE_NONOK_THRESHOLD: float = float(_os.getenv("ERROR_RATE_NONOK_THRESHOLD", "0.20"))
+# AC2: absolute count of tool failures (status="tool_error") over the window.
+ERROR_RATE_TOOL_FAILURE_THRESHOLD: int = int(_os.getenv("ERROR_RATE_TOOL_FAILURE_THRESHOLD", "10"))
+# AC2: absolute count of LLM timeouts over the window (error_code matches the
+# substring below — providers tag transient timeouts there).
+ERROR_RATE_LLM_TIMEOUT_THRESHOLD: int = int(_os.getenv("ERROR_RATE_LLM_TIMEOUT_THRESHOLD", "5"))
+# Case-insensitive substring identifying an LLM/transient timeout error_code.
+ERROR_RATE_TIMEOUT_ERROR_SUBSTR: str = _os.getenv("ERROR_RATE_TIMEOUT_ERROR_SUBSTR", "timeout")
+# AC3: suppress repeat alerts for the same metric within this cooldown (minutes).
+ERROR_RATE_ALERT_COOLDOWN_MIN: int = int(_os.getenv("ERROR_RATE_ALERT_COOLDOWN_MIN", "60"))
+
 # ─── Demo Mode ────────────────────────────────────────────────────────────────
 # When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
 # and loads synthetic Prophet training data from demo_data/prophet_training.json.
