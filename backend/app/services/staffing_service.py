@@ -28,11 +28,24 @@ class StaffingConfig(BaseModel):
 class StaffingService:
     """Calculates staffing requirements based on demand."""
 
+    @staticmethod
+    def _staff_for(covers: float, cfg: StaffingConfig) -> tuple[int, int, int, int]:
+        """Role headcounts for a covers level (pure ratio math)."""
+        servers = math.ceil(covers / cfg.covers_per_server)
+        hosts = math.ceil(covers / cfg.covers_per_host)
+        kitchen = math.ceil(covers / cfg.covers_per_kitchen)
+        sommeliers = 2 if covers > 160 else 1
+        return servers, hosts, kitchen, sommeliers
+
     async def calculate_recommendation(
         self,
         predicted_covers: int,
         config: Optional[StaffingConfig] = None,
         confidence: Optional[float] = None,
+        *,
+        hotel_id: Optional[str] = None,
+        total_seats: Optional[float] = None,
+        turns_sum: Optional[float] = None,
     ) -> Union[Dict, AgentAbstention]:
         # ADR-0007 §D6 — graceful degradation: when the upstream forecast is too
         # uncertain, abstain rather than emit a confident-looking staffing number.
@@ -51,26 +64,38 @@ class StaffingService:
 
         cfg = config or StaffingConfig()
 
-        servers = math.ceil(predicted_covers / cfg.covers_per_server)
-        hosts = math.ceil(predicted_covers / cfg.covers_per_host)
-        kitchen = math.ceil(predicted_covers / cfg.covers_per_kitchen)
-
-        # Role-specific: Sommelier required for high-volume/premium days
-        sommeliers = 1
-        if predicted_covers > 160:
-            sommeliers = 2
-
+        servers, hosts, kitchen, sommeliers = self._staff_for(predicted_covers, cfg)
         total_shifts = servers + hosts + kitchen + sommeliers
         current_cost = total_shifts * cfg.avg_shift_cost
+        baseline_headcount = (
+            cfg.usual_servers + cfg.usual_hosts + cfg.usual_kitchen + cfg.usual_sommeliers
+        )
 
-        warnings = []
-        if current_cost > cfg.labor_budget_gbp_per_day:
-            msg = (
-                f"Budget Alert: Projected daily labor cost £{current_cost:.0f} "
-                f"exceeds daily budget of £{cfg.labor_budget_gbp_per_day:.0f}"
-            )
-            warnings.append(msg)
-            await self._dispatch_budget_alert(predicted_covers, current_cost, cfg.labor_budget_gbp_per_day)
+        # Epic 12 G-5 (HOS-252) — centralized output sanity bounds. Absorbs the
+        # former ad-hoc budget alert: covers/headcount must fit property capacity
+        # and sane deltas, cost must respect budget. Out of bounds → clamp/flag +
+        # route to human (never silent), one typed trip per flag.
+        from app.services import output_sanity
+
+        verdict = output_sanity.evaluate(
+            predicted_covers,
+            total_shifts,
+            total_seats=total_seats,
+            turns_sum=turns_sum,
+            baseline_headcount=baseline_headcount,
+            labor_cost=current_cost,
+            labor_budget=cfg.labor_budget_gbp_per_day,
+        )
+
+        # A capacity breach clamps the *delivered* covers down to capacity and
+        # recomputes the headcount on the clamped value (still delivered, flagged).
+        effective_covers = predicted_covers
+        if verdict.clamped_covers is not None:
+            effective_covers = verdict.clamped_covers
+            servers, hosts, kitchen, sommeliers = self._staff_for(effective_covers, cfg)
+
+        if not verdict.within_bounds:
+            await output_sanity.record_sanity_trip(hotel_id or "_system", verdict)
 
         result = {
             "servers": servers,
@@ -82,22 +107,15 @@ class StaffingService:
                 "kitchen": kitchen - cfg.usual_kitchen,
                 "sommeliers": sommeliers - cfg.usual_sommeliers,
             },
-            "warnings": warnings,
-            "rationale": f"Staffing suggestion based on {predicted_covers} covers. Optimized for role-ratios.",
+            "warnings": verdict.warnings,
+            "sanity": {
+                "within_bounds": verdict.within_bounds,
+                "route_to_human": verdict.route_to_human,
+                "clamped_covers": verdict.clamped_covers,
+                "flags": [r for r, _ in verdict.flags],
+            },
+            "rationale": f"Staffing suggestion based on {effective_covers} covers. Optimized for role-ratios.",
         }
         # Demo board: highlight Staffing Service node after recommendation
         asyncio.create_task(demo_emit("staffing"))
         return result
-
-    @staticmethod
-    async def _dispatch_budget_alert(covers: int, cost: float, budget: float) -> None:
-        from app.services.ops_dispatcher import dispatch_anomaly
-        await dispatch_anomaly(
-            title=f"Labor budget exceeded — £{cost:.0f} vs £{budget:.0f} daily limit",
-            detail=(
-                f"Predicted covers: {covers}\n"
-                f"Estimated daily cost: £{cost:.2f} | Daily budget: £{budget:.2f} | Overage: £{cost - budget:.2f}\n\n"
-                "Review staffing ratios or adjust the labor budget in StaffingConfig."
-            ),
-            tags=["budget", "staffing"],
-        )

@@ -146,6 +146,17 @@ FORECAST_MAPE_CATASTROPHE: float = float(_os.getenv("FORECAST_MAPE_CATASTROPHE",
 # baseline is a follow-up once live-MAPE telemetry (EVAL-3/5) is wired in.
 FORECAST_BASELINE_DEFAULT_COVERS: float = float(_os.getenv("FORECAST_BASELINE_DEFAULT_COVERS", "0"))
 
+# ─── Epic 12 G-5 — Output sanity bounds on recommendations (HOS-252) ──────────
+# Centralized guard: recommended covers/headcount must stay within property
+# capacity and sane deltas before dispatch (no "30 servers for 12 covers"). Out
+# of bounds → clamp/flag + route to human (never a silent dispatch). Shares the
+# property-capacity ceiling with G-3 (feedback_guard.capacity_ceiling). Enforced
+# in staffing_service.calculate_recommendation. Documented in FAILURE_THRESHOLDS.
+# Recommended headcount above baseline × this multiplier is an absurd delta → flag.
+OUTPUT_SANITY_MAX_HEADCOUNT_DELTA_MULT: float = float(
+    _os.getenv("OUTPUT_SANITY_MAX_HEADCOUNT_DELTA_MULT", "3.0")
+)
+
 # ─── Demo Mode ────────────────────────────────────────────────────────────────
 # When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
 # and loads synthetic Prophet training data from demo_data/prophet_training.json.
