@@ -76,6 +76,24 @@ HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN: int = int(
     _os.getenv("HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN", "15")
 )
 
+# ─── Epic 12 G-3 — Feedback→training input bounds (HOS-250) ───────────────────
+# Guards the manager-reported actual_covers before it is persisted / retrained.
+# Documented in eval/FAILURE_THRESHOLDS.md. All config-driven (no redeploy).
+# Policy on an implausible value: "reject" (default, hard pre-pilot guard — value
+# is not ingested) or "flag" (ingested but tagged for downstream exclusion).
+FEEDBACK_BOUNDS_POLICY: str = _os.getenv("FEEDBACK_BOUNDS_POLICY", "reject").lower()
+# Minimum plausible covers; values below are implausible (typo / faulty sensor).
+FEEDBACK_COVERS_MIN: float = float(_os.getenv("FEEDBACK_COVERS_MIN", "1"))
+# Capacity ceiling = total_seats × (sum of daily turns) × this multiplier.
+FEEDBACK_COVERS_CAPACITY_MULTIPLIER: float = float(
+    _os.getenv("FEEDBACK_COVERS_CAPACITY_MULTIPLIER", "1.5")
+)
+# Soft historical sanity: covers above (historical max × this) are flagged — never
+# rejected (a genuine surge can exceed history while staying within capacity).
+FEEDBACK_HISTORICAL_MULTIPLIER: float = float(
+    _os.getenv("FEEDBACK_HISTORICAL_MULTIPLIER", "3.0")
+)
+
 # ─── Demo Mode ────────────────────────────────────────────────────────────────
 # When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
 # and loads synthetic Prophet training data from demo_data/prophet_training.json.

@@ -58,6 +58,34 @@ Baseline = frozen training-set snapshot (`eval/distribution_snapshots/<feature>.
 
 ---
 
+## Feedback→training input bounds — HOS-250 (Epic 12 G-3)
+
+Guards the manager-reported `actual_covers` at the ingestion chokepoint
+(`receipts.persist_actual_covers`) before it reaches the training path. All
+config-driven (`backend/app/core/config.py`) — no redeploy. Enforced via
+`backend/app/services/feedback_guard.py`.
+
+| Bound | Rule | Env var | Default |
+|---|---|---|---|
+| Lower | reject if `actual_covers < min` (catches negative / zero) | `FEEDBACK_COVERS_MIN` | `1` |
+| Capacity ceiling | reject if `> total_seats × (turns_b+turns_l+turns_d) × mult` (per property) | `FEEDBACK_COVERS_CAPACITY_MULTIPLIER` | `1.5` |
+| Historical sanity | **flag** (never reject) if `> historical_max × mult` while within capacity | `FEEDBACK_HISTORICAL_MULTIPLIER` | `3.0` |
+
+| Knob | Env var | Default | Notes |
+|---|---|---|---|
+| Policy | `FEEDBACK_BOUNDS_POLICY` | `reject` | `reject` = value not ingested (hard pre-pilot guard); `flag` = ingested but tagged `implausible_flag` + source `manager_feedback_flagged` for downstream exclusion |
+
+**On any breach**: a typed trip row is written to `agent_action_log`
+(`status="tool_error"`, `error_code="implausible_feedback"`,
+`tool_name="feedback.ingestion"`) and an ops alert is raised — `dispatch_error`
+(reject) or `dispatch_anomaly` (flag). Never a silent ingestion. No migration
+(capacity derived from existing `restaurant_profiles.total_seats` + turns).
+
+**Degrade-open**: if the property/history lookup fails, the value is treated as
+plausible (the guard never blocks legitimate feedback on an infra hiccup).
+
+---
+
 ## Coverage thresholds (eval gate — ADR-0007 §D3)
 
 Coverage = % of taxonomy categories with ≥ 1 PASS scenario in the current run.
