@@ -88,6 +88,12 @@ FEEDBACK_COVERS_MIN: float = float(_os.getenv("FEEDBACK_COVERS_MIN", "1"))
 FEEDBACK_COVERS_CAPACITY_MULTIPLIER: float = float(
     _os.getenv("FEEDBACK_COVERS_CAPACITY_MULTIPLIER", "1.5")
 )
+# Fallback daily turns when a property's seats are known but its turn config is
+# missing (NULL turns on an incompletely-onboarded / migrated profile). Keeps the
+# capacity ceiling enforceable instead of silently bypassed on a falsy turns_sum.
+FEEDBACK_COVERS_DEFAULT_TURNS: float = float(
+    _os.getenv("FEEDBACK_COVERS_DEFAULT_TURNS", "3")
+)
 # Soft historical sanity: covers above (historical max × this) are flagged — never
 # rejected (a genuine surge can exceed history while staying within capacity).
 FEEDBACK_HISTORICAL_MULTIPLIER: float = float(

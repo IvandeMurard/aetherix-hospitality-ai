@@ -48,6 +48,23 @@ def test_capacity_skipped_when_profile_unknown():
     assert v.plausible is True
 
 
+def test_capacity_enforced_with_default_turns_when_turns_missing():
+    # Seats known but turns NULL → turns_sum == 0 (falsy). The ceiling must still
+    # be enforced via the default-turns fallback, not silently skipped (HOS-250
+    # hardening: a falsy turns_sum previously bypassed the capacity guard).
+    v = evaluate(50_000, total_seats=120, turns_sum=0)  # ceiling = 120×3×1.5 = 540
+    assert v.plausible is False
+    assert v.severity == "reject"
+    assert v.reason == feedback_guard.REASON_IMPLAUSIBLE
+
+
+def test_plausible_value_passes_with_default_turns():
+    # A realistic surge stays plausible even when turns are unconfigured.
+    v = evaluate(300, total_seats=120, turns_sum=None)  # ceiling = 540
+    assert v.plausible is True
+    assert v.severity == "ok"
+
+
 def test_policy_flag_downgrades_capacity_breach(monkeypatch):
     monkeypatch.setattr(feedback_guard.config, "FEEDBACK_BOUNDS_POLICY", "flag")
     v = evaluate(400, total_seats=50, turns_sum=4.5)

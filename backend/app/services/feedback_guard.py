@@ -62,7 +62,8 @@ def evaluate(
     turns_sum: Optional[float] = None,
     historical_max: Optional[float] = None,
 ) -> BoundsVerdict:
-    """Bound an actual_covers value. Capacity is only enforced when known."""
+    """Bound an actual_covers value. Capacity is enforced whenever seats are
+    known (default turns used when the turn config is missing)."""
     # Lower bound — negative / zero / sub-minimum.
     if actual_value < config.FEEDBACK_COVERS_MIN:
         return BoundsVerdict(
@@ -72,9 +73,13 @@ def evaluate(
             f"actual_covers={actual_value} below minimum {config.FEEDBACK_COVERS_MIN}.",
         )
 
-    # Capacity ceiling — only when we know the property's seats + turns.
-    if total_seats and turns_sum:
-        ceiling = capacity_ceiling(total_seats, turns_sum)
+    # Capacity ceiling — enforced whenever the property's seats are known. Turns
+    # may be NULL on an incompletely-onboarded property (turns_sum == 0); a falsy
+    # turns_sum must NOT silently skip the ceiling (that lets an aberrant value
+    # through), so fall back to a default service count to keep the bound live.
+    if total_seats:
+        effective_turns = turns_sum if turns_sum else config.FEEDBACK_COVERS_DEFAULT_TURNS
+        ceiling = capacity_ceiling(total_seats, effective_turns)
         if ceiling > 0 and actual_value > ceiling:
             return BoundsVerdict(
                 False,
@@ -82,7 +87,7 @@ def evaluate(
                 REASON_IMPLAUSIBLE,
                 (
                     f"actual_covers={actual_value} exceeds capacity ceiling "
-                    f"{ceiling:.0f} (seats={total_seats} × turns={turns_sum} × "
+                    f"{ceiling:.0f} (seats={total_seats} × turns={effective_turns} × "
                     f"{config.FEEDBACK_COVERS_CAPACITY_MULTIPLIER})."
                 ),
             )
