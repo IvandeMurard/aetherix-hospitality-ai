@@ -139,6 +139,43 @@ async def test_aberrant_value_rejected_when_turns_unconfigured(db_session):
 
 
 @pytest.mark.asyncio
+async def test_historical_max_excludes_flagged_rows(db_session):
+    """HOS-268: a previously flagged-but-ingested value must NOT raise the
+    historical max, or the soft sanity bound self-erodes (each aberrant value
+    admits the next). Seats are huge here so only the historical bound is live."""
+    # Large capacity so the ceiling never fires — isolate the historical check.
+    db_session.add(
+        RestaurantProfile(
+            id=_uuid.uuid4(),
+            tenant_id="hotel_g3",
+            property_name="Test Hotel",
+            outlet_name="Test Restaurant",
+            total_seats=100_000,
+        )
+    )
+    # Legit history: max 100 (manager_feedback). Plus a flagged 10000 that must be
+    # ignored when computing the historical max.
+    now = datetime.now(tz=timezone.utc)
+    for covers, source in ((100.0, "manager_feedback"), (10_000.0, "manager_feedback_flagged")):
+        rec = StaffingRecommendation(
+            id=_uuid.uuid4(), tenant_id="hotel_g3", property_id=_uuid.uuid4(),
+            anomaly_id=_uuid.uuid4(), message_text="x", triggering_factor="e",
+            recommended_headcount=2, window_start=now, window_end=now,
+            predicted_covers=100.0, actual_covers=covers, actual_covers_source=source,
+            status="accepted",
+        )
+        db_session.add(rec)
+    await db_session.commit()
+
+    svc = ReceiptsService(db_session, llm=AsyncMock())
+    # 500 > 100 × 3 (historical multiplier) → flagged. If the flagged 10000 had
+    # counted, the threshold would be 30000 and 500 would pass — the bug.
+    verdict = await svc._check_feedback_bounds("hotel_g3", 500.0)
+    assert verdict.plausible is False
+    assert verdict.severity == "flag"
+
+
+@pytest.mark.asyncio
 async def test_plausible_value_persists_as_before(db_session):
     await _seed_profile(db_session)
     rec = await _seed_recommendation(db_session)
