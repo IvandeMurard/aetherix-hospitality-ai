@@ -30,6 +30,7 @@ from app.db.session import AsyncSessionLocal
 from app.integrations.sendgrid_client import SendGridClient
 from app.integrations.twilio_client import TwilioClient
 from app.services.receipts import ReceiptsService
+from app.workers.heartbeat import REASON_PARTIAL, record_heartbeat, record_trip
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,7 @@ async def _run_receipt_dispatch_job() -> None:
 
         dispatched = 0
         skipped = 0
+        failed = 0
         for hotel in hotels:
             if not hotel.phone_number and not hotel.notification_email:
                 skipped += 1
@@ -127,6 +129,7 @@ async def _run_receipt_dispatch_job() -> None:
                     await _dispatch_receipt_for_hotel(service, hotel, target_date)
                     dispatched += 1
                 except Exception:
+                    failed += 1
                     logger.exception(
                         "receipts_dispatcher: dispatch failed hotel_id=%s job_id=%s",
                         hotel.tenant_id,
@@ -134,11 +137,23 @@ async def _run_receipt_dispatch_job() -> None:
                     )
 
         logger.info(
-            "receipts_dispatcher: complete job_id=%s dispatched=%d skipped=%d",
+            "receipts_dispatcher: complete job_id=%s dispatched=%d skipped=%d failed=%d",
             job_id,
             dispatched,
             skipped,
+            failed,
         )
+
+        # AC1 — per-hotel failures are otherwise silent; trip one aggregated alert.
+        if failed:
+            await record_trip(
+                "receipt_dispatcher",
+                REASON_PARTIAL,
+                f"Daily Receipt: {failed}/{dispatched + failed} hotels failed. job_id={job_id}.",
+            )
+        # AC2 — heartbeat marks a completed run (even with partial failures, the
+        # job itself ran → the dead-man's switch should not trip).
+        await record_heartbeat("receipt_dispatcher")
 
     except Exception as exc:
         logger.exception("receipts_dispatcher: fatal error job_id=%s", job_id)
@@ -242,6 +257,7 @@ async def _run_weekly_digest_job() -> None:
 
         dispatched = 0
         skipped = 0
+        failed = 0
         for hotel in hotels:
             if not hotel.phone_number and not hotel.notification_email:
                 skipped += 1
@@ -252,15 +268,26 @@ async def _run_weekly_digest_job() -> None:
                     await _dispatch_weekly_digest_for_hotel(service, hotel, week_end)
                     dispatched += 1
                 except Exception:
+                    failed += 1
                     logger.exception(
                         "weekly_digest: dispatch failed hotel_id=%s job_id=%s",
                         hotel.tenant_id, job_id,
                     )
 
         logger.info(
-            "weekly_digest: complete job_id=%s dispatched=%d skipped=%d",
-            job_id, dispatched, skipped,
+            "weekly_digest: complete job_id=%s dispatched=%d skipped=%d failed=%d",
+            job_id, dispatched, skipped, failed,
         )
+
+        # AC1 — aggregated alert on per-hotel failures (otherwise silent).
+        if failed:
+            await record_trip(
+                "weekly_digest",
+                REASON_PARTIAL,
+                f"Weekly Digest: {failed}/{dispatched + failed} hotels failed. job_id={job_id}.",
+            )
+        # AC2 — heartbeat marks a completed run.
+        await record_heartbeat("weekly_digest")
 
     except Exception as exc:
         logger.exception("weekly_digest: fatal error job_id=%s", job_id)

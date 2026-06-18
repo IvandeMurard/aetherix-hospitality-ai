@@ -23,18 +23,22 @@ from app.api.routes import (
     dashboard,
     demo,
     events,
-    kpi as kpi_route,
     mcp,
     mcp_v1,
     notifications,
     pms,
     predictions,
-    receipts as receipts_route,
     reports,
     roi,
     weather,
     webhooks,
     wellknown,
+)
+from app.api.routes import (
+    kpi as kpi_route,
+)
+from app.api.routes import (
+    receipts as receipts_route,
 )
 from app.api.routes import webhook as twilio_inbound_webhook
 from app.core.error_handlers import problem_details_handler
@@ -49,6 +53,7 @@ from app.workers.agent_action_log_partition_rotation import (
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.event_sync import start_event_scheduler
+from app.workers.heartbeat import register_heartbeat_monitor_job
 from app.workers.kpi_aggregator import register_kpi_aggregator_job
 from app.workers.memory_metrics import register_memory_metrics_job
 from app.workers.receipts_dispatcher import (
@@ -131,6 +136,8 @@ async def lifespan(app: FastAPI):
     register_receipt_dispatch_job(_scheduler)
     # P2-5 — weekly KPI digest every Sunday at RECEIPT_DISPATCH_HOUR.
     register_weekly_digest_job(_scheduler)
+    # HOS-248 (Epic 12 G-1) — dead-man's switch over scheduled dispatchers.
+    register_heartbeat_monitor_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler
