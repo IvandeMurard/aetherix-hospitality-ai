@@ -63,42 +63,61 @@ class ReportingService:
         return result
 
     async def _dispatch_ops(self, result: Dict[str, Any], mape: float) -> None:
-        """Fire-and-forget: write audit to Obsidian; alert Linear if accuracy drops."""
-        from app.integrations.obsidian import VAULT_FOLDERS
-        from app.services.ops_dispatcher import dispatch_anomaly, dispatch_report
+        """Fire-and-forget: write audit to Obsidian; alert Linear if accuracy drops.
 
-        m = result["metrics"]
-        f = result["financial_impact"]
-        period = result["period"]
-        tenant = result["tenant_id"]
+        HOS-248 (AC5): this is the path that 500'd `/reports/weekly` in HOS-211
+        (VAULT_FOLDERS ImportError). It is now genuinely fire-and-forget — any
+        failure here is swallowed (never breaks the caller) AND trips a typed ops
+        alert via the heartbeat instrumentation instead of failing silently.
+        """
+        try:
+            from app.integrations.obsidian import VAULT_FOLDERS
+            from app.services.ops_dispatcher import dispatch_anomaly, dispatch_report
 
-        note_content = (
-            f"# Weekly Audit — {tenant}\n\n"
-            f"**Period:** {period}\n\n"
-            f"| Metric | Value |\n|---|---|\n"
-            f"| Accuracy | {m['accuracy']}% |\n"
-            f"| MAPE | {m['mape']}% |\n"
-            f"| Total covers | {m['total_covers']} |\n"
-            f"| Estimated savings | £{f['estimated_savings_gbp']} |\n"
-            f"| ROI | {f['roi_multiplier']}x |\n"
-        )
-        await dispatch_report(
-            title=f"Weekly Audit {period}",
-            content=note_content,
-            folder=VAULT_FOLDERS["reports"],
-            tags=["weekly-audit", tenant],
-        )
+            m = result["metrics"]
+            f = result["financial_impact"]
+            period = result["period"]
+            tenant = result["tenant_id"]
 
-        if mape > MAPE_ALERT_THRESHOLD:
-            await dispatch_anomaly(
-                title=f"[{tenant}] Forecast accuracy degraded — MAPE {m['mape']}%",
-                detail=(
-                    f"Weekly MAPE exceeded {MAPE_ALERT_THRESHOLD}% threshold for period {period}.\n"
-                    f"Accuracy: {m['accuracy']}% | Covers: {m['total_covers']}\n\n"
-                    "Possible causes: missing PMS data, model drift, or unusual demand spike."
-                ),
-                tags=["model", "accuracy"],
+            note_content = (
+                f"# Weekly Audit — {tenant}\n\n"
+                f"**Period:** {period}\n\n"
+                f"| Metric | Value |\n|---|---|\n"
+                f"| Accuracy | {m['accuracy']}% |\n"
+                f"| MAPE | {m['mape']}% |\n"
+                f"| Total covers | {m['total_covers']} |\n"
+                f"| Estimated savings | £{f['estimated_savings_gbp']} |\n"
+                f"| ROI | {f['roi_multiplier']}x |\n"
             )
+            await dispatch_report(
+                title=f"Weekly Audit {period}",
+                content=note_content,
+                folder=VAULT_FOLDERS["reports"],
+                tags=["weekly-audit", tenant],
+            )
+
+            if mape > MAPE_ALERT_THRESHOLD:
+                await dispatch_anomaly(
+                    title=f"[{tenant}] Forecast accuracy degraded — MAPE {m['mape']}%",
+                    detail=(
+                        f"Weekly MAPE exceeded {MAPE_ALERT_THRESHOLD}% threshold for period {period}.\n"
+                        f"Accuracy: {m['accuracy']}% | Covers: {m['total_covers']}\n\n"
+                        "Possible causes: missing PMS data, model drift, or unusual demand spike."
+                    ),
+                    tags=["model", "accuracy"],
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("reporting_service._dispatch_ops failed (non-blocking)")
+            try:
+                from app.workers.heartbeat import REASON_JOB_ERROR, record_trip
+
+                await record_trip(
+                    "reporting_service",
+                    REASON_JOB_ERROR,
+                    f"_dispatch_ops failed during weekly audit. Error: {exc!r}",
+                )
+            except Exception as inner:  # noqa: BLE001
+                logger.warning("reporting_service: trip alert failed: %s", inner)
 
     def _calculate_savings(self, df: pd.DataFrame) -> float:
         """Heuristic for labor savings based on prediction accuracy."""

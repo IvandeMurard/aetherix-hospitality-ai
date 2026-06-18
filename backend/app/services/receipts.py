@@ -29,10 +29,15 @@ from datetime import date, datetime, time, timezone
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import AgentActionLog, OperationalMemory, StaffingRecommendation
+from app.db.models import (
+    AgentActionLog,
+    OperationalMemory,
+    RestaurantProfile,
+    StaffingRecommendation,
+)
 from app.i18n.abstention_messages import DEFAULT_LOCALE, localized_message
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
@@ -590,7 +595,7 @@ class ReceiptsService:
         *,
         request_id: str = "",
         observed_on: date | None = None,
-    ) -> OperationalMemory:
+    ) -> Optional[OperationalMemory]:
         """Persist a manager's ground-truth covers correction.
 
         Story 10.10 (HOS-200). Called from the Twilio inbound handler when
@@ -606,13 +611,44 @@ class ReceiptsService:
 
         The caller owns the transaction (commit happens upstream so the
         recommendation update and the memory write land atomically). Returns the
-        created OperationalMemory row.
+        created OperationalMemory row, or ``None`` when the value was rejected by
+        the feedback bounds guard (HOS-250).
+
+        HOS-250 (Epic 12 G-3): ``actual_value`` is bounded against the property
+        capacity + historical range before any write. An implausible value is
+        rejected (not ingested) or flagged, per ``FEEDBACK_BOUNDS_POLICY``, and
+        always raises a typed ops alert — never a silent poison of the model.
         """
         now = datetime.now(tz=timezone.utc)
 
+        # HOS-250 — bound the value before it touches the training path.
+        verdict = await self._check_feedback_bounds(
+            recommendation.tenant_id, float(actual_value)
+        )
+        flagged = False
+        if not verdict.plausible:
+            from app.services.feedback_guard import record_feedback_trip
+
+            await record_feedback_trip(
+                recommendation.tenant_id,
+                verdict.reason or "implausible_feedback",
+                verdict.detail or "",
+                verdict.severity,
+                db=self.db,
+            )
+            if verdict.severity == "reject":
+                logger.warning(
+                    "receipts.persist_actual_covers: REJECTED actual=%s hotel_id=%s — %s",
+                    actual_value, recommendation.tenant_id, verdict.detail,
+                )
+                return None
+            flagged = True  # severity == "flag" → ingest but tag
+
         # AC1 — ground truth onto the recommendation
         recommendation.actual_covers = actual_value
-        recommendation.actual_covers_source = "manager_feedback"
+        recommendation.actual_covers_source = (
+            "manager_feedback_flagged" if flagged else "manager_feedback"
+        )
         recommendation.actual_covers_at = now
 
         # AC2 — ground_truth memory row (no embedding: factual, not retrieved by
@@ -622,11 +658,14 @@ class ReceiptsService:
         reflection = (
             f"actual covers {actual_value} vs predicted {predicted} on {on_date}"
         )
+        tags = ["ground_truth", "covers_correction"]
+        if flagged:
+            tags.append("implausible_flag")
         memory = OperationalMemory(
             hotel_id=recommendation.tenant_id,
             reflection=reflection,
             memory_type="ground_truth",
-            tags=["ground_truth", "covers_correction"],
+            tags=tags,
             embedding_pending=True,
             request_id=request_id,
         )
@@ -642,6 +681,59 @@ class ReceiptsService:
             memory.id,
         )
         return memory
+
+    async def _check_feedback_bounds(self, tenant_id: str, actual_value: float):
+        """HOS-250 — evaluate actual_covers against capacity + historical range.
+
+        Looks up the property capacity (``total_seats × turns``) and the
+        historical max ``actual_covers`` for the tenant. A missing profile →
+        capacity is not enforced (only the lower bound applies). Any lookup
+        failure degrades open (treated as plausible) so the guard never blocks
+        legitimate feedback on an infra hiccup.
+        """
+        from app.services.feedback_guard import BoundsVerdict, evaluate
+
+        total_seats: float | None = None
+        turns_sum: float | None = None
+        historical_max: float | None = None
+        try:
+            profile = (
+                await self.db.execute(
+                    select(RestaurantProfile).where(
+                        RestaurantProfile.tenant_id == tenant_id
+                    )
+                )
+            ).scalars().first()
+            if profile is not None and profile.total_seats:
+                total_seats = float(profile.total_seats)
+                turns_sum = (
+                    float(profile.turns_breakfast or 0)
+                    + float(profile.turns_lunch or 0)
+                    + float(profile.turns_dinner or 0)
+                )
+            hist = (
+                await self.db.execute(
+                    select(func.max(StaffingRecommendation.actual_covers)).where(
+                        StaffingRecommendation.tenant_id == tenant_id,
+                        StaffingRecommendation.actual_covers.is_not(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if hist is not None:
+                historical_max = float(hist)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "receipts._check_feedback_bounds: lookup failed hotel_id=%s: %s",
+                tenant_id, exc,
+            )
+            return BoundsVerdict(True, "ok")
+
+        return evaluate(
+            actual_value,
+            total_seats=total_seats,
+            turns_sum=turns_sum,
+            historical_max=historical_max,
+        )
 
     async def weekly_digest(
         self, hotel_id: str, week_end: date
