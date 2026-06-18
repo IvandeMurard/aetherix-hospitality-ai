@@ -124,6 +124,28 @@ ERROR_RATE_TIMEOUT_ERROR_SUBSTR: str = _os.getenv("ERROR_RATE_TIMEOUT_ERROR_SUBS
 # AC3: suppress repeat alerts for the same metric within this cooldown (minutes).
 ERROR_RATE_ALERT_COOLDOWN_MIN: int = int(_os.getenv("ERROR_RATE_ALERT_COOLDOWN_MIN", "60"))
 
+# ─── Epic 12 G-4 — Confidence-tiered forecast guardrail at dispatch (HOS-251) ─
+# Generalizes the ADR-0005 cold-start auto-disable (degrade, not extinguish) to
+# the dispatch path. NEVER blanks a recommendation (Décision #6 HITL-always):
+#   • Tier 1 — confidence < WARN: the recommendation is dispatched anyway, tagged
+#     with a confidence caveat (AgentAbstention flag carrier — HOS-206).
+#   • Tier 2 — confidence < CATASTROPHE *or* live MAPE > MAPE_CATASTROPHE: fall
+#     back to a simpler baseline (tagged as such), recommendation still delivered.
+# Documented in eval/FAILURE_THRESHOLDS.md. All config-driven (no redeploy).
+FORECAST_CONFIDENCE_WARN: float = float(_os.getenv("FORECAST_CONFIDENCE_WARN", "0.6"))
+# Catastrophe floor — below the Prophet confidence floor (0.5) by default, so the
+# catastrophic tier is driven mainly by the live-MAPE breach below, not by the
+# discrete confidence score alone.
+FORECAST_CONFIDENCE_CATASTROPHE: float = float(_os.getenv("FORECAST_CONFIDENCE_CATASTROPHE", "0.4"))
+# Live rolling MAPE (%) above which the forecast is treated as catastrophic —
+# "well beyond" the 25% cold-start auto-disable ceiling (ADR-0005 / HOS-251).
+FORECAST_MAPE_CATASTROPHE: float = float(_os.getenv("FORECAST_MAPE_CATASTROPHE", "35"))
+# Tier-2 baseline prior used when the caller supplies no historical baseline in
+# context (`baseline_covers` / `recent_avg_covers`). 0 = disabled → degrade to the
+# Prophet point estimate, still tagged baseline (never silent). A richer trailing
+# baseline is a follow-up once live-MAPE telemetry (EVAL-3/5) is wired in.
+FORECAST_BASELINE_DEFAULT_COVERS: float = float(_os.getenv("FORECAST_BASELINE_DEFAULT_COVERS", "0"))
+
 # ─── Demo Mode ────────────────────────────────────────────────────────────────
 # When true: enables SSE demo board (/demo/stream), emits pipeline stage events,
 # and loads synthetic Prophet training data from demo_data/prophet_training.json.
