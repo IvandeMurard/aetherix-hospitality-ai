@@ -127,6 +127,28 @@ def test_layer_without_runner_warns(monkeypatch):
     assert called["n"] == 0
 
 
+def test_detect_baseline_maps_to_own_layer():
+    # A per-layer baseline bump re-runs only that layer, not a full run.
+    _, layers = gate.detect(["eval/baselines/latency_baseline.json"])
+    assert layers == {"latency"}
+    _, layers = gate.detect(["eval/baselines/forecast_baseline.json"])
+    assert layers == {"forecast"}
+    # The dataset/thresholds still trigger all evaluable layers.
+    _, layers = gate.detect(["eval/golden_dataset.jsonl"])
+    assert layers == set(gate.EVALUABLE_LAYERS)
+
+
+def test_latency_baseline_only_warns_without_running_forecast(monkeypatch):
+    # Regression guard: adding a latency baseline must NOT drag in a forecast run.
+    _set_changed(monkeypatch, ["eval/baselines/latency_baseline.json"])
+
+    def _boom(*a, **k):
+        raise AssertionError("no evaluable layer — engine must not run")
+
+    monkeypatch.setattr(gate, "invoke_run_all", _boom)
+    assert gate.main() == gate.WARN
+
+
 def test_cache_hit_skips_engine(monkeypatch):
     touched = ["eval/golden_dataset.jsonl"]
     _set_changed(monkeypatch, touched)
