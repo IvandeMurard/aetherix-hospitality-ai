@@ -1,0 +1,14 @@
+{
+  "layer": "latency",
+  "unit": "ms",
+  "seed": 42,
+  "warmup": 3,
+  "note": "p95 is the SLO line enforced by eval_latency + latency_slo_worker. Frozen from docs/ops/latency-slo.md (HOS-209). Re-measure + bump via PR + CLAUDE.md trace.",
+  "endpoints": {
+    "GET /api/v1/predictions/today": {"p50_ms": 3000, "p95_ms": 8000, "p99_ms": 12000},
+    "GET /api/v1/recommendations/today": {"p50_ms": 5000, "p95_ms": 12000, "p99_ms": 18000},
+    "receipt_generation": {"p50_ms": 6000, "p95_ms": 15000, "p99_ms": 25000},
+    "inbound_parser_haiku": {"p50_ms": 800, "p95_ms": 2000, "p99_ms": 4000},
+    "mcp_tool_call": {"p50_ms": 2000, "p95_ms": 5000, "p99_ms": 8000}
+  }
+}
