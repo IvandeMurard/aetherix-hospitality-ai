@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -549,3 +550,36 @@ class AgentActionLog(Base):
     abstention_layer = Column(String, nullable=True)     # forecast|recommendation|receipt|parser
     eval_run_id = Column(UUID(as_uuid=True), nullable=True)
     drift_score = Column(JSONB, nullable=True)
+
+
+class SchedulerEvent(Base):
+    """Dedicated scheduler-health channel (HOS-271).
+
+    Heartbeats ("last good run" markers) and dead-man / partial-failure trips for
+    scheduled jobs previously went into `agent_action_log` — the per-MCP-tool-call
+    billing + metering meter (ADR-0003 D1). At ~720 dispatch_worker heartbeats per
+    day per env that polluted billing rollups: `status='ok'` collided with the
+    tool-call status enum, `hotel_id='_system'` showed up as a phantom tenant in
+    every `GROUP BY hotel_id`, and each monitor poll ran an unindexed `MAX()` over
+    a high-write table. This table is the dedicated, non-tenant home for that
+    telemetry instead. Append-only; safe to truncate / rotate independently.
+    """
+
+    __tablename__ = "scheduler_event"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    job_name = Column(String, nullable=False)
+    event_type = Column(String, nullable=False)   # 'heartbeat' | 'trip'
+    reason = Column(String, nullable=True)         # trip reason (error_code); null for heartbeat
+    detail = Column(String, nullable=True)         # trip detail; null for heartbeat
+
+    __table_args__ = (
+        # Backs the dead-man's-switch lookup: latest heartbeat per job.
+        Index(
+            "idx_scheduler_event_job_type_created",
+            "job_name",
+            "event_type",
+            "created_at",
+        ),
+    )
