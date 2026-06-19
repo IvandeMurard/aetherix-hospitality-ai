@@ -549,3 +549,26 @@ class AgentActionLog(Base):
     abstention_layer = Column(String, nullable=True)     # forecast|recommendation|receipt|parser
     eval_run_id = Column(UUID(as_uuid=True), nullable=True)
     drift_score = Column(JSONB, nullable=True)
+
+
+class EvalBaseline(Base):
+    """Historical audit log of eval baselines (ADR-0007 §6.c, HOS-216 AC7).
+
+    The git-tracked `eval/baselines/*.json` files stay the RUNTIME source of truth
+    — the CI gate reads them directly. This table answers "what was our baseline on
+    date X / which PR set it and why". Décision #16 ORM mirror of migration
+    20260619010000. The partial unique index (one active baseline per layer) lives
+    in the migration; the drift gate compares columns only, not indexes.
+    """
+
+    __tablename__ = "eval_baselines"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    layer = Column(String, nullable=False)              # forecast|parser|drift|latency|recall
+    git_sha = Column(String, nullable=False)
+    baseline_json = Column(JSONB, nullable=False)       # per-category metrics frozen
+    reason = Column(String, nullable=False)             # why this baseline was set/reset
+    pr_number = Column(Integer, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=False)
+    superseded_by = Column(UUID(as_uuid=True), ForeignKey("eval_baselines.id"), nullable=True)
