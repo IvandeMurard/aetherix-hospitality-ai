@@ -159,3 +159,53 @@ async def test_plausible_value_still_written_to_feedback_memory(db_session):
         )
     ).scalars().one()
     assert float(refreshed.actual_covers) == 120.0
+
+
+@pytest.mark.asyncio
+async def test_rejected_value_tells_manager_not_silent(db_session):
+    """HOS-270: a rejected covers figure must be surfaced to the manager — the
+    reply explains the number was not recorded (no silent drop)."""
+    await _seed(db_session)
+    reply_mock = AsyncMock()
+
+    with (
+        patch.object(webhook, "AsyncSessionLocal", lambda: _SessionCtx(db_session)),
+        patch.object(webhook, "ReceiptsService", lambda db: ReceiptsService(db, llm=AsyncMock())),
+        patch.object(webhook._twilio_client, "send_whatsapp", reply_mock),
+        patch("app.mcp_server.tool_submit_feedback_to_memory", AsyncMock(return_value={"status": "ok"})),
+        patch("app.services.ops_dispatcher.dispatch_error", AsyncMock()),
+        patch("app.services.ops_dispatcher.dispatch_anomaly", AsyncMock()),
+    ):
+        await webhook._bg_receipt_feedback(
+            from_number=f"whatsapp:{PHONE}", body="dinner covers 99999, not 140"
+        )
+
+    reply_mock.assert_awaited_once()
+    sent = reply_mock.await_args.args[1].lower()
+    # Manager is told the number wasn't recorded and invited to resend — not the
+    # generic "Noted. I've updated my records" success copy.
+    assert "didn't record the number" in sent
+    assert "noted. i've updated my records" not in sent
+
+
+@pytest.mark.asyncio
+async def test_plausible_value_keeps_success_reply(db_session):
+    """Guard the negative: a plausible figure still gets the normal confirmation."""
+    await _seed(db_session)
+    reply_mock = AsyncMock()
+
+    with (
+        patch.object(webhook, "AsyncSessionLocal", lambda: _SessionCtx(db_session)),
+        patch.object(webhook, "ReceiptsService", lambda db: ReceiptsService(db, llm=AsyncMock())),
+        patch.object(webhook._twilio_client, "send_whatsapp", reply_mock),
+        patch("app.mcp_server.tool_submit_feedback_to_memory", AsyncMock(return_value={"status": "ok"})),
+        patch("app.services.ops_dispatcher.dispatch_error", AsyncMock()),
+        patch("app.services.ops_dispatcher.dispatch_anomaly", AsyncMock()),
+    ):
+        await webhook._bg_receipt_feedback(
+            from_number=f"whatsapp:{PHONE}", body="dinner covers 120, not 140"
+        )
+
+    reply_mock.assert_awaited_once()
+    sent = reply_mock.await_args.args[1].lower()
+    assert "didn't record the number" not in sent
