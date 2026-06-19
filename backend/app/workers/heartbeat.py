@@ -49,22 +49,48 @@ REASON_PARTIAL = "partial_hotel_failures"      # run completed but N per-hotel f
 _last_alerted: dict[tuple[str, str], datetime] = {}
 
 
+# ─── Monitored-jobs registry (HOS-273) ───────────────────────────────────────
+# Single source of truth for the dead-man's switch. Previously the set of
+# monitored jobs lived in THREE parallel places that had to stay in sync (the
+# config vars, the _window_min() dict, and the monitored_jobs() tuple) and each
+# call site hardcoded its own job string — so a new dispatcher could record a
+# heartbeat that nothing ever polled (silent monitoring gap). Now: one entry in
+# _MONITORED_JOBS registers a job, and both monitored_jobs() and _window_min()
+# derive from it. Call sites import the JOB_* constants instead of literals.
+
+# Job-name constants — call sites reference these, never a bare string, so a typo
+# can't silently desync a heartbeat from the registry.
+JOB_RECEIPT_DISPATCHER = "receipt_dispatcher"
+JOB_WEEKLY_DIGEST = "weekly_digest"
+JOB_DISPATCH_WORKER = "dispatch_worker"
+
+# job_name → name of the config attribute holding its max tolerated gap (minutes).
+# The attribute is resolved via getattr at call-time (not captured here) so that
+# env-driven retuning needs no redeploy and tests can monkeypatch config. Adding a
+# monitored job = one line here + its HEARTBEAT_WINDOW_* config var. Nothing else.
+_MONITORED_JOBS: dict[str, str] = {
+    JOB_RECEIPT_DISPATCHER: "HEARTBEAT_WINDOW_RECEIPT_DISPATCHER_MIN",
+    JOB_WEEKLY_DIGEST: "HEARTBEAT_WINDOW_WEEKLY_DIGEST_MIN",
+    JOB_DISPATCH_WORKER: "HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN",
+}
+
+
 def _window_min(job_name: str) -> Optional[int]:
     """Max tolerated gap (minutes) since last good run for a monitored job.
 
-    Read from config at call-time so env-driven retuning needs no redeploy
-    and tests can monkeypatch config attributes.
+    Resolved from the single _MONITORED_JOBS registry → config at call-time so
+    env-driven retuning needs no redeploy and tests can monkeypatch config.
+    Returns None for an unregistered job (the monitor then skips it).
     """
-    return {
-        "receipt_dispatcher": config.HEARTBEAT_WINDOW_RECEIPT_DISPATCHER_MIN,
-        "weekly_digest": config.HEARTBEAT_WINDOW_WEEKLY_DIGEST_MIN,
-        "dispatch_worker": config.HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN,
-    }.get(job_name)
+    attr = _MONITORED_JOBS.get(job_name)
+    if attr is None:
+        return None
+    return getattr(config, attr, None)
 
 
 def monitored_jobs() -> tuple[str, ...]:
-    """Job ids covered by the dead-man's switch."""
-    return ("receipt_dispatcher", "weekly_digest", "dispatch_worker")
+    """Job ids covered by the dead-man's switch (derived from the registry)."""
+    return tuple(_MONITORED_JOBS)
 
 
 async def _write_log_row(
@@ -92,7 +118,20 @@ async def _write_log_row(
 
 
 async def record_heartbeat(job_name: str) -> None:
-    """Persist a 'last good run' marker for a scheduled job (T1)."""
+    """Persist a 'last good run' marker for a scheduled job (T1).
+
+    A heartbeat for a job absent from the _MONITORED_JOBS registry would never be
+    polled by the dead-man's switch — exactly the silent-monitoring-gap class this
+    Epic exists to prevent (HOS-273). Warn loudly rather than fail open. The marker
+    is still written (it is harmless and observable), but ops gets a signal that the
+    registry needs an entry.
+    """
+    if job_name not in _MONITORED_JOBS:
+        logger.warning(
+            "heartbeat: record_heartbeat('%s') for a job NOT in _MONITORED_JOBS — "
+            "the dead-man's switch will never watch it. Add it to the registry.",
+            job_name,
+        )
     await _write_log_row(
         tool_name=f"scheduler.{job_name}",
         status="ok",

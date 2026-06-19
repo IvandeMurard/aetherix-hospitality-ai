@@ -25,6 +25,13 @@ heartbeat exceeds the job's window.
 | `weekly_digest` | Sundays @ `RECEIPT_DISPATCH_HOUR` | `HEARTBEAT_WINDOW_WEEKLY_DIGEST_MIN` | `11520` (8 d) | 7 d cadence + 1 d grace |
 | `dispatch_worker` | every 2 min | `HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN` | `15` (min) | 2 min cadence + grace; keeps NFR2 (≤ 3 min delivery) observable |
 
+> **Adding a monitored job (HOS-273):** the rows above are backed by a single
+> registry — `_MONITORED_JOBS` in `heartbeat.py` maps each `job id` → its window
+> env var. Add a job = one entry there + the matching `HEARTBEAT_WINDOW_*` default
+> in `config.py` + a row here; `monitored_jobs()` and the window lookup derive from
+> that registry, and call sites use the `JOB_*` constants (no bare strings). A
+> heartbeat recorded for a job missing from the registry logs a loud warning.
+
 | Monitor knob | Env var | Default | Notes |
 |---|---|---|---|
 | Poll interval | `HEARTBEAT_MONITOR_INTERVAL_MIN` | `15` (min) | How often the dead-man check runs |

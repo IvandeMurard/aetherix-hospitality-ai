@@ -96,6 +96,46 @@ async def test_record_heartbeat_never_raises_on_db_failure():
 
 
 # ---------------------------------------------------------------------------
+# Monitored-jobs registry — single source of truth (HOS-273)
+# ---------------------------------------------------------------------------
+
+def test_monitored_jobs_derives_from_registry():
+    assert heartbeat.monitored_jobs() == tuple(heartbeat._MONITORED_JOBS)
+
+
+def test_every_registered_job_resolves_to_an_int_window():
+    # Guards against a registry entry pointing at a missing/typo'd config attr —
+    # that would silently make _window_min return None and skip the job.
+    for job in heartbeat.monitored_jobs():
+        window = heartbeat._window_min(job)
+        assert isinstance(window, int), f"{job} window did not resolve to an int"
+
+
+def test_window_min_unknown_job_is_none():
+    assert heartbeat._window_min("not_a_real_job") is None
+
+
+def test_window_min_resolves_config_at_call_time(monkeypatch):
+    # Registry stores the config attr *name*; the value must be read live so an
+    # env-driven retune (or a test monkeypatch) takes effect without redeploy.
+    monkeypatch.setattr(heartbeat.config, "HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN", 999)
+    assert heartbeat._window_min(heartbeat.JOB_DISPATCH_WORKER) == 999
+
+
+async def test_record_heartbeat_warns_for_unregistered_job(caplog):
+    import logging
+
+    store: list = []
+    with patch.object(heartbeat, "AsyncSessionLocal", _CapturingSessionFactory(store)):
+        with caplog.at_level(logging.WARNING, logger=heartbeat.logger.name):
+            await heartbeat.record_heartbeat("ghost_job")
+
+    # The marker is still written (harmless + observable), but ops is warned.
+    assert len(store) == 1
+    assert any("ghost_job" in r.message and "_MONITORED_JOBS" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
 # record_trip (AC1 / AC3)
 # ---------------------------------------------------------------------------
 
