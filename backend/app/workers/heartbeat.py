@@ -5,18 +5,23 @@ but not *alert*: a cron that errors or never fires was silent. This module close
 that gap with two mechanisms:
 
   1. **Heartbeat** — each scheduled job calls `record_heartbeat(job)` on a
-     successful run, persisting a queryable "last good run" marker in
-     `agent_action_log` (status="ok", tool_name="scheduler.<job>"). No new table
-     (HOS-248: migration not required).
+     successful run, persisting a queryable "last good run" marker
+     (event_type="heartbeat") in the dedicated `scheduler_event` table.
 
   2. **Dead-man's switch** — `heartbeat_monitor` polls every
      HEARTBEAT_MONITOR_INTERVAL_MIN and trips an ops alert when a job's last
      heartbeat is older than its configured window (config-driven, no redeploy).
 
-Every trip is logged to `agent_action_log` with a typed reason (AC3) and routed
-to ops via `ops_dispatcher.dispatch_error` (Linear sink — already wired, mirror
-Obsidian included). All writes are fire-and-forget: instrumentation never breaks
-the job it observes.
+Every trip is logged to `scheduler_event` (event_type="trip") with a typed reason
+(AC3) and routed to ops via `ops_dispatcher.dispatch_error` (Linear sink — already
+wired, mirror Obsidian included). All writes are fire-and-forget: instrumentation
+never breaks the job it observes.
+
+Storage (HOS-271): this telemetry lives in its own `scheduler_event` table, NOT in
+`agent_action_log` (the per-MCP-tool-call billing + metering meter, ADR-0003 D1).
+A ~2-min dispatch_worker heartbeat would otherwise inject ~720 rows/day/env into
+the billing meter — `status='ok'` colliding with the tool-call enum and
+`hotel_id='_system'` polluting every `GROUP BY hotel_id` rollup.
 
 Sink decision (SM session 18/06): Linear via ops_dispatcher. No Slack.
 """
@@ -30,16 +35,16 @@ from typing import Optional
 from sqlalchemy import func, select
 
 from app.core import config
-from app.db.models import AgentActionLog
+from app.db.models import SchedulerEvent
 from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
-# Sentinel hotel_id for system-level (non-tenant) rows. agent_action_log.hotel_id
-# is NOT NULL, so scheduler events use this rather than None.
-SYSTEM_HOTEL_ID = "_system"
+# scheduler_event.event_type discriminator.
+EVENT_HEARTBEAT = "heartbeat"   # a successful "last good run" marker
+EVENT_TRIP = "trip"             # a dead-man / job-error / partial-failure alert
 
-# Typed trip reasons (AC3 / NFR2 Epic 12). Stored in agent_action_log.error_code.
+# Typed trip reasons (AC3 / NFR2 Epic 12). Stored in scheduler_event.reason.
 REASON_JOB_ERROR = "job_error"                 # a run raised / failed
 REASON_DEAD_MAN = "dead_man_timeout"           # a run never fired within its window
 REASON_PARTIAL = "partial_hotel_failures"      # run completed but N per-hotel failures
@@ -49,55 +54,89 @@ REASON_PARTIAL = "partial_hotel_failures"      # run completed but N per-hotel f
 _last_alerted: dict[tuple[str, str], datetime] = {}
 
 
+# ─── Monitored-jobs registry (HOS-273) ───────────────────────────────────────
+# Single source of truth for the dead-man's switch. Previously the set of
+# monitored jobs lived in THREE parallel places that had to stay in sync (the
+# config vars, the _window_min() dict, and the monitored_jobs() tuple) and each
+# call site hardcoded its own job string — so a new dispatcher could record a
+# heartbeat that nothing ever polled (silent monitoring gap). Now: one entry in
+# _MONITORED_JOBS registers a job, and both monitored_jobs() and _window_min()
+# derive from it. Call sites import the JOB_* constants instead of literals.
+
+# Job-name constants — call sites reference these, never a bare string, so a typo
+# can't silently desync a heartbeat from the registry.
+JOB_RECEIPT_DISPATCHER = "receipt_dispatcher"
+JOB_WEEKLY_DIGEST = "weekly_digest"
+JOB_DISPATCH_WORKER = "dispatch_worker"
+
+# job_name → name of the config attribute holding its max tolerated gap (minutes).
+# The attribute is resolved via getattr at call-time (not captured here) so that
+# env-driven retuning needs no redeploy and tests can monkeypatch config. Adding a
+# monitored job = one line here + its HEARTBEAT_WINDOW_* config var. Nothing else.
+_MONITORED_JOBS: dict[str, str] = {
+    JOB_RECEIPT_DISPATCHER: "HEARTBEAT_WINDOW_RECEIPT_DISPATCHER_MIN",
+    JOB_WEEKLY_DIGEST: "HEARTBEAT_WINDOW_WEEKLY_DIGEST_MIN",
+    JOB_DISPATCH_WORKER: "HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN",
+}
+
+
 def _window_min(job_name: str) -> Optional[int]:
     """Max tolerated gap (minutes) since last good run for a monitored job.
 
-    Read from config at call-time so env-driven retuning needs no redeploy
-    and tests can monkeypatch config attributes.
+    Resolved from the single _MONITORED_JOBS registry → config at call-time so
+    env-driven retuning needs no redeploy and tests can monkeypatch config.
+    Returns None for an unregistered job (the monitor then skips it).
     """
-    return {
-        "receipt_dispatcher": config.HEARTBEAT_WINDOW_RECEIPT_DISPATCHER_MIN,
-        "weekly_digest": config.HEARTBEAT_WINDOW_WEEKLY_DIGEST_MIN,
-        "dispatch_worker": config.HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN,
-    }.get(job_name)
+    attr = _MONITORED_JOBS.get(job_name)
+    if attr is None:
+        return None
+    return getattr(config, attr, None)
 
 
 def monitored_jobs() -> tuple[str, ...]:
-    """Job ids covered by the dead-man's switch."""
-    return ("receipt_dispatcher", "weekly_digest", "dispatch_worker")
+    """Job ids covered by the dead-man's switch (derived from the registry)."""
+    return tuple(_MONITORED_JOBS)
 
 
-async def _write_log_row(
-    tool_name: str,
-    status: str,
-    error_code: Optional[str] = None,
-    payload: Optional[dict] = None,
+async def _write_event(
+    job_name: str,
+    event_type: str,
+    *,
+    reason: Optional[str] = None,
+    detail: Optional[str] = None,
 ) -> None:
-    """Fire-and-forget insert into agent_action_log. Never raises."""
+    """Fire-and-forget insert into scheduler_event. Never raises."""
     try:
         async with AsyncSessionLocal() as db:
             db.add(
-                AgentActionLog(
-                    hotel_id=SYSTEM_HOTEL_ID,
-                    tool_name=tool_name,
-                    status=status,
-                    error_code=error_code,
-                    payload=payload,
-                    request_id="",
+                SchedulerEvent(
+                    job_name=job_name,
+                    event_type=event_type,
+                    reason=reason,
+                    detail=detail,
                 )
             )
             await db.commit()
     except Exception as exc:  # noqa: BLE001
-        logger.warning("heartbeat: agent_action_log write failed (%s): %s", tool_name, exc)
+        logger.warning("heartbeat: scheduler_event write failed (%s/%s): %s", job_name, event_type, exc)
 
 
 async def record_heartbeat(job_name: str) -> None:
-    """Persist a 'last good run' marker for a scheduled job (T1)."""
-    await _write_log_row(
-        tool_name=f"scheduler.{job_name}",
-        status="ok",
-        payload={"kind": "heartbeat", "job": job_name},
-    )
+    """Persist a 'last good run' marker for a scheduled job (T1).
+
+    A heartbeat for a job absent from the _MONITORED_JOBS registry would never be
+    polled by the dead-man's switch — exactly the silent-monitoring-gap class this
+    Epic exists to prevent (HOS-273). Warn loudly rather than fail open. The marker
+    is still written (it is harmless and observable), but ops gets a signal that the
+    registry needs an entry.
+    """
+    if job_name not in _MONITORED_JOBS:
+        logger.warning(
+            "heartbeat: record_heartbeat('%s') for a job NOT in _MONITORED_JOBS — "
+            "the dead-man's switch will never watch it. Add it to the registry.",
+            job_name,
+        )
+    await _write_event(job_name, EVENT_HEARTBEAT)
     logger.debug("heartbeat: recorded for job=%s", job_name)
 
 
@@ -128,12 +167,7 @@ async def record_trip(
         logger.debug("heartbeat: trip suppressed by debounce job=%s reason=%s", job_name, reason)
         return False
 
-    await _write_log_row(
-        tool_name=f"scheduler.{job_name}",
-        status="tool_error",
-        error_code=reason,
-        payload={"kind": "trip", "job": job_name, "reason": reason, "detail": detail},
-    )
+    await _write_event(job_name, EVENT_TRIP, reason=reason, detail=detail)
 
     try:
         from app.services.ops_dispatcher import dispatch_error
@@ -151,11 +185,16 @@ async def record_trip(
 
 
 async def _last_heartbeat_at(db, job_name: str) -> Optional[datetime]:
-    """Timestamp of the most recent successful heartbeat for a job, or None."""
+    """Timestamp of the most recent successful heartbeat for a job, or None.
+
+    Hits the dedicated scheduler_event table via idx_scheduler_event_job_type_created
+    (job_name, event_type, created_at) — no longer an unindexed scan over the
+    high-write billing meter.
+    """
     result = await db.execute(
-        select(func.max(AgentActionLog.created_at)).where(
-            AgentActionLog.tool_name == f"scheduler.{job_name}",
-            AgentActionLog.status == "ok",
+        select(func.max(SchedulerEvent.created_at)).where(
+            SchedulerEvent.job_name == job_name,
+            SchedulerEvent.event_type == EVENT_HEARTBEAT,
         )
     )
     return result.scalar_one_or_none()
@@ -207,20 +246,42 @@ async def _run_heartbeat_monitor_job() -> None:
         raise
 
 
+def _monitor_cron_trigger_kwargs(interval_min: int) -> dict:
+    """Build APScheduler cron kwargs for the monitor poll cadence.
+
+    QA-S4 follow-up (HOS-212): APScheduler's cron ``minute`` field only accepts
+    0–59, so ``minute="*/N"`` with ``N >= 60`` raises ValueError at registration
+    and the dead-man's switch never starts (a silent monitoring gap — the exact
+    failure this Epic exists to prevent). Guard it: an interval ≥ 60 min is
+    expressed as an hour-stepped cron instead (every ``N // 60`` hours, on the
+    hour). Sub-minute / non-positive values floor to 1 min.
+    """
+    if interval_min < 1:
+        interval_min = 1
+    if interval_min < 60:
+        return {"minute": f"*/{interval_min}"}
+    # >= 60 min: step on the hour field. APScheduler's hour range is 0–23, so the
+    # step value itself must stay ≤ 23 — cap there so an oversized config yields a
+    # valid (~daily) poll rather than crashing registration.
+    hours = min(max(interval_min // 60, 1), 23)
+    return {"hour": f"*/{hours}", "minute": "0"}
+
+
 def register_heartbeat_monitor_job(scheduler) -> None:
     """Register the dead-man's-switch monitor on the shared scheduler.
 
-    Fires every HEARTBEAT_MONITOR_INTERVAL_MIN minutes.
+    Fires every HEARTBEAT_MONITOR_INTERVAL_MIN minutes (or every N hours when the
+    configured interval is ≥ 60 min — see _monitor_cron_trigger_kwargs).
     """
     scheduler.add_job(
         _run_heartbeat_monitor_job,
         trigger="cron",
-        minute=f"*/{config.HEARTBEAT_MONITOR_INTERVAL_MIN}",
         id="heartbeat_monitor",
         replace_existing=True,
         misfire_grace_time=60,
+        **_monitor_cron_trigger_kwargs(config.HEARTBEAT_MONITOR_INTERVAL_MIN),
     )
     logger.info(
-        "heartbeat_monitor: cron job registered (every %d min)",
+        "heartbeat_monitor: cron job registered (interval %d min)",
         config.HEARTBEAT_MONITOR_INTERVAL_MIN,
     )

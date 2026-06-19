@@ -1,0 +1,73 @@
+name: Eval-by-Design Gate
+
+# EVAL-1 enforcement layer (HOS-216, ADR-0007 §4 / §D2.d).
+# Runs the eval coverage gate on PRs touching model/LLM/memory/provider/prompt
+# code or the golden dataset, and posts a sticky report comment.
+#
+# Rollout (AC5): ships in WARN mode — EVAL_GATE_BLOCKING="false" means a FAIL/
+# ERROR is surfaced in the comment but does NOT block the merge, because the gate
+# runs Prophet in CI (stochastic; ADR §9 R2/R4). Flip to blocking after N green
+# PRs prove Prophet-in-CI stable: set EVAL_GATE_BLOCKING to "true" (one-line PR +
+# a CLAUDE.md trace). The script already emits the real exit codes 0/1/2/3.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  eval-gate:
+    name: eval-gate
+    runs-on: ubuntu-latest
+    env:
+      EVAL_GATE_BLOCKING: "false"
+      GITHUB_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/pyproject.toml"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Run eval coverage gate
+        id: gate
+        run: |
+          set +e
+          uv run --project backend python scripts/ci/check_eval_coverage.py \
+            --base-ref "origin/${{ github.base_ref }}" \
+            --md-out eval-report.md \
+            --json-out eval-result.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Post sticky PR comment
+        if: always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: eval-report
+          path: eval-report.md
+
+      - name: Enforce verdict (WARN mode = non-blocking)
+        if: always()
+        run: |
+          code="${{ steps.gate.outputs.exit_code }}"
+          echo "eval gate exit code: $code"
+          if [ "$EVAL_GATE_BLOCKING" = "true" ] && { [ "$code" = "1" ] || [ "$code" = "2" ]; }; then
+            echo "::error::Eval-by-design gate failed (exit $code) — blocking."
+            exit 1
+          fi
+          echo "WARN mode — verdict surfaced in the PR comment, not blocking."
+          echo "Flip EVAL_GATE_BLOCKING to 'true' to enforce."

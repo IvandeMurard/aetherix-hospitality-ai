@@ -221,7 +221,9 @@ class TestStaffingConfigFieldNaming:
         service = StaffingService()
         # Set tiny budget and high shift cost so budget is exceeded
         cfg = StaffingConfig(labor_budget_gbp_per_day=100.0, avg_shift_cost=200.0)
-        with patch.object(service, "_dispatch_budget_alert", new_callable=AsyncMock):
+        # G-5 (HOS-252): the budget check is now absorbed by output_sanity — patch
+        # its trip dispatcher rather than the removed _dispatch_budget_alert.
+        with patch("app.services.output_sanity.record_sanity_trip", new_callable=AsyncMock):
             result = await service.calculate_recommendation(10, cfg)
         assert result["warnings"], "Expected a budget warning"
         assert "daily" in result["warnings"][0].lower()
@@ -239,7 +241,7 @@ class TestStaffingServiceAsyncContract:
     @pytest.mark.asyncio
     async def test_runs_without_error_in_async_context(self):
         service = StaffingService()
-        with patch.object(service, "_dispatch_budget_alert", new_callable=AsyncMock):
+        with patch("app.services.output_sanity.record_sanity_trip", new_callable=AsyncMock):
             result = await service.calculate_recommendation(50)
         assert "servers" in result
         assert "warnings" in result
