@@ -85,13 +85,18 @@ FULL_RUN_PREFIXES = (
     "backend/app/services/agent_constitution.py",
 )
 
-# A change to the shared contract re-runs everything evaluable (dataset / baseline
-# / thresholds). We don't try to diff the JSONL line-by-line per layer here.
-CONTRACT_PATHS = (
+# Shared-contract paths that re-run everything evaluable (we don't diff the JSONL
+# line-by-line per layer here). A per-layer baseline file (eval/baselines/<layer>_
+# baseline.json) instead re-runs only that layer — see detect() — so adding e.g. a
+# latency baseline doesn't drag in a forecast run.
+FULL_CONTRACT_PATHS = (
     "eval/golden_dataset.jsonl",
     "eval/FAILURE_THRESHOLDS.md",
-    "eval/baselines/",
 )
+# All contract paths (for the touched-but-not-evaluated exclusion — none of these
+# are "code" triggers).
+CONTRACT_PATHS = (*FULL_CONTRACT_PATHS, "eval/baselines/")
+_BASELINE_SUFFIX = "_baseline.json"
 
 # Layers that actually have a runner wired in scripts/eval/run_all.py today.
 # Detected-but-unevaluable layers (recommendation/recall/receipt/drift/latency)
@@ -166,8 +171,11 @@ def detect(changed: list[str]) -> tuple[list[str], set[str]]:
             layers.update(EVALUABLE_LAYERS)
         elif f in LAYER_BY_PATH:
             layers.add(LAYER_BY_PATH[f])
-        elif any(_matches(f, c) for c in CONTRACT_PATHS):
+        elif f in FULL_CONTRACT_PATHS:
             layers.update(EVALUABLE_LAYERS)
+        elif f.startswith("eval/baselines/") and f.endswith(_BASELINE_SUFFIX):
+            # A baseline bump re-runs only its own layer (ADR §D2.b).
+            layers.add(Path(f).name[: -len(_BASELINE_SUFFIX)])
     return touched, layers
 
 
