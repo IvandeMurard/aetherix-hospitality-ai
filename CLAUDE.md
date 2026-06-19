@@ -59,7 +59,7 @@
 | 19 | Orchestrateur séparé — Aetherix = F&B execution node | 19/05/2026 |
 | 20 | Anima — architecture mémoire 4 couches + DPIA gate | 19/05/2026 |
 | 21 | Apaleo MCP — convention nommage native + sales evidence Anthropic | 26/05/2026 |
-| 22 | Eval-by-design gate CI obligatoire (Qonto + BMad meta-fix) | 04/06/2026 |
+| 22 | Eval-by-design = offline gate CI + runtime eval + outcome eval (Qonto + BMad ; portée élargie 3 bras, amendé 19/06 ADR-0007 §13) | 04/06/2026 |
 | 23 | POS integration scope + adapter pattern (Phase 4) | 06/06/2026 |
 | 24 | Graphe de contexte Postgres recursive CTE (Phase 4) — Path C retenu cash-driven, AGE bloqué Supabase | 06/06/2026 |
 | 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — exécution Étape 2 (post-pilote OU pré-fundraise) | 16/06/2026 |
