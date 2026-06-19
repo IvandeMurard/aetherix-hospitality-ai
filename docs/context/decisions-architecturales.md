@@ -119,6 +119,13 @@ Pattern analogue à Décision #16 schema drift gate (hard gate, blocking merge).
 
 **Asset REX Phase 3 Track B :** article *"How we extended BMad-Method with Evaluation-by-Design for AI/ML products"* à rédiger post-EVAL-0..5 shippés.
 
+**Amendement 19/06/2026 (ADR-0007 §13) — portée élargie : 3 bras.** L'invariant gate CI ci-dessus reste le **Bras A** ; eval-by-design couvre désormais explicitement tout le pipeline agentique via 3 bras partageant la même taxonomie + `eval/FAILURE_THRESHOLDS.md` (un « FAIL » = même sémantique partout) :
+- **A — offline / dev-time** : non-régression golden dataset (gate `check_eval_coverage.py`, EVAL-0/1 — Epic 11 HOS-203).
+- **B — runtime / online** : guardrails Epic 12 (HOS-212, G-1..G-6) + MV drift/latency sur `agent_action_log`. ⇒ l'`eval-exempt` posé sur Epic 12 est **cohérent**, pas une entorse (on mesure le parachute en vol, pas au golden dataset), tant que B tient le même standard (raison typée NFR2, métriques d'abstention).
+- **C — outcome / aval** : Trust-KPI Epic 10 (HOS-174 / HOS-177/178) — *hors framework eval à ce jour*, à rattacher Phase 4 (HOS-275, articule Décision #26 outcome-capture).
+
+Suivi ré-armement Bras A (gate offline → blocking) : HOS-216 (machinerie, WARN-first) → HOS-274 (flip blocking après N PR vertes). Détail complet → `docs/adr/0007-evaluation-by-design.md` §13.
+
 ### 23 — POS integration scope + adapter pattern (Phase 4) (06/06/2026)
 
 Trigger : (a) Meuze.ai *"POS-only restaurants"* concurrent identifié 01/06 — défense narrative *"PMS+POS-aware cross-property intelligence"* (snippet H-6) requiert ship POS Phase 4 (pas 5) ; (b) ADR-0008 graphe de contexte (open decision 04/06) bloqué tant que schema features POS-driven non tranché ; (c) ADR-0005 cohort matching v1 PMS-only insuffisant pour discriminer hôtels même profil PMS / F&B opposé.
