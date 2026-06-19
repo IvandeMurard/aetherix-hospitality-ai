@@ -787,3 +787,51 @@ L'ADR est **ACCEPTED** quand :
 ## Annexe A — JSONL exemples canoniques
 
 Cf. section §3 — 8 exemples couvrant les layers : forecast (normal, event), recommendation (abstention), receipt (partial abstention), parser (FR terse, FR modified emoji), drift (KS spike), latency (p95 SLO), pos_anomaly (placeholder).
+
+---
+
+## 13. Addendum — 2026-06-19 · Eval-by-design = offline gate + runtime eval + outcome eval
+
+> **Status**: Accepted (amendement de portée) · **Date**: 2026-06-19 · **Auteur**: SM (Bob)
+> **Trigger**: clôture des guardrails runtime Epic 12 (HOS-212, S4→S6) + arbitrage PO sur la portée du principe
+> **Amende**: §1 Goal — étend la définition au-delà du gate CI dev-time
+> **Articule**: Epic 11 (eval framework, HOS-203), Epic 12 (runtime guardrails, HOS-212), Epic 10 (pilot Trust-KPI, HOS-174)
+
+### 13.1 Décision
+
+L'ADR-0007 v1 cadre eval-by-design essentiellement comme un **gate CI pre-merge** (D2/D3 : bloquer un merge qui régresse le golden dataset). Cette portée est **nécessaire mais insuffisante** : un gate dev-time prouve la qualité sur des scénarios synthétiques figés, mais n'évalue rien du comportement de l'agent **en production**, sur trafic réel, sous drift.
+
+**Amendement** : eval-by-design s'applique à **tout le pipeline agentique, en aval comme en amont** — **trois bras complémentaires** partageant une taxonomie et un vocabulaire de sévérité communs (`eval/FAILURE_THRESHOLDS.md`, raisons typées NFR2) pour qu'un « FAIL » signifie la même chose partout :
+
+| Bras | Quand | Quoi | Implémentation |
+|---|---|---|---|
+| **A — Offline / dev-time** | Pre-merge (CI) | Non-régression sur golden dataset : MAPE stratifié, parser accuracy, coverage catégorielle | EVAL-0/1 (Epic 11) — gate `check_eval_coverage.py` |
+| **B — Runtime / online** | Production, continu | Garde-fous + détection d'anomalie sur trafic réel : taux d'erreur, timeouts LLM, bornes de sortie, abstention, drift, latence SLO | **Epic 12 guardrails G-1..G-6** + EVAL-3/EVAL-5 (MV sur `agent_action_log`) |
+| **C — Outcome / aval** | Post-dispatch, boucle longue | La sortie a-t-elle été actionnée et a-t-elle produit de la valeur : acceptance, ablation, P&L | Trust-KPI Epic 10 (HOS-177/178) — KPI framework §Niveau 1-3 |
+
+### 13.2 Conséquences
+
+1. **`eval-exempt` sur Epic 12 est cohérent, pas une entorse.** Exempter les guardrails runtime (Bras B) du gate offline (Bras A) est correct : on ne passe pas un parachute au golden dataset, on le mesure en vol. Condition : le Bras B est tenu au **même standard** que A — chaque étage émet un signal mesurable, à raison typée (NFR2), alimentant les métriques d'abstention. C'est le cas (G-1..G-5 livrés S4-S6).
+
+2. **Le seam à fermer = rattacher le Bras C au framework.** L'eval d'outcome vit aujourd'hui dans l'instrumentation pilote (Epic 10), hors taxonomie eval. Tant qu'il n'est pas rattaché, « eval-by-design » reste partiel sur l'étage le plus en aval — la valeur réelle. À cadrer Phase 4 (outcome-capture instrumentation, Décision #26).
+
+3. **Matrice de couverture par étage** (vivante — miroir d'un doc Linear opérationnel) :
+
+| Étage pipeline | Bras A (offline) | Bras B (runtime) | Bras C (outcome) |
+|---|---|---|---|
+| Ingest PMS/POS | `ood_edge` | drift detector (EVAL-3 — ⚠️ HOS-207 non livré) | — |
+| Parse inbound | scénarios parser | abstention `parser_low_confidence` ✅ ; durcissement injection ⚠️ G-6 (HOS-253) | — |
+| Forecast | MAPE stratifié (EVAL-1 — ⚠️ gate WARN, HOS-216/274) | cold-start guard + `forecast_guardrail` ✅ | — |
+| Staffing / reco | — | `output_sanity` + feedback bounds ✅ | acceptance rate |
+| Dispatch | — | heartbeat + `error_rate_monitor` ✅ | — |
+| Feedback / training | — | guard bornes + rejet non-silencieux ✅ | — |
+| Outcome / valeur | — | — | Trust-KPI + ablation (Epic 10) |
+| Latence (transverse) | — | SLO + MV + alerte (EVAL-5 — ⚠️ HOS-209, S6) | — |
+
+4. **Risque nommé** : un eval-by-design *réduit au Bras A* donne un système prouvé sur synthétique mais aveugle au drift live ; *réduit au Bras B* laisse les régressions merger librement. Les trois bras sont requis et indissociables.
+
+### 13.3 Suivi
+
+- **Ré-armement Bras A** (gate offline → blocking) tracké : HOS-216 (machinerie, WARN) → HOS-274 (flip blocking après N PR vertes).
+- **Rattachement Bras C** au framework : à scoper Phase 4 (outcome-capture, Décision #26). Pas d'issue dédiée à ce jour → candidat backlog.
+- **Cross-link CLAUDE.md** : Décision #22 à amender (ajouter lien vers cet addendum + reformuler « gate CI » → « offline + runtime + outcome »). **À confirmer PO avant édition de la source de vérité** — non fait dans cet addendum.

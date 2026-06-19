@@ -24,7 +24,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.db.session import AsyncSessionLocal
 from app.services.alert_dispatcher import AlertDispatcherService
-from app.workers.heartbeat import record_heartbeat
+from app.workers.heartbeat import JOB_DISPATCH_WORKER, record_heartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ async def _run_dispatch_job() -> None:
             await _service.run_pending(db)
         logger.info("dispatch_worker: complete  job_id=%s", job_id)
         # AC2 — heartbeat marks a completed run for the dead-man's switch.
-        await record_heartbeat("dispatch_worker")
+        await record_heartbeat(JOB_DISPATCH_WORKER)
     except Exception as exc:
         logger.exception("dispatch_worker: error  job_id=%s", job_id)
         try:
