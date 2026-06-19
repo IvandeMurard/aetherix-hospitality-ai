@@ -207,20 +207,42 @@ async def _run_heartbeat_monitor_job() -> None:
         raise
 
 
+def _monitor_cron_trigger_kwargs(interval_min: int) -> dict:
+    """Build APScheduler cron kwargs for the monitor poll cadence.
+
+    QA-S4 follow-up (HOS-212): APScheduler's cron ``minute`` field only accepts
+    0–59, so ``minute="*/N"`` with ``N >= 60`` raises ValueError at registration
+    and the dead-man's switch never starts (a silent monitoring gap — the exact
+    failure this Epic exists to prevent). Guard it: an interval ≥ 60 min is
+    expressed as an hour-stepped cron instead (every ``N // 60`` hours, on the
+    hour). Sub-minute / non-positive values floor to 1 min.
+    """
+    if interval_min < 1:
+        interval_min = 1
+    if interval_min < 60:
+        return {"minute": f"*/{interval_min}"}
+    # >= 60 min: step on the hour field. APScheduler's hour range is 0–23, so the
+    # step value itself must stay ≤ 23 — cap there so an oversized config yields a
+    # valid (~daily) poll rather than crashing registration.
+    hours = min(max(interval_min // 60, 1), 23)
+    return {"hour": f"*/{hours}", "minute": "0"}
+
+
 def register_heartbeat_monitor_job(scheduler) -> None:
     """Register the dead-man's-switch monitor on the shared scheduler.
 
-    Fires every HEARTBEAT_MONITOR_INTERVAL_MIN minutes.
+    Fires every HEARTBEAT_MONITOR_INTERVAL_MIN minutes (or every N hours when the
+    configured interval is ≥ 60 min — see _monitor_cron_trigger_kwargs).
     """
     scheduler.add_job(
         _run_heartbeat_monitor_job,
         trigger="cron",
-        minute=f"*/{config.HEARTBEAT_MONITOR_INTERVAL_MIN}",
         id="heartbeat_monitor",
         replace_existing=True,
         misfire_grace_time=60,
+        **_monitor_cron_trigger_kwargs(config.HEARTBEAT_MONITOR_INTERVAL_MIN),
     )
     logger.info(
-        "heartbeat_monitor: cron job registered (every %d min)",
+        "heartbeat_monitor: cron job registered (interval %d min)",
         config.HEARTBEAT_MONITOR_INTERVAL_MIN,
     )
