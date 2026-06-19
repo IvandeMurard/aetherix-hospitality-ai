@@ -86,6 +86,92 @@ plausible (the guard never blocks legitimate feedback on an infra hiccup).
 
 ---
 
+## Agent error-rate / LLM-timeout alerting — HOS-249 (Epic 12 G-2)
+
+Turns `agent_action_log` from a passive register into an alarm. A rolling-window
+monitor (`backend/app/workers/error_rate_monitor.py`, registered on the shared
+scheduler) evaluates the last `ERROR_RATE_WINDOW_MIN` minutes on each poll and
+trips an ops alert (Linear, via `ops_dispatcher.dispatch_anomaly`) on breach.
+All config-driven (`backend/app/core/config.py`) — no redeploy.
+
+| Signal | Rule | Env var | Default |
+|---|---|---|---|
+| Non-ok rate (AC1) | `count(status != "ok") / total` over window, **only when** `total ≥ min samples` | `ERROR_RATE_NONOK_THRESHOLD` | `0.20` |
+| — min samples gate | rate check skipped below this many rows (low-volume false-alarm guard) | `ERROR_RATE_MIN_SAMPLES` | `20` |
+| Tool failures (AC2) | absolute count of `status="tool_error"` over window | `ERROR_RATE_TOOL_FAILURE_THRESHOLD` | `10` |
+| LLM timeouts (AC2) | absolute count of rows whose `error_code` matches the timeout substring | `ERROR_RATE_LLM_TIMEOUT_THRESHOLD` | `5` |
+| — timeout match | case-insensitive substring identifying a timeout `error_code` | `ERROR_RATE_TIMEOUT_ERROR_SUBSTR` | `timeout` |
+
+| Knob | Env var | Default | Notes |
+|---|---|---|---|
+| Poll interval | `ERROR_RATE_MONITOR_INTERVAL_MIN` | `15` | How often the window is evaluated |
+| Window width | `ERROR_RATE_WINDOW_MIN` | `60` | Rolling window evaluated each poll |
+| Alert debounce | `ERROR_RATE_ALERT_COOLDOWN_MIN` | `60` | Suppresses repeat alerts per metric (AC3) |
+
+**On any breach**: a typed trip row is written to `agent_action_log`
+(`status="tool_error"`, `error_code` ∈ {`error_rate_spike`, `tool_failure_spike`,
+`llm_timeout_spike`}, `tool_name="monitor.error_rate"`, `hotel_id="_system"`) and a
+`dispatch_anomaly` ops alert is raised (AC4 / NFR2). The monitor excludes its own
+trip rows from the window so an alert can't feed back into the next evaluation.
+The count checks fire regardless of volume (an absolute failure spike matters even
+at low traffic); only the *rate* check is gated on min samples.
+
+---
+
+## Confidence-tiered forecast guardrail at dispatch — HOS-251 (Epic 12 G-4)
+
+Generalizes the ADR-0005 cold-start auto-disable (degrade, don't extinguish) to
+the dispatch path. **Never blanks a recommendation** (Décision #6 HITL-always) —
+it produces a confidence *indicator*, not a switch. Enforced via
+`backend/app/services/forecast_guardrail.py`, applied in
+`aetherix_engine.get_forecast`. All config-driven (`backend/app/core/config.py`).
+
+| Tier | Trigger | Behaviour | Env var | Default |
+|---|---|---|---|---|
+| Nominal | `confidence ≥ WARN` and `live_mape ≤ MAPE_CATASTROPHE` | recommendation dispatched as-is | — | — |
+| **Tier 1** | `confidence < WARN` | dispatched **+ confidence caveat** (AgentAbstention flag `confidence_below_threshold`); covers unchanged | `FORECAST_CONFIDENCE_WARN` | `0.6` |
+| **Tier 2** | `confidence < CATASTROPHE` **or** `live_mape > MAPE_CATASTROPHE` | **baseline fallback** (tagged), staffing recomputed on baseline; flag `cold_start_meta_learner_drift` | `FORECAST_CONFIDENCE_CATASTROPHE` / `FORECAST_MAPE_CATASTROPHE` | `0.4` / `35` |
+
+Baseline source (Tier 2): `context["baseline_covers"]` → `context["recent_avg_covers"]`
+→ `FORECAST_BASELINE_DEFAULT_COVERS` (default `0` = disabled) → degrade to the
+Prophet point estimate (still delivered + tagged, never silent). The catastrophe
+confidence floor sits below Prophet's `0.5` confidence floor by default, so Tier 2
+is driven mainly by the live-MAPE breach; a richer trailing baseline + live-MAPE
+feed are a follow-up once EVAL-3/5 latency/MAPE telemetry is wired in.
+
+**On any non-nominal verdict**: a typed row is written to `agent_action_log`
+(`status="tool_error"`, `error_code`/`abstention_reason` = the tier reason,
+`abstention_layer="forecast"`, `tool_name="forecast.guardrail"`) so it feeds the
+Epic 11 abstention metrics (NFR2). Tier 2 additionally raises a `dispatch_anomaly`
+ops alert; Tier 1 is a routine manager caveat (no ops noise).
+
+---
+
+## Output sanity bounds on recommendations — HOS-252 (Epic 12 G-5)
+
+Centralized guard ensuring a recommendation is *physically sane* before dispatch
+(no "30 servers for 12 covers"). Enforced via
+`backend/app/services/output_sanity.py`, applied in
+`staffing_service.calculate_recommendation`. Out of bounds → clamp/flag + route
+to human, never a silent dispatch (AC2). Shares the property-capacity ceiling
+with G-3 (`feedback_guard.capacity_ceiling`). Config-driven.
+
+| Bound | Rule | Env var | Default |
+|---|---|---|---|
+| Capacity | covers above `total_seats × turns × mult` are **clamped** to the ceiling + routed to human | `FEEDBACK_COVERS_CAPACITY_MULTIPLIER` (shared with G-3) | `1.5` |
+| Headcount delta | headcount above `baseline × mult` → **flag** + route to human | `OUTPUT_SANITY_MAX_HEADCOUNT_DELTA_MULT` | `3.0` |
+| Budget (absorbed) | projected daily labor cost above the daily budget → **flag** | `StaffingConfig.labor_budget_gbp_per_day` | `1200` |
+
+The former ad-hoc budget alert in `staffing_service` is **absorbed** into this
+guard (AC5 — single source, no double logic). On any breach a typed trip row is
+written per flag to `agent_action_log` (`status="tool_error"`, `error_code` ∈
+{`output_over_capacity`, `output_absurd_delta`, `labor_budget_exceeded`},
+`tool_name="output.sanity"`) and a `dispatch_anomaly` ops alert is raised (AC3 /
+NFR2). Capacity is only enforced when the property's seats are known
+(degrade-open, same as G-3).
+
+---
+
 ## Coverage thresholds (eval gate — ADR-0007 §D3)
 
 Coverage = % of taxonomy categories with ≥ 1 PASS scenario in the current run.
