@@ -49,6 +49,9 @@ class AetherixEngine:
         # Exposed so POST /api/v1/predictions/train can (re)train the live singleton
         # (the OrchestratorAgent below shares this exact instance by reference).
         self.forecaster = forecaster
+        # Kept for the Epic 12 G-4 dispatch guardrail: a Tier-2 fallback recomputes
+        # staffing on the baseline covers (same instance the orchestrator uses).
+        self._staffer = staffer
 
         self._agent = OrchestratorAgent(
             forecaster=forecaster,
@@ -68,9 +71,62 @@ class AetherixEngine:
             return result.scalars().first()
 
     async def get_forecast(self, tenant_id: str, target_date: date, service_type: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Delegate to OrchestratorAgent, then cache result."""
+        """Delegate to OrchestratorAgent, apply the runtime guardrail, then cache."""
         result = await self._agent.get_forecast(tenant_id, target_date, service_type, context)
+        result = await self._apply_forecast_guardrail(tenant_id, result, context)
         await self._cache_recommendation(tenant_id, target_date, result)
+        return result
+
+    async def _apply_forecast_guardrail(
+        self, tenant_id: str, result: Dict[str, Any], context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Epic 12 G-4 (HOS-251) — confidence-tiered guardrail at dispatch.
+
+        Never blanks the recommendation: Tier 1 attaches a confidence caveat,
+        Tier 2 swaps in a baseline (and recomputes staffing on it). Non-fatal —
+        a guardrail failure must not drop an otherwise-valid recommendation.
+        """
+        from app.services import forecast_guardrail as fg
+
+        try:
+            prediction = result.get("prediction") or {}
+            covers = prediction.get("covers")
+            confidence = prediction.get("confidence")
+            if covers is None or confidence is None:
+                return result
+
+            verdict = await fg.apply(
+                tenant_id,
+                covers,
+                confidence,
+                context=context,
+                live_mape=(context or {}).get("live_mape"),
+            )
+            if verdict.is_nominal:
+                return result
+
+            # Tier 2: deliver the baseline, not the untrustworthy Prophet point —
+            # recompute staffing on the baseline covers so the headcount matches.
+            if verdict.baseline_used:
+                prediction["covers"] = verdict.effective_covers
+                prediction["baseline_used"] = True
+                result["staffing_recommendation"] = await self._staffer.calculate_recommendation(
+                    verdict.effective_covers
+                )
+
+            # Surface the manager-facing caveat alongside the delivered number.
+            result["forecast_guardrail"] = {
+                "tier": verdict.tier,
+                "reason": verdict.reason,
+                "baseline_used": verdict.baseline_used,
+                # AgentAbstention is intentionally falsy (__bool__ → False), so test
+                # `is not None` rather than truthiness here.
+                "human_message": (
+                    verdict.abstention.human_message if verdict.abstention is not None else None
+                ),
+            }
+        except Exception:
+            logger.warning("forecast guardrail skipped (non-fatal)", exc_info=True)
         return result
 
     async def _cache_recommendation(self, tenant_id: str, target_date: date, data: Dict) -> None:

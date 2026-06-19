@@ -218,3 +218,43 @@ def test_register_heartbeat_monitor_injects_job_without_starting():
     scheduler.add_job.assert_called_once()
     scheduler.start.assert_not_called()
     assert scheduler.add_job.call_args.kwargs.get("id") == "heartbeat_monitor"
+
+
+# ---------------------------------------------------------------------------
+# Cron interval guard — QA-S4 follow-up (HOS-212): minute field is 0–59, so a
+# */N step with N >= 60 must not reach APScheduler (it raises ValueError there).
+# ---------------------------------------------------------------------------
+
+def test_cron_kwargs_sub_hour_interval_uses_minute_step():
+    assert heartbeat._monitor_cron_trigger_kwargs(15) == {"minute": "*/15"}
+
+
+def test_cron_kwargs_interval_at_or_above_60_switches_to_hour_step():
+    # 60 min → every 1 hour on the hour; 120 → every 2 hours. Never minute="*/60".
+    assert heartbeat._monitor_cron_trigger_kwargs(60) == {"hour": "*/1", "minute": "0"}
+    assert heartbeat._monitor_cron_trigger_kwargs(150) == {"hour": "*/2", "minute": "0"}
+
+
+def test_cron_kwargs_non_positive_interval_floors_to_one_minute():
+    assert heartbeat._monitor_cron_trigger_kwargs(0) == {"minute": "*/1"}
+
+
+def test_cron_kwargs_oversized_interval_caps_at_valid_hour_step():
+    # An hour step > 23 would overflow the hour field (0–23); cap at */23.
+    assert heartbeat._monitor_cron_trigger_kwargs(60 * 48) == {"hour": "*/23", "minute": "0"}
+
+
+@pytest.mark.parametrize("interval", [1, 15, 59, 60, 90, 120, 1440, 5000])
+def test_register_builds_a_valid_cron_trigger_for_any_interval(interval, monkeypatch):
+    """The registered trigger must be constructible by APScheduler — i.e. the
+    guard never lets an out-of-range minute step through (regression for the
+    crash the QA-S4 finding flagged)."""
+    from apscheduler.triggers.cron import CronTrigger
+
+    monkeypatch.setattr(heartbeat.config, "HEARTBEAT_MONITOR_INTERVAL_MIN", interval)
+    scheduler = MagicMock()
+    heartbeat.register_heartbeat_monitor_job(scheduler)
+
+    kwargs = scheduler.add_job.call_args.kwargs
+    # Reconstruct the trigger exactly as APScheduler would from the cron kwargs.
+    CronTrigger(**{k: v for k, v in kwargs.items() if k in ("minute", "hour")})
