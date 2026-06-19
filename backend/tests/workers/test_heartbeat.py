@@ -83,10 +83,11 @@ async def test_record_heartbeat_writes_ok_row():
 
     assert len(store) == 1
     row = store[0]
-    assert row.tool_name == "scheduler.receipt_dispatcher"
-    assert row.status == "ok"
-    assert row.hotel_id == heartbeat.SYSTEM_HOTEL_ID
-    assert row.payload["kind"] == "heartbeat"
+    # HOS-271 — dedicated scheduler_event channel, not agent_action_log.
+    assert row.job_name == "receipt_dispatcher"
+    assert row.event_type == heartbeat.EVENT_HEARTBEAT
+    assert row.reason is None
+    assert row.detail is None
 
 
 async def test_record_heartbeat_never_raises_on_db_failure():
@@ -153,9 +154,11 @@ async def test_record_trip_writes_typed_row_and_dispatches():
     assert emitted is True
     assert len(store) == 1
     row = store[0]
-    assert row.status == "tool_error"
-    assert row.error_code == heartbeat.REASON_PARTIAL
-    assert row.tool_name == "scheduler.weekly_digest"
+    # HOS-271 — trip is an event_type='trip' row on scheduler_event.
+    assert row.event_type == heartbeat.EVENT_TRIP
+    assert row.reason == heartbeat.REASON_PARTIAL
+    assert row.job_name == "weekly_digest"
+    assert "2/5 hotels failed." in row.detail
     dispatch.assert_awaited_once()
     assert "weekly_digest" in dispatch.await_args.kwargs["title"]
 
