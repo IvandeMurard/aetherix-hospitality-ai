@@ -16,6 +16,8 @@
 **Analyse complète** : `docs/competitive/conduit-ai-analysis.md`
 **Risque** : extension "internal agents" vers F&B forecasting native OU claim mindshare marketing "F&B analytics" sans tech derrière OU client Marriott refusant Aetherix car "on a déjà notre AI hospitality".
 
+**Status update 2026-06-20 — PAS de nouveau trigger.** Confirmation statut : ex-HostAI, $3.1M seed (PI Labs + YC, avril 2025), agents guest/ops multi-step text+voice. Aucun trigger F&B forecasting / embauche ML / partnership PMS Apaleo/Mews / nouvelle levée ce mois-ci. ⚠️ Collision de noms confirmée : ignorer "Conduit" proptech (€2.9M) et "Conduit" frontline scheduling ($375K) — pas le même acteur. Maintien cadence scan ciblé LinkedIn careers 2 semaines.
+
 **Triggers à monitorer chaque lundi** :
 - Annonces produit *"Predictive analytics"*, *"F&B forecasting"*, *"Staffing recommendations"*, *"Demand prediction"*
 - Embauches LinkedIn : "ML engineer", "data scientist", "forecast", "operations research", "time-series"
@@ -29,7 +31,13 @@
 - Si trigger "Apaleo partnership" → outreach Apaleo Marketplace + activer notre listing en urgence
 - Si trigger "funding round" → outreach YC founder-to-founder (Cole Rubin, Punn Kam) pour explorer partnership
 
-### W2 — Apaleo Copilot scope F&B (canari sur PMS bedrock) — 🚨 **FIRED 2026-06-08**
+### W2 — Apaleo Copilot scope F&B (canari sur PMS bedrock) — 🚨 **FIRED 2026-06-08, RE-FIRED 2026-06-20**
+
+**Status update 2026-06-20 — ESCALADE** : la couche agentique Apaleo s'étend sur 3 fronts nouveaux depuis le 08/06 :
+1. **Apaleo Trace Agent** (partenariat THE FLAG) — premier agent Apaleo qui **exécute** des tâches opérationnelles (pas juste chat) à partir des reservation comments, via LLM + APIs ouvertes. Toujours pas de F&B explicite, mais le pattern "demande → tâche exécutée" est désormais prouvé en prod chez Apaleo.
+2. **Copilot A2A + SOP upload** — le Copilot accepte l'upload de SOPs en texte brut ET ouvre un canal **agent-to-agent (A2A)** : des agents/apps tiers peuvent s'y connecter. Ceci change la nature du risque : pas seulement "Apaleo absorbe le F&B" mais "Apaleo devient la plateforme dans laquelle Aetherix doit choisir de se brancher (A2A) ou rester standalone (MCP)".
+3. **Expansion France** (Nicolas Suissa, Country Lead) — marché direct, propriété PAR sandbox.
+→ 2 items flaggés Linear ce 20/06 (spike A2A + audit Trace Agent) — voir `docs/veille/2026-06-20-veille.md` §Flaggés Linear.
 
 **Status update 2026-06-08 — VEILLE TRIGGER DÉCLENCHÉ** : Apaleo a officiellement lancé son AI Copilot (Hospitality Net mai 2026). Scope actuel = ops multi-domaine front + back office : chat interface · check arrivals · extend stays · plan housekeeping · resolve overbookings · assign rooms. **F&B explicite PAS ENCORE**, mais expansion technique triviale depuis cette base (chat + MCP tools déjà en place).
 
@@ -39,6 +47,8 @@
 - Scénario C (20%) — F&B forecasting/staffing predictive natif → niche fermée sur PMS bedrock, pivot urgent requis
 
 **Trigger d'escalade vers Scénario C** : embauches Apaleo "operations AI" mentionnant F&B / forecasting / data science · partnership annoncé avec Meuze.ai-like · release notes Copilot avec `forecast_covers` / `predict_staffing`.
+
+**Nouveau trigger 06-20 — canal A2A** : ouverture A2A = décision archi time-sensitive indépendante du scénario F&B (A/B/C) — même si Apaleo ne fait jamais de F&B natif, le choix "Aetherix branché en A2A dans le Copilot" vs "MCP standalone" doit être tranché avant le pilote M4 (juillet 2026). Spike flaggé Linear 06-20.
 
 **Profil rapide** : Apaleo confirmé first PMS MCP à ITB Berlin 2026. Risque historique : Copilot étend vers F&B forecasting/staffing → fermerait la niche Aetherix sur le PMS bedrock (Décisions #1, #7, #21).
 **Évidence base** : `docs/competitive/apaleo-mcp-mapping.md` (HOS-197) · **Audit fonctionnel** : à créer via session SM 06-08 → `docs/competitive/apaleo-copilot-functional-audit.md`
@@ -141,14 +151,16 @@
 
 **Mitigation** : monitor quarterly (cycle PMS release plus lent que startups) · Aetherix reste API-first Apaleo+Mews focused.
 
-### W5 — Jengu.ai (front-of-house adjacent)
+### W5 — Jengu.ai (front-of-house adjacent) — **scan escaladé 2026-06-20**
 
 **Profil rapide** : agents IA custom hospitality, focus comm guest + pricing + voice bots. Pas mention F&B ops.
 **Risque** : extension vers ops F&B (convergence probable 12-18 mois).
 
+**Status update 2026-06-20** : article blog Jengu *"How AI is Transforming Hotel F&B Operations"* (menu design → revenue) repéré — premier contenu publié explicitement F&B par cet acteur. Forecasting covers / staffing prediction toujours absents du pitch, mais le sujet F&B entre dans leur narratif marketing. **Cadence passée de mensuel léger → ciblé ce mois-ci** (re-scan dans 2-4 semaines pour confirmer si c'est un one-off content ou un pivot produit).
+
 **Triggers** :
 - Funding round publique
-- Features F&B / staffing dans roadmap
+- Features F&B / staffing dans roadmap (pas juste contenu marketing)
 - PMS specific integrations annoncées
 
 **Mitigation** : speed Phase 3 pilote pour capture mindshare "AI for hospitality F&B" avant convergence.
