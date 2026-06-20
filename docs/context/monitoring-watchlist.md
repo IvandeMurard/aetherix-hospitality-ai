@@ -39,6 +39,8 @@
 3. **Expansion France** (Nicolas Suissa, Country Lead) — marché direct, propriété PAR sandbox.
 → 2 items flaggés Linear ce 20/06 (spike A2A + audit Trace Agent) — voir `docs/veille/2026-06-20-veille.md` §Flaggés Linear.
 
+**Cross-référence 06-20 — Apaleo "The Agentic Hotel" (Hotel Yearbook 2026, pub. 15/06)** : article de positionnement Apaleo confirmant **THE FLAG Zürich** comme case study flagship agentic (même partenaire que Trace Agent). Thèse : infra ouverte API-first + design property-specific + ROI = friction reduction (pas headcount reduction) — citation exemple : demande baby cot devient automatiquement tâche housekeeping, "45 min de room assignment disparaissent/jour". **Toujours aucune mention F&B/staffing/MCP/A2A/Copilot/Trace Agent dans cet article** (article distinct du lancement Trace Agent, ton plus narratif/vision). Confirme philosophie "augmentation pas remplacement" — compatible avec narrative Aetherix (tandem bike, Décision #6). THE FLAG Zürich = property à surveiller/benchmarker en priorité pour l'audit Trace Agent flaggé Linear (même partenaire, accès facilité si outreach).
+
 **Status update 2026-06-08 — VEILLE TRIGGER DÉCLENCHÉ** : Apaleo a officiellement lancé son AI Copilot (Hospitality Net mai 2026). Scope actuel = ops multi-domaine front + back office : chat interface · check arrivals · extend stays · plan housekeeping · resolve overbookings · assign rooms. **F&B explicite PAS ENCORE**, mais expansion technique triviale depuis cette base (chat + MCP tools déjà en place).
 
 **Scénarios à 3-6 mois (analyse PM 06-08)** :
@@ -207,6 +209,23 @@
 - Tester migration shadow read (dual-write `operational_memory` Supabase + Qdrant, compare results) avant cutover
 
 **Cadence** : passive — déclenche review **uniquement** sur trigger. Pas de cron récurrent (gaspillage si pas atteint).
+
+### WT3 — UCP (Universal Commerce Protocol) vs MCP — race de standards agentic commerce — ajouté 2026-06-20
+
+**Profil rapide** : Amadeus a annoncé (insight Amadeus Hospitality, juin 2026) une expansion majeure de sa stratégie IA — AI Commerce Solution (booking agentique full-stack), Amadeus Max (couche assistant cross-produit), et surtout un **co-développement avec Google d'un nouveau standard : Universal Commerce Protocol (UCP) pour le lodging**. Citation : *"AI is reshaping how travelers discover, shop, book, and experience hotels"* (Francisco Pérez-Lozao Rüter, President Hospitality, Amadeus).
+**Impact si UCP devient dominant côté distribution/booking** : ne menace pas directement MCP côté ops (Décision #21, Apaleo MCP nommage natif) — UCP cible la commerce/booking layer (GDS, CRS, advertising), MCP cible la couche opérationnelle/data (PMS, F&B, staffing). Mais si Google+Amadeus imposent UCP comme franchise standard sur tout le funnel agentic hospitality (incluant des extensions vers ops), cela pourrait fragmenter l'écosystème standards (UCP commerce vs MCP ops) ou, à l'inverse, créer une pression d'interopérabilité (UCP-to-MCP bridge) à anticiper.
+**Évidence baseline** : https://www.amadeus-hospitality.com/insight/amadeus-unveils-major-expansion-of-ai-strategy-across-hospitality-sector/
+
+**Triggers à monitorer (trimestriel)** :
+- UCP spec publique ouverte (vs proprietary Amadeus+Google) — déterminant pour adoption large
+- Extension UCP scope vers données opérationnelles (vs commerce/booking uniquement)
+- Annonce interopérabilité UCP ↔ MCP (ou absence — silo confirmé)
+- Adoption UCP par d'autres GDS/CRS majeurs (Sabre, Travelport) ou PMS (Mews, Cloudbeds)
+- Mentions UCP dans contexte F&B / staffing / ops (hors scope actuel = commerce pur)
+
+**Mitigation si trigger déclenché** : pas d'action immédiate requise — Aetherix opère côté ops (MCP), pas côté commerce/booking (UCP). Si convergence ops+commerce se dessine (ex. UCP veut absorber des signaux opérationnels pour personnaliser le booking), réévaluer position MCP-native vs interop bridge.
+
+**Cadence** : trimestrielle — protocole nouveau-né (juin 2026), pas de cron automatisé pour l'instant.
 
 ## Priorité 3 — veille distante
 
