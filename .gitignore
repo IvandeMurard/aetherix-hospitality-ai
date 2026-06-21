@@ -55,3 +55,9 @@ C:\\Users\\
 
 # Eval run artifacts (baselines are tracked; reports are generated)
 eval/reports/
+
+# --- Secrets : ne jamais committer (incident Q2-01, HOS-277, 2026-06-21) ---
+.env.fly
+.env.*
+!.env.example
+!**/.env.example
