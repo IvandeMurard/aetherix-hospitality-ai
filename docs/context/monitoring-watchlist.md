@@ -52,6 +52,8 @@
 
 **Nouveau trigger 06-20 — canal A2A** : ouverture A2A = décision archi time-sensitive indépendante du scénario F&B (A/B/C) — même si Apaleo ne fait jamais de F&B natif, le choix "Aetherix branché en A2A dans le Copilot" vs "MCP standalone" doit être tranché avant le pilote M4 (juillet 2026). Spike flaggé Linear 06-20.
 
+**Status update 2026-06-22 — Agent Hub lancé + A2A confirmé canal officiel** : Apaleo a officiellement lancé l'**Agent Hub**, premier marketplace d'agents IA hôteliers (developers/service providers publient leurs agents), en même temps que l'ouverture A2A du Copilot à des agents tiers. Les deux voies sont désormais actionnables concrètement, pas seulement anticipées : (1) lister Aetherix comme F&B agent sur Agent Hub — visibilité 1 500+ hôtels Apaleo ; (2) brancher Aetherix en A2A comme couche F&B native de Copilot (qui ne couvre toujours pas covers/staffing). Routé en Linear sans nouvelle issue orpheline : commentaire sur [HOS-180](https://linear.app/hospitalityagent/issue/HOS-180) (Story 10.6, listing Agent Hub déjà créée Phase 3 — passée actionnable) + nouvelle [HOS-278](https://linear.app/hospitalityagent/issue/HOS-278) (Story 10.7, spike A2A, sous le même Epic HOS-174).
+
 **Profil rapide** : Apaleo confirmé first PMS MCP à ITB Berlin 2026. Risque historique : Copilot étend vers F&B forecasting/staffing → fermerait la niche Aetherix sur le PMS bedrock (Décisions #1, #7, #21).
 **Évidence base** : `docs/competitive/apaleo-mcp-mapping.md` (HOS-197) · **Audit fonctionnel** : à créer via session SM 06-08 → `docs/competitive/apaleo-copilot-functional-audit.md`
 
@@ -98,6 +100,21 @@
 **Mitigation** : positioning snippet H-8 partagé avec OtelAI + Apaleo Marketplace listing + Phase 3 pilot delivery rapide.
 
 **À vérifier prochaine session** : confirmer URL canonique TH1.ai (ambiguïté th1.ai vs thine.com vs theone.inc dans les sources veille 06-08).
+
+### W14 — Grevon (Kore MCP + Ops staff intelligence) — ajouté 2026-06-22
+
+**Profil rapide** : Lancé à HITEC 2026 (San Antonio). 200+ propriétés actives, 12 pays. Suite 3 produits : **Grevon Echo** (voice agent inbound 24/7), **Grevon Pulse** (booking agent, inquiry→reservation), **Grevon Ops** (operations intelligence — terme générique, pas de claim explicite covers/staffing forecasting dans le contenu public consulté 06-22). **Grevon Kore** = couche MCP centrale ("Built on MCP, AI-native from Day 1") qui traduit les données PMS en format AI-readable — intègre 7+ PMS (Mews, Cloudbeds, Oracle Hospitality, Apaleo, etc.). Positionnement business model = direct booking / élimination commissions OTA ("Book more. Answer less."), pas F&B execution.
+**Risque** : "Ops" reste vague publiquement — si la roadmap couvre covers/labor forecasting, devient concurrent direct sur le core staffing Aetherix. Architecture MCP-native dès day 1 confirme la thèse de marché Décision #21 (MCP comme standard), mais élargit le champ concurrentiel MCP-natif (s'ajoute à Apaleo, SiteMinder, Simple Booking, TravelOS, Sabre, Aven).
+**Mesh check (06-22)** : aucun signal Anima (pas de guest cognition/world model), Tacet (pas de données environnementales/capteurs) ni Orchestrateur (pas de pattern multi-agent routing — Kore est un hub de données, pas un orchestrateur décisionnel) au-delà de l'architecture MCP générique déjà couverte par W2/WT1.
+
+**Triggers à monitorer (cadence mensuelle)** :
+- Détail produit Grevon Ops révélant covers/labor forecasting explicite (= concurrent direct staffing)
+- Customer wins enterprise / case studies F&B
+- Funding round (signal agressivité GTM)
+- Partenariat ou listing croisé avec Apaleo Agent Hub (W2) — chevauchement direct de marketplace
+
+**Mitigation** : positioning H-8 "specialist beats generalist" (cf. W10/W11) si Ops s'avère être un forecasting généraliste plutôt que F&B-spécifique. Pas d'action immédiate — scan passif jusqu'à signal Ops plus concret.
+**Doc dédié** : `docs/competitive/grevon-ops.md` (à créer si W14 escalade).
 
 ## Priorité 2 — monitoring tactique
 
