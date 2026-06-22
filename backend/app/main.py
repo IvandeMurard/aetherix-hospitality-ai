@@ -53,8 +53,10 @@ from app.workers.agent_action_log_partition_rotation import (
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.event_sync import start_event_scheduler
+from app.workers.error_rate_monitor import register_error_rate_monitor_job
 from app.workers.heartbeat import register_heartbeat_monitor_job
 from app.workers.kpi_aggregator import register_kpi_aggregator_job
+from app.workers.latency_slo_worker import register_latency_slo_job
 from app.workers.memory_metrics import register_memory_metrics_job
 from app.workers.receipts_dispatcher import (
     register_receipt_dispatch_job,
@@ -138,6 +140,10 @@ async def lifespan(app: FastAPI):
     register_weekly_digest_job(_scheduler)
     # HOS-248 (Epic 12 G-1) — dead-man's switch over scheduled dispatchers.
     register_heartbeat_monitor_job(_scheduler)
+    # HOS-249 (Epic 12 G-2) — rolling-window error-rate / LLM-timeout alerting.
+    register_error_rate_monitor_job(_scheduler)
+    # HOS-209 (EVAL-5) — nightly latency SLO MV refresh + p95 breach alert.
+    register_latency_slo_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler

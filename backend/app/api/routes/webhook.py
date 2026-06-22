@@ -342,6 +342,11 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
                 logger.warning("_bg_receipt_feedback: ack reply failed for %s", from_number)
             return
 
+        # HOS-270: track whether the manager's numeric correction was rejected by
+        # the G-3 plausibility guard, so Step 5 can tell them (not a silent drop).
+        # Defined at function scope so the reply branch sees it on every path.
+        covers_rejected = False
+
         # Step 4: write to operational_memory via tool_submit_feedback_to_memory
         if recommendation_id:
             from app.mcp_server import tool_submit_feedback_to_memory
@@ -357,7 +362,6 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
                 # retrievable) feedback memory below — otherwise a rejected/aberrant
                 # value still poisons the model via the feedback path even though
                 # the ground-truth write was blocked.
-                covers_rejected = False
                 if (
                     feedback.intent == "structured_correction"
                     and feedback.actual_value is not None
@@ -407,7 +411,16 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
 
     # Step 5: Twilio reply based on confidence
     try:
-        if feedback.requires_confirmation:
+        if covers_rejected:
+            # HOS-270: the figure failed the plausibility guard — never drop it
+            # silently. Tell the manager their note was kept but the number wasn't,
+            # and invite a correction.
+            reply = (
+                "I've kept your note, but that covers figure looked outside the usual "
+                "range for your venue, so I didn't record the number. If it's correct, "
+                "please reply with the figure again to confirm."
+            )
+        elif feedback.requires_confirmation:
             reply = (
                 "I've recorded your note with medium confidence. "
                 "Reply with a thumbs-up to confirm, or ignore to discard."
