@@ -711,11 +711,21 @@ class ReceiptsService:
                     + float(profile.turns_lunch or 0)
                     + float(profile.turns_dinner or 0)
                 )
+            # HOS-268: exclude flagged-but-ingested rows from the historical max.
+            # Under FEEDBACK_BOUNDS_POLICY="flag" an implausible value is persisted
+            # tagged "manager_feedback_flagged"; counting it here would let the soft
+            # historical-sanity bound self-erode (each aberrant value raises the max,
+            # admitting the next). NULL-safe: legacy rows (source unset) still count.
+            from sqlalchemy import or_
             hist = (
                 await self.db.execute(
                     select(func.max(StaffingRecommendation.actual_covers)).where(
                         StaffingRecommendation.tenant_id == tenant_id,
                         StaffingRecommendation.actual_covers.is_not(None),
+                        or_(
+                            StaffingRecommendation.actual_covers_source.is_(None),
+                            StaffingRecommendation.actual_covers_source != "manager_feedback_flagged",
+                        ),
                     )
                 )
             ).scalar_one_or_none()

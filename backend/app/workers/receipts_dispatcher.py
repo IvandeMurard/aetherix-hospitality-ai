@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import date
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -30,7 +31,13 @@ from app.db.session import AsyncSessionLocal
 from app.integrations.sendgrid_client import SendGridClient
 from app.integrations.twilio_client import TwilioClient
 from app.services.receipts import ReceiptsService
-from app.workers.heartbeat import REASON_PARTIAL, record_heartbeat, record_trip
+from app.workers.heartbeat import (
+    JOB_RECEIPT_DISPATCHER,
+    JOB_WEEKLY_DIGEST,
+    REASON_PARTIAL,
+    record_heartbeat,
+    record_trip,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,76 +45,69 @@ _twilio = TwilioClient()
 _sendgrid = SendGridClient()
 
 
-async def _dispatch_receipt_for_hotel(
-    service: ReceiptsService,
+async def _send_to_channels(
     hotel: RestaurantProfile,
-    target_date: date,
+    subject: str,
+    narrative: str,
+    *,
+    log_ctx: str,
 ) -> None:
-    """Build and send one Receipt for a single hotel."""
+    """Send a composed narrative to a hotel's WhatsApp + email channels (HOS-272).
+
+    WhatsApp is the required channel (OQ1); email is opt-in — sent only when the
+    hotel has a notification_email. Each channel is independently guarded so one
+    failing never blocks the other, and NotConfiguredError is downgraded to a log
+    line (expected in envs without Twilio/SendGrid). Shared by the daily Receipt
+    and weekly digest dispatchers — previously copy-pasted 3-except blocks in both.
+    """
     hotel_id: str = hotel.tenant_id
-    hotel_name: str = hotel.property_name or hotel.outlet_name or hotel_id
 
-    payload = await service.daily_receipt(hotel_id, target_date)
-
-    drill_down_url = (
-        f"{config.FRONTEND_BASE_URL.rstrip('/')}"
-        f"/receipts/{hotel_id}/{target_date.isoformat()}"
-    )
-    narrative = await service.compose_narrative(payload, hotel_name, drill_down_url)
-
-    # WhatsApp — required channel (OQ1)
     if hotel.phone_number:
         try:
             sid = await _twilio.send_whatsapp(hotel.phone_number, narrative)
-            logger.info(
-                "receipts_dispatcher: WhatsApp sent hotel_id=%s date=%s sid=%s",
-                hotel_id,
-                target_date,
-                sid,
-            )
+            logger.info("%s: WhatsApp sent hotel_id=%s sid=%s", log_ctx, hotel_id, sid)
         except NotConfiguredError:
             logger.warning(
-                "receipts_dispatcher: Twilio not configured — skipping WhatsApp hotel_id=%s",
-                hotel_id,
+                "%s: Twilio not configured — skipping WhatsApp hotel_id=%s", log_ctx, hotel_id
             )
         except Exception:
-            logger.exception(
-                "receipts_dispatcher: WhatsApp send failed hotel_id=%s date=%s",
-                hotel_id,
-                target_date,
-            )
+            logger.exception("%s: WhatsApp send failed hotel_id=%s", log_ctx, hotel_id)
 
-    # Email — opt-in (OQ1): only when hotel has notification_email + SendGrid configured
     if hotel.notification_email:
-        subject = f"Daily Receipt — {hotel_name} — {target_date.isoformat()}"
         try:
             await _sendgrid.send_email(hotel.notification_email, subject, narrative)
             logger.info(
-                "receipts_dispatcher: email sent hotel_id=%s date=%s to=%s",
-                hotel_id,
-                target_date,
-                hotel.notification_email,
+                "%s: email sent hotel_id=%s to=%s", log_ctx, hotel_id, hotel.notification_email
             )
         except NotConfiguredError:
             logger.debug(
-                "receipts_dispatcher: SendGrid not configured — skipping email hotel_id=%s",
-                hotel_id,
+                "%s: SendGrid not configured — skipping email hotel_id=%s", log_ctx, hotel_id
             )
         except Exception:
-            logger.exception(
-                "receipts_dispatcher: email send failed hotel_id=%s date=%s",
-                hotel_id,
-                target_date,
-            )
+            logger.exception("%s: email send failed hotel_id=%s", log_ctx, hotel_id)
 
 
-async def _run_receipt_dispatch_job() -> None:
-    """Entry point called daily by APScheduler at RECEIPT_DISPATCH_HOUR."""
+async def _run_dispatch_loop(
+    job_name: str,
+    *,
+    log_ctx: str,
+    label: str,
+    per_hotel: Callable[[ReceiptsService, RestaurantProfile], Awaitable[None]],
+) -> None:
+    """Shared scaffold for the per-hotel dispatch jobs (P2-3 / P2-5, HOS-272).
+
+    Owns the active-hotel SELECT, the per-hotel loop with dispatched/skipped/failed
+    counters, the aggregated partial-failure trip (AC1), the success heartbeat
+    (AC2) and the fatal-error handler. Each job supplies only its registry
+    ``job_name`` (for heartbeat/trip), a ``log_ctx``/``label`` for messages, and a
+    ``per_hotel`` coroutine that builds & sends one hotel's message.
+
+    Note: ``job_name`` is the heartbeat-registry id (e.g. "receipt_dispatcher");
+    ``log_ctx`` is the human worker name used in logs + ops alerts (e.g.
+    "receipts_dispatcher") — they intentionally differ.
+    """
     job_id = str(uuid.uuid4())[:8]
-    target_date = date.today()
-    logger.info(
-        "receipts_dispatcher: started job_id=%s date=%s", job_id, target_date
-    )
+    logger.info("%s: started job_id=%s", log_ctx, job_id)
 
     try:
         async with AsyncSessionLocal() as db:
@@ -126,18 +126,20 @@ async def _run_receipt_dispatch_job() -> None:
             async with AsyncSessionLocal() as db:
                 service = ReceiptsService(db)
                 try:
-                    await _dispatch_receipt_for_hotel(service, hotel, target_date)
+                    await per_hotel(service, hotel)
                     dispatched += 1
                 except Exception:
                     failed += 1
                     logger.exception(
-                        "receipts_dispatcher: dispatch failed hotel_id=%s job_id=%s",
+                        "%s: dispatch failed hotel_id=%s job_id=%s",
+                        log_ctx,
                         hotel.tenant_id,
                         job_id,
                     )
 
         logger.info(
-            "receipts_dispatcher: complete job_id=%s dispatched=%d skipped=%d failed=%d",
+            "%s: complete job_id=%s dispatched=%d skipped=%d failed=%d",
+            log_ctx,
             job_id,
             dispatched,
             skipped,
@@ -147,30 +149,63 @@ async def _run_receipt_dispatch_job() -> None:
         # AC1 — per-hotel failures are otherwise silent; trip one aggregated alert.
         if failed:
             await record_trip(
-                "receipt_dispatcher",
+                job_name,
                 REASON_PARTIAL,
-                f"Daily Receipt: {failed}/{dispatched + failed} hotels failed. job_id={job_id}.",
+                f"{label}: {failed}/{dispatched + failed} hotels failed. job_id={job_id}.",
             )
         # AC2 — heartbeat marks a completed run (even with partial failures, the
         # job itself ran → the dead-man's switch should not trip).
-        await record_heartbeat("receipt_dispatcher")
+        await record_heartbeat(job_name)
 
     except Exception as exc:
-        logger.exception("receipts_dispatcher: fatal error job_id=%s", job_id)
+        logger.exception("%s: fatal error job_id=%s", log_ctx, job_id)
         try:
             from app.services.ops_dispatcher import dispatch_error
 
             await dispatch_error(
-                title="receipts_dispatcher job failed",
-                detail=(
-                    f"Daily Receipt dispatch failed. "
-                    f"job_id={job_id}. Error: {exc!r}"
-                ),
-                tags=["receipts_dispatcher", "worker"],
+                title=f"{log_ctx} job failed",
+                detail=f"{label} dispatch failed. job_id={job_id}. Error: {exc!r}",
+                tags=[log_ctx, "worker"],
             )
         except Exception as inner:  # noqa: BLE001
-            logger.warning("receipts_dispatcher: dispatch_error failed: %s", inner)
+            logger.warning("%s: dispatch_error failed: %s", log_ctx, inner)
         raise
+
+
+async def _dispatch_receipt_for_hotel(
+    service: ReceiptsService,
+    hotel: RestaurantProfile,
+    target_date: date,
+) -> None:
+    """Build and send one Receipt for a single hotel."""
+    hotel_id: str = hotel.tenant_id
+    hotel_name: str = hotel.property_name or hotel.outlet_name or hotel_id
+
+    payload = await service.daily_receipt(hotel_id, target_date)
+
+    drill_down_url = (
+        f"{config.FRONTEND_BASE_URL.rstrip('/')}"
+        f"/receipts/{hotel_id}/{target_date.isoformat()}"
+    )
+    narrative = await service.compose_narrative(payload, hotel_name, drill_down_url)
+    subject = f"Daily Receipt — {hotel_name} — {target_date.isoformat()}"
+
+    await _send_to_channels(hotel, subject, narrative, log_ctx="receipts_dispatcher")
+
+
+async def _run_receipt_dispatch_job() -> None:
+    """Entry point called daily by APScheduler at RECEIPT_DISPATCH_HOUR (P2-3)."""
+    target_date = date.today()
+
+    async def _per_hotel(service: ReceiptsService, hotel: RestaurantProfile) -> None:
+        await _dispatch_receipt_for_hotel(service, hotel, target_date)
+
+    await _run_dispatch_loop(
+        JOB_RECEIPT_DISPATCHER,
+        log_ctx="receipts_dispatcher",
+        label="Daily Receipt",
+        per_hotel=_per_hotel,
+    )
 
 
 def register_receipt_dispatch_job(scheduler: AsyncIOScheduler) -> None:
@@ -206,102 +241,24 @@ async def _dispatch_weekly_digest_for_hotel(
 
     payload = await service.weekly_digest(hotel_id, week_end)
     narrative = await service.compose_weekly_narrative(payload, hotel_name)
-
     subject = f"Weekly Digest — {hotel_name} — week of {payload.week_start}"
 
-    if hotel.phone_number:
-        try:
-            sid = await _twilio.send_whatsapp(hotel.phone_number, narrative)
-            logger.info(
-                "weekly_digest: WhatsApp sent hotel_id=%s week_end=%s sid=%s",
-                hotel_id, week_end, sid,
-            )
-        except NotConfiguredError:
-            logger.warning(
-                "weekly_digest: Twilio not configured — skipping WhatsApp hotel_id=%s", hotel_id
-            )
-        except Exception:
-            logger.exception(
-                "weekly_digest: WhatsApp send failed hotel_id=%s week_end=%s", hotel_id, week_end
-            )
-
-    if hotel.notification_email:
-        try:
-            await _sendgrid.send_email(hotel.notification_email, subject, narrative)
-            logger.info(
-                "weekly_digest: email sent hotel_id=%s week_end=%s to=%s",
-                hotel_id, week_end, hotel.notification_email,
-            )
-        except NotConfiguredError:
-            logger.debug(
-                "weekly_digest: SendGrid not configured — skipping email hotel_id=%s", hotel_id
-            )
-        except Exception:
-            logger.exception(
-                "weekly_digest: email send failed hotel_id=%s week_end=%s", hotel_id, week_end
-            )
+    await _send_to_channels(hotel, subject, narrative, log_ctx="weekly_digest")
 
 
 async def _run_weekly_digest_job() -> None:
     """Entry point called every Sunday by APScheduler at RECEIPT_DISPATCH_HOUR (P2-5)."""
-    job_id = str(uuid.uuid4())[:8]
     week_end = date.today()
-    logger.info("weekly_digest: started job_id=%s week_end=%s", job_id, week_end)
 
-    try:
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(RestaurantProfile).where(RestaurantProfile.is_active.is_(True))
-            )
-            hotels = result.scalars().all()
+    async def _per_hotel(service: ReceiptsService, hotel: RestaurantProfile) -> None:
+        await _dispatch_weekly_digest_for_hotel(service, hotel, week_end)
 
-        dispatched = 0
-        skipped = 0
-        failed = 0
-        for hotel in hotels:
-            if not hotel.phone_number and not hotel.notification_email:
-                skipped += 1
-                continue
-            async with AsyncSessionLocal() as db:
-                service = ReceiptsService(db)
-                try:
-                    await _dispatch_weekly_digest_for_hotel(service, hotel, week_end)
-                    dispatched += 1
-                except Exception:
-                    failed += 1
-                    logger.exception(
-                        "weekly_digest: dispatch failed hotel_id=%s job_id=%s",
-                        hotel.tenant_id, job_id,
-                    )
-
-        logger.info(
-            "weekly_digest: complete job_id=%s dispatched=%d skipped=%d failed=%d",
-            job_id, dispatched, skipped, failed,
-        )
-
-        # AC1 — aggregated alert on per-hotel failures (otherwise silent).
-        if failed:
-            await record_trip(
-                "weekly_digest",
-                REASON_PARTIAL,
-                f"Weekly Digest: {failed}/{dispatched + failed} hotels failed. job_id={job_id}.",
-            )
-        # AC2 — heartbeat marks a completed run.
-        await record_heartbeat("weekly_digest")
-
-    except Exception as exc:
-        logger.exception("weekly_digest: fatal error job_id=%s", job_id)
-        try:
-            from app.services.ops_dispatcher import dispatch_error
-
-            await dispatch_error(
-                title="weekly_digest job failed",
-                detail=f"Weekly KPI digest failed. job_id={job_id}. Error: {exc!r}",
-                tags=["weekly_digest", "worker"],
-            )
-        except Exception as inner:  # noqa: BLE001
-            logger.warning("weekly_digest: dispatch_error failed: %s", inner)
-        raise
+    await _run_dispatch_loop(
+        JOB_WEEKLY_DIGEST,
+        log_ctx="weekly_digest",
+        label="Weekly Digest",
+        per_hotel=_per_hotel,
+    )
 
 
 def register_weekly_digest_job(scheduler: AsyncIOScheduler) -> None:
