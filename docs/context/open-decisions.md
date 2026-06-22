@@ -148,6 +148,8 @@
 
 **Dépendances :** volume de données pilote Phase 3-4 · propensity logging HOS-247 (Phase 4 gate) · définition reward (open decision ci-dessus)
 
+**Veille (20/06/2026) :** Sapiaverse (simulation à 8.14Md d'agents IA, backé Sequoia Scout/a16z Scout/NVIDIA) valide marché-niveau l'idée de "tester une politique sur une population simulée avant déploiement réel" — catégorie désormais financée sérieusement. Pas une méthode adoptable telle quelle (simulation de population générique, pas estimateur causal sur cohortes guest), mais référence utile au design Phase 5 : un méta-test "simuler le Learning Engine sur cohortes synthétiques avant d'explorer sur de vrais guests" serait cohérent avec Option (A) ci-dessus (exploration off-policy cohortes) et réduirait le risque DPIA pendant la phase d'apprentissage du choix d'estimateur.
+
 ---
 
 ### Floor k-anonymat couche Segment (17/06/2026)
