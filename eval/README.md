@@ -53,6 +53,24 @@ exemptions (SM rejects abuse — human review, not an auto-check):
 | `ci-only` | `scripts/ci/*` (except `check_eval_coverage.py` itself → full run) |
 | `test-only` | `backend/tests/` only |
 
+### Offline model-quality (must-eval) vs runtime guardrails (legitimately exempt)
+
+The recurring case-by-case arbitration (HOS-274) is the **eval-by-design frontier**:
+which code is *offline model quality* (Bras A — must carry eval coverage) versus
+*runtime/online guardrails* (Bras B, Epic 12 / HOS-212 — legitimately `eval-exempt`).
+The taxonomy is settled by ADR-0007 §13 (three-arm addendum) and Décision #22:
+
+| Arm | What it measures | Lives in | Gate behaviour |
+|---|---|---|---|
+| **A — offline / dev-time** | Does the model still produce good outputs? (golden-dataset non-regression) | `EVAL_TRIGGER_PATHS` (forecast/parser/recommendation/memory services, `app/providers/`, `backend/prompts/`, the dataset + thresholds) | **Must-eval** — gate runs, no exemption without an authorised label |
+| **B — runtime / online** | Is the *live* system behaving? (heartbeats, dead-man's switch, error-rate / latency monitors, dispatchers) | `app/services/heartbeat*`, dispatchers, `*_monitor.py`, scheduler/worker plumbing (Epic 12 / HOS-212) | **Legitimately `eval-exempt` (`infra`)** — no golden-dataset scenario applies; correctness is asserted by unit/integration tests, not MAPE |
+| **C — outcome / downstream** | Was the output actioned and did it create value? (Trust-KPI) | Epic 10 instrumentation (`recommendation_acceptance_rate`, ablation) | Not yet on the offline substrate — HOS-275 (Phase 4) |
+
+**Rule of thumb:** if a change can move a `golden_dataset.jsonl` metric, it is Bras A →
+must-eval. If it only changes *when/whether* a job fires or an alert is sent, it is
+Bras B → `eval-exempt` with the `infra` justification. Runtime guardrails do **not**
+get a golden-dataset scenario; they are covered by their own tests + `HEARTBEAT_THRESHOLDS.md`.
+
 ---
 
 ## Dataset: `golden_dataset.jsonl`
