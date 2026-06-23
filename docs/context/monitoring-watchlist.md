@@ -101,22 +101,24 @@
 
 **À vérifier prochaine session** : confirmer URL canonique TH1.ai (ambiguïté th1.ai vs thine.com vs theone.inc dans les sources veille 06-08).
 
-### W14 — Grevon (Kore MCP + Ops staff intelligence) — ajouté 2026-06-22
+### W14 — Grevon (suite verticale AI-native : Pulse/Echo/Ops/Kore/Link + Axiom/Axis à venir) — ajouté 2026-06-22, escaladé 2026-06-23
 
-**Profil rapide** : Lancé à HITEC 2026 (San Antonio). 200+ propriétés actives, 12 pays. Suite 3 produits : **Grevon Echo** (voice agent inbound 24/7), **Grevon Pulse** (booking agent, inquiry→reservation), **Grevon Ops** (operations intelligence — terme générique, pas de claim explicite covers/staffing forecasting dans le contenu public consulté 06-22). **Grevon Kore** = couche MCP centrale ("Built on MCP, AI-native from Day 1") qui traduit les données PMS en format AI-readable — intègre 7+ PMS (Mews, Cloudbeds, Oracle Hospitality, Apaleo, etc.). Positionnement business model = direct booking / élimination commissions OTA ("Book more. Answer less."), pas F&B execution.
-**Risque** : "Ops" reste vague publiquement — si la roadmap couvre covers/labor forecasting, devient concurrent direct sur le core staffing Aetherix. Architecture MCP-native dès day 1 confirme la thèse de marché Décision #21 (MCP comme standard), mais élargit le champ concurrentiel MCP-natif (s'ajoute à Apaleo, SiteMinder, Simple Booking, TravelOS, Sabre, Aven).
+**Profil rapide — ESCALADÉ 06-23, analyse complète `docs/competitive/grevon-analysis.md`** : pas un concurrent "Ops" isolé — suite verticale complète AI-native, fondée par des **vétérans RMS Cloud** (Peter Buttigieg, fondateur RMS Cloud, Non-Exec Chairman ; Tom Buttigieg, CEO, ex-RMS Cloud). Architecture : **Link** (connecteur PMS-agnostique : RMS Cloud, Cloudbeds, Oracle, **Apaleo**, Maxxton, Mews, Clock) → **Kore** (hub MCP central temps réel) → **Pulse** (booking) / **Echo** (voice) / **Ops** (staff Q&A SOPs+PMS). Deux produits en dev, GA fin 2026 : **Axiom** (feed outbound vers ChatGPT/Gemini/Perplexity — recoupe directement WT3 UCP vs MCP) et **Axis** (dashboard analytics ROI/attribution). 200+ propriétés, 12 pays.
+**Risque** : (1) Ops reste un Q&A conversationnel sans forecasting/staffing disclosed même en profondeur — pas de Scénario C déclenché ; (2) Axiom = 3e tentative de standardiser "inventaire hôtelier lisible par agents IA", concurrent conceptuel d'UCP et de l'A2A Apaleo (W2) — à arbitrer avant que Aetherix ne tranche son propre positionnement (HOS-278) ; (3) lignée RMS Cloud = accès réseau distribution potentiellement plus rapide qu'un concurrent stealth pur ; (4) thèse "AIO" (Agent Intelligence Optimization, blog dédié) valide en externe le concept interne Agent SEO d'Aetherix (P1-5/HOS-72) — n'est plus un framing propriétaire.
 **Mesh check (06-22) — CORRIGÉ 06-23** : le check initial (homepage uniquement, "aucun signal Anima/Tacet/Orchestrateur") était incomplet. Une page produit Ops détaillée montre un cas d'usage housekeeping concret : *"Room 214 has a special request note — Ops pulls the guest's request directly from PMS context — dietary preferences, pillow type, allergy alert — and surfaces it before the team enters the room."* C'est exactement le pattern Anima (claim guest-risk/préférence surfacé au bon moment opérationnel, Décision #20/#26) — **déjà en prod sur 200+ propriétés**, pas juste une thèse. Signal réel pour Anima : voir `anima_vision.md` (mémoire) pour la note de validation marché. Les deux autres cas (front desk policy, maintenance contact) restent du Q&A SOP générique — pas de signal Tacet (rien d'environnemental/capteurs) ni Orchestrateur (pas de routing multi-agent, Kore reste un hub de données) au-delà de l'architecture MCP déjà couverte par W2/WT1.
 
 **Process note** : le scan initial s'est arrêté à la homepage. Pour les prochains concurrents flaggés, creuser les pages produit/feature détaillées avant de conclure "aucun signal" sur un nœud du Mesh — le signal le plus pertinent était sur une page secondaire, pas la landing page.
 
 **Triggers à monitorer (cadence mensuelle)** :
 - Détail produit Grevon Ops révélant covers/labor forecasting explicite (= concurrent direct staffing)
-- Customer wins enterprise / case studies F&B
+- Lancement Axiom (GA fin 2026) — chevauchement concret avec décision A2A/MCP Aetherix (HOS-278) à vérifier
+- Lancement Axis — benchmarking anonymisé inter-propriétés proche de la thèse Hive Memory fédérée, à surveiller pour positionnement
+- Customer wins enterprise / case studies F&B nommés
 - Funding round (signal agressivité GTM)
-- Partenariat ou listing croisé avec Apaleo Agent Hub (W2) — chevauchement direct de marketplace
+- Partenariat ou listing croisé avec Apaleo Agent Hub (W2) — chevauchement direct de marketplace (Apaleo déjà dans la liste PMS supportés Grevon)
 
-**Mitigation** : positioning H-8 "specialist beats generalist" (cf. W10/W11) si Ops s'avère être un forecasting généraliste plutôt que F&B-spécifique. Pas d'action immédiate — scan passif jusqu'à signal Ops plus concret.
-**Doc dédié** : `docs/competitive/grevon-ops.md` (à créer si W14 escalade).
+**Mitigation** : positioning H-8 "specialist beats generalist" (cf. W10/W11) — applicable verbatim (suite généraliste vs F&B specialist). Apaleo Marketplace/Agent Hub listing rapide (HOS-180) pour devancer un chevauchement marketplace. Pas d'action immédiate sur le forecasting — scan mensuel jusqu'à signal Ops plus concret.
+**Doc dédié** : `docs/competitive/grevon-analysis.md` (créé 06-23).
 
 ## Priorité 2 — monitoring tactique
 
