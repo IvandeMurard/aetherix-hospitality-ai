@@ -216,6 +216,22 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 ---
 
+### 28 — PMS canonical schema : jurisprudence Provider étendue aux adapters PMS (amendement ADR-0006) (23/06/2026)
+
+**Trigger :** analyse concurrentielle approfondie Grevon (`docs/competitive/grevon-analysis.md`, 23/06/2026) — leur produit **Kore** revendique explicitement *"a typical PMS API gives you raw data — rates as numbers, room types as codes. Kore goes further: it enriches, validates, and translates that data into a format LLMs actually understand"*, en amont de tous leurs agents (Pulse/Echo/Ops). Vérification du code Aetherix a confirmé un gap réel : `PMSAdapter` (`backend/app/services/pms_sync.py`) existe comme interface normalisée (`get_occupancy`, `get_revenue`, `get_historical_data`, `update_staffing_in_pms`), mais le pipeline forecast (`data_transformer.py`) la **contourne** — il lit les champs Apaleo bruts directement ("arrival", "adults", "children") pour construire le dataframe Prophet. Aucun adapter Mews n'existe encore (Phase 4, Décision #23 / HOS-186).
+
+**Antécédent documentaire :** `docs/ARCHITECTURE.md` (obsolète, fév. 2026 — cf. CLAUDE.md §Points d'attention) nommait déjà ce composant — "PMS Adapters" listé dans une "Semantic Layer" planifiée Phase 5 — jamais construit. Le scope est tombé silencieusement quand l'architecture a pivoté (Qdrant→pgvector, Décision #3) sans décision explicite de retrait : c'est une dette de *process* (rien n'a flaggé la disparition), pas seulement une dette technique. Le "Semantic Layer" qui a survécu dans les docs courants (`docs/MARKET_INTELLIGENCE.md`, `docs/ROADMAP_NOW_NEXT_LATER.md`) ne désigne aujourd'hui que la couche RAG/pgvector (`fb_patterns` + `operational_memory`) — un concept différent (rétrieval de patterns historiques), pas la normalisation de flux PMS live.
+
+**Décision :** étendre la jurisprudence Provider (Décision #9/#10, déjà appliquée au POS via ADR-0006 D3) aux adapters PMS. Introduire un schéma canonique vendor-agnostique (dataclasses dans `backend/app/providers/pms/base.py`, miroir exact de `providers/pos/base.py`) entre les adapters (Apaleo aujourd'hui, Mews demain) et tout consommateur interne (`DataTransformer`, `PredictionEngine`, `StaffRecommender`). Aucun composant business ne doit plus jamais lire un champ vendor-spécifique directement — seuls les adapters connaissent le format natif du PMS source.
+
+**Scope — distinct de HOS-186 :** HOS-186 ("PMS Connector universel") opère au niveau **Orchestrateur↔PMS** (Décision #19, cross-node, multi-PMS vu depuis l'extérieur d'Aetherix) — reste backlog Phase 4, ne démarre qu'après Phase 3 Track A. Cette décision opère au niveau **interne au node Aetherix** (adapters↔pipeline forecast) — orthogonale, ne bloque pas et n'est pas bloquée par HOS-186. Une fois construit, le schéma canonique devient la fondation sur laquelle HOS-186 pourra s'appuyer (l'Orchestrateur consommerait le schéma déjà normalisé plutôt que de re-normaliser depuis zéro).
+
+**Parallélisation :** ne touche pas `app/providers/pos/*` (Epic 13, HOS-254) ni le pilote Apaleo prod (Phase 3 Track A) — fichiers disjoints. Pré-requis recommandé avant la première story d'adapter Mews (Phase 4), pas avant. Détail technique → amendement `docs/adr/0006-pos-integration.md` §9.
+
+**Linear :** Epic 15 (HOS-279) — 2 stories, ~5 points, `relatedTo` HOS-186.
+
+---
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).
