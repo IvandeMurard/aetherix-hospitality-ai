@@ -18,6 +18,7 @@
 | H-6 | Hotel-native, PMS+POS-aware cross-property intelligence. | Vs Meuze.ai (F&B for restaurants/QSR) |
 | H-7 | Federated by design — your hotel inherits the cohort's operational wisdom from Day 1, your raw data stays in your tenant. | Hive Memory Federated narrative — counter Meuze.ai's live federated claim (announced Phase 3, shipped Phase 4) |
 | H-8 | OtelAI manages 6 departments. Aetherix masters one — F&B. When 30-45% of operating costs depend on a single forecast, specialist beats generalist. | Anti multi-department generalist platforms (OtelAI, TH1.ai, Venli, AeroGuest) — vertical depth > horizontal breadth on operational decisions |
+| H-9 | PMS vendors are racing to become the decisioning layer. We bet F&B decisioning is too deep a discipline for any of them to build as a side feature — local incumbent or global platform. | Vs the "record vs learn" PMS consolidation thesis (Christian H., LinkedIn 06/2026) — extends H-8 one level up: vs PMS-level learning layers, not just F&B startups |
 
 ## Human-AI collaboration framing — "Tandem bike" (Murati frame)
 
@@ -99,6 +100,31 @@
 - **Network effect** (value buyers) — collective wisdom calibrates your forecast
 - **Day-1 unlock** (acquisition pitch) — solo cold-start eliminated
 - **Cohort sharpening** (retention pitch) — every accepted reco sharpens for all members
+
+## "Record vs Learn" framing — PMS decisioning layer (Christian H. frame)
+
+**Source narrative:** Christian H. (LinkedIn, 06/2026) — on the long tail of 300-1200+ regional PMS incumbents vs global platforms (Mews, Cloudbeds): *"The cloud settled legacy versus modern a decade ago. The divide is record versus learn... The winner will not be whoever has the best interface. It will be whoever becomes the trusted source of operational truth inside the hotel, and turns it into decisions the building acts on."*
+
+**Why this matters for Aetherix:** this names, at market level, the exact mechanism already tracked under **W2** (Apaleo Copilot/Trace Agent) and **W4** (Mews "AI-native OS") in `docs/context/monitoring-watchlist.md` — PMS vendors, local or global, racing to become the layer that decides, not just records. It generalizes the threat from "will this one PMS add F&B" to "every PMS is trying to become the decisioning layer, period."
+
+**Snippet copy (full version — deck pilot, founder narrative, technical-buyer page):**
+
+> *"Every PMS — a thirty-year-old regional incumbent or a two-year-old cloud platform — is racing to become the layer that decides, not just records. We don't compete in that race. We bet that F&B decisioning — covers forecasting, staffing, food waste — is too deep a discipline to be anyone's side feature, whoever wins the PMS war. Aetherix sits on top of whichever PMS a hotel runs, local or global, and does the one thing none of them will do well: turn F&B data into a decision the kitchen acts on tonight."*
+
+**Variant (shorter, 1-liner — landing / LinkedIn comment):**
+
+> *"PMS vendors are learning to decide. We bet F&B decisioning is too specialized a discipline for any of them to build as a side feature — local incumbent or global platform."*
+
+**Variant (combine with H-7 Hive Memory — same local+global logic, different axis — careful not to conflate the two):**
+
+> *"The local-vs-global divide in PMS is about who owns the record. Ours is about who owns the learning: your hotel's own F&B patterns (Private Memory) inherit the cohort's wisdom from Day 1 (Hive Memory) — without needing your PMS, regional or global, to be the one that learns it."*
+
+**3 surfaces this framing covers:**
+- **Founder narrative / LinkedIn engagement** — direct, additive response to a thought-leader post already framing the right market shift, rather than a defensive watchlist note
+- **Technical-buyer page** — clarifies Aetherix is PMS-agnostic by design (Décision #19, #28), not a contender in the PMS consolidation war
+- **Investor narrative** — extends H-8 (specialist vs generalist) one level up: vs PMS-level learning layers (Apaleo, Mews), not only vs F&B-specific startups (OtelAI, Grevon)
+
+**Cross-reference:** `docs/context/monitoring-watchlist.md` W2, W4 · H-7 (Federated cohort) · H-8 (Specialist vs Generalist).
 
 ## Sources de vérité
 
