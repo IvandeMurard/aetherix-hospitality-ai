@@ -107,6 +107,8 @@
 
 **Why this matters for Aetherix:** this names, at market level, the exact mechanism already tracked under **W2** (Apaleo Copilot/Trace Agent) and **W4** (Mews "AI-native OS") in `docs/context/monitoring-watchlist.md` — PMS vendors, local or global, racing to become the layer that decides, not just records. It generalizes the threat from "will this one PMS add F&B" to "every PMS is trying to become the decisioning layer, period."
 
+**Two nested axes in the post — don't conflate them:** (1) **the moat** — idiosyncrasy (local OTAs, payment rails, regulation, billing quirks a global platform ignores) vs generalist (scales, but doesn't adapt) — and (2) **the weapon** — record vs learn (storing vs learning a decision policy). His thesis: the winner combines both — a global platform that learns is still generalist without idiosyncratic depth; a regional incumbent that learns *and* keeps its local depth has a home-field advantage no global platform can replicate. The axis that maps onto Aetherix is **#1, idiosyncrasy vs generalist** — not a company-scale distinction (regional firm vs global firm), but an adaptation-depth one, applied one level deeper: per-property, not per-country.
+
 **Snippet copy (full version — deck pilot, founder narrative, technical-buyer page):**
 
 > *"Every PMS — a thirty-year-old regional incumbent or a two-year-old cloud platform — is racing to become the layer that decides, not just records. We don't compete in that race. We bet that F&B decisioning — covers forecasting, staffing, food waste — is too deep a discipline to be anyone's side feature, whoever wins the PMS war. Aetherix sits on top of whichever PMS a hotel runs, local or global, and does the one thing none of them will do well: turn F&B data into a decision the kitchen acts on tonight."*
@@ -115,16 +117,17 @@
 
 > *"PMS vendors are learning to decide. We bet F&B decisioning is too specialized a discipline for any of them to build as a side feature — local incumbent or global platform."*
 
-**Variant (combine with H-7 Hive Memory — same local+global logic, different axis — careful not to conflate the two):**
+**Variant (combine with Tacit Knowledge framing, not Hive Memory — idiosyncrasy is the right pole, not local-vs-global scale):**
 
-> *"The local-vs-global divide in PMS is about who owns the record. Ours is about who owns the learning: your hotel's own F&B patterns (Private Memory) inherit the cohort's wisdom from Day 1 (Hive Memory) — without needing your PMS, regional or global, to be the one that learns it."*
+> *"Christian H. is right that the moat is idiosyncrasy, not scale — local OTAs and billing quirks a global platform ignores. We apply the same principle one level deeper: the regular Tuesday banquet, the way this specific kitchen actually runs. Private Memory captures that — what your manager never thought to write down. Hive Memory is only the cold-start scaffold; it fades as your hotel's own idiosyncratic patterns take over (Day-1 prior → property-specific truth). We never let the generalist answer be the final one."*
 
-**3 surfaces this framing covers:**
+**4 surfaces this framing covers:**
 - **Founder narrative / LinkedIn engagement** — direct, additive response to a thought-leader post already framing the right market shift, rather than a defensive watchlist note
 - **Technical-buyer page** — clarifies Aetherix is PMS-agnostic by design (Décision #19, #28), not a contender in the PMS consolidation war
 - **Investor narrative** — extends H-8 (specialist vs generalist) one level up: vs PMS-level learning layers (Apaleo, Mews), not only vs F&B-specific startups (OtelAI, Grevon)
+- **Memory architecture narrative** — clarifies Hive Memory is a cold-start prior, never the generalist endpoint Christian critiques (cf. Tacit Knowledge framing above, Décision #26 D3 80/20→20/80 shift)
 
-**Cross-reference:** `docs/context/monitoring-watchlist.md` W2, W4 · H-7 (Federated cohort) · H-8 (Specialist vs Generalist).
+**Cross-reference:** `docs/context/monitoring-watchlist.md` W2, W4 · Tacit Knowledge framing (idiosyncrasy pole) · H-7 (Federated cohort, cold-start mechanics only) · H-8 (Specialist vs Generalist).
 
 ## Sources de vérité
 
