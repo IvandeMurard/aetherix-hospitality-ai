@@ -16,6 +16,8 @@
 **Analyse complète** : `docs/competitive/conduit-ai-analysis.md`
 **Risque** : extension "internal agents" vers F&B forecasting native OU claim mindshare marketing "F&B analytics" sans tech derrière OU client Marriott refusant Aetherix car "on a déjà notre AI hospitality".
 
+**Status update 2026-06-20 — PAS de nouveau trigger.** Confirmation statut : ex-HostAI, $3.1M seed (PI Labs + YC, avril 2025), agents guest/ops multi-step text+voice. Aucun trigger F&B forecasting / embauche ML / partnership PMS Apaleo/Mews / nouvelle levée ce mois-ci. ⚠️ Collision de noms confirmée : ignorer "Conduit" proptech (€2.9M) et "Conduit" frontline scheduling ($375K) — pas le même acteur. Maintien cadence scan ciblé LinkedIn careers 2 semaines.
+
 **Triggers à monitorer chaque lundi** :
 - Annonces produit *"Predictive analytics"*, *"F&B forecasting"*, *"Staffing recommendations"*, *"Demand prediction"*
 - Embauches LinkedIn : "ML engineer", "data scientist", "forecast", "operations research", "time-series"
@@ -29,7 +31,15 @@
 - Si trigger "Apaleo partnership" → outreach Apaleo Marketplace + activer notre listing en urgence
 - Si trigger "funding round" → outreach YC founder-to-founder (Cole Rubin, Punn Kam) pour explorer partnership
 
-### W2 — Apaleo Copilot scope F&B (canari sur PMS bedrock) — 🚨 **FIRED 2026-06-08**
+### W2 — Apaleo Copilot scope F&B (canari sur PMS bedrock) — 🚨 **FIRED 2026-06-08, RE-FIRED 2026-06-20**
+
+**Status update 2026-06-20 — ESCALADE** : la couche agentique Apaleo s'étend sur 3 fronts nouveaux depuis le 08/06 :
+1. **Apaleo Trace Agent** (partenariat THE FLAG) — premier agent Apaleo qui **exécute** des tâches opérationnelles (pas juste chat) à partir des reservation comments, via LLM + APIs ouvertes. Toujours pas de F&B explicite, mais le pattern "demande → tâche exécutée" est désormais prouvé en prod chez Apaleo.
+2. **Copilot A2A + SOP upload** — le Copilot accepte l'upload de SOPs en texte brut ET ouvre un canal **agent-to-agent (A2A)** : des agents/apps tiers peuvent s'y connecter. Ceci change la nature du risque : pas seulement "Apaleo absorbe le F&B" mais "Apaleo devient la plateforme dans laquelle Aetherix doit choisir de se brancher (A2A) ou rester standalone (MCP)".
+3. **Expansion France** (Nicolas Suissa, Country Lead) — marché direct, propriété PAR sandbox.
+→ 2 items flaggés Linear ce 20/06 (spike A2A + audit Trace Agent) — voir `docs/veille/2026-06-20-veille.md` §Flaggés Linear.
+
+**Cross-référence 06-20 — Apaleo "The Agentic Hotel" (Hotel Yearbook 2026, pub. 15/06)** : article de positionnement Apaleo confirmant **THE FLAG Zürich** comme case study flagship agentic (même partenaire que Trace Agent). Thèse : infra ouverte API-first + design property-specific + ROI = friction reduction (pas headcount reduction) — citation exemple : demande baby cot devient automatiquement tâche housekeeping, "45 min de room assignment disparaissent/jour". **Toujours aucune mention F&B/staffing/MCP/A2A/Copilot/Trace Agent dans cet article** (article distinct du lancement Trace Agent, ton plus narratif/vision). Confirme philosophie "augmentation pas remplacement" — compatible avec narrative Aetherix (tandem bike, Décision #6). THE FLAG Zürich = property à surveiller/benchmarker en priorité pour l'audit Trace Agent flaggé Linear (même partenaire, accès facilité si outreach).
 
 **Status update 2026-06-08 — VEILLE TRIGGER DÉCLENCHÉ** : Apaleo a officiellement lancé son AI Copilot (Hospitality Net mai 2026). Scope actuel = ops multi-domaine front + back office : chat interface · check arrivals · extend stays · plan housekeeping · resolve overbookings · assign rooms. **F&B explicite PAS ENCORE**, mais expansion technique triviale depuis cette base (chat + MCP tools déjà en place).
 
@@ -39,6 +49,10 @@
 - Scénario C (20%) — F&B forecasting/staffing predictive natif → niche fermée sur PMS bedrock, pivot urgent requis
 
 **Trigger d'escalade vers Scénario C** : embauches Apaleo "operations AI" mentionnant F&B / forecasting / data science · partnership annoncé avec Meuze.ai-like · release notes Copilot avec `forecast_covers` / `predict_staffing`.
+
+**Nouveau trigger 06-20 — canal A2A** : ouverture A2A = décision archi time-sensitive indépendante du scénario F&B (A/B/C) — même si Apaleo ne fait jamais de F&B natif, le choix "Aetherix branché en A2A dans le Copilot" vs "MCP standalone" doit être tranché avant le pilote M4 (juillet 2026). Spike flaggé Linear 06-20.
+
+**Status update 2026-06-22 — Agent Hub lancé + A2A confirmé canal officiel** : Apaleo a officiellement lancé l'**Agent Hub**, premier marketplace d'agents IA hôteliers (developers/service providers publient leurs agents), en même temps que l'ouverture A2A du Copilot à des agents tiers. Les deux voies sont désormais actionnables concrètement, pas seulement anticipées : (1) lister Aetherix comme F&B agent sur Agent Hub — visibilité 1 500+ hôtels Apaleo ; (2) brancher Aetherix en A2A comme couche F&B native de Copilot (qui ne couvre toujours pas covers/staffing). Routé en Linear sans nouvelle issue orpheline : commentaire sur [HOS-180](https://linear.app/hospitalityagent/issue/HOS-180) (Story 10.6, listing Agent Hub déjà créée Phase 3 — passée actionnable) + nouvelle [HOS-278](https://linear.app/hospitalityagent/issue/HOS-278) (Story 10.7, spike A2A, sous le même Epic HOS-174).
 
 **Profil rapide** : Apaleo confirmé first PMS MCP à ITB Berlin 2026. Risque historique : Copilot étend vers F&B forecasting/staffing → fermerait la niche Aetherix sur le PMS bedrock (Décisions #1, #7, #21).
 **Évidence base** : `docs/competitive/apaleo-mcp-mapping.md` (HOS-197) · **Audit fonctionnel** : à créer via session SM 06-08 → `docs/competitive/apaleo-copilot-functional-audit.md`
@@ -86,6 +100,25 @@
 **Mitigation** : positioning snippet H-8 partagé avec OtelAI + Apaleo Marketplace listing + Phase 3 pilot delivery rapide.
 
 **À vérifier prochaine session** : confirmer URL canonique TH1.ai (ambiguïté th1.ai vs thine.com vs theone.inc dans les sources veille 06-08).
+
+### W14 — Grevon (suite verticale AI-native : Pulse/Echo/Ops/Kore/Link + Axiom/Axis à venir) — ajouté 2026-06-22, escaladé 2026-06-23
+
+**Profil rapide — ESCALADÉ 06-23, analyse complète `docs/competitive/grevon-analysis.md`** : pas un concurrent "Ops" isolé — suite verticale complète AI-native, fondée par des **vétérans RMS Cloud** (Peter Buttigieg, fondateur RMS Cloud, Non-Exec Chairman ; Tom Buttigieg, CEO, ex-RMS Cloud). Architecture : **Link** (connecteur PMS-agnostique : RMS Cloud, Cloudbeds, Oracle, **Apaleo**, Maxxton, Mews, Clock) → **Kore** (hub MCP central temps réel) → **Pulse** (booking) / **Echo** (voice) / **Ops** (staff Q&A SOPs+PMS). Deux produits en dev, GA fin 2026 : **Axiom** (feed outbound vers ChatGPT/Gemini/Perplexity — recoupe directement WT3 UCP vs MCP) et **Axis** (dashboard analytics ROI/attribution). 200+ propriétés, 12 pays.
+**Risque** : (1) Ops reste un Q&A conversationnel sans forecasting/staffing disclosed même en profondeur — pas de Scénario C déclenché ; (2) Axiom = 3e tentative de standardiser "inventaire hôtelier lisible par agents IA", concurrent conceptuel d'UCP et de l'A2A Apaleo (W2) — à arbitrer avant que Aetherix ne tranche son propre positionnement (HOS-278) ; (3) lignée RMS Cloud = accès réseau distribution potentiellement plus rapide qu'un concurrent stealth pur ; (4) thèse "AIO" (Agent Intelligence Optimization, blog dédié) valide en externe le concept interne Agent SEO d'Aetherix (P1-5/HOS-72) — n'est plus un framing propriétaire.
+**Mesh check (06-22) — CORRIGÉ 06-23** : le check initial (homepage uniquement, "aucun signal Anima/Tacet/Orchestrateur") était incomplet. Une page produit Ops détaillée montre un cas d'usage housekeeping concret : *"Room 214 has a special request note — Ops pulls the guest's request directly from PMS context — dietary preferences, pillow type, allergy alert — and surfaces it before the team enters the room."* C'est exactement le pattern Anima (claim guest-risk/préférence surfacé au bon moment opérationnel, Décision #20/#26) — **déjà en prod sur 200+ propriétés**, pas juste une thèse. Signal réel pour Anima : voir `anima_vision.md` (mémoire) pour la note de validation marché. Les deux autres cas (front desk policy, maintenance contact) restent du Q&A SOP générique — pas de signal Tacet (rien d'environnemental/capteurs) ni Orchestrateur (pas de routing multi-agent, Kore reste un hub de données) au-delà de l'architecture MCP déjà couverte par W2/WT1.
+
+**Process note** : le scan initial s'est arrêté à la homepage. Pour les prochains concurrents flaggés, creuser les pages produit/feature détaillées avant de conclure "aucun signal" sur un nœud du Mesh — le signal le plus pertinent était sur une page secondaire, pas la landing page.
+
+**Triggers à monitorer (cadence mensuelle)** :
+- Détail produit Grevon Ops révélant covers/labor forecasting explicite (= concurrent direct staffing)
+- Lancement Axiom (GA fin 2026) — chevauchement concret avec décision A2A/MCP Aetherix (HOS-278) à vérifier
+- Lancement Axis — benchmarking anonymisé inter-propriétés proche de la thèse Hive Memory fédérée, à surveiller pour positionnement
+- Customer wins enterprise / case studies F&B nommés
+- Funding round (signal agressivité GTM)
+- Partenariat ou listing croisé avec Apaleo Agent Hub (W2) — chevauchement direct de marketplace (Apaleo déjà dans la liste PMS supportés Grevon)
+
+**Mitigation** : positioning H-8 "specialist beats generalist" (cf. W10/W11) — applicable verbatim (suite généraliste vs F&B specialist). Apaleo Marketplace/Agent Hub listing rapide (HOS-180) pour devancer un chevauchement marketplace. Pas d'action immédiate sur le forecasting — scan mensuel jusqu'à signal Ops plus concret.
+**Doc dédié** : `docs/competitive/grevon-analysis.md` (créé 06-23).
 
 ## Priorité 2 — monitoring tactique
 
@@ -141,14 +174,16 @@
 
 **Mitigation** : monitor quarterly (cycle PMS release plus lent que startups) · Aetherix reste API-first Apaleo+Mews focused.
 
-### W5 — Jengu.ai (front-of-house adjacent)
+### W5 — Jengu.ai (front-of-house adjacent) — **scan escaladé 2026-06-20**
 
 **Profil rapide** : agents IA custom hospitality, focus comm guest + pricing + voice bots. Pas mention F&B ops.
 **Risque** : extension vers ops F&B (convergence probable 12-18 mois).
 
+**Status update 2026-06-20** : article blog Jengu *"How AI is Transforming Hotel F&B Operations"* (menu design → revenue) repéré — premier contenu publié explicitement F&B par cet acteur. Forecasting covers / staffing prediction toujours absents du pitch, mais le sujet F&B entre dans leur narratif marketing. **Cadence passée de mensuel léger → ciblé ce mois-ci** (re-scan dans 2-4 semaines pour confirmer si c'est un one-off content ou un pivot produit).
+
 **Triggers** :
 - Funding round publique
-- Features F&B / staffing dans roadmap
+- Features F&B / staffing dans roadmap (pas juste contenu marketing)
 - PMS specific integrations annoncées
 
 **Mitigation** : speed Phase 3 pilote pour capture mindshare "AI for hospitality F&B" avant convergence.
@@ -195,6 +230,27 @@
 - Tester migration shadow read (dual-write `operational_memory` Supabase + Qdrant, compare results) avant cutover
 
 **Cadence** : passive — déclenche review **uniquement** sur trigger. Pas de cron récurrent (gaspillage si pas atteint).
+
+### WT3 — UCP (Universal Commerce Protocol) vs MCP — race de standards agentic commerce — ajouté 2026-06-20
+
+**Profil rapide** : Amadeus a annoncé (insight Amadeus Hospitality, juin 2026) une expansion majeure de sa stratégie IA — AI Commerce Solution (booking agentique full-stack), Amadeus Max (couche assistant cross-produit), et surtout un **co-développement avec Google d'un nouveau standard : Universal Commerce Protocol (UCP) pour le lodging**. Citation : *"AI is reshaping how travelers discover, shop, book, and experience hotels"* (Francisco Pérez-Lozao Rüter, President Hospitality, Amadeus).
+**Impact si UCP devient dominant côté distribution/booking** : ne menace pas directement MCP côté ops (Décision #21, Apaleo MCP nommage natif) — UCP cible la commerce/booking layer (GDS, CRS, advertising), MCP cible la couche opérationnelle/data (PMS, F&B, staffing). Mais si Google+Amadeus imposent UCP comme franchise standard sur tout le funnel agentic hospitality (incluant des extensions vers ops), cela pourrait fragmenter l'écosystème standards (UCP commerce vs MCP ops) ou, à l'inverse, créer une pression d'interopérabilité (UCP-to-MCP bridge) à anticiper.
+**Évidence baseline** : https://www.amadeus-hospitality.com/insight/amadeus-unveils-major-expansion-of-ai-strategy-across-hospitality-sector/
+
+**Triggers à monitorer (trimestriel)** :
+- UCP spec publique ouverte (vs proprietary Amadeus+Google) — déterminant pour adoption large
+- Extension UCP scope vers données opérationnelles (vs commerce/booking uniquement)
+- Annonce interopérabilité UCP ↔ MCP (ou absence — silo confirmé)
+- Adoption UCP par d'autres GDS/CRS majeurs (Sabre, Travelport) ou PMS (Mews, Cloudbeds)
+- Mentions UCP dans contexte F&B / staffing / ops (hors scope actuel = commerce pur)
+
+**Mitigation si trigger déclenché** : pas d'action immédiate requise — Aetherix opère côté ops (MCP), pas côté commerce/booking (UCP). Si convergence ops+commerce se dessine (ex. UCP veut absorber des signaux opérationnels pour personnaliser le booking), réévaluer position MCP-native vs interop bridge.
+
+**Cadence** : trimestrielle — protocole nouveau-né (juin 2026), pas de cron automatisé pour l'instant.
+
+**Cross-référence 06-26 — "Do You Think You're Ready for A2A Commerce?" (Ira Vouk, Hotel Yearbook)** : article d'analyste indépendant (pas un vendor) qui généralise la thèse UCP/MCP/A2A en thèse de marché : *"The traveler may never even reach a hotel website before options are already filtered, prioritized, negotiated"* — le client devient un agent IA qui négocie pour le voyageur, pas le voyageur lui-même. Confirme la trajectoire B2B-corporate-first (A2A scale en managed travel avant le loisir) et nomme le vrai enjeu structurel : PMS/CRS/booking engines/loyalty *"operate like neighboring countries reluctantly exchanging information"* — exactement le problème que l'amendement ADR-0006 (Décision #28, schéma canonique PMS) corrige côté Aetherix en interne. 4e voix indépendante (après Amadeus/Apaleo/Grevon/Jinko) sur la même thèse — la cadence trimestrielle reste justifiée (pas de nouveau trigger actionnable, mais convergence qui s'accélère, à re-vérifier si un 5e signal arrive avant la prochaine review trimestrielle).
+
+**Note croisée** : Ira Vouk est aussi la source citée ("closer to 1,200" PMS) dans le post LinkedIn Christian H. analysé 06-25 (cf. positioning snippet H-9, `market_signals_2026Q2.md`) — voix d'analyste à suivre, recoupe deux thèses Aetherix (consolidation PMS + agentic commerce) de façon indépendante.
 
 ## Priorité 3 — veille distante
 

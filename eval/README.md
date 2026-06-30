@@ -13,14 +13,32 @@ Foundation laid by **EVAL-0 (HOS-204)**; runners land in EVAL-1…EVAL-5.
 **Any change that touches the model, the LLM, memory, providers, or prompts does
 not merge without updating `eval/golden_dataset.jsonl` and a green eval run.**
 
-This mirrors the schema-drift gate (Décision #16): a hard, blocking CI gate.
-The set of paths that trigger it is defined in ADR-0007 §D2.a (`EVAL_TRIGGER_PATHS`)
-— forecasting/parser/recommendation/memory services, `app/providers/`,
-`backend/app/prompts/`, and the eval dataset + thresholds themselves.
+This mirrors the schema-drift gate (Décision #16). The set of paths that trigger
+it is defined in ADR-0007 §D2.a (`EVAL_TRIGGER_PATHS`) — forecasting/parser/
+recommendation/memory services, `app/providers/`, `backend/app/prompts/`, and the
+eval dataset + thresholds themselves.
 
 Failure thresholds (the per-layer "bad output" definitions) live in
 [`FAILURE_THRESHOLDS.md`](./FAILURE_THRESHOLDS.md). Changing a threshold is an
 explicit decision: PR + CLAUDE.md trace.
+
+### The gate (`scripts/ci/check_eval_coverage.py`) — HOS-216
+
+The gate diffs the PR against `origin/main`, maps touched trigger paths to eval
+layers (ADR §D2.b), skips on an `eval-exempt` label or a sha256 cache hit
+(`eval/baselines/.cache_keys.json`), invokes `scripts/eval/run_all.py` for the
+detected layers, and posts a sticky PR comment via `.github/workflows/eval-gate.yml`.
+
+Exit codes (ADR §D2.f): `0` PASS · `1` FAIL (regression > 3pp **or** category
+coverage < 60%) · `2` ERROR · `3` WARN (coverage 60–80%, or touched-but-not-
+evaluated). Run it locally with `python scripts/ci/check_eval_coverage.py`.
+
+**Rollout WARN → blocking (AC5).** Because the gate runs Prophet in CI (stochastic
+— ADR §9 R2/R4), it ships **non-blocking**: `eval-gate.yml` sets
+`EVAL_GATE_BLOCKING: "false"`, so a FAIL is surfaced in the PR comment but does not
+block the merge. Once N green PRs prove Prophet-in-CI stable, flip it to blocking —
+a one-line change (`EVAL_GATE_BLOCKING: "true"`) + a CLAUDE.md trace. The script
+already emits the real exit codes, so no other change is needed.
 
 ### `eval-exempt` label (override)
 
@@ -34,6 +52,24 @@ exemptions (SM rejects abuse — human review, not an auto-check):
 | `infra` | `.github/`, `fly.toml`, `Dockerfile`, deploy scripts |
 | `ci-only` | `scripts/ci/*` (except `check_eval_coverage.py` itself → full run) |
 | `test-only` | `backend/tests/` only |
+
+### Offline model-quality (must-eval) vs runtime guardrails (legitimately exempt)
+
+The recurring case-by-case arbitration (HOS-274) is the **eval-by-design frontier**:
+which code is *offline model quality* (Bras A — must carry eval coverage) versus
+*runtime/online guardrails* (Bras B, Epic 12 / HOS-212 — legitimately `eval-exempt`).
+The taxonomy is settled by ADR-0007 §13 (three-arm addendum) and Décision #22:
+
+| Arm | What it measures | Lives in | Gate behaviour |
+|---|---|---|---|
+| **A — offline / dev-time** | Does the model still produce good outputs? (golden-dataset non-regression) | `EVAL_TRIGGER_PATHS` (forecast/parser/recommendation/memory services, `app/providers/`, `backend/prompts/`, the dataset + thresholds) | **Must-eval** — gate runs, no exemption without an authorised label |
+| **B — runtime / online** | Is the *live* system behaving? (heartbeats, dead-man's switch, error-rate / latency monitors, dispatchers) | `app/services/heartbeat*`, dispatchers, `*_monitor.py`, scheduler/worker plumbing (Epic 12 / HOS-212) | **Legitimately `eval-exempt` (`infra`)** — no golden-dataset scenario applies; correctness is asserted by unit/integration tests, not MAPE |
+| **C — outcome / downstream** | Was the output actioned and did it create value? (Trust-KPI) | Epic 10 instrumentation (`recommendation_acceptance_rate`, ablation) | Not yet on the offline substrate — HOS-275 (Phase 4) |
+
+**Rule of thumb:** if a change can move a `golden_dataset.jsonl` metric, it is Bras A →
+must-eval. If it only changes *when/whether* a job fires or an alert is sent, it is
+Bras B → `eval-exempt` with the `infra` justification. Runtime guardrails do **not**
+get a golden-dataset scenario; they are covered by their own tests + `HEARTBEAT_THRESHOLDS.md`.
 
 ---
 

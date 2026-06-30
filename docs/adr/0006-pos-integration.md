@@ -691,3 +691,60 @@ Cohérent format `docs/planning/phase-3-pilot-validation.md` Track A. Linear IDs
 - `docs/marketing/positioning-snippets.md` H-6 — *"PMS+POS-aware cross-property intelligence"*
 - `docs/context/decisions-architecturales.md` — Décisions #1, #7, #9, #10, #11, #21, #22 invoquées
 - `docs/context/open-decisions.md` §Graphe de contexte (débloqué) · §Food waste tracking (étend)
+
+---
+
+## 9. Amendment 2026-06-23 — PMS canonical schema (jurisprudence Provider étendue)
+
+> **Trigger** : analyse concurrentielle approfondie Grevon (`docs/competitive/grevon-analysis.md`) — leur produit Kore revendique explicitement la normalisation des données PMS brutes en format canonique avant tout consommateur agent. Implémente CLAUDE.md Décision #28.
+> **Linear** : Epic 15 (HOS-279) — Story 15.1 (HOS-280), Story 15.2 (HOS-281). Parallélisable avec Epic 13 POS (HOS-254) et le pilote Apaleo Phase 3 Track A.
+> **Distinct de** : HOS-186 ("PMS Connector universel", niveau Orchestrateur↔PMS, Décision #19) — backlog Phase 4 post-Track A, scope cross-node. Cet amendement est interne au node Aetherix (adapters↔pipeline forecast), orthogonal à HOS-186.
+
+### 9.1 Constat
+
+Vérification du code (06-23) : `PMSAdapter` (`backend/app/services/pms_sync.py`) existe comme interface normalisée (`get_occupancy`, `get_revenue`, `get_historical_data`, `update_staffing_in_pms`), implémentée par `ApaleoPMSAdapter` et `ApaleoMCPAdapter`. Mais le pipeline forecast — `DataTransformer` (`data_transformer.py`) — la **contourne** : il lit les champs de la réponse Apaleo brute directement ("arrival", "adults", "children") pour construire le dataframe Prophet (`ds`, `y`). Aucun adapter Mews n'existe encore (Phase 4, Décision #23).
+
+**Conséquence si non corrigé** : brancher Mews (Phase 4, HOS-186 ou story dédiée) nécessitera soit dupliquer la logique du `DataTransformer` pour le format Mews, soit réécrire `DataTransformer` à ce moment-là sous pression de calendrier — exactement l'inverse de l'invariant Provider (Décision #9 : *"swap Claude → Gemini → GPT sans réécriture"*).
+
+**Antécédent** : `docs/ARCHITECTURE.md` (obsolète, fév. 2026) nommait déjà "PMS Adapters" comme composant de sa "Semantic Layer", planifié Phase 5, jamais construit. Le scope est tombé silencieusement lors du pivot Qdrant→pgvector (Décision #3) sans décision explicite de retrait — dette de process, pas seulement dette technique. Le terme "Semantic Layer" a survécu dans les docs marketing courants (`docs/MARKET_INTELLIGENCE.md`) mais désigne aujourd'hui uniquement la couche RAG/pgvector (`fb_patterns` + `operational_memory`) — un concept différent (rétrieval de patterns historiques pour l'explicabilité), pas la normalisation de flux PMS live. Les deux ne doivent pas être confondus.
+
+### 9.2 Décision
+
+Étendre la jurisprudence Provider (§D3 ci-dessus, Décision #9/#10) aux adapters PMS, symétriquement à ce qui a été fait pour POS dans cet ADR :
+
+```
+backend/app/providers/pms/
+├── __init__.py
+├── base.py              — Protocol PMSProvider + dataclasses canoniques
+│                           (NormalizedReservation, NormalizedOccupancy, ...)
+├── factory.py            — get_pms_provider() singleton, env-driven (Décision #10)
+├── apaleo_adapter.py      — migré depuis services/pms_sync.py + apaleo_adapter.py
+└── mews_adapter.py        — Phase 4, story dédiée (hors scope HOS-279/280/281)
+```
+
+**Invariant** : à partir de cette migration, `DataTransformer` / `PredictionEngine` / `StaffRecommender` ne lisent **plus jamais** un champ vendor-spécifique directement — uniquement les dataclasses de `providers/pms/base.py`. Seul l'adapter connaît le format natif du PMS source. Quand `mews_adapter.py` sera écrit (Phase 4), il s'insère sans toucher au pipeline forecast.
+
+### 9.3 Pourquoi maintenant et pas en même temps que l'adapter Mews
+
+Faire la normalisation *au moment* d'écrire l'adapter Mews mélangerait deux risques dans une seule story (le mapping Mews lui-même + la rétro-compatibilité du pipeline forecast existant). Découpler permet de valider le refactor (HOS-280/281) sur Apaleo seul, avec un test de non-régression strict (mêmes sorties forecast avant/après), avant d'introduire un deuxième vendor.
+
+### 9.4 Story breakdown (Epic 15, HOS-279)
+
+| Story | Title | Effort | Dépend de |
+|---|---|---|---|
+| **HOS-280** (15.1) | `PMSProvider` Protocol + dataclasses canoniques + migration `ApaleoPMSAdapter`/`ApaleoMCPAdapter` — comportement inchangé | 3 | — |
+| **HOS-281** (15.2) | `DataTransformer`/`PredictionEngine`/`StaffRecommender` consomment exclusivement le schéma canonique | 2 | HOS-280 |
+
+**Total** : 2 stories, 5 points. Pur refactor — éligible label `eval-exempt` (Décision #22) si la régression test (AC3 des deux stories) confirme zéro changement de comportement observable.
+
+### 9.5 Risque
+
+| ID | Risque | Probabilité | Sévérité | Mitigation |
+|---|---|---|---|---|
+| **R9** | Refactor introduit une régression silencieuse dans le calcul MAPE (mapping canonique légèrement différent du mapping ad-hoc actuel) | Faible | Sévère (Phase 3 pilote en cours) | AC3 des deux stories = test de non-régression strict sur fixture sandbox identique avant/après. Ne pas merger si delta MAPE ≠ 0 (tolérance flottant). |
+
+### 9.6 Références additionnelles
+
+- `docs/competitive/grevon-analysis.md` — analyse déclencheur
+- `docs/context/decisions-architecturales.md` — Décision #28
+- HOS-186, HOS-254, HOS-279, HOS-280, HOS-281

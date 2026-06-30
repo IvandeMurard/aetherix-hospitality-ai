@@ -119,6 +119,13 @@ Pattern analogue à Décision #16 schema drift gate (hard gate, blocking merge).
 
 **Asset REX Phase 3 Track B :** article *"How we extended BMad-Method with Evaluation-by-Design for AI/ML products"* à rédiger post-EVAL-0..5 shippés.
 
+**Amendement 19/06/2026 (ADR-0007 §13) — portée élargie : 3 bras.** L'invariant gate CI ci-dessus reste le **Bras A** ; eval-by-design couvre désormais explicitement tout le pipeline agentique via 3 bras partageant la même taxonomie + `eval/FAILURE_THRESHOLDS.md` (un « FAIL » = même sémantique partout) :
+- **A — offline / dev-time** : non-régression golden dataset (gate `check_eval_coverage.py`, EVAL-0/1 — Epic 11 HOS-203).
+- **B — runtime / online** : guardrails Epic 12 (HOS-212, G-1..G-6) + MV drift/latency sur `agent_action_log`. ⇒ l'`eval-exempt` posé sur Epic 12 est **cohérent**, pas une entorse (on mesure le parachute en vol, pas au golden dataset), tant que B tient le même standard (raison typée NFR2, métriques d'abstention).
+- **C — outcome / aval** : Trust-KPI Epic 10 (HOS-174 / HOS-177/178) — *hors framework eval à ce jour*, à rattacher Phase 4 (HOS-275, articule Décision #26 outcome-capture).
+
+Suivi ré-armement Bras A (gate offline → blocking) : HOS-216 (machinerie, WARN-first) → HOS-274 (flip blocking après N PR vertes). Détail complet → `docs/adr/0007-evaluation-by-design.md` §13.
+
 ### 23 — POS integration scope + adapter pattern (Phase 4) (06/06/2026)
 
 Trigger : (a) Meuze.ai *"POS-only restaurants"* concurrent identifié 01/06 — défense narrative *"PMS+POS-aware cross-property intelligence"* (snippet H-6) requiert ship POS Phase 4 (pas 5) ; (b) ADR-0008 graphe de contexte (open decision 04/06) bloqué tant que schema features POS-driven non tranché ; (c) ADR-0005 cohort matching v1 PMS-only insuffisant pour discriminer hôtels même profil PMS / F&B opposé.
@@ -206,6 +213,22 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 **Décisions ouvertes déplacées open-decisions.md :** politique exploration éthique · reward multi-objectif · méthode off-policy evaluation · floor k-anonymat Segment.
 
 **Document canonique :** `docs/adr/0011-learning-engine-hive-v2.md`.
+
+---
+
+### 28 — PMS canonical schema : jurisprudence Provider étendue aux adapters PMS (amendement ADR-0006) (23/06/2026)
+
+**Trigger :** analyse concurrentielle approfondie Grevon (`docs/competitive/grevon-analysis.md`, 23/06/2026) — leur produit **Kore** revendique explicitement *"a typical PMS API gives you raw data — rates as numbers, room types as codes. Kore goes further: it enriches, validates, and translates that data into a format LLMs actually understand"*, en amont de tous leurs agents (Pulse/Echo/Ops). Vérification du code Aetherix a confirmé un gap réel : `PMSAdapter` (`backend/app/services/pms_sync.py`) existe comme interface normalisée (`get_occupancy`, `get_revenue`, `get_historical_data`, `update_staffing_in_pms`), mais le pipeline forecast (`data_transformer.py`) la **contourne** — il lit les champs Apaleo bruts directement ("arrival", "adults", "children") pour construire le dataframe Prophet. Aucun adapter Mews n'existe encore (Phase 4, Décision #23 / HOS-186).
+
+**Antécédent documentaire :** `docs/ARCHITECTURE.md` (obsolète, fév. 2026 — cf. CLAUDE.md §Points d'attention) nommait déjà ce composant — "PMS Adapters" listé dans une "Semantic Layer" planifiée Phase 5 — jamais construit. Le scope est tombé silencieusement quand l'architecture a pivoté (Qdrant→pgvector, Décision #3) sans décision explicite de retrait : c'est une dette de *process* (rien n'a flaggé la disparition), pas seulement une dette technique. Le "Semantic Layer" qui a survécu dans les docs courants (`docs/MARKET_INTELLIGENCE.md`, `docs/ROADMAP_NOW_NEXT_LATER.md`) ne désigne aujourd'hui que la couche RAG/pgvector (`fb_patterns` + `operational_memory`) — un concept différent (rétrieval de patterns historiques), pas la normalisation de flux PMS live.
+
+**Décision :** étendre la jurisprudence Provider (Décision #9/#10, déjà appliquée au POS via ADR-0006 D3) aux adapters PMS. Introduire un schéma canonique vendor-agnostique (dataclasses dans `backend/app/providers/pms/base.py`, miroir exact de `providers/pos/base.py`) entre les adapters (Apaleo aujourd'hui, Mews demain) et tout consommateur interne (`DataTransformer`, `PredictionEngine`, `StaffRecommender`). Aucun composant business ne doit plus jamais lire un champ vendor-spécifique directement — seuls les adapters connaissent le format natif du PMS source.
+
+**Scope — distinct de HOS-186 :** HOS-186 ("PMS Connector universel") opère au niveau **Orchestrateur↔PMS** (Décision #19, cross-node, multi-PMS vu depuis l'extérieur d'Aetherix) — reste backlog Phase 4, ne démarre qu'après Phase 3 Track A. Cette décision opère au niveau **interne au node Aetherix** (adapters↔pipeline forecast) — orthogonale, ne bloque pas et n'est pas bloquée par HOS-186. Une fois construit, le schéma canonique devient la fondation sur laquelle HOS-186 pourra s'appuyer (l'Orchestrateur consommerait le schéma déjà normalisé plutôt que de re-normaliser depuis zéro).
+
+**Parallélisation :** ne touche pas `app/providers/pos/*` (Epic 13, HOS-254) ni le pilote Apaleo prod (Phase 3 Track A) — fichiers disjoints. Pré-requis recommandé avant la première story d'adapter Mews (Phase 4), pas avant. Détail technique → amendement `docs/adr/0006-pos-integration.md` §9.
+
+**Linear :** Epic 15 (HOS-279) — 2 stories, ~5 points, `relatedTo` HOS-186.
 
 ---
 

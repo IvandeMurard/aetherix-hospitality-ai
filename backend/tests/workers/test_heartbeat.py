@@ -83,16 +83,57 @@ async def test_record_heartbeat_writes_ok_row():
 
     assert len(store) == 1
     row = store[0]
-    assert row.tool_name == "scheduler.receipt_dispatcher"
-    assert row.status == "ok"
-    assert row.hotel_id == heartbeat.SYSTEM_HOTEL_ID
-    assert row.payload["kind"] == "heartbeat"
+    # HOS-271 — dedicated scheduler_event channel, not agent_action_log.
+    assert row.job_name == "receipt_dispatcher"
+    assert row.event_type == heartbeat.EVENT_HEARTBEAT
+    assert row.reason is None
+    assert row.detail is None
 
 
 async def test_record_heartbeat_never_raises_on_db_failure():
     with patch.object(heartbeat, "AsyncSessionLocal", lambda: _FailingSession()):
         # Must swallow — instrumentation never breaks the observed job.
         await heartbeat.record_heartbeat("dispatch_worker")
+
+
+# ---------------------------------------------------------------------------
+# Monitored-jobs registry — single source of truth (HOS-273)
+# ---------------------------------------------------------------------------
+
+def test_monitored_jobs_derives_from_registry():
+    assert heartbeat.monitored_jobs() == tuple(heartbeat._MONITORED_JOBS)
+
+
+def test_every_registered_job_resolves_to_an_int_window():
+    # Guards against a registry entry pointing at a missing/typo'd config attr —
+    # that would silently make _window_min return None and skip the job.
+    for job in heartbeat.monitored_jobs():
+        window = heartbeat._window_min(job)
+        assert isinstance(window, int), f"{job} window did not resolve to an int"
+
+
+def test_window_min_unknown_job_is_none():
+    assert heartbeat._window_min("not_a_real_job") is None
+
+
+def test_window_min_resolves_config_at_call_time(monkeypatch):
+    # Registry stores the config attr *name*; the value must be read live so an
+    # env-driven retune (or a test monkeypatch) takes effect without redeploy.
+    monkeypatch.setattr(heartbeat.config, "HEARTBEAT_WINDOW_DISPATCH_WORKER_MIN", 999)
+    assert heartbeat._window_min(heartbeat.JOB_DISPATCH_WORKER) == 999
+
+
+async def test_record_heartbeat_warns_for_unregistered_job(caplog):
+    import logging
+
+    store: list = []
+    with patch.object(heartbeat, "AsyncSessionLocal", _CapturingSessionFactory(store)):
+        with caplog.at_level(logging.WARNING, logger=heartbeat.logger.name):
+            await heartbeat.record_heartbeat("ghost_job")
+
+    # The marker is still written (harmless + observable), but ops is warned.
+    assert len(store) == 1
+    assert any("ghost_job" in r.message and "_MONITORED_JOBS" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +154,11 @@ async def test_record_trip_writes_typed_row_and_dispatches():
     assert emitted is True
     assert len(store) == 1
     row = store[0]
-    assert row.status == "tool_error"
-    assert row.error_code == heartbeat.REASON_PARTIAL
-    assert row.tool_name == "scheduler.weekly_digest"
+    # HOS-271 — trip is an event_type='trip' row on scheduler_event.
+    assert row.event_type == heartbeat.EVENT_TRIP
+    assert row.reason == heartbeat.REASON_PARTIAL
+    assert row.job_name == "weekly_digest"
+    assert "2/5 hotels failed." in row.detail
     dispatch.assert_awaited_once()
     assert "weekly_digest" in dispatch.await_args.kwargs["title"]
 
@@ -218,3 +261,43 @@ def test_register_heartbeat_monitor_injects_job_without_starting():
     scheduler.add_job.assert_called_once()
     scheduler.start.assert_not_called()
     assert scheduler.add_job.call_args.kwargs.get("id") == "heartbeat_monitor"
+
+
+# ---------------------------------------------------------------------------
+# Cron interval guard — QA-S4 follow-up (HOS-212): minute field is 0–59, so a
+# */N step with N >= 60 must not reach APScheduler (it raises ValueError there).
+# ---------------------------------------------------------------------------
+
+def test_cron_kwargs_sub_hour_interval_uses_minute_step():
+    assert heartbeat._monitor_cron_trigger_kwargs(15) == {"minute": "*/15"}
+
+
+def test_cron_kwargs_interval_at_or_above_60_switches_to_hour_step():
+    # 60 min → every 1 hour on the hour; 120 → every 2 hours. Never minute="*/60".
+    assert heartbeat._monitor_cron_trigger_kwargs(60) == {"hour": "*/1", "minute": "0"}
+    assert heartbeat._monitor_cron_trigger_kwargs(150) == {"hour": "*/2", "minute": "0"}
+
+
+def test_cron_kwargs_non_positive_interval_floors_to_one_minute():
+    assert heartbeat._monitor_cron_trigger_kwargs(0) == {"minute": "*/1"}
+
+
+def test_cron_kwargs_oversized_interval_caps_at_valid_hour_step():
+    # An hour step > 23 would overflow the hour field (0–23); cap at */23.
+    assert heartbeat._monitor_cron_trigger_kwargs(60 * 48) == {"hour": "*/23", "minute": "0"}
+
+
+@pytest.mark.parametrize("interval", [1, 15, 59, 60, 90, 120, 1440, 5000])
+def test_register_builds_a_valid_cron_trigger_for_any_interval(interval, monkeypatch):
+    """The registered trigger must be constructible by APScheduler — i.e. the
+    guard never lets an out-of-range minute step through (regression for the
+    crash the QA-S4 finding flagged)."""
+    from apscheduler.triggers.cron import CronTrigger
+
+    monkeypatch.setattr(heartbeat.config, "HEARTBEAT_MONITOR_INTERVAL_MIN", interval)
+    scheduler = MagicMock()
+    heartbeat.register_heartbeat_monitor_job(scheduler)
+
+    kwargs = scheduler.add_job.call_args.kwargs
+    # Reconstruct the trigger exactly as APScheduler would from the cron kwargs.
+    CronTrigger(**{k: v for k, v in kwargs.items() if k in ("minute", "hour")})
