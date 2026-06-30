@@ -248,6 +248,10 @@
 
 **Cadence** : trimestrielle — protocole nouveau-né (juin 2026), pas de cron automatisé pour l'instant.
 
+**Cross-référence 06-26 — "Do You Think You're Ready for A2A Commerce?" (Ira Vouk, Hotel Yearbook)** : article d'analyste indépendant (pas un vendor) qui généralise la thèse UCP/MCP/A2A en thèse de marché : *"The traveler may never even reach a hotel website before options are already filtered, prioritized, negotiated"* — le client devient un agent IA qui négocie pour le voyageur, pas le voyageur lui-même. Confirme la trajectoire B2B-corporate-first (A2A scale en managed travel avant le loisir) et nomme le vrai enjeu structurel : PMS/CRS/booking engines/loyalty *"operate like neighboring countries reluctantly exchanging information"* — exactement le problème que l'amendement ADR-0006 (Décision #28, schéma canonique PMS) corrige côté Aetherix en interne. 4e voix indépendante (après Amadeus/Apaleo/Grevon/Jinko) sur la même thèse — la cadence trimestrielle reste justifiée (pas de nouveau trigger actionnable, mais convergence qui s'accélère, à re-vérifier si un 5e signal arrive avant la prochaine review trimestrielle).
+
+**Note croisée** : Ira Vouk est aussi la source citée ("closer to 1,200" PMS) dans le post LinkedIn Christian H. analysé 06-25 (cf. positioning snippet H-9, `market_signals_2026Q2.md`) — voix d'analyste à suivre, recoupe deux thèses Aetherix (consolidation PMS + agentic commerce) de façon indépendante.
+
 ## Priorité 3 — veille distante
 
 ### W6 — TravelOS / Agentic Hospitality (MCP intermédiaire)
