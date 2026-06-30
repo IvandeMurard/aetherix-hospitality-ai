@@ -21,6 +21,7 @@
 - `context/demo-apaleo.md` — Demo PRD Apaleo + résultats probe sandbox (HOS-190 AC1)
 - `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — gate MAPE J+1 (Décision #14)
 - `context/runbook-pre-pilot.md` — checklist pré-pilote
+- `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL (findings HOS-282/283/284/286/287)
 - `context/linear-conventions.md` — protocole Epic/Story Linear
 - `context/open-decisions.md` — miroir détaillé des décisions ouvertes
 - `context/veille.md` · `context/watchlist.md` — contexte veille & signaux long terme
