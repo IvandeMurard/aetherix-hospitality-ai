@@ -12,6 +12,9 @@ from app.core.demo_events import demo_emit
 
 logger = logging.getLogger(__name__)
 
+# HOS-274 canary — no-op touch to force the eval-gate forecast run (Prophet-in-CI
+# stability measurement before flipping the gate to blocking). Reverted after.
+
 class PredictionResult:
     """Structured prediction result."""
     def __init__(
