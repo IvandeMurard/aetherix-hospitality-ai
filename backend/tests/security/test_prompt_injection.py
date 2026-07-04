@@ -45,29 +45,22 @@ def _build(cognitive_context: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# A — smoking gun: the payload reaches the prompt verbatim (current behaviour)
+# A — the manager note is preserved as DATA but no longer actioned (post G-6)
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("scenario", INJECTION_SCENARIOS, ids=_IDS)
-def test_untrusted_memory_reaches_prompt_verbatim(scenario):
-    """Characterises the UNMITIGATED surface (G-6 deferred): manager-controlled
-    memory content is interpolated raw into the reasoning prompt."""
+def test_untrusted_memory_preserved_but_not_actioned(scenario):
+    """Real feedback is not lost — the note is still in the prompt as fenced data —
+    but the amplifier instruction ("Factor in the 'Learnings'") that told the model
+    to act on it is gone."""
     prompt = _build(scenario["payload"])
-    assert scenario["payload"] in prompt, (
-        "expected the raw injection payload to appear verbatim in the prompt "
-        "(documents the unmitigated surface)"
-    )
-    # ...and the model is explicitly told to act on that block — the amplifier.
-    assert "Factor in the 'Learnings'" in prompt
+    assert scenario["payload"] in prompt  # data preserved
+    assert "<UNTRUSTED_MANAGER_NOTES>" in prompt  # fenced
+    assert "Factor in the 'Learnings'" not in prompt  # amplifier removed
 
 
 # ---------------------------------------------------------------------------
-# B — fix target (xfail until the G-6 defense lands)
+# B — the G-6 defense: untrusted memory is fenced + framed as data-not-instructions
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(
-    reason="G-6 prompt-injection defense deferred (HOS-253/HOS-294 go/no-go) — "
-    "untrusted memory is not yet fenced/neutralised",
-    strict=False,
-)
 @pytest.mark.parametrize("scenario", INJECTION_SCENARIOS, ids=_IDS)
 def test_prompt_fences_untrusted_memory(scenario):
     """The DESIRED behaviour: untrusted memory must be delimited AND framed as
