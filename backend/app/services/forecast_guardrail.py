@@ -28,6 +28,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
+from app.context import request_id_var
 from app.core import config
 from app.db.models import AgentActionLog
 from app.db.session import AsyncSessionLocal
@@ -199,7 +200,10 @@ async def record_forecast_trip(hotel_id: str, verdict: ForecastVerdict) -> None:
                     abstention_context=(
                         verdict.abstention.context if verdict.abstention else None
                     ),
-                    request_id="",
+                    # HOS-293: link the trip to the originating decision so the
+                    # chain is reconstructible. Empty in a scheduled context
+                    # (no request scope), set on the request-scoped dispatch path.
+                    request_id=request_id_var.get() or "",
                 )
             )
             await db.commit()
