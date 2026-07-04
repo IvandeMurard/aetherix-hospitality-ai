@@ -331,3 +331,43 @@ class TestIsTransientError:
     def test_generic_exception_no_status_is_transient(self):
         assert _is_transient_error(RuntimeError("ANTHROPIC_API_KEY not set"))
         assert _is_transient_error(Exception("generic"))
+
+
+# ---------------------------------------------------------------------------
+# HOS-282 — fallback health-check canary (never raises)
+# ---------------------------------------------------------------------------
+
+class TestFallbackHealthCheck:
+    @pytest.mark.asyncio
+    async def test_returns_true_when_fallback_responds(self):
+        primary = _mock_provider("claude/sonnet", "ignored")
+        fallback = _mock_provider("gemini/flash", "pong")
+        provider = FallbackLLMProvider(primary=primary, fallback=fallback)
+
+        assert await provider.check_fallback_health() is True
+        fallback.complete.assert_awaited_once()
+        primary.complete.assert_not_awaited()  # health check never touches primary
+
+    @pytest.mark.asyncio
+    async def test_returns_false_and_warns_when_fallback_raises(self, caplog):
+        import logging
+
+        primary = _mock_provider("claude/sonnet")
+        fallback = _failing_provider(
+            "gemini/flash", RuntimeError("GEMINI_API_KEY not set")
+        )
+        provider = FallbackLLMProvider(primary=primary, fallback=fallback)
+
+        with caplog.at_level(logging.WARNING):
+            result = await provider.check_fallback_health()
+
+        assert result is False
+        assert any("health-check FAILED" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_returns_false_on_empty_response(self):
+        provider = FallbackLLMProvider(
+            primary=_mock_provider("claude/sonnet"),
+            fallback=_mock_provider("gemini/flash", "   "),
+        )
+        assert await provider.check_fallback_health() is False

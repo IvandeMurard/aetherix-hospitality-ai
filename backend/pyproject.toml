@@ -51,6 +51,12 @@ ignore = ["E501"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 timeout = 60
+# HOS-282: `integration` tests hit real external APIs (Gemini fallback canary).
+# Excluded from the default/CI run; select them explicitly with `-m integration`.
+addopts = "-m 'not integration'"
+markers = [
+    "integration: real external API call — excluded by default, run with `-m integration`.",
+]
 
 [tool.coverage.run]
 source = ["app"]
