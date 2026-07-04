@@ -4,11 +4,14 @@ name: Eval-by-Design Gate
 # Runs the eval coverage gate on PRs touching model/LLM/memory/provider/prompt
 # code or the golden dataset, and posts a sticky report comment.
 #
-# Rollout (AC5): ships in WARN mode — EVAL_GATE_BLOCKING="false" means a FAIL/
-# ERROR is surfaced in the comment but does NOT block the merge, because the gate
-# runs Prophet in CI (stochastic; ADR §9 R2/R4). Flip to blocking after N green
-# PRs prove Prophet-in-CI stable: set EVAL_GATE_BLOCKING to "true" (one-line PR +
-# a CLAUDE.md trace). The script already emits the real exit codes 0/1/2/3.
+# Rollout (AC5): now BLOCKING — EVAL_GATE_BLOCKING="true" means a FAIL (exit 1:
+# regression >3pp or coverage <60%) or ERROR (exit 2) blocks the merge. WARN
+# (exit 3: coverage 60–80% or touched-but-not-evaluated) stays non-blocking.
+# Flipped WARN→blocking on 2026-07-04 (HOS-274) after a CI canary (PR #185) proved
+# Prophet-in-CI deterministic: 3 consecutive runs, identical forecast MAPE 25.40%,
+# 0 regressions, 0.00pp run-to-run variance vs the re-frozen baseline (PR #175).
+# The R2/R4 stochasticity risk was env-drift, resolved by freezing from CI.
+# See CLAUDE.md Décision #29 + ADR-0007 §D2.g. Emergency rollback = "false".
 
 on:
   pull_request:
@@ -23,7 +26,7 @@ jobs:
     name: eval-gate
     runs-on: ubuntu-latest
     env:
-      EVAL_GATE_BLOCKING: "false"
+      EVAL_GATE_BLOCKING: "true"
       GITHUB_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
     steps:
       - uses: actions/checkout@v4

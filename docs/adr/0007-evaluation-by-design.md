@@ -201,6 +201,32 @@ Simple. Stocké dans `eval/baselines/.cache_keys.json`. Évite re-runs sur PR re
 
 Code 3 ≠ blocking en CI (exit 0 pour le workflow) mais visible dans le commentaire.
 
+#### D2.g — Rollout WARN→blocking + frontière des paths (HOS-274, 2026-07-04)
+
+**Statut : le gate est passé BLOCKING le 2026-07-04** (`EVAL_GATE_BLOCKING="true"`). Le
+rollout WARN (D2.f, AC5) est clos.
+
+**Preuve de la précondition (« N runs verts prouvant Prophet-in-CI stable »)** : les PR
+docs court-circuitent (`No trigger paths touched`) sans lancer Prophet — un simple compte
+de PR vertes ne prouve rien. Un **canari CI** (PR #185, no-op sur un `EVAL_TRIGGER_PATH`
+forecast) a forcé 3 runs Prophet consécutifs dans l'environnement CI : **MAPE forecast
+identique à 25.40 %, 0 régression, variance run-to-run 0.00pp** vs la baseline re-figée
+depuis CI (PR #175). La stochasticité redoutée (R2/R4) était du **drift d'environnement**
+(versions libs CI ≠ local), neutralisé par le freeze-from-CI — Prophet (mode MAP/L-BFGS)
+est déterministe à environnement fixé. Le blocking ne mord donc que sur exit **1/2**
+(régression réelle >3pp ou crash), jamais sur du bruit Prophet.
+
+**Frontière des paths — sortir de l'arbitrage au cas par cas (AC3) :**
+
+| Classe de path | Politique |
+|---|---|
+| `EVAL_TRIGGER_PATHS` (D2.a) — forecast/recommendation/recall/parser + `providers/` + `prompts/` + `eval/` | **DOIT** porter une couverture eval (scenario golden dataset) OU label `eval-exempt` justifié. Une modif ici sans scenario → WARN « touched-but-not-evaluated » (D3). |
+| **Runtime guardrails (Bras B, Epic 12)** — workers/monitoring/heartbeat/circuit-breaker/bornes (`scheduler`, `dispatch`, alerting) | **Légitimement hors offline-eval** : évalués en runtime (guardrails ADR-0009), pas par le golden dataset. Absents de `EVAL_TRIGGER_PATHS` **par design** — ce n'est pas une dette. Frontière Bras A vs Bras B, cf. §13. |
+| Doc / infra-only / ci-only / test-only / refactor sans changement de comportement | Exempts via label `eval-exempt` (D2.c), review SM rejette l'abus. |
+
+**Rollback d'urgence** : repasser `EVAL_GATE_BLOCKING` à `"false"` (one-liner) si un
+faux-blocage chronique émerge — mais tracer la raison, car ré-ouvre la dette de gating.
+
 ---
 
 ### D3 (Q3) — Coverage : **catégorielle (taxonomy), pas par lignes — 80% warn, 60% fail**
