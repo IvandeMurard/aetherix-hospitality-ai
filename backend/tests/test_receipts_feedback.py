@@ -167,6 +167,20 @@ class TestHaikuClassifier:
         assert result.notes == "private event tomorrow"
 
     @pytest.mark.asyncio
+    async def test_classifier_routed_to_haiku_model(self):
+        """HOS-283 AC3: Pass-3 classifier must call the LLM with the Haiku model
+        override — the shared provider defaults to Sonnet."""
+        llm_json = '{"intent":"free_form","confidence":0.8,"outcome":"modified","actual_value":null,"notes":""}'
+        svc = _service(llm_response=llm_json)
+        await svc.parse_inbound("some free-form manager note")
+
+        svc._llm.complete.assert_awaited_once()
+        assert (
+            svc._llm.complete.await_args.kwargs["model"]
+            == "claude-haiku-4-5-20251001"
+        )
+
+    @pytest.mark.asyncio
     async def test_structured_correction_from_llm(self):
         llm_json = '{"intent":"structured_correction","confidence":0.92,"outcome":"modified","actual_value":95.0,"notes":"95 covers"}'
         result = await _service(llm_response=llm_json).parse_inbound("we expect about 95 tomorrow")

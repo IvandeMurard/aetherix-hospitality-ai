@@ -125,6 +125,12 @@ Respond with a single JSON object only — no explanation, no markdown:
 
 _HAIKU_CLASSIFIER_USER = "Manager reply: {text}"
 
+# HOS-283: this classification task is designed for Haiku (cheap, deterministic
+# JSON). The shared LLM provider defaults to Sonnet, so route this single call to
+# Haiku explicitly via the per-call model override. Stays in the Claude family
+# (ADR #1). Reasoning / explainability / narrative paths keep the Sonnet default.
+_HAIKU_CLASSIFIER_MODEL = "claude-haiku-4-5-20251001"
+
 # Low-confidence threshold: auto-downgrade + request thumbs-up confirmation (OQ2)
 _CONFIDENCE_THRESHOLD = 0.6
 
@@ -481,6 +487,7 @@ class ReceiptsService:
                 max_tokens=120,
                 temperature=0.0,
                 system=_HAIKU_CLASSIFIER_SYSTEM,
+                model=_HAIKU_CLASSIFIER_MODEL,
             )
             # Strip markdown code fences if LLM wraps the JSON
             clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()

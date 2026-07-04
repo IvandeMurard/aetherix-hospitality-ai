@@ -89,7 +89,24 @@ class TestFallbackProviderPrimarySuccess:
             max_tokens=300,
             temperature=0.3,
             system="You are a hotel assistant.",
+            model=None,
         )
+
+    @pytest.mark.asyncio
+    async def test_model_override_propagates_to_primary_and_fallback(self):
+        """HOS-283 AC2: a per-call model= override reaches BOTH providers so the
+        task-based tier survives a failover."""
+        primary = _failing_provider("claude/sonnet", TimeoutError("boom"))
+        fallback = _mock_provider("gemini/flash", "ok")
+
+        provider = FallbackLLMProvider(primary=primary, fallback=fallback)
+        await provider.complete(
+            messages=_MESSAGES,
+            model="claude-haiku-4-5-20251001",
+        )
+
+        assert primary.complete.await_args.kwargs["model"] == "claude-haiku-4-5-20251001"
+        assert fallback.complete.await_args.kwargs["model"] == "claude-haiku-4-5-20251001"
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +180,7 @@ class TestFallbackProviderArgPassthrough:
             max_tokens=400,
             temperature=0.5,
             system="Be concise.",
+            model=None,
         )
 
 

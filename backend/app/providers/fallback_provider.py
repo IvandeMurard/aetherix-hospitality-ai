@@ -61,6 +61,7 @@ class FallbackLLMProvider:
         max_tokens: int = 500,
         temperature: float = 0.3,
         system: str | None = None,
+        model: str | None = None,
     ) -> str:
         """Try primary provider; on transient errors, transparently retry with fallback.
 
@@ -73,6 +74,9 @@ class FallbackLLMProvider:
             max_tokens:  Maximum tokens to generate.
             temperature: Sampling temperature.
             system:      Optional system instruction.
+            model:       Optional per-call model override (HOS-283) — propagated
+                         to BOTH the primary and the fallback provider so the
+                         task-based tier survives a failover.
 
         Returns:
             The first successful text response (primary or fallback).
@@ -87,6 +91,7 @@ class FallbackLLMProvider:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system,
+                model=model,
             )
         except Exception as primary_exc:
             if not _is_transient_error(primary_exc):
@@ -115,6 +120,7 @@ class FallbackLLMProvider:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system,
+                model=model,
             )
 
     @property

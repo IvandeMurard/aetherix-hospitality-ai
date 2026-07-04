@@ -74,6 +74,7 @@ class GeminiProvider:
         max_tokens: int = 500,
         temperature: float = 0.3,
         system: str | None = None,
+        model: str | None = None,
     ) -> str:
         """Call Gemini and return the plain-text completion.
 
@@ -83,6 +84,8 @@ class GeminiProvider:
             temperature: Sampling temperature.
             system:      Optional system instruction; maps to Gemini's
                          ``system_instruction`` config field.
+            model:       Optional per-call model override (task-based routing,
+                         HOS-283).  Falls back to the provider default when None.
 
         Returns:
             The model's text response.
@@ -116,9 +119,10 @@ class GeminiProvider:
         config = types.GenerateContentConfig(**config_kwargs)
         contents = _to_gemini_contents(messages)
 
+        effective_model = model or self._model
         t0 = time.monotonic()
         response = await self._client.aio.models.generate_content(
-            model=self._model,
+            model=effective_model,
             contents=contents,
             config=config,
         )
@@ -134,7 +138,7 @@ class GeminiProvider:
 
         logger.info(
             "llm_call provider=gemini model=%s latency_ms=%d request_id=%s",
-            self._model,
+            effective_model,
             latency_ms,
             request_id_var.get(),
         )
