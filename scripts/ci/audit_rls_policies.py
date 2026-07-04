@@ -72,11 +72,26 @@ REQUIRED_TABLES: dict[str, str] = {
     "recommendation_cache": "tenant_id",
     "weather_forecasts": "tenant_id",
     "local_events": "tenant_id",
+    # HOS-292 / Q2-05 — added in migration 20260521 (after the 20260515 pre-pilot
+    # RLS batch), so it was previously invisible to this audit.
+    "kpi_daily": "tenant_id",
 }
 
 # Tables that may exist but are not in scope for this audit (no tenant column,
 # managed elsewhere). Listed for clarity in the JSON report.
 OUT_OF_SCOPE: set[str] = {"users"}
+
+# Materialized views cannot carry RLS in Postgres (relkind='m', not 'r'). Their
+# tenant isolation is inherited from the RLS-protected base tables they read AND
+# enforced by the app-layer tenant filter on every read (the backend uses
+# service_role, which BYPASSes RLS). Registered here so a *new* MV is a conscious
+# decision reviewed for isolation, not a silent gap (HOS-292 / Q2-05).
+MATERIALIZED_VIEWS: set[str] = {
+    "recommendation_acceptance_daily",
+    "abstention_daily",
+    "latency_slo_daily",
+    "memory_instrumentation_daily",
+}
 
 
 # ---------------------------------------------------------------------------

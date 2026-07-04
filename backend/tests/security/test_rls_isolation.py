@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import os
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import AsyncGenerator
@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import (
 from app.db.models import (
     Base,
     DemandAnomaly,
+    KpiDaily,
     OperationalMemory,
     RestaurantProfile,
     StaffingRecommendation,
@@ -50,14 +51,11 @@ from app.db.models import (
 # Shared constants
 # ---------------------------------------------------------------------------
 
-MIGRATION_PATH = (
-    Path(__file__).resolve().parents[3]
-    / "supabase" / "migrations"
-    / "20260515000000_enable_rls_pre_pilot.sql"
-)
+MIGRATIONS_DIR = Path(__file__).resolve().parents[3] / "supabase" / "migrations"
+MIGRATION_PATH = MIGRATIONS_DIR / "20260515000000_enable_rls_pre_pilot.sql"
 
 # Mirror the audit-script source of truth: every table that must be locked
-# down before HOS-111 ships.
+# down before pilot. Kept in sync with scripts/ci/audit_rls_policies.py.
 REQUIRED_TABLES = (
     "restaurant_profiles",
     "demand_anomalies",
@@ -73,31 +71,82 @@ REQUIRED_TABLES = (
     "recommendation_cache",
     "weather_forecasts",
     "local_events",
+    "kpi_daily",  # HOS-292 / Q2-05 — added post-0515, RLS lives in migration 0521
 )
+
+# Materialized views can't carry RLS in Postgres — isolation comes from the
+# RLS-protected base tables they read + the app-layer tenant filter on reads.
+# Registered so a NEW mat-view is a conscious, reviewed decision (HOS-292).
+MATERIALIZED_VIEWS = frozenset({
+    "recommendation_acceptance_daily",
+    "abstention_daily",
+    "latency_slo_daily",
+    "memory_instrumentation_daily",
+})
 
 
 # ---------------------------------------------------------------------------
 # Section 1 — Migration content (static)
 # ---------------------------------------------------------------------------
 
+def _table_rls_protected(sql: str, table: str) -> bool:
+    """True if *table* has RLS enabled + a service_role policy anywhere in *sql*.
+
+    Handles both migration styles:
+      - explicit (e.g. 20260521 kpi_daily): ``ALTER TABLE ... ENABLE ROW LEVEL
+        SECURITY`` + ``CREATE POLICY ... ON <table> ... service_role``;
+      - DO-block ARRAY (20260515 pre-pilot batch): the table appears as a quoted
+        literal in the ARRAY the block iterates to enable RLS + add the policy.
+    """
+    explicit_rls = re.search(
+        rf"ALTER TABLE\s+(?:public\.)?{re.escape(table)}\s+ENABLE ROW LEVEL SECURITY",
+        sql, re.IGNORECASE,
+    )
+    explicit_policy = re.search(
+        rf"CREATE POLICY[^;]*ON\s+(?:public\.)?{re.escape(table)}\b[^;]*service_role",
+        sql, re.IGNORECASE | re.DOTALL,
+    )
+    if explicit_rls and explicit_policy:
+        return True
+    return f"'{table}'" in sql  # DO-block ARRAY literal
+
+
 class TestRLSMigrationContent:
-    """The pre-pilot migration must lock down every required table."""
+    """Every required table must be locked down by SOME migration, and every
+    materialized view must be registered (RLS can't cover mat-views)."""
 
     @pytest.fixture(scope="class")
     def migration_sql(self) -> str:
-        assert MIGRATION_PATH.exists(), f"migration missing: {MIGRATION_PATH}"
-        return MIGRATION_PATH.read_text(encoding="utf-8")
+        # HOS-292: scan ALL migrations, not just the 20260515 pre-pilot file —
+        # kpi_daily's RLS lives in 20260521, and later tables must be caught too.
+        assert MIGRATIONS_DIR.is_dir(), f"migrations dir missing: {MIGRATIONS_DIR}"
+        return "\n".join(
+            p.read_text(encoding="utf-8") for p in sorted(MIGRATIONS_DIR.glob("*.sql"))
+        )
 
     def test_migration_file_exists(self):
         assert MIGRATION_PATH.is_file()
 
     @pytest.mark.parametrize("table", REQUIRED_TABLES)
-    def test_table_listed_in_migration(self, migration_sql: str, table: str):
-        # The migration enumerates tables in a single ARRAY[...]; each entry
-        # appears as a quoted literal. The presence test is enough — every
-        # ARRAY element receives the same DO-block treatment.
-        assert f"'{table}'" in migration_sql, (
-            f"{table} missing from pre-pilot RLS migration enumeration"
+    def test_required_table_has_rls_and_policy(self, migration_sql: str, table: str):
+        assert _table_rls_protected(migration_sql, table), (
+            f"{table} is not RLS-protected in any migration "
+            f"(needs ENABLE ROW LEVEL SECURITY + a service_role policy)"
+        )
+
+    def test_no_unregistered_materialized_views(self, migration_sql: str):
+        """A new mat-view must be reviewed for tenant isolation before it ships —
+        it cannot inherit RLS automatically."""
+        found = set(
+            re.findall(
+                r"MATERIALIZED VIEW IF NOT EXISTS\s+(\w+)", migration_sql, re.IGNORECASE
+            )
+        )
+        unregistered = found - set(MATERIALIZED_VIEWS)
+        assert not unregistered, (
+            f"unregistered materialized view(s) {sorted(unregistered)} — review "
+            f"tenant isolation (base-table RLS + app-layer filter) and add to "
+            f"MATERIALIZED_VIEWS (HOS-292)"
         )
 
     def test_migration_enables_row_level_security(self, migration_sql: str):
@@ -211,6 +260,14 @@ async def session_with_tenants() -> AsyncGenerator[
             )
             session.add(memory)
 
+            kpi = KpiDaily(
+                tenant_id=tenant,
+                kpi_date=date(2026, 5, 15),
+                kpi_name="recommendation_acceptance_rate",
+                value=0.42,
+            )
+            session.add(kpi)
+
         await session.commit()
         yield session, profiles
 
@@ -321,6 +378,30 @@ class TestApplicationLayerFiltering:
 
         assert len(rows_a) == 1
         assert rows_a[0].hotel_id == TENANT_A
+
+    @pytest.mark.asyncio
+    async def test_kpi_daily_filter_isolates_tenants(self, session_with_tenants):
+        """HOS-292 / Q2-05: kpi_daily (added after the 0515 RLS batch) must
+        isolate by tenant_id like every other tenant-scoped table."""
+        session, _ = session_with_tenants
+
+        rows_a = (
+            await session.execute(
+                select(KpiDaily).where(KpiDaily.tenant_id == TENANT_A)
+            )
+        ).scalars().all()
+        assert len(rows_a) == 1
+        assert all(r.tenant_id == TENANT_A for r in rows_a)
+
+        # Cross-tenant: tenant_B's KPI row is invisible to a tenant_A-scoped read.
+        leaked = (
+            await session.execute(
+                select(KpiDaily)
+                .where(KpiDaily.tenant_id == TENANT_A)
+                .where(KpiDaily.kpi_name == "recommendation_acceptance_rate")
+            )
+        ).scalars().all()
+        assert {r.tenant_id for r in leaked} == {TENANT_A}
 
     @pytest.mark.asyncio
     async def test_cross_tenant_anomaly_lookup_returns_nothing(
