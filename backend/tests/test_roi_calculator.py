@@ -567,3 +567,56 @@ class TestROIQueriesRestaurantProfiles:
 
         assert avg_spend == DEFAULT_AVG_SPEND_PER_COVER
         assert hourly_rate == DEFAULT_STAFF_HOURLY_RATE
+
+
+# ===========================================================================
+# 9. Q2-02 (HOS-288) — run_full_scan isolates the AsyncSession per task
+# ===========================================================================
+class TestRunFullScanSessionIsolation:
+    """Sharing the input `db` across asyncio.gather breaks with 2+ properties
+    (AsyncSession is not concurrency-safe). Each gathered task must own a
+    session from AsyncSessionLocal()."""
+
+    @pytest.mark.asyncio
+    async def test_each_property_gets_its_own_isolated_session(self):
+        service = ROICalculatorService()
+
+        # Input session: only used to fetch the active property ids.
+        fetch_db = AsyncMock()
+        fetch_result = MagicMock()
+        fetch_result.fetchall.return_value = [(uuid.uuid4(),), (uuid.uuid4(),)]
+        fetch_db.execute = AsyncMock(return_value=fetch_result)
+
+        # AsyncSessionLocal() hands out a distinct session per call.
+        isolated = [AsyncMock(), AsyncMock()]
+        handed_out: list = []
+
+        def _session_factory():
+            sess = isolated[len(handed_out)]
+            handed_out.append(sess)
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=sess)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
+
+        used_sessions: list = []
+
+        async def fake_run_for_property(session, property_id):
+            used_sessions.append(session)
+            return 0
+
+        with patch(
+            "app.services.roi_calculator.AsyncSessionLocal", _session_factory
+        ), patch.object(
+            service, "run_for_property", side_effect=fake_run_for_property
+        ):
+            await service.run_full_scan(fetch_db)
+
+        assert len(used_sessions) == 2, "both properties should be processed"
+        assert fetch_db not in used_sessions, (
+            "the shared input session must NOT be reused inside gather"
+        )
+        assert used_sessions[0] is not used_sessions[1], (
+            "each gathered task must own a distinct session"
+        )
+        assert {id(s) for s in used_sessions} == {id(s) for s in isolated}

@@ -43,6 +43,7 @@ from app.core.config import (
     DEFAULT_CAPTATION_RATE,
     DEFAULT_STAFF_HOURLY_RATE,
 )
+from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -259,10 +260,17 @@ class ROICalculatorService:
             logger.info("roi_calculator: no active properties, skipping")
             return
 
-        tasks = [
-            self.run_for_property(db, property_id=uuid.UUID(str(pid)))
-            for pid in property_ids
-        ]
+        # Q2-02 (HOS-288): each gathered task MUST own its AsyncSession — the
+        # session is not safe for concurrent use, so sharing `db` across the
+        # gather raises "another operation is in progress" with 2+ properties.
+        # Mirror anomaly_detection.run_full_scan (isolated session per task).
+        async def _run_isolated(pid) -> int:
+            async with AsyncSessionLocal() as isolated_session:
+                return await self.run_for_property(
+                    isolated_session, property_id=uuid.UUID(str(pid))
+                )
+
+        tasks = [_run_isolated(pid) for pid in property_ids]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         error_count = sum(1 for r in results if isinstance(r, Exception))
