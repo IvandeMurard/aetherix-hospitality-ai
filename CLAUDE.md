@@ -67,6 +67,7 @@
 | 27 | Phase de mise en conformité (Epic 12 — runtime guardrails post-audit) **clôturée** : G-1→G-5 livrés (heartbeat/dead-man's switch, alerting error-rate/timeout, bornes feedback→training, circuit-breaker forecast tiered-confidence, bornes sanity outputs) + 6 findings QA-S4 ; G-6 prompt-injection **différé Phase 4**. Invariant : tout trip guardrail loggé avec raison typée (NFR2). Pattern = **ADR-0009** ; frontière runtime (Bras B) vs offline-eval (Bras A) = ADR-0007 §13 ; audit clôturé `docs/context/security-review-2026-05-01.md` | 20/06/2026 |
 | 28 | PMS canonical schema — jurisprudence Provider (#9/#10) étendue aux adapters PMS, amendement **ADR-0006** | 23/06/2026 |
 | 29 | Eval-gate EVAL-1 passé **WARN→blocking** (HOS-274) : exit 1/2 bloque le merge, exit 3 (WARN) reste non-bloquant. Précondition prouvée par canari CI (PR #185) — Prophet-in-CI **déterministe** : 3 runs, MAPE 25.40 % identique, 0 régression, variance 0.00pp vs baseline re-figée (PR #175). Frontière paths (doivent porter couverture vs runtime-guardrails Bras B légitimement exempts) = **ADR-0007 §D2.g**. Rollback = `EVAL_GATE_BLOCKING="false"` | 04/07/2026 |
+| 30 | Audit différentiel pré-pilote 2026-Q2 (HOS-277) **CLOSED** : NO-GO levé → **GO conditionnel** (sandbox Apaleo + dataset non-PII). Q2-01 (fuite `.env.fly`) → repo PRIVATE + historique purgé (filter-repo) + rotation 11/11 clés (résidu `refs/pull/*` → ticket Support, non-bloquant) ; Q2-02 AsyncSession (HOS-288) + Q2-03 PII WhatsApp (HOS-289) corrigés (PR #187). Doc = `docs/context/security-review-2026-Q2.md` (bannière CLOSED) | 04/07/2026 |
 
 ---
 
@@ -78,7 +79,7 @@
 | Phase 1 | ✅ Done (19/04/2026) | MCP Server v0 + ADR 0003 observability + memory instrumentation. PR #73 merged. |
 | Phase 0 (deploy) | ✅ Done (15/05/2026) | Staging Fly.io live. Smoke E2E 5/5 PASS. RLS 14/14 + webhook HMAC. |
 | Phase 2 | ✅ Done (17/05/2026) | Agent "Receipts" P2-1 → P2-7 mergées. Daily + WhatsApp + email + inbound parser + weekly digest. |
-| Phase 3 | Kickoff 17/05/2026 | Pilot Validation + Portfolio Reinforcement. **Mise en conformité pré-pilote (Epic 12 runtime guardrails) clôturée 20/06** (G-1→G-5 + findings QA-S4 ; G-6 différé Phase 4) → bloquant audit levé, débloque gate pilote HOS-176. Détail → `docs/planning/phase-3-pilot-validation.md` + `docs/planning/phase-3-sprint-plan.md`. |
+| Phase 3 | Kickoff 17/05/2026 | Pilot Validation + Portfolio Reinforcement. **Conformité pré-pilote close** : Epic 12 runtime guardrails (20/06) + **audit différentiel 2026-Q2 (HOS-277) CLOSED 04/07** (Q2-01 secrets/rotation + Q2-02/03 corrigés, Décision #30) → **NO-GO levé, GO conditionnel** sandbox+non-PII → gate pilote **HOS-176** débloqué. Détail → `docs/planning/phase-3-pilot-validation.md` + `docs/planning/phase-3-sprint-plan.md`. |
 | Phase 4 | Scale & Distribution | Mews integration · POS ingestion · **Federated HiveMemory ship (announced Phase 3)** · cross-property dashboard · food waste KPI · multi-tenant. |
 | Phase 5 | Vision long-terme | Agentic Hospitality Mesh — Revenue Orchestration Agent + MCP-native design pipeline + Aetherix Voice (Lore-inspired). Détail → `docs/context/vision-future.md`. |
 

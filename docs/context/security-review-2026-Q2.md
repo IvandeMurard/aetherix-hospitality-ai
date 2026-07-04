@@ -1,5 +1,12 @@
 # Pre-Pilot Differential Re-Audit — 2026-Q2
 
+> **STATUS: CLOSED (2026-07-04).** Le verdict NO-GO est **levé**. Les 3 findings P0/ÉLEVÉ bloquants sont résolus :
+> - **Q2-01 CRITIQUE (`.env.fly` secrets prod versionnés)** → **RÉSOLU** : repo passé **PRIVATE** ; `.env.fly` purgé de **tout l'historique** (`git filter-repo` + force-push `main`/`hos-175`) + `.gitignore` ; **rotation 11/11 clés** (Anthropic, Gemini, Mistral, Supabase DB+key, AUTH_SECRET, Twilio, Upstash, SendGrid, PredictHQ, Apaleo). Résidu : commit `7070837` encore atteignable via `refs/pull/*` sur repo désormais privé → **ticket GitHub Support** (suivi non-bloquant).
+> - **Q2-02 ÉLEVÉ (AsyncSession partagée dans `gather`)** → **RÉSOLU** — [HOS-288](https://linear.app/hospitalityagent/issue/HOS-288), PR #187 (session isolée par task).
+> - **Q2-03 ÉLEVÉ (PII tel+body dans logs WhatsApp)** → **RÉSOLU** — [HOS-289](https://linear.app/hospitalityagent/issue/HOS-289), PR #187 (numéros masqués, corps non loggé).
+>
+> **Verdict révisé : GO conditionnel** pour 1 design-partner sur **sandbox Apaleo + dataset non-PII**, supervision active (input [HOS-176](https://linear.app/hospitalityagent/issue/HOS-176)). Gaps MOYENS/FAIBLES (Annexe A) restent en backlog, non bloquants. Gate CI durci depuis l'audit : eval-gate **blocking** ([HOS-274](https://linear.app/hospitalityagent/issue/HOS-274)).
+
 > **Auteur :** Architect / QA review (Claude Opus 4.8) — BMad mode QA/Architect
 > **Cadrage :** [HOS-277](https://linear.app/hospitalityagent/issue/HOS-277) — Epic: Pre-Pilot Differential Re-Audit (2026-Q2)
 > **Scope :** Aetherix F&B execution node **uniquement**, delta `c613a71..main` (+15 026 / −1 254 lignes, 170 fichiers backend, 103 commits). OUT : Anima, POS (Epic 13), Context Graph (Epic 14), frontend, cold-start meta-learner (HOS-192/193/195 — auditer après merge).
