@@ -8,6 +8,7 @@ Architecture constraints:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -52,8 +53,8 @@ from app.workers.agent_action_log_partition_rotation import (
 )
 from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
-from app.workers.event_sync import start_event_scheduler
 from app.workers.error_rate_monitor import register_error_rate_monitor_job
+from app.workers.event_sync import start_event_scheduler
 from app.workers.heartbeat import register_heartbeat_monitor_job
 from app.workers.kpi_aggregator import register_kpi_aggregator_job
 from app.workers.latency_slo_worker import register_latency_slo_job
@@ -117,6 +118,14 @@ async def lifespan(app: FastAPI):
         app.state.llm.model_id,
         type(app.state.embedding).__name__,
     )
+
+    # HOS-282 — fallback (Gemini) canary: fire-and-forget WARNING if the parachute
+    # is down, so silent rot (expired key / quota / drift) is caught at deploy time
+    # rather than during a real Claude outage. Only runs when a fallback key is
+    # configured; never blocks or fails startup.
+    _fallback_health = getattr(app.state.llm, "check_fallback_health", None)
+    if callable(_fallback_health) and os.getenv("GEMINI_API_KEY"):
+        asyncio.create_task(_fallback_health())
 
     # Decision #10 (HOS-157): AetherixEngine singleton — one instance per process.
     # Prophet CPU-bound methods run via asyncio.to_thread; engine shared across all routes.

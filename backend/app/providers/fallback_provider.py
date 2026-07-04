@@ -117,6 +117,47 @@ class FallbackLLMProvider:
                 system=system,
             )
 
+    async def check_fallback_health(self) -> bool:
+        """Ping the fallback provider with a minimal request to surface silent rot.
+
+        The fallback path (Gemini) almost never runs in prod because the primary
+        (Claude) rarely 5xx's — so an expired key, lapsed quota, or drifted SDK
+        contract stays invisible until a real Claude outage, i.e. the one moment
+        it must work. This canary exercises the fallback directly so the rot is
+        caught early (boot health-check or scheduled job — HOS-282).
+
+        Non-raising: logs a WARNING and returns ``False`` on any failure so it can
+        be fired safely from startup without ever taking the process down.
+        """
+        try:
+            text = await self._fallback.complete(
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+                temperature=0.0,
+            )
+        except Exception as exc:
+            logger.warning(
+                "FallbackLLMProvider: fallback %s health-check FAILED (%s: %s) — "
+                "the parachute may be down; rotate/verify the fallback key",
+                self._fallback.model_id,
+                type(exc).__name__,
+                exc,
+            )
+            return False
+
+        if not (text and text.strip()):
+            logger.warning(
+                "FallbackLLMProvider: fallback %s health-check returned an empty "
+                "response — treating as unavailable",
+                self._fallback.model_id,
+            )
+            return False
+
+        logger.info(
+            "FallbackLLMProvider: fallback %s health-check OK", self._fallback.model_id
+        )
+        return True
+
     @property
     def model_id(self) -> str:
         """Composite identifier showing both providers for observability."""
