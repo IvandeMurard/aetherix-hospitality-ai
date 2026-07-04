@@ -48,6 +48,7 @@ class ClaudeProvider:
         max_tokens: int = 500,
         temperature: float = 0.3,
         system: str | None = None,
+        model: str | None = None,
     ) -> str:
         """Call the Claude Messages API and return the assistant's text.
 
@@ -58,6 +59,8 @@ class ClaudeProvider:
             temperature: Sampling temperature.
             system:      System-level instruction passed to Anthropic's
                          top-level ``system=`` field (not injected as a message).
+            model:       Optional per-call model override (task-based routing,
+                         HOS-283).  Falls back to the provider default when None.
 
         Raises:
             RuntimeError: If ``ANTHROPIC_API_KEY`` was not set at instantiation
@@ -73,8 +76,9 @@ class ClaudeProvider:
             self._api_key = key
             self._client = AsyncAnthropic(api_key=key)
 
+        effective_model = model or self._model
         kwargs: dict = dict(
-            model=self._model,
+            model=effective_model,
             max_tokens=max_tokens,
             temperature=temperature,
             messages=messages,
@@ -88,7 +92,7 @@ class ClaudeProvider:
 
         logger.info(
             "llm_call provider=claude model=%s latency_ms=%d request_id=%s",
-            self._model,
+            effective_model,
             latency_ms,
             request_id_var.get(),
         )

@@ -22,6 +22,7 @@ class LLMProvider(Protocol):
         max_tokens: int = 500,
         temperature: float = 0.3,
         system: str | None = None,
+        model: str | None = None,
     ) -> str:
         """Return the model's plain-text response.
 
@@ -32,6 +33,9 @@ class LLMProvider(Protocol):
             system:      Optional system-level instruction.  Providers that
                          support a dedicated system field (e.g. Anthropic) use
                          it directly; others prepend it as a system message.
+            model:       Optional per-call model override (task-based routing,
+                         HOS-283).  When ``None`` the provider's default model is
+                         used — existing callers are unchanged.
         """
         ...
 

@@ -98,6 +98,21 @@ class TestGeminiProviderComplete:
         call_kwargs = mock_client.aio.models.generate_content.call_args.kwargs
         assert call_kwargs["model"] == "gemini-2.0-flash"
 
+    @pytest.mark.asyncio
+    async def test_complete_model_override_supersedes_default(self):
+        """HOS-283: model= overrides the provider default for this call only."""
+        mock_client = _make_mock_client("ok")
+
+        with patch("google.genai.Client", return_value=mock_client):
+            provider = GeminiProvider(api_key="sk-test", model="gemini-2.0-flash")
+            await provider.complete(
+                messages=[{"role": "user", "content": "ping"}],
+                model="gemini-1.5-pro",
+            )
+
+        call_kwargs = mock_client.aio.models.generate_content.call_args.kwargs
+        assert call_kwargs["model"] == "gemini-1.5-pro"
+
 
 # ---------------------------------------------------------------------------
 # AC3 — system param → system_instruction
