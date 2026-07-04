@@ -18,6 +18,20 @@ from app.services.memory_service import MemoryService
 logger = logging.getLogger(__name__)
 
 
+def _mask_number(raw: Optional[str]) -> str:
+    """Mask a phone / WhatsApp identifier for logs (Q2-03 / finding 8.5, HOS-289).
+
+    Keeps the ``whatsapp:`` prefix + last 2 digits so lines stay debuggable
+    without persisting a full E.164 number (PII) to application logs.
+    """
+    if not raw or not isinstance(raw, str):
+        return "<none>"
+    prefix = "whatsapp:" if raw.startswith("whatsapp:") else ""
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    tail = digits[-2:] if len(digits) >= 2 else digits
+    return f"{prefix}***{tail}"
+
+
 class WhatsAppService:
     """
     Handles WhatsApp communication via Twilio.
@@ -71,14 +85,17 @@ class WhatsAppService:
         # Strip whatsapp: prefix to get the plain E.164 number for DB lookup
         sender_number = sender_raw.removeprefix("whatsapp:")
 
-        logger.info(f"Received WhatsApp from {sender_raw}: {body}")
+        # Q2-03 (HOS-289): never log the message body or a full number (PII).
+        logger.info(
+            "Received WhatsApp from %s (%d chars)", _mask_number(sender_raw), len(body)
+        )
 
         # Verify sender against registered profiles — no side-effects for unknown senders
         profile = await self._resolve_tenant(sender_number)
         if profile is None:
             logger.warning(
                 "WhatsApp message from unknown sender %s — ignoring (not in any RestaurantProfile)",
-                sender_raw,
+                _mask_number(sender_raw),
             )
             return
 
@@ -183,7 +200,7 @@ class WhatsAppService:
                 if response.status_code != 201:
                     logger.error(f"Twilio error: {response.text}")
                 else:
-                    logger.info(f"Message sent to {to}")
+                    logger.info("Message sent to %s", _mask_number(to))
                     # Demo board: highlight WhatsApp/Twilio node after delivery
                     asyncio.create_task(demo_emit("whatsapp"))
             except Exception as e:

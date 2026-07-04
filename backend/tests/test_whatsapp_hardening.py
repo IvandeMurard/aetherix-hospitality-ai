@@ -206,3 +206,37 @@ class TestRunPendingExcludesConfigError:
         sql_str = str(compiled)
         assert "ready_to_push" in sql_str
         assert "config_error" not in sql_str
+
+
+# ===========================================================================
+# Q2-03 (HOS-289) — no PII (phone number / message body) in WhatsApp logs
+# ===========================================================================
+class TestWhatsAppLogPII:
+    """Finding 8.5: sender/recipient numbers and message bodies must not be
+    persisted to application logs."""
+
+    def test_mask_number_hides_full_number(self):
+        from app.services.whatsapp_service import _mask_number
+
+        masked = _mask_number("whatsapp:+33612345678")
+        assert "612345678" not in masked
+        assert "33612345678" not in masked
+        assert masked.startswith("whatsapp:")
+        assert masked.endswith("78")
+
+    def test_mask_number_handles_missing_or_bad_input(self):
+        from app.services.whatsapp_service import _mask_number
+
+        assert _mask_number(None) == "<none>"
+        assert _mask_number("") == "<none>"
+
+    def test_source_never_logs_raw_body_or_sender(self):
+        """Regression guard against re-introducing the raw f-string logs."""
+        import inspect
+
+        import app.services.whatsapp_service as w
+
+        src = inspect.getsource(w)
+        assert "{body}" not in src, "message body must never be logged"
+        assert "from {sender_raw}" not in src
+        assert "sent to {to}" not in src
