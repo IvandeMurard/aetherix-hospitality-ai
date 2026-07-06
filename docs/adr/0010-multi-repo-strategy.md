@@ -101,6 +101,8 @@ github.com/IvandeMurard/
 - `memory/` (mémoire PM) → **reste local/privé**, jamais dans le méta-repo public.
 - `scripts/ci/` : génériques (`check_eval_coverage.py`, `check_schema_drift.py`) → **méta** (base des reusable workflows) · spécifiques (`schema_drift_ignore.json`, smoke Apaleo, training Prophet) → **`aetherix`**.
 
+**Amendement 06/07/2026 (Décision #31, ADR-0012) — exception explicite au critère cross-cutting :** `ADR-0012` (Mesh Signal Contract) définit une interface s'étendant sur ≥ 2 nœuds (Tacet, Anima, Aetherix, Orchestrateur) et satisferait donc mécaniquement le critère Q2. **Il reste néanmoins `aetherix`, PRIVÉ, et ne migre jamais vers le méta-repo public.** Motivation : contrairement à ADR-0004 (gouvernance/frontières de nœuds) ou ADR-0010 (governance repo), ADR-0012 documente l'IP différenciante du produit (le signal model — vocabulaire `DomainSignal`/`SignalComposite`/`RecommendationCandidate`/`CollectivePattern` + mécanismes de calibration à 3 niveaux). Le critère Q2 (*"cross-cutting = ≥2 nœuds"*) reste valide pour classer un ADR *architectural/gouvernance* ; il ne s'applique pas automatiquement à un ADR qui documente un avantage concurrentiel. Si une mention apparaît un jour dans le méta-repo public, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
+
 ### Q3 — Stratégie BMad / submodules : **URL-reference par défaut, submodule uniquement si dépendance d'exécution**
 
 **Décision (affine la convention #3/#5) :** BMad vit dans le méta-repo (`docs/bmad/`). Les repos agents le **référencent par URL** dans leur doc — **pas de submodule par défaut**.

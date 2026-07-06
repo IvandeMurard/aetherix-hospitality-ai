@@ -42,7 +42,9 @@ r3 corrige les trois et repositionne le document au niveau Mesh (§D-scope).
 
 Ce contrat n'est pas une abstraction interne à Aetherix : c'est le vocabulaire que **tout nœud du Mesh** (Tacet, Anima, Aetherix, Orchestrateur) utilise pour s'exposer à l'Orchestrateur sans que celui-ci ait à connaître la sémantique propriétaire de chaque nœud. Sans ce contrat, l'Orchestrateur doit apprendre à parler `room_risk_score` (Tacet), `ProfileSnapshot` (Anima) et `operational_memory` outcome (Aetherix) comme trois langages distincts — ce qui contredit l'ambition de composabilité du Mesh (ADR-0004).
 
-Vit dans `aetherix-hospitality-ai/docs/adr/` pour l'instant, au même titre que `mesh-architecture.md`, tant que la migration multi-repo (Décision #25) n'a pas atteint son Étape 2.
+Vit dans `aetherix-hospitality-ai/docs/adr/` pour l'instant, au même titre que `mesh-architecture.md`.
+
+**Correction 06/07/2026 (décision Ivan) : contrairement à `mesh-architecture.md`, ce document NE migre PAS vers le méta-repo public à l'Étape 2.** Bien qu'il satisfasse le critère cross-cutting de Q2/ADR-0010 (*"un ADR est cross-cutting s'il définit une interface s'étendant sur ≥ 2 nœuds"*), le Signal Contract est explicitement traité comme une exception : c'est l'IP différenciante (*"la vraie IP, c'est le signal model"*, §1), pas de la gouvernance/infra comme ADR-0004/0010. Il reste dans le repo privé `aetherix` en permanence. Si une référence apparaît un jour dans le méta-repo public, elle se limite à une ligne générique mentionnant l'existence d'un contrat perceptif cross-nœud — sans le vocabulaire (`DomainSignal`/`SignalComposite`/`RecommendationCandidate`/`CollectivePattern`) ni les mécanismes de calibration. Amendement correspondant : ADR-0010 §Q2.
 
 ### D0 — Pipeline conceptuel
 

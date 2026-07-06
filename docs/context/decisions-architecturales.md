@@ -190,6 +190,8 @@ Séparation **vitrine publique** (vision Mesh) / **execution nodes privés**. M�
 
 **Document canonique :** [`docs/adr/0010-multi-repo-strategy.md`](../adr/0010-multi-repo-strategy.md) (Q1-Q9 tranchées, plan migration séquencé, specs submodule + reusable workflow + redirect banner, DoD). Brief d'entrée `-DRAFT` supprimé (superseded).
 
+**Amendement 06/07/2026 (Q2 — exception ADR-0012) :** le critère cross-cutting (*"interface s'étendant sur ≥2 nœuds → méta-repo"*) ne s'applique pas automatiquement quand l'ADR documente l'IP différenciante plutôt que de la gouvernance/infra. ADR-0012 (Mesh Signal Contract, Décision #31) reste `aetherix` PRIVÉ en permanence malgré son caractère cross-cutting — détail dans ADR-0010 §Q2 et Décision #31.
+
 ### 26 — Anima : Guest Cognition Layer + confidence-weighted claims + Segment dual-scope + HiveMemory v2 (Learning Engine tier Mesh) (17/06/2026)
 
 **Trigger :** post-hackathon Anima PoC (juin 2026) + revue architecture multi-parties (sessions 13/06–17/06) — trois évolutions par rapport à Décision #20.
@@ -246,6 +248,8 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 **Implémentation :** Phase 4, gated par le tranchage de la décision ouverte "Interaction model event-driven Phase 4-5" — sous cron quotidien actuel, la composition cross-domaine n'a pas d'occasion réelle de compter à temps.
 
 **Gel terminologique post-acceptation :** tout changement de vocabulaire futur passe par amendement d'ADR explicite, pas un renommage silencieux.
+
+**Amendement 06/07/2026 — reste privé, exception au méta-repo public :** décision Ivan — contrairement à `mesh-architecture.md`, ce document ne migre jamais vers le méta-repo public (Décision #25/ADR-0010 Q2), malgré son caractère cross-cutting (≥2 nœuds). C'est l'IP différenciante du produit, pas de la gouvernance/infra. Amendement correspondant : ADR-0010 §Q2. Si une mention publique apparaît un jour, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
 
 **Document canonique :** `docs/adr/0012-mesh-signal-contract.md`.
 
