@@ -190,6 +190,8 @@ Séparation **vitrine publique** (vision Mesh) / **execution nodes privés**. M�
 
 **Document canonique :** [`docs/adr/0010-multi-repo-strategy.md`](../adr/0010-multi-repo-strategy.md) (Q1-Q9 tranchées, plan migration séquencé, specs submodule + reusable workflow + redirect banner, DoD). Brief d'entrée `-DRAFT` supprimé (superseded).
 
+**Amendement 06/07/2026 (Q2 — exception ADR-0012) :** le critère cross-cutting (*"interface s'étendant sur ≥2 nœuds → méta-repo"*) ne s'applique pas automatiquement quand l'ADR documente l'IP différenciante plutôt que de la gouvernance/infra. ADR-0012 (Mesh Signal Contract, Décision #31) reste `aetherix` PRIVÉ en permanence malgré son caractère cross-cutting — détail dans ADR-0010 §Q2 et Décision #31.
+
 ### 26 — Anima : Guest Cognition Layer + confidence-weighted claims + Segment dual-scope + HiveMemory v2 (Learning Engine tier Mesh) (17/06/2026)
 
 **Trigger :** post-hackathon Anima PoC (juin 2026) + revue architecture multi-parties (sessions 13/06–17/06) — trois évolutions par rapport à Décision #20.
@@ -229,6 +231,27 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 **Parallélisation :** ne touche pas `app/providers/pos/*` (Epic 13, HOS-254) ni le pilote Apaleo prod (Phase 3 Track A) — fichiers disjoints. Pré-requis recommandé avant la première story d'adapter Mews (Phase 4), pas avant. Détail technique → amendement `docs/adr/0006-pos-integration.md` §9.
 
 **Linear :** Epic 15 (HOS-279) — 2 stories, ~5 points, `relatedTo` HOS-186.
+
+---
+
+### 31 — Hospitality Agentic Mesh Signal Contract (ADR-0012) (06/07/2026)
+
+**Trigger :** reframing stratégique 05/07/2026 (*"la vraie IP n'est ni le LLM, ni MCP, ni le forecast — c'est le signal model"*) + audit des sujets architecturaux couverts, qui a révélé une dette sémantique existante : le mot "signal" était déjà utilisé de façon incohérente à trois endroits du repo (Tacet "signaux structurés", Anima `sentiment_signal`, Aetherix "signal d'apprentissage" mémoire) sans jamais être unifié.
+
+**Décision (r3, après deux cycles de revue externe) :** contrat Mesh-wide (pas Aetherix-only) définissant :
+- **`DomainSignal`** — namespaced par bounded context du nœud propriétaire (`environmental.*` Tacet, `guest.*` Anima, `fnb.*` Aetherix, `operational.*`/`orchestrator.*` Orchestrateur). Aucune fonction de promotion centralisée — chaque nœud interprète déjà dans son domaine (cohérent ADR-0004 D1, ADR-0011 D1), pas d'objet `Observation` intermédiaire.
+- **`SignalComposite`** — agrégation cross-domaine côté Orchestrateur, `significance_score` continu, **aucun champ actionable/candidate_decision** — frontière perception/décision protégée pour ne pas recréer l'antipattern déprécié par ADR-0004 D5.
+- **Calibration à 3 niveaux** : prior de cohorte Hive (défaut day-1, Décision #2/#26 D3) → apprentissage local (boucle Private Memory) → override manager explicite (`orchestrator.override`, priorité max). Répond à la question "qui a autorité sur les seuils" sans reporter la charge de configuration initiale sur le client (ce qui contredirait la promesse cold-start).
+- **`CollectivePattern`** — alias ontologique de `fb_patterns` (Hive Memory Aetherix) et du Hive prior Anima (Décision #26 D3, ADR-0011 D3/D4) — pas un nouveau store. Nourrit la calibration, jamais composé avec des signaux locaux (portée `hotel_id` stricte inchangée).
+- **Pas de `decay_rate`** sur `DomainSignal` v0.1 (YAGNI) — reste exclusivement une propriété des Semantic claims Anima (ADR-0011 D2). `DomainSignal` utilise `observed_at`/`effective_from`/`expires_at`.
+
+**Implémentation :** Phase 4, gated par le tranchage de la décision ouverte "Interaction model event-driven Phase 4-5" — sous cron quotidien actuel, la composition cross-domaine n'a pas d'occasion réelle de compter à temps.
+
+**Gel terminologique post-acceptation :** tout changement de vocabulaire futur passe par amendement d'ADR explicite, pas un renommage silencieux.
+
+**Amendement 06/07/2026 — reste privé, exception au méta-repo public :** décision Ivan — contrairement à `mesh-architecture.md`, ce document ne migre jamais vers le méta-repo public (Décision #25/ADR-0010 Q2), malgré son caractère cross-cutting (≥2 nœuds). C'est l'IP différenciante du produit, pas de la gouvernance/infra. Amendement correspondant : ADR-0010 §Q2. Si une mention publique apparaît un jour, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
+
+**Document canonique :** `docs/adr/0012-mesh-signal-contract.md`.
 
 ---
 

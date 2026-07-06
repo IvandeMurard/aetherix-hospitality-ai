@@ -173,6 +173,7 @@ Résultat : 0% perte de yield. 100% fidélisation émotionnelle.
 | **SensoryMemory** | Tacet | Apprentissage de patterns environnementaux (historique risques par zone/saison). Embryon technologique pour Anima. |
 | **OperationalMemory** | Aetherix | Mémoire privée par hôtel — feedback managers, outcomes, décisions passées. Table `operational_memory`, pgvector. |
 | **Anima** | Futur nœud | Mémoire relationnelle guest — émotionnel + logistique + CRM. Distinct des trois ci-dessus. |
+| **Signal Contract** | Cross-nœud (interne, non public) | Contrat perceptif reliant les sorties des nœuds à l'Orchestrateur. Détail (vocabulaire, schémas, mécanismes de calibration) volontairement non documenté ici — voir ADR-0012 (repo privé uniquement, cf. ADR-0010 §Q2). |
 
 > **Règle :** ne pas utiliser "Hive Memory" pour désigner les patterns Tacet. Utiliser "SensoryMemory" dans le repo Tacet dès maintenant.
 
