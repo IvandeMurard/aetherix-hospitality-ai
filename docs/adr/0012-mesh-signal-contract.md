@@ -1,8 +1,8 @@
 # ADR-0012 — Hospitality Agentic Mesh: Signal Contract
 
-**Date :** 2026-07-05 (r2 : 2026-07-05 · r3 : 2026-07-05 — révisions suite retours Ivan + second avis externe)
-**Status :** Proposed (draft r3 pour revue Ivan — pas encore Accepted)
-**Décideurs :** Ivan de Murard (à valider)
+**Date :** 2026-07-05 (r2 : 2026-07-05 · r3 : 2026-07-05 — révisions suite retours Ivan + second avis externe) · **Accepted :** 2026-07-06
+**Status :** Accepted
+**Décideurs :** Ivan de Murard
 **Contexte :** Reframing stratégique 05/07/2026 — *"la vraie IP n'est ni le LLM, ni MCP, ni le forecast. C'est le signal model."*
 **Portée :** Mesh entier (Aetherix, Tacet, Anima, Orchestrateur), pas Aetherix seul — cf. §D-scope. Vit dans ce repo pour l'instant, comme `mesh-architecture.md` (Décision #25 Étape 1 statu quo).
 
@@ -152,6 +152,18 @@ RecommendationCandidate: { type, target_node, human_review_required: true }
 
 ---
 
+## 2bis. Points de rattachement à l'architecture existante (implémentation Phase 4)
+
+Non-bloquants pour l'acceptation — à respecter au moment de l'implémentation, pour éviter de dupliquer ce qui existe déjà.
+
+- **Monitoring (ADR-0009 / Décision #27)** : la santé de l'émission de signaux (volume par nœud, dérive de `confidence`, fréquence anormale d'`orchestrator.override`) doit s'intégrer au heartbeat/dead-man's switch et à l'alerting error-rate déjà construits — pas un second système de surveillance parallèle.
+- **Outcome-capture (ADR-0011 D4, Story 3.5 HOS-246)** : `SignalComposite.significance_score` + le seuil de calibration appliqué (D-calibration) sont directement le `context-features`/`propensity` attendus par l'instrumentation de capture d'outcome déjà actée — l'implémentation doit brancher là-dessus, pas créer un second pipeline de logging.
+- **Versioning MCP (ADR-0004 D5)** : exposer `DomainSignal` dans les tools MCP existants (`get_room_risk_score`, `get_emotional_risk`) est un changement de schéma cassant, soumis à la même discipline `v0`/`v1` que le reste du Mesh.
+- **Déclencheur d'implémentation** : ce contrat ne prend sa pleine valeur que sous ingestion événementielle (décision ouverte "Interaction model event-driven Phase 4-5") — sous le cron quotidien actuel, un `SignalComposite` formé en cours de journée n'a aucun moment pour compter avant le batch du lendemain. L'implémentation de cet ADR est donc de fait gated par le tranchage de cette décision ouverte, pas seulement "Phase 4" au sens large.
+- **Gel terminologique** : une fois `Accepted`, `DomainSignal` / `SignalComposite` / `RecommendationCandidate` / `CollectivePattern` sont figés. Tout changement de vocabulaire futur passe par un amendement d'ADR explicite, pas un renommage silencieux en cours d'implémentation (ce document a déjà été renommé trois fois pendant sa propre revue — pas un précédent à répéter après acceptation).
+
+---
+
 ## 3. Ce que cet ADR NE tranche PAS (décisions ouvertes dérivées)
 
 - **Valeurs de seuil de calibration** par type de composite — nécessite données pilote (§D-calibration)
@@ -185,10 +197,6 @@ RecommendationCandidate: { type, target_node, human_review_required: true }
 
 ---
 
-## 6. Prochaine étape
+## 6. Statut
 
-**Ce document est un draft r3.** À valider par Ivan avant de :
-1. Passer le Status à `Accepted`
-2. Ajouter la ligne d'index CLAUDE.md (Décision #31)
-3. Référencer ce contrat depuis `mesh-architecture.md` §5
-4. Créer la story d'implémentation (Linear) si Phase 4 scope confirmé
+**Accepted 2026-07-06.** Propagé : CLAUDE.md §Décisions architecturales (Décision #31), `docs/context/decisions-architecturales.md` (détail #31), `docs/mesh-architecture.md` §5 (Naming), `docs/context/open-decisions.md` (nouvelle décision ouverte : seuils de calibration). Implémentation reste Phase 4, gated par le tranchage de "Interaction model event-driven Phase 4-5" (§2bis).

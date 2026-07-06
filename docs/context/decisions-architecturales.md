@@ -232,6 +232,25 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 ---
 
+### 31 — Hospitality Agentic Mesh Signal Contract (ADR-0012) (06/07/2026)
+
+**Trigger :** reframing stratégique 05/07/2026 (*"la vraie IP n'est ni le LLM, ni MCP, ni le forecast — c'est le signal model"*) + audit des sujets architecturaux couverts, qui a révélé une dette sémantique existante : le mot "signal" était déjà utilisé de façon incohérente à trois endroits du repo (Tacet "signaux structurés", Anima `sentiment_signal`, Aetherix "signal d'apprentissage" mémoire) sans jamais être unifié.
+
+**Décision (r3, après deux cycles de revue externe) :** contrat Mesh-wide (pas Aetherix-only) définissant :
+- **`DomainSignal`** — namespaced par bounded context du nœud propriétaire (`environmental.*` Tacet, `guest.*` Anima, `fnb.*` Aetherix, `operational.*`/`orchestrator.*` Orchestrateur). Aucune fonction de promotion centralisée — chaque nœud interprète déjà dans son domaine (cohérent ADR-0004 D1, ADR-0011 D1), pas d'objet `Observation` intermédiaire.
+- **`SignalComposite`** — agrégation cross-domaine côté Orchestrateur, `significance_score` continu, **aucun champ actionable/candidate_decision** — frontière perception/décision protégée pour ne pas recréer l'antipattern déprécié par ADR-0004 D5.
+- **Calibration à 3 niveaux** : prior de cohorte Hive (défaut day-1, Décision #2/#26 D3) → apprentissage local (boucle Private Memory) → override manager explicite (`orchestrator.override`, priorité max). Répond à la question "qui a autorité sur les seuils" sans reporter la charge de configuration initiale sur le client (ce qui contredirait la promesse cold-start).
+- **`CollectivePattern`** — alias ontologique de `fb_patterns` (Hive Memory Aetherix) et du Hive prior Anima (Décision #26 D3, ADR-0011 D3/D4) — pas un nouveau store. Nourrit la calibration, jamais composé avec des signaux locaux (portée `hotel_id` stricte inchangée).
+- **Pas de `decay_rate`** sur `DomainSignal` v0.1 (YAGNI) — reste exclusivement une propriété des Semantic claims Anima (ADR-0011 D2). `DomainSignal` utilise `observed_at`/`effective_from`/`expires_at`.
+
+**Implémentation :** Phase 4, gated par le tranchage de la décision ouverte "Interaction model event-driven Phase 4-5" — sous cron quotidien actuel, la composition cross-domaine n'a pas d'occasion réelle de compter à temps.
+
+**Gel terminologique post-acceptation :** tout changement de vocabulaire futur passe par amendement d'ADR explicite, pas un renommage silencieux.
+
+**Document canonique :** `docs/adr/0012-mesh-signal-contract.md`.
+
+---
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).

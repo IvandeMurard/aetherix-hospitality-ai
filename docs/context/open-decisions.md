@@ -195,6 +195,18 @@
 
 ---
 
+### Seuils de calibration SignalComposite (ADR-0012)
+
+**Statut :** Open — pas urgent, ne bloque pas Phase 3
+**Trigger :** données pilote Phase 3 réelles
+**Origine :** ADR-0012 (Décision #31), D-calibration — le modèle à 3 niveaux (prior cohorte Hive / apprentissage local / override manager) est tranché, mais les **valeurs numériques** des seuils de `significance_score` par type de `SignalComposite` ne le sont pas.
+
+**Ce qui reste à faire :** une fois le pilote Phase 3 en cours et les premiers `recommendation_accepted`/rejected + outcomes disponibles, calibrer empiriquement à partir de quel `significance_score` un composite justifie une `RecommendationCandidate`, par domaine (`environmental.*`, `guest.*`, `fnb.*`, `operational.*`).
+
+**Dépendances :** implémentation d'ADR-0012 elle-même gated par le tranchage de "Interaction model event-driven Phase 4-5" (ci-dessus) — ce point ne peut être calibré qu'une fois les deux construits.
+
+---
+
 ## Resolved (archive)
 
 ### [x] Multi-repo strategy + governance — RÉSOLU 16/06/2026 → ADR-0010 (Décision #25)

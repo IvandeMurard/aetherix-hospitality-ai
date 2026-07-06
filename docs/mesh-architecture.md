@@ -173,8 +173,13 @@ Résultat : 0% perte de yield. 100% fidélisation émotionnelle.
 | **SensoryMemory** | Tacet | Apprentissage de patterns environnementaux (historique risques par zone/saison). Embryon technologique pour Anima. |
 | **OperationalMemory** | Aetherix | Mémoire privée par hôtel — feedback managers, outcomes, décisions passées. Table `operational_memory`, pgvector. |
 | **Anima** | Futur nœud | Mémoire relationnelle guest — émotionnel + logistique + CRM. Distinct des trois ci-dessus. |
+| **DomainSignal** | Tout nœud | Unité perceptive namespaced par bounded context (`environmental.*` Tacet, `guest.*` Anima, `fnb.*` Aetherix, `operational.*`/`orchestrator.*` Orchestrateur). Émis directement par le nœud propriétaire — pas d'objet `Observation` intermédiaire. Détail complet : ADR-0012. |
+| **SignalComposite** | Orchestrateur | Composition cross-domaine de `DomainSignal` du même `hotel_id`. `significance_score` continu — ne porte jamais de champ actionable (frontière perception/décision, ADR-0012). |
+| **RecommendationCandidate** | Orchestrateur | Produit exclusivement par l'Orchestrateur en appliquant un seuil calibré à un `SignalComposite` — jamais par un nœud. Passe par HITL (Décision #6). |
+| **CollectivePattern** | Aetherix Hive Memory (`fb_patterns`) + Anima Segment (Hive prior) | Alias ontologique — pas un nouveau store. Nourrit la calibration des seuils `SignalComposite`, jamais composé comme signal cross-tenant (ADR-0012 D4). |
 
 > **Règle :** ne pas utiliser "Hive Memory" pour désigner les patterns Tacet. Utiliser "SensoryMemory" dans le repo Tacet dès maintenant.
+> **Règle :** vocabulaire Signal (`DomainSignal`/`SignalComposite`/`RecommendationCandidate`/`CollectivePattern`) figé depuis ADR-0012 (Décision #31) — tout changement passe par amendement d'ADR, pas un renommage silencieux.
 
 ---
 
