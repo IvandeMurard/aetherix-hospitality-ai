@@ -7,15 +7,48 @@ from typing import Any, Dict, Optional
 import httpx
 from sqlalchemy.future import select
 
+from app.core.config import DEMO_MODE
 from app.core.demo_events import demo_emit
 from app.core.exceptions import NotConfiguredError
-from app.db.models import RestaurantProfile
+from app.db.models import AgentActionLog, RestaurantProfile
 from app.db.session import AsyncSessionLocal
 from app.providers.factory import get_llm_provider
 from app.services.aetherix_engine import AetherixEngine
 from app.services.memory_service import MemoryService
 
 logger = logging.getLogger(__name__)
+
+# HOS-303 — typed trip reason (NFR2, ADR-0009): the untrained-model mock
+# forecast must never ground a manager-facing reply outside DEMO_MODE.
+MOCK_FORECAST_TOOL = "mock_forecast_guardrail"
+REASON_MOCK_FORECAST = "mock_forecast_suppressed"
+
+
+async def _record_mock_forecast_trip(hotel_id: str) -> None:
+    """Log one typed trip row when mock covers are withheld from a reply."""
+    try:
+        async with AsyncSessionLocal() as db:
+            db.add(
+                AgentActionLog(
+                    hotel_id=hotel_id or "_system",
+                    tool_name=MOCK_FORECAST_TOOL,
+                    status="tool_error",
+                    error_code=REASON_MOCK_FORECAST,
+                    payload={
+                        "kind": "trip",
+                        "reason": REASON_MOCK_FORECAST,
+                        "detail": (
+                            "prediction.is_mock=True outside DEMO_MODE; "
+                            "covers/staffing withheld from LLM context"
+                        ),
+                    },
+                    request_id="",
+                )
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("mock_forecast_guardrail: agent_action_log write failed: %s", exc)
+    logger.warning("mock_forecast_guardrail: TRIP hotel_id=%s", hotel_id)
 
 
 def _mask_number(raw: Optional[str]) -> str:
@@ -138,19 +171,30 @@ class WhatsAppService:
         try:
             forecast = await self.engine.get_forecast(tenant_id, date.today(), "dinner", {})
             prediction = forecast.get("prediction", {})
-            patterns = forecast.get("historical_patterns", [])
-            similar_text = "\n".join(
-                f"- {p['payload'].get('pattern_text', '')} ({p['payload'].get('outcome_description', '')})"
-                for p in patterns[:3]
-                if "payload" in p
-            ) if patterns else ""
-            forecast_context = {
-                "date": date.today().isoformat(),
-                "covers": prediction.get("covers", "—"),
-                "confidence": int(prediction.get("confidence", 0) * 100),
-                "similar_nights": similar_text,
-                "staffing": forecast.get("staffing_recommendation", {}),
-            }
+            if prediction.get("is_mock") and not DEMO_MODE:
+                # HOS-303: the model is not trained — the hardcoded fallback
+                # covers must never reach a manager. Typed trip + date-only
+                # context (same minimal shape as the forecast-failure path).
+                await _record_mock_forecast_trip(tenant_id)
+                forecast_context = {"date": date.today().isoformat()}
+            else:
+                patterns = forecast.get("historical_patterns", [])
+                similar_text = "\n".join(
+                    f"- {p['payload'].get('pattern_text', '')} ({p['payload'].get('outcome_description', '')})"
+                    for p in patterns[:3]
+                    if "payload" in p
+                ) if patterns else ""
+                covers = prediction.get("covers", "—")
+                if prediction.get("is_mock"):
+                    # DEMO_MODE: numbers allowed but visibly marked (AC2).
+                    covers = f"{covers} (demo data — model not trained)"
+                forecast_context = {
+                    "date": date.today().isoformat(),
+                    "covers": covers,
+                    "confidence": int(prediction.get("confidence", 0) * 100),
+                    "similar_nights": similar_text,
+                    "staffing": forecast.get("staffing_recommendation", {}),
+                }
         except Exception as exc:
             logger.warning("WhatsApp: failed to load forecast for context: %s", exc)
             forecast_context = {"date": date.today().isoformat()}
