@@ -8,7 +8,7 @@
 ---
 
 ## 🏛️ Architecture
-- `ARCHITECTURE.md` — design système (v0.2.0 ; sections Streamlit/Render obsolètes, se fier à CLAUDE.md)
+- `ARCHITECTURE.md` — pointeur architecture (v0.3.0, 07/07/2026) : où trouver quoi + résumé 10 lignes. La vérité vit dans CLAUDE.md / mesh-architecture.md / ADRs
 - `mesh-architecture.md` — **SOURCE DE VÉRITÉ CROSS-REPOS** (Mesh : Aetherix + Tacet + Orchestrateur + Anima)
 - `AI_CONTEXT_LAYER.md` — couche de contexte IA
 - `adr/` — Architecture Decision Records :
@@ -24,6 +24,7 @@
 - `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL (findings HOS-282/283/284/286/287)
 - `context/linear-conventions.md` — protocole Epic/Story Linear
 - `context/open-decisions.md` — miroir détaillé des décisions ouvertes
+- `context/analyse-critique-2026-07.md` — **audit critique complet Aetherix+Tacet (07/07/2026)** : chaîne de valeur 5 maillons, circularité MAPE synthétique, différenciation, wedge/moat, risques crédibilité
 - `context/veille.md` · `context/watchlist.md` — contexte veille & signaux long terme
 
 ## 🗺️ Planning & Roadmap
@@ -33,6 +34,7 @@
 - `planning/phase-2-agent-receipts.md` · `planning/phase-2-gate-runbook.md`
 - `planning/phase-3-pilot-validation.md` · `planning/sprint-phase3-j1-j10.md`
 - `planning/hos-190-manual-runbook.md` — runbook manuel HOS-190 (AC1/AC4/AC5/AC6)
+- `planning/plan-90j-proof-visibility.md` — **plan 90 jours Proof & Visibility (juil.→oct. 2026)** : preuve empirique (Recruit backtest, shadow mode, interviews), méta-repo public (arbitrage Aetherix reste privé), observabilité Logfire, stratégie visibilité/emploi + draft ticket GitHub Support Q2-01
 
 ## 📡 Veille
 - `veille/` — rapports hebdo (`report-*.md`, `AAAA-MM-JJ-veille.md`) + drafts (`draft-*`)

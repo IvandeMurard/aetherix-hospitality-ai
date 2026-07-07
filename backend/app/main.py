@@ -41,7 +41,7 @@ from app.api.routes import (
 from app.api.routes import (
     receipts as receipts_route,
 )
-from app.api.routes import webhook as twilio_inbound_webhook
+from app.api.routes import twilio_inbound as twilio_inbound_webhook
 from app.core.error_handlers import problem_details_handler
 from app.db.schema_check import verify_schema
 from app.db.session import engine

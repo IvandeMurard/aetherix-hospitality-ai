@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Any
 
 # Ensure scripts/_env_loader.py is importable when invoked from the repo root.
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 try:
     from _env_loader import load_env  # type: ignore[import-not-found]
     load_env()

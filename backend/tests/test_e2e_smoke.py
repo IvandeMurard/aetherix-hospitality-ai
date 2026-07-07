@@ -417,7 +417,7 @@ class TestExplainabilityService:
 # ===========================================================================
 
 def _webhook_app() -> FastAPI:
-    from app.api.routes.webhook import router
+    from app.api.routes.twilio_inbound import router
     app = FastAPI()
     app.include_router(router)
     return app
@@ -443,7 +443,7 @@ class TestTwilioInboundConversationalPath:
         app = _webhook_app()
         app.dependency_overrides[get_db] = _noop_db
 
-        with patch("app.api.routes.webhook._bg_receipt_feedback", new_callable=AsyncMock):
+        with patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock):
             with TestClient(app) as client:
                 resp = client.post(
                     "/webhooks/twilio/inbound",

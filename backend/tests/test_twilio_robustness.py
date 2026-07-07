@@ -62,7 +62,7 @@ def _make_twilio_client() -> TwilioClient:
 class TestGetWebhookUrl:
     def test_falls_back_to_request_url_when_no_headers_no_override(self, monkeypatch):
         monkeypatch.delenv("TWILIO_WEBHOOK_BASE_URL", raising=False)
-        from app.api.routes.webhook import _get_webhook_url
+        from app.api.routes.twilio_inbound import _get_webhook_url
 
         req = _make_mock_request(scheme="http", netloc="127.0.0.1:8000")
         url = _get_webhook_url(req)
@@ -72,7 +72,7 @@ class TestGetWebhookUrl:
 
     def test_uses_x_forwarded_proto_and_host(self, monkeypatch):
         monkeypatch.delenv("TWILIO_WEBHOOK_BASE_URL", raising=False)
-        from app.api.routes.webhook import _get_webhook_url
+        from app.api.routes.twilio_inbound import _get_webhook_url
 
         req = _make_mock_request(
             scheme="http",
@@ -90,7 +90,7 @@ class TestGetWebhookUrl:
 
     def test_base_url_env_override_takes_precedence_over_headers(self, monkeypatch):
         monkeypatch.setenv("TWILIO_WEBHOOK_BASE_URL", "https://api.aetherix.com")
-        from app.api.routes.webhook import _get_webhook_url
+        from app.api.routes.twilio_inbound import _get_webhook_url
 
         req = _make_mock_request(
             headers={
@@ -106,7 +106,7 @@ class TestGetWebhookUrl:
 
     def test_base_url_trailing_slash_stripped(self, monkeypatch):
         monkeypatch.setenv("TWILIO_WEBHOOK_BASE_URL", "https://api.aetherix.com/")
-        from app.api.routes.webhook import _get_webhook_url
+        from app.api.routes.twilio_inbound import _get_webhook_url
 
         req = _make_mock_request()
         url = _get_webhook_url(req)
@@ -116,7 +116,7 @@ class TestGetWebhookUrl:
 
     def test_query_string_appended(self, monkeypatch):
         monkeypatch.setenv("TWILIO_WEBHOOK_BASE_URL", "https://api.aetherix.com")
-        from app.api.routes.webhook import _get_webhook_url
+        from app.api.routes.twilio_inbound import _get_webhook_url
 
         req = _make_mock_request(query="foo=bar")
         url = _get_webhook_url(req)
@@ -313,14 +313,14 @@ class TestTwilioDLQ:
 
 class TestBgParseQueryIsolatedSession:
     def test_bg_parse_query_has_no_db_parameter(self):
-        from app.api.routes.webhook import _bg_parse_query
+        from app.api.routes.twilio_inbound import _bg_parse_query
 
         sig = inspect.signature(_bg_parse_query)
         assert "db" not in sig.parameters
 
     @pytest.mark.asyncio
     async def test_bg_parse_query_opens_asyncsessionlocal(self):
-        from app.api.routes.webhook import _bg_parse_query
+        from app.api.routes.twilio_inbound import _bg_parse_query
 
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
@@ -335,9 +335,9 @@ class TestBgParseQueryIsolatedSession:
         )
         mock_explainer_cls = MagicMock(return_value=mock_explainer_instance)
 
-        with patch("app.api.routes.webhook.AsyncSessionLocal", mock_session_factory), \
-             patch("app.api.routes.webhook.QueryParserService") as MockParser, \
-             patch("app.api.routes.webhook.ExplainabilityService", mock_explainer_cls):
+        with patch("app.api.routes.twilio_inbound.AsyncSessionLocal", mock_session_factory), \
+             patch("app.api.routes.twilio_inbound.QueryParserService") as MockParser, \
+             patch("app.api.routes.twilio_inbound.ExplainabilityService", mock_explainer_cls):
             mock_parser_instance = AsyncMock()
             mock_parser_instance.parse_and_store = AsyncMock(return_value=parse_result)
             MockParser.return_value = mock_parser_instance
@@ -349,7 +349,7 @@ class TestBgParseQueryIsolatedSession:
     def test_route_does_not_forward_request_session_to_bg_task(self, monkeypatch):
         """P2-4: The webhook route must schedule _bg_receipt_feedback without a db kwarg."""
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
-        from app.api.routes.webhook import router
+        from app.api.routes.twilio_inbound import router
         from app.db.session import get_db
 
         app = FastAPI()
@@ -360,7 +360,7 @@ class TestBgParseQueryIsolatedSession:
 
         app.dependency_overrides[get_db] = _noop_db
 
-        with patch("app.api.routes.webhook._bg_receipt_feedback", new_callable=AsyncMock) as mock_bg:
+        with patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock) as mock_bg:
             with TestClient(app) as client:
                 resp = client.post(
                     "/webhooks/twilio/inbound",

@@ -62,7 +62,7 @@
 | 22 | Eval-by-design = offline gate CI + runtime eval + outcome eval (Qonto + BMad ; portée élargie 3 bras, amendé 19/06 ADR-0007 §13) | 04/06/2026 |
 | 23 | POS integration scope + adapter pattern (Phase 4) | 06/06/2026 |
 | 24 | Graphe de contexte Postgres recursive CTE (Phase 4) — Path C retenu cash-driven, AGE bloqué Supabase | 06/06/2026 |
-| 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — exécution Étape 2 (post-pilote OU pré-fundraise) | 16/06/2026 |
+| 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — **exécuté 07/07/2026** (déclencheur pré-candidatures) : méta-repo public [`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) livré, Aetherix reste privé, cross-link tacet-app. ADR-0012 jamais migré (Décision #31) | 16/06/2026 |
 | 26 | Anima = Guest Cognition Layer · confidence-weighted claims (schema, pas couche) · Segment double portée (local + Hive prior) · Learning Engine tier Mesh séparé · outcome-capture instrumentation Phase 4 | 17/06/2026 |
 | 27 | Phase de mise en conformité (Epic 12 — runtime guardrails post-audit) **clôturée** : G-1→G-5 livrés (heartbeat/dead-man's switch, alerting error-rate/timeout, bornes feedback→training, circuit-breaker forecast tiered-confidence, bornes sanity outputs) + 6 findings QA-S4 ; G-6 prompt-injection **différé Phase 4**. Invariant : tout trip guardrail loggé avec raison typée (NFR2). Pattern = **ADR-0009** ; frontière runtime (Bras B) vs offline-eval (Bras A) = ADR-0007 §13 ; audit clôturé `docs/context/security-review-2026-05-01.md` | 20/06/2026 |
 | 28 | PMS canonical schema — jurisprudence Provider (#9/#10) étendue aux adapters PMS, amendement **ADR-0006** | 23/06/2026 |
@@ -187,6 +187,6 @@ REDIS_URL             — Upstash (session state)
 
 ## Points d'attention
 
-1. `docs/ARCHITECTURE.md` daté fév. 2026 — sections Streamlit/Render.com obsolètes. Se fier à ce CLAUDE.md.
-2. `.env.example` racine = ancien backend (`archive/legacy-backend`).
-3. Hébergement staging = Fly.io `cdg` (Décision #17). Dev local Windows pour scripts utilitaires.
+1. `.env.example` racine = ancien backend (`archive/legacy-backend`).
+2. Hébergement staging = Fly.io `cdg` (Décision #17). Dev local Windows pour scripts utilitaires.
+3. Plan actif : **Epic 16 Proof & Visibility (HOS-300)** — 90 j, gel nouveaux ADRs / extension Mesh. Détail `docs/planning/plan-90j-proof-visibility.md` + audit `docs/context/analyse-critique-2026-07.md`.
