@@ -192,6 +192,8 @@ Séparation **vitrine publique** (vision Mesh) / **execution nodes privés**. M�
 
 **Amendement 06/07/2026 (Q2 — exception ADR-0012) :** le critère cross-cutting (*"interface s'étendant sur ≥2 nœuds → méta-repo"*) ne s'applique pas automatiquement quand l'ADR documente l'IP différenciante plutôt que de la gouvernance/infra. ADR-0012 (Mesh Signal Contract, Décision #31) reste `aetherix` PRIVÉ en permanence malgré son caractère cross-cutting — détail dans ADR-0010 §Q2 et Décision #31.
 
+**Amendement 07/07/2026 (exécution partielle — déclencheur pré-candidatures) :** un troisième trigger s'ajoute aux deux de Q6 (pilote+NDA / pré-fundraise) : la **recherche d'emploi** (audit critique `analyse-critique-2026-07.md` — le case study public pointait vers un repo privé, 404). Exécuté ce jour : méta-repo public [`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) (README vision + inventaire honnête construit-vs-vision + MIT, **historique frais** — règle le risque résidu Q2-01 pour le contenu public) + cross-link `tacet-app`. **Non exécuté** (reste Étape 2) : scission stub public archivé / `aetherix` privé, migration `mesh-architecture.md` + ADRs cross-cutting, reusable workflows. Contenu méta-repo volontairement minimal tant que le ticket GitHub Support Q2-01 (HOS-304) n'est pas clos. Story : HOS-305 (Epic 16, HOS-300).
+
 ### 26 — Anima : Guest Cognition Layer + confidence-weighted claims + Segment dual-scope + HiveMemory v2 (Learning Engine tier Mesh) (17/06/2026)
 
 **Trigger :** post-hackathon Anima PoC (juin 2026) + revue architecture multi-parties (sessions 13/06–17/06) — trois évolutions par rapport à Décision #20.
