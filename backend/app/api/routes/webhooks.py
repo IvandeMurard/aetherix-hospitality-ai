@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from fastapi.responses import Response
 
-from app.api.routes.webhook import _validate_twilio_signature
+from app.api.routes.twilio_inbound import _validate_twilio_signature
 from app.services.whatsapp_service import WhatsAppService
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])

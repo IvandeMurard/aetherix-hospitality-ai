@@ -187,6 +187,6 @@ REDIS_URL             — Upstash (session state)
 
 ## Points d'attention
 
-1. `docs/ARCHITECTURE.md` daté fév. 2026 — sections Streamlit/Render.com obsolètes. Se fier à ce CLAUDE.md.
-2. `.env.example` racine = ancien backend (`archive/legacy-backend`).
-3. Hébergement staging = Fly.io `cdg` (Décision #17). Dev local Windows pour scripts utilitaires.
+1. `.env.example` racine = ancien backend (`archive/legacy-backend`).
+2. Hébergement staging = Fly.io `cdg` (Décision #17). Dev local Windows pour scripts utilitaires.
+3. Plan actif : **Epic 16 Proof & Visibility (HOS-300)** — 90 j, gel nouveaux ADRs / extension Mesh. Détail `docs/planning/plan-90j-proof-visibility.md` + audit `docs/context/analyse-critique-2026-07.md`.

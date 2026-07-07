@@ -194,7 +194,7 @@ class TestActionLoggerService:
 # ===========================================================================
 
 def _make_webhook_app() -> FastAPI:
-    from app.api.routes.webhook import router
+    from app.api.routes.twilio_inbound import router
 
     app = FastAPI()
     app.include_router(router)
@@ -219,7 +219,7 @@ def webhook_client(monkeypatch):
     app.dependency_overrides[get_db] = _fake_db
 
     with patch(
-        "app.api.routes.webhook.ActionLoggerService.log_action",
+        "app.api.routes.twilio_inbound.ActionLoggerService.log_action",
         new_callable=AsyncMock,
         return_value={"status": "logged", "recommendation_id": str(uuid.uuid4()), "action": "accepted"},
     ):
@@ -240,7 +240,7 @@ def test_webhook_accept_returns_twiml_accept_message(webhook_client):
 def test_webhook_reject_returns_twiml_reject_message(webhook_client):
     """AC#6 + AC#1: Reject reply → TwiML with rejection message."""
     with patch(
-        "app.api.routes.webhook.ActionLoggerService.log_action",
+        "app.api.routes.twilio_inbound.ActionLoggerService.log_action",
         new_callable=AsyncMock,
         return_value={"status": "logged", "recommendation_id": str(uuid.uuid4()), "action": "rejected"},
     ):
@@ -258,7 +258,7 @@ def test_webhook_unknown_returns_query_ack(webhook_client):
     The route returns TWIML_QUERY_ACK immediately. _bg_receipt_feedback is mocked
     out so the test never touches a real DB connection.
     """
-    with patch("app.api.routes.webhook._bg_receipt_feedback", new_callable=AsyncMock):
+    with patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock):
         resp = webhook_client.post(
             "/webhooks/twilio/inbound",
             data={"From": "+33600000001", "Body": "maybe", "To": "+14155238886"},
@@ -298,7 +298,7 @@ def test_webhook_signature_validation_skipped_in_test_mode(monkeypatch):
     app.dependency_overrides[get_db] = _fake_db
 
     with patch(
-        "app.api.routes.webhook.ActionLoggerService.log_action",
+        "app.api.routes.twilio_inbound.ActionLoggerService.log_action",
         new_callable=AsyncMock,
         return_value={"status": "not_found"},
     ):
@@ -322,8 +322,8 @@ def test_webhook_unknown_does_not_call_log_action(monkeypatch):
 
     mock_log = AsyncMock()
 
-    with patch("app.api.routes.webhook.ActionLoggerService.log_action", mock_log), \
-         patch("app.api.routes.webhook._bg_receipt_feedback", new_callable=AsyncMock):
+    with patch("app.api.routes.twilio_inbound.ActionLoggerService.log_action", mock_log), \
+         patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock):
         with TestClient(app) as client:
             resp = client.post(
                 "/webhooks/twilio/inbound",
