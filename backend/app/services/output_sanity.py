@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.core import config
+from app.core.observability import guardrail_trip
 from app.db.models import AgentActionLog
 from app.db.session import AsyncSessionLocal
 from app.services.feedback_guard import capacity_ceiling
@@ -146,4 +147,6 @@ async def record_sanity_trip(hotel_id: str, verdict: SanityVerdict) -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("output_sanity: dispatch_anomaly failed: %s", exc)
 
+    for reason, detail in verdict.flags:
+        guardrail_trip(SANITY_TOOL, hotel_id, reason, detail)
     logger.warning("output_sanity: TRIP hotel_id=%s flags=%s", hotel_id, verdict.flags)

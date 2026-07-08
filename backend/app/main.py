@@ -103,6 +103,13 @@ async def lifespan(app: FastAPI):
     # --------------- startup ---------------
     _validate_startup_env()
 
+    # HOS-311 — Logfire traces (FastAPI + Anthropic tokens/cost). Runs before
+    # provider singletons so the anthropic client class is patched first.
+    # Strict no-op without LOGFIRE_TOKEN (CI/tests/dev need nothing).
+    from app.core.observability import configure_observability
+
+    configure_observability(app)
+
     # HOS-150 AC7 — verify migrations have been applied; refuse boot if any
     # critical table is missing. Replaces the old `Base.metadata.create_all`
     # path, which silently created divergent tables in fresh environments.

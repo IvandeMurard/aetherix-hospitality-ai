@@ -154,6 +154,7 @@ LLM_MODEL             — "claude-sonnet-4-6" (défaut)
 EMBEDDING_BACKEND     — "mistral" (défaut) | "openai"
 EMBEDDING_MODEL       — "mistral-embed" (défaut)
 REDIS_URL             — Upstash (session state)
+LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si absent)
 ```
 
 ---

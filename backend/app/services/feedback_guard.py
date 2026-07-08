@@ -152,6 +152,9 @@ async def record_feedback_trip(
     except Exception as exc:  # noqa: BLE001
         logger.warning("feedback_guard: ops alert failed: %s", exc)
 
+    from app.core.observability import guardrail_trip
+
+    guardrail_trip(FEEDBACK_TOOL, hotel_id, reason, detail)
     logger.warning(
         "feedback_guard: TRIP hotel_id=%s severity=%s reason=%s — %s",
         hotel_id, severity, reason, detail,

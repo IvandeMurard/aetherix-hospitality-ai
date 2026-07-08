@@ -12,6 +12,7 @@ from app.core.demo_events import demo_emit
 from app.core.exceptions import NotConfiguredError
 from app.db.models import AgentActionLog, RestaurantProfile
 from app.db.session import AsyncSessionLocal
+from app.core.observability import guardrail_trip, span as obs_span
 from app.providers.factory import get_llm_provider
 from app.services.aetherix_engine import AetherixEngine
 from app.services.memory_service import MemoryService
@@ -48,6 +49,7 @@ async def _record_mock_forecast_trip(hotel_id: str) -> None:
             await db.commit()
     except Exception as exc:  # noqa: BLE001
         logger.warning("mock_forecast_guardrail: agent_action_log write failed: %s", exc)
+    guardrail_trip(MOCK_FORECAST_TOOL, hotel_id, REASON_MOCK_FORECAST)
     logger.warning("mock_forecast_guardrail: TRIP hotel_id=%s", hotel_id)
 
 
@@ -240,7 +242,8 @@ class WhatsAppService:
 
         async with httpx.AsyncClient() as client:
             try:
-                response = await client.post(url, data=data, auth=auth)
+                with obs_span("whatsapp.send", to=_mask_number(to), body_chars=len(body)):
+                    response = await client.post(url, data=data, auth=auth)
                 if response.status_code != 201:
                     logger.error(f"Twilio error: {response.text}")
                 else:
