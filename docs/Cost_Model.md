@@ -411,8 +411,8 @@ Profit: $84.70/month (covers founder ramen 🍜)
 
 ### Related Documents
 
-- **Problem Statement:** `docs/Problem_Statement.md`
-- **MVP Scope:** `docs/MVP_SCOPE.md`
+- **Problem Statement:** `docs/_archive/Problem_Statement.md`
+- **MVP Scope:** `docs/_archive/MVP_SCOPE.md`
 - **Architecture:** `docs/ARCHITECTURE.md`
 - **Google Sheet (Live):** https://docs.google.com/spreadsheets/d/1K2AZVUdOeTxWzZQb5FaFIbh_nJXkuGvjTrcNk0Z_OPQ/edit?usp=sharing
 

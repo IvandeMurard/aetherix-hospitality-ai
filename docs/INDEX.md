@@ -1,8 +1,8 @@
 # 📚 Index de la documentation — Aetherix
 
-> Catalogue de toute la documentation `docs/`, classée par sous-catégorie.
-> Chargé **sur demande** (pas automatiquement) — CLAUDE.md ne garde que les pointeurs de code + le lien vers cet index, afin de rester sous son budget de ~150 lignes.
+> Catalogue de la documentation **vivante** de `docs/`, classée par sous-catégorie. Chargé sur demande (pas automatiquement).
 > **Convention :** facts de session → `CLAUDE.md` ; contexte narratif & détaillé → ici et dans les fichiers ci-dessous.
+> **Élagage 08/07/2026 (Story 16.2 / HOS-302)** : 292 → ~51 fichiers vivants. Docs de phases terminées, stratégies périmées et vieux rapports → [`docs/_archive/`](_archive/) (rien n'est supprimé). Framework BMad → `tools/bmad/` (outillage, pas de la doc projet).
 > ⚡ Priorité inter-nœuds : `mesh-architecture.md` (vérité cross-repos).
 
 ---
@@ -10,72 +10,60 @@
 ## 🏛️ Architecture
 - `ARCHITECTURE.md` — pointeur architecture (v0.3.0, 07/07/2026) : où trouver quoi + résumé 10 lignes. La vérité vit dans CLAUDE.md / mesh-architecture.md / ADRs
 - `mesh-architecture.md` — **SOURCE DE VÉRITÉ CROSS-REPOS** (Mesh : Aetherix + Tacet + Orchestrateur + Anima)
-- `AI_CONTEXT_LAYER.md` — couche de contexte IA
-- `adr/` — Architecture Decision Records :
-  - `0001-aetherix-mcp-server-v0.md` · `0002-memory-instrumentation.md` · `0003-agent-observability-and-metering.md` · `0004-orchestrator-separation.md` · `0005-cold-start-meta-learner.md`
+- `adr/` — Architecture Decision Records (11) :
+  - `0001-aetherix-mcp-server-v0` · `0002-memory-instrumentation` · `0003-agent-observability-and-metering` · `0004-orchestrator-separation`
+  - `0006-pos-integration` · `0007-evaluation-by-design` · `0008-context-graph` · `0009-runtime-guardrails`
+  - `0010-multi-repo-strategy` · `0011-learning-engine-hive-v2` · `0012-mesh-signal-contract` (**privé à jamais**, Décision #31)
 
 ## 🧭 Context (détail par domaine)
+- `context/decisions-architecturales.md` — détail des 31 décisions (index 1-ligne dans CLAUDE.md)
+- `context/open-decisions.md` — décisions ouvertes + archive des résolues
+- `context/analyse-critique-2026-07.md` — **audit critique complet Aetherix+Tacet (07/07/2026)** : chaîne de valeur 5 maillons, circularité MAPE synthétique, différenciation, wedge/moat, risques crédibilité
 - `context/data-conventions.md` — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
-- `context/strategy.md` · `context/vision-future.md` — stratégie & vision long terme
+- `context/vision-future.md` — vision long terme (Phase 5, Mesh, Aetherix Voice)
 - `context/demo-apaleo.md` — Demo PRD Apaleo + résultats probe sandbox (HOS-190 AC1)
-- `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — gate MAPE J+1 (Décision #14)
+- `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — gate MAPE J+1 (Décision #14) ⚠️ synthétique = circulaire (cf. analyse-critique) ; benchmark réel = HOS-307
 - `context/runbook-pre-pilot.md` — checklist pré-pilote
-- `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL (findings HOS-282/283/284/286/287)
+- `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL
 - `context/linear-conventions.md` — protocole Epic/Story Linear
-- `context/open-decisions.md` — miroir détaillé des décisions ouvertes
-- `context/analyse-critique-2026-07.md` — **audit critique complet Aetherix+Tacet (07/07/2026)** : chaîne de valeur 5 maillons, circularité MAPE synthétique, différenciation, wedge/moat, risques crédibilité
-- `context/veille.md` · `context/watchlist.md` — contexte veille & signaux long terme
+- `context/monitoring-watchlist.md` — signaux à réévaluer à chaque phase (watchlist compétitive)
+- `context/security-review-2026-05-01.md` — audit sécurité mai (clôturé, Epic 12)
+- `context/security-review-2026-Q2.md` — audit différentiel pré-pilote Q2 (CLOSED, Décision #30)
 
-## 🗺️ Planning & Roadmap
-- `ROADMAP_NOW_NEXT_LATER.md` — roadmap opérationnelle (Now / Next / Later)
-- `MVP_SCOPE.md` — périmètre MVP
-- `planning/phase-0-1-execution-plan.md` · `planning/phase-0-retro.md`
-- `planning/phase-2-agent-receipts.md` · `planning/phase-2-gate-runbook.md`
-- `planning/phase-3-pilot-validation.md` · `planning/sprint-phase3-j1-j10.md`
-- `planning/hos-190-manual-runbook.md` — runbook manuel HOS-190 (AC1/AC4/AC5/AC6)
-- `planning/plan-90j-proof-visibility.md` — **plan 90 jours Proof & Visibility (juil.→oct. 2026)** : preuve empirique (Recruit backtest, shadow mode, interviews), méta-repo public (arbitrage Aetherix reste privé), observabilité Logfire, stratégie visibilité/emploi + draft ticket GitHub Support Q2-01
+## 🗺️ Planning
+- `planning/plan-90j-proof-visibility.md` — **plan actif (Epic 16, HOS-300)** : preuve empirique + visibilité, juil.→oct. 2026, phases A→E + draft ticket GitHub Support
+- `planning/phase-3-pilot-validation.md` · `planning/phase-3-sprint-plan.md` — Phase 3 pilote
+- `planning/pilot-readiness-test-plan.md` — test plan readiness pilote (Epic Pilot-Readiness)
+- `planning/evaluation-by-design.md` — plan d'implémentation eval-by-design (Décision #22, ADR-0007)
+- `planning/hos-190-manual-runbook.md` — runbook manuel HOS-190
+- Phases 0-2 terminées → `_archive/planning/`
 
 ## 📡 Veille
-- `veille/` — rapports hebdo (`report-*.md`, `AAAA-MM-JJ-veille.md`) + drafts (`draft-*`)
-- `context/watchlist.md` — signaux à réévaluer à chaque phase
+- `veille/digest-2026-Q1-avril.md` — digest compressé mars/avril (originaux → `_archive/veille/`)
+- `veille/2026-06-*.md` · `veille/2026-07-*.md` — rapports du trimestre courant
 - Automatisation : `.github/workflows/veille-hebdomadaire.yml` (lundi 8h30) · `scripts/ops/veille_proactive.py`
 
-## 📣 Marketing & Sales
-- `marketing/CASE_STUDY_UPDATE.md` — prompt Lovable, case study public aligné vision Mesh
-- `marketing/SALES-Pitch-Update-Q3.md` — mise à jour pitch Q3 2026
-- `presentation.md` · `demo_script.md` · `WALKTHROUGH_APALEO.md` — supports démo
-- `Problem_Statement.md` · `MARKET_INTELLIGENCE.md` — positionnement & marché
+## 🥊 Competitive
+- `competitive/apaleo-mcp-mapping.md` · `conduit-ai-analysis.md` · `grevon-analysis.md` · `otelai-analysis.md` · `th1-ai-analysis.md` · `travelos-mcp-analysis.md`
+- Page concurrence frontale (Nory/Tenzo/5-Out/Avero) = à produire, Story 16.13 (HOS-313)
 
-## 🔌 MCP
-- `mcp/getting-started.md` — démarrage MCP
-- Code associé : `backend/app/mcp_server.py` (MCP v0, 3 tools)
+## 🚀 Pilot & Ops
+- `pilot/onboarding-kit.md` · `pilot/outreach-template.md` · `pilot/credentials-sop.md`
+- `ops/latency-slo.md` — SLO latence · `ops/llm-fallback-runbook.md` — runbook fallback LLM
+- `SECURITY/secrets_handling.md` · `SECURITY/secrets_rotation_playbook.md`
 
-## 📊 Metrics & Benchmarks
-- `metrics/backtest_2026-04-17.json` (+ `.png`) · `metrics/benchmark_2026-04-19.json`
-- `context/mape-benchmark.md` — gate MAPE J+1
+## 🧪 Testing & MCP
+- `testing/e2e-apaleo-sandbox.md` (+ `testing/evidence/`) — E2E sandbox Apaleo
+- `mcp/getting-started.md` — consommer le MCP server Aetherix
+- `demos/README.md` — démos disponibles
 
-## 🔐 Security
-- `SECURITY/secrets_handling.md` — gestion des secrets (Fly.io)
-- `SECURITY/secrets_rotation_playbook.md` — rotation & purge d'historique
+## 📣 Marketing
+- `marketing/CASE_STUDY_UPDATE.md` — prompt case study public (ivandemurard.com/aetherix)
+- `marketing/positioning-snippets.md` — snippets de positionnement
+- `marketing/fiches/` — fiches RAG (html/pdf)
 
-## 🚀 Deployment & Ops
-- `DEPLOYMENT.md` — déploiement Fly.io (Décision #17)
-- `TROUBLESHOOTING.md` — dépannage
-- `Cost_Model.md` — modèle de coûts
-
-## 🎬 Demos & Assets
-- `demos/README.md` — assets démo (screenshot Receipt, recording 60s — HOS-190 AC4/AC5)
-- `assets/` — diagrammes (`architecture-*.svg`, `aetherix_future_vision_architecture_v4.svg`), logos, `demo_board.html`
-
-## 🧪 Internal / Reviews
-- `internal/PHASE_0_REVIEW.md` · `internal/validation_report.md` · `internal/integration_report.md`
-- `internal/aetherix_brutal_feedback.md` · `internal/IMPROVEMENT_RECOMMENDATIONS.md`
-
-## 📐 BMad
-- `bmad/_bmad/` — agents BMad (sm, dev, architect, pm, analyst, qa, tech-writer)
-- `bmad/_bmad-output/` — artefacts (`planning-artifacts/`, `implementation-artifacts/`)
-
-## 🔗 Linear
-- `context/linear-conventions.md` — conventions Epic/Story (DoD, labels, statuts)
-- `linear/import-phase-0-1.json` — import initial Phase 0/1
+## 🗄️ Hors docs/
+- `tools/bmad/` — framework BMad (agents SM/Dev/PM/QA…) — outillage, référencé par CLAUDE.md §BMad
+- `docs/_archive/` — tout ce qui précède les jalons actuels : phases 0-2, stratégies pré-Mesh (Problem_Statement, MVP_SCOPE, ROADMAP_NOW_NEXT_LATER, MARKET_INTELLIGENCE, AI_CONTEXT_LAYER, DEPLOYMENT/TROUBLESHOOTING pré-Fly), audits internes mai, veille mars/avril
+- `docs/metrics/` · `docs/linear/` — artefacts JSON historiques (backtest avril, import Linear)

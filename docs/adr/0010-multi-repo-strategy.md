@@ -105,11 +105,11 @@ github.com/IvandeMurard/
 
 ### Q3 — Stratégie BMad / submodules : **URL-reference par défaut, submodule uniquement si dépendance d'exécution**
 
-**Décision (affine la convention #3/#5) :** BMad vit dans le méta-repo (`docs/bmad/`). Les repos agents le **référencent par URL** dans leur doc — **pas de submodule par défaut**.
+**Décision (affine la convention #3/#5) :** BMad vit dans le méta-repo (`tools/bmad/`). Les repos agents le **référencent par URL** dans leur doc — **pas de submodule par défaut**.
 
 **Rationale (push-back Architect documenté sur la convention PM #5) :** les Git submodules imposent un coût réel et permanent (clone `--recursive` obligatoire, HEAD détachés, checkout submodule en CI, friction contributeur) pour un bénéfice faible quand les fichiers BMad sont **lus** (par un humain ou Claude) et non **exécutés** par la tooling de l'agent. Churn BMad faible + founder solo = ROI submodule négatif.
 
-**Exception :** si une tooling d'agent vient à *exécuter* des fichiers BMad depuis le repo (ex. un workflow CI qui les invoque), alors ajouter le submodule `docs/bmad → hospitality-agentic-mesh:docs/bmad` **pour ce repo uniquement**. Mise à jour manuelle (`git submodule update --remote`), pas Dependabot (mauvais support des SHAs de submodules internes).
+**Exception :** si une tooling d'agent vient à *exécuter* des fichiers BMad depuis le repo (ex. un workflow CI qui les invoque), alors ajouter le submodule `tools/bmad → hospitality-agentic-mesh:tools/bmad` **pour ce repo uniquement**. Mise à jour manuelle (`git submodule update --remote`), pas Dependabot (mauvais support des SHAs de submodules internes).
 
 **Invariant conservé :** le méta-repo **n'a pas** les agents comme submodules (sinon `git clone meta` tire tout). Les agents sont listés via `REPOS.md` + URLs (Q9).
 
@@ -192,7 +192,7 @@ Contact : LinkedIn · ivandemurard@gmail.com
 
 **Jour 1 — Méta-repo bootstrap**
 - Créer `hospitality-agentic-mesh` (public, MIT).
-- Migrer `mesh-architecture.md` + ADRs cross-cutting (0004, 0010) + `INDEX.md` public + `docs/bmad/`.
+- Migrer `mesh-architecture.md` + ADRs cross-cutting (0004, 0010) + `INDEX.md` public + `tools/bmad/`.
 - Porter la README Étape 1.5 comme front-page méta-repo.
 - Créer `CLAUDE.md` méta (Q8) + `REPOS.md` (Q9).
 - Mettre à jour les pointeurs : `tacet-app/ARCHITECTURE_MANIFEST.md` + CLAUDE.md agents → URL méta.
@@ -217,8 +217,8 @@ Contact : LinkedIn · ivandemurard@gmail.com
 
 **`.gitmodules` (uniquement si exception Q3 déclenchée pour un agent) :**
 ```ini
-[submodule "docs/bmad"]
-    path = docs/bmad
+[submodule "tools/bmad"]
+    path = tools/bmad
     url = https://github.com/IvandeMurard/hospitality-agentic-mesh.git
     branch = main
 ```
