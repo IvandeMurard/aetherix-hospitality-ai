@@ -1,0 +1,82 @@
+{
+  "protocol": {
+    "dataset": "Kaggle Recruit Restaurant Visitor Forecasting (real visitors, 829 JP restaurants)",
+    "n_stores": 30,
+    "origins_per_store": 6,
+    "horizon_days": 7,
+    "naive": "mean of last 4 same weekdays",
+    "prophet": "Aetherix PredictionEngine config + holiday_flg regressor",
+    "lightgbm": "global model, lags 7/14/21/28 + roll28 + dow/month/holiday, seed 42",
+    "seed": 42,
+    "scored_points": 1193
+  },
+  "mape_pct": {
+    "naive": {
+      "all_leads": 55.86,
+      "J+1": 57.47,
+      "J+2": 44.02,
+      "J+3": 66.5,
+      "J+4": 52.74,
+      "J+5": 60.42,
+      "J+6": 62.61,
+      "J+7": 46.72
+    },
+    "prophet": {
+      "all_leads": 49.71,
+      "J+1": 52.65,
+      "J+2": 39.27,
+      "J+3": 60.07,
+      "J+4": 45.04,
+      "J+5": 52.07,
+      "J+6": 56.21,
+      "J+7": 42.37
+    },
+    "lightgbm": {
+      "all_leads": 52.41,
+      "J+1": 56.2,
+      "J+2": 40.6,
+      "J+3": 58.46,
+      "J+4": 49.9,
+      "J+5": 54.52,
+      "J+6": 63.49,
+      "J+7": 44.0
+    }
+  },
+  "mdape_pct": {
+    "naive": {
+      "all_leads": 27.57,
+      "J+1": 27.94,
+      "J+2": 27.39,
+      "J+3": 28.81,
+      "J+4": 27.48,
+      "J+5": 26.25,
+      "J+6": 27.86,
+      "J+7": 27.39
+    },
+    "prophet": {
+      "all_leads": 27.01,
+      "J+1": 28.54,
+      "J+2": 25.21,
+      "J+3": 27.66,
+      "J+4": 30.35,
+      "J+5": 25.48,
+      "J+6": 28.4,
+      "J+7": 25.43
+    },
+    "lightgbm": {
+      "all_leads": 25.56,
+      "J+1": 26.64,
+      "J+2": 23.09,
+      "J+3": 25.88,
+      "J+4": 26.3,
+      "J+5": 25.73,
+      "J+6": 26.27,
+      "J+7": 24.56
+    }
+  },
+  "ac4_verdict": {
+    "rule": "Prophet must beat naive by >= 5 MAPE points (all leads)",
+    "prophet_minus_naive_pp": -6.15,
+    "pass": true
+  }
+}

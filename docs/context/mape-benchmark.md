@@ -1,10 +1,61 @@
 # MAPE benchmark — HOS-190 AC3 gate (Décision #14)
 
-> **Status:** ✅ **PASS — measured 2026-05-28.**
+> ⚠️ **08/07/2026 — le chiffre synthétique ci-dessous est retiré de toute communication externe.**
+> L'audit critique (`analyse-critique-2026-07.md`) a établi que le 15.09 % est **circulaire** :
+> `generate_demo_data.py` fabrique les couverts à partir des mêmes régresseurs que Prophet consomme —
+> le modèle retrouve sa propre formule génératrice. Le benchmark de référence est désormais la
+> section **« Benchmark données réelles — Recruit (08/07/2026) »** ci-dessous (HOS-307).
+
+> **Status:** ✅ **PASS — measured 2026-05-28.** *(gate interne de non-régression uniquement)*
 > J+1 holdout MAPE = **15.09%** on the synthetic 365-day dataset (seed=42,
 > holdout = last 30 days, all 3 regressors active). Gate threshold 22% cleared
 > with a 6.91pp margin. Internal target 15% reached at 0.09pp delta — consistent
 > with the Phase 0 status line in CLAUDE.md.
+
+---
+
+## Benchmark données réelles — Recruit Restaurant Visitor Forecasting (08/07/2026, HOS-307)
+
+**Dataset** : fréquentation quotidienne **réelle** de 829 restaurants japonais (Kaggle *Recruit
+Restaurant Visitor Forecasting*, 2016-01 → 2017-04, 252 108 observations) + jours fériés.
+**Protocole** (déterministe, prouvé sur 2 runs bit-identiques — discipline Décision #29) :
+30 restaurants au plus long historique · 6 origines par restaurant espacées de 5 jours
+(rotation des phases de semaine — un espacement hebdo épinglerait chaque lead sur un unique
+jour de semaine et biaiserait le MAPE) · horizon 7 jours · 1 193 points scorés par modèle.
+**Script** : `scripts/ops/benchmark_recruit.py` · **Résultats** : `eval/benchmarks/recruit_results.json`.
+
+| Modèle | MAPE all-leads | MAPE J+1 | MAPE J+7 | **MdAPE all-leads** | MdAPE J+1 | MdAPE J+7 |
+|---|---|---|---|---|---|---|
+| Baseline naïve (moy. 4 derniers mêmes jours) | 55.86 % | 57.47 % | 46.72 % | 27.57 % | 27.94 % | 27.39 % |
+| **Prophet (config Aetherix + férié)** | **49.71 %** | 52.65 % | 42.37 % | 27.01 % | 28.54 % | 25.43 % |
+| LightGBM (global, lags 7-28 + calendrier) | 52.41 % | 56.20 % | 44.00 % | **25.56 %** | 26.64 % | 24.56 % |
+
+### Verdict AC4 (règle : Prophet bat la naïve de ≥ 5 pts MAPE)
+
+**PASS formel** : Prophet −6.15 pp vs naïve en MAPE. **Mais la lecture honnête exige la nuance MdAPE** :
+
+1. L'avantage MAPE de Prophet vient surtout de sa **robustesse aux jours extrêmes** (le MAPE moyen
+   est dominé par les jours à très faible fréquentation où l'APE explose — 2 couverts réels → 400 %
+   d'erreur). Sur le restaurant *typique* (médiane), **Prophet ≈ naïve** (27.0 vs 27.6 %).
+2. **LightGBM est le meilleur modèle en médiane** (25.6 %, −2 pp vs naïve) — cohérent avec le
+   leaderboard Kaggle d'origine (les GBM dominaient). Piste de pivot documentée : LightGBM global
+   multi-propriétés comme moteur candidat Phase 4, Prophet conservé pour l'explicabilité
+   (décomposition tendance/saisonnalité lisible par le manager) et la robustesse aux extrêmes.
+3. **Reality-check de la cible produit < 15 %** : sur des restaurants de rue au jour le jour,
+   aucun des 3 modèles n'en approche (25-28 % MdAPE). La cible reste défendable pour le cas hôtelier
+   (base captive : l'occupancy est un régresseur fort que ce dataset n'a pas), mais elle doit être
+   **revalidée sur données hôtelières réelles** (shadow mode HOS-308) avant toute promesse client.
+
+### Reproduire
+
+```bash
+# Données : Kaggle "Recruit Restaurant Visitor Forecasting" (air_visit_data.csv, date_info.csv)
+# → placer dans backend/data/benchmarks/ (non commitées, ~9 Mo)
+backend/.venv/Scripts/python scripts/ops/benchmark_recruit.py \
+  --data-dir backend/data/benchmarks --out eval/benchmarks/recruit_results.json
+```
+
+---
 
 ## Why this file exists
 

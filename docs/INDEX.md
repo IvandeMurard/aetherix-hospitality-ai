@@ -23,7 +23,7 @@
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
 - `context/vision-future.md` — vision long terme (Phase 5, Mesh, Aetherix Voice)
 - `context/demo-apaleo.md` — Demo PRD Apaleo + résultats probe sandbox (HOS-190 AC1)
-- `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — gate MAPE J+1 (Décision #14) ⚠️ synthétique = circulaire (cf. analyse-critique) ; benchmark réel = HOS-307
+- `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — **benchmark données réelles Recruit (08/07, HOS-307)** : naïve vs Prophet vs LightGBM, MAPE+MdAPE J+1→J+7, verdict AC4 nuancé · l'ancien 15.09 % synthétique = circulaire, gate interne uniquement
 - `context/runbook-pre-pilot.md` — checklist pré-pilote
 - `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL
 - `context/linear-conventions.md` — protocole Epic/Story Linear
