@@ -12,16 +12,27 @@ from app.core import observability as obs
 
 
 class TestUnconfiguredNoOps:
+    # `_enabled` is process-global and other tests may boot the app (lifespan
+    # calls configure_observability), so each test pins the state explicitly
+    # instead of assuming suite ordering.
+
     def test_span_is_usable_context_manager(self):
-        with obs.span("prophet.train", rows=365) as s:
-            assert s is None  # nullcontext yields None
+        with patch.object(obs, "_enabled", False):
+            with obs.span("prophet.train", rows=365) as s:
+                assert s is None  # nullcontext yields None
 
     def test_guardrail_trip_is_silent(self):
         # Must not raise, must not require logfire configuration.
-        obs.guardrail_trip("forecast_guardrail", "hotel-1", "low_confidence", "detail")
+        with patch.object(obs, "_enabled", False):
+            obs.guardrail_trip("forecast_guardrail", "hotel-1", "low_confidence", "detail")
 
-    def test_enabled_flag_defaults_false(self):
-        assert obs._enabled is False
+    def test_span_active_when_enabled(self):
+        if obs.logfire is None:
+            return  # logfire not installed — nothing to assert
+        with patch.object(obs, "_enabled", True):
+            cm = obs.span("prophet.predict", target_date="2026-07-08")
+        from contextlib import nullcontext
+        assert not isinstance(cm, nullcontext)
 
 
 class TestLogfireMissing:
