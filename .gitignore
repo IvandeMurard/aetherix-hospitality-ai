@@ -61,3 +61,6 @@ eval/reports/
 .env.*
 !.env.example
 !**/.env.example
+
+# Benchmark raw datasets (Kaggle Recruit — download locally, ~9 MB)
+backend/data/benchmarks/
