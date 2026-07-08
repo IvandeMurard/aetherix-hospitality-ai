@@ -1,0 +1,1108 @@
+{
+  "protocol": {
+    "days": 30,
+    "seed": 42,
+    "regime_shift_day": 15,
+    "shift_factor": 1.25,
+    "retrain_every_days": 7,
+    "services": "real PredictionEngine / StaffingService / feedback_guard.evaluate",
+    "data": "synthetic sandbox (loop mechanics demo \u2014 accuracy is HOS-307's job)"
+  },
+  "metrics": {
+    "mape_by_week_pct": {
+      "semaine 1": 8.4,
+      "semaine 2": 7.9,
+      "semaine 3": 15.9,
+      "semaine 4": 12.5,
+      "semaine 5": 11.6
+    },
+    "mape_post_shift_before_recalibration_pct": 15.9,
+    "mape_post_shift_after_recalibration_pct": 12.3,
+    "acceptance_rate_pct": 76.7,
+    "bounds_rejections": 1,
+    "recalibrations": 5,
+    "outcomes_captured": 29
+  },
+  "ledger": [
+    {
+      "day": "2026-01-01",
+      "index": 1,
+      "predicted": 101,
+      "range": [
+        94,
+        109
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 6,
+        "hosts": 2,
+        "kitchen": 3,
+        "deltas": {
+          "servers": -1,
+          "hosts": 0,
+          "kitchen": 0,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 101 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "modified",
+      "manager_counter": 79,
+      "actual_reported": 95.0,
+      "ape_pct": 6.3,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-02",
+      "index": 2,
+      "predicted": 114,
+      "range": [
+        106,
+        121
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 7,
+        "hosts": 2,
+        "kitchen": 3,
+        "deltas": {
+          "servers": 0,
+          "hosts": 0,
+          "kitchen": 0,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 114 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 114,
+      "actual_reported": 123.0,
+      "ape_pct": 7.3,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-03",
+      "index": 3,
+      "predicted": 110,
+      "range": [
+        102,
+        118
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 7,
+        "hosts": 2,
+        "kitchen": 3,
+        "deltas": {
+          "servers": 0,
+          "hosts": 0,
+          "kitchen": 0,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 110 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 110,
+      "actual_reported": 104.0,
+      "ape_pct": 5.8,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-04",
+      "index": 4,
+      "predicted": 74,
+      "range": [
+        66,
+        81
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 5,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -2,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 74 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 74,
+      "actual_reported": 67.0,
+      "ape_pct": 10.4,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-05",
+      "index": 5,
+      "predicted": 57,
+      "range": [
+        50,
+        65
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 57 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 57,
+      "actual_reported": 50.0,
+      "ape_pct": 14.0,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-06",
+      "index": 6,
+      "predicted": 56,
+      "range": [
+        49,
+        64
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 56 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 56,
+      "actual_reported": 56.0,
+      "ape_pct": 0.0,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-07",
+      "index": 7,
+      "predicted": 68,
+      "range": [
+        60,
+        75
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 68 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 68,
+      "actual_reported": 59.0,
+      "ape_pct": 15.3,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-08",
+      "index": 8,
+      "predicted": 65,
+      "range": [
+        57,
+        72
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 65 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "modified",
+      "manager_counter": 86,
+      "actual_reported": 62.0,
+      "ape_pct": 4.8,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-09",
+      "index": 9,
+      "predicted": 89,
+      "range": [
+        82,
+        97
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 5,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -2,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 89 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 89,
+      "actual_reported": 71.0,
+      "ape_pct": 25.4,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-10",
+      "index": 10,
+      "predicted": 85,
+      "range": [
+        78,
+        92
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 5,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -2,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 85 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 85,
+      "actual_reported": 900.0,
+      "ape_pct": null,
+      "bounds": "reject",
+      "bounds_reason": "implausible_feedback",
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-11",
+      "index": 11,
+      "predicted": 67,
+      "range": [
+        59,
+        74
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 67 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "modified",
+      "manager_counter": 84,
+      "actual_reported": 65.0,
+      "ape_pct": 3.1,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-12",
+      "index": 12,
+      "predicted": 49,
+      "range": [
+        42,
+        57
+      ],
+      "confidence": 0.7,
+      "staffing": {
+        "servers": 3,
+        "hosts": 1,
+        "kitchen": 1,
+        "deltas": {
+          "servers": -4,
+          "hosts": -1,
+          "kitchen": -2,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 49 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 49,
+      "actual_reported": 45.0,
+      "ape_pct": 8.9,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-13",
+      "index": 13,
+      "predicted": 50,
+      "range": [
+        42,
+        57
+      ],
+      "confidence": 0.7,
+      "staffing": {
+        "servers": 3,
+        "hosts": 1,
+        "kitchen": 1,
+        "deltas": {
+          "servers": -4,
+          "hosts": -1,
+          "kitchen": -2,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 50 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "modified",
+      "manager_counter": 68,
+      "actual_reported": 51.0,
+      "ape_pct": 2.0,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-14",
+      "index": 14,
+      "predicted": 64,
+      "range": [
+        56,
+        71
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 64 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "modified",
+      "manager_counter": 90,
+      "actual_reported": 62.0,
+      "ape_pct": 3.2,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": false
+    },
+    {
+      "day": "2026-01-15",
+      "index": 15,
+      "predicted": 66,
+      "range": [
+        59,
+        73
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 66 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 66,
+      "actual_reported": 84.0,
+      "ape_pct": 21.4,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-16",
+      "index": 16,
+      "predicted": 82,
+      "range": [
+        75,
+        90
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 5,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -2,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 82 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "modified",
+      "manager_counter": 103,
+      "actual_reported": 92.0,
+      "ape_pct": 10.9,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-17",
+      "index": 17,
+      "predicted": 82,
+      "range": [
+        75,
+        90
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 5,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -2,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 82 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 82,
+      "actual_reported": 92.0,
+      "ape_pct": 10.9,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-18",
+      "index": 18,
+      "predicted": 97,
+      "range": [
+        89,
+        104
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 6,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -1,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 97 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 97,
+      "actual_reported": 118.0,
+      "ape_pct": 17.8,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-19",
+      "index": 19,
+      "predicted": 67,
+      "range": [
+        59,
+        75
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 67 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 67,
+      "actual_reported": 72.0,
+      "ape_pct": 6.9,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-20",
+      "index": 20,
+      "predicted": 48,
+      "range": [
+        40,
+        55
+      ],
+      "confidence": 0.7,
+      "staffing": {
+        "servers": 3,
+        "hosts": 1,
+        "kitchen": 1,
+        "deltas": {
+          "servers": -4,
+          "hosts": -1,
+          "kitchen": -2,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 48 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "modified",
+      "manager_counter": 65,
+      "actual_reported": 64.0,
+      "ape_pct": 25.0,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-21",
+      "index": 21,
+      "predicted": 57,
+      "range": [
+        49,
+        65
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 57 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 57,
+      "actual_reported": 70.0,
+      "ape_pct": 18.6,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-22",
+      "index": 22,
+      "predicted": 69,
+      "range": [
+        61,
+        76
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 69 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 69,
+      "actual_reported": 75.0,
+      "ape_pct": 8.0,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-23",
+      "index": 23,
+      "predicted": 84,
+      "range": [
+        76,
+        92
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 5,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -2,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 84 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 84,
+      "actual_reported": 92.0,
+      "ape_pct": 8.7,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-24",
+      "index": 24,
+      "predicted": 90,
+      "range": [
+        83,
+        97
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 5,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -2,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 90 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 90,
+      "actual_reported": 108.0,
+      "ape_pct": 16.7,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-25",
+      "index": 25,
+      "predicted": 72,
+      "range": [
+        64,
+        80
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 72 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 72,
+      "actual_reported": 81.0,
+      "ape_pct": 11.1,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-26",
+      "index": 26,
+      "predicted": 49,
+      "range": [
+        41,
+        57
+      ],
+      "confidence": 0.7,
+      "staffing": {
+        "servers": 3,
+        "hosts": 1,
+        "kitchen": 1,
+        "deltas": {
+          "servers": -4,
+          "hosts": -1,
+          "kitchen": -2,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 49 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 49,
+      "actual_reported": 59.0,
+      "ape_pct": 16.9,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-27",
+      "index": 27,
+      "predicted": 58,
+      "range": [
+        50,
+        65
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 1,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": -1,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 58 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 58,
+      "actual_reported": 71.0,
+      "ape_pct": 18.3,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-28",
+      "index": 28,
+      "predicted": 72,
+      "range": [
+        64,
+        79
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 4,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -3,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 72 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 72,
+      "actual_reported": 78.0,
+      "ape_pct": 7.7,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-29",
+      "index": 29,
+      "predicted": 75,
+      "range": [
+        68,
+        83
+      ],
+      "confidence": 0.8,
+      "staffing": {
+        "servers": 5,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -2,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 75 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 75,
+      "actual_reported": 81.0,
+      "ape_pct": 7.4,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    },
+    {
+      "day": "2026-01-30",
+      "index": 30,
+      "predicted": 95,
+      "range": [
+        87,
+        103
+      ],
+      "confidence": 0.9,
+      "staffing": {
+        "servers": 6,
+        "hosts": 2,
+        "kitchen": 2,
+        "deltas": {
+          "servers": -1,
+          "hosts": 0,
+          "kitchen": -1,
+          "sommeliers": 0
+        },
+        "warnings": [],
+        "sanity": {
+          "within_bounds": true,
+          "route_to_human": false,
+          "clamped_covers": null,
+          "flags": []
+        },
+        "rationale": "Staffing suggestion based on 95 covers. Optimized for role-ratios."
+      },
+      "manager_feedback": "accepted",
+      "manager_counter": 95,
+      "actual_reported": 82.0,
+      "ape_pct": 15.9,
+      "bounds": "ok",
+      "bounds_reason": null,
+      "post_shift": true
+    }
+  ]
+}
