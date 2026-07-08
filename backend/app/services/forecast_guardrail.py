@@ -224,6 +224,9 @@ async def record_forecast_trip(hotel_id: str, verdict: ForecastVerdict) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("forecast_guardrail: dispatch_anomaly failed: %s", exc)
 
+    from app.core.observability import guardrail_trip
+
+    guardrail_trip(GUARDRAIL_TOOL, hotel_id, verdict.reason or verdict.tier, verdict.detail or "")
     logger.warning(
         "forecast_guardrail: %s hotel_id=%s — %s", verdict.tier, hotel_id, verdict.detail
     )

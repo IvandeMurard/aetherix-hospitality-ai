@@ -9,6 +9,7 @@ import pandas as pd
 from prophet import Prophet
 
 from app.core.demo_events import demo_emit
+from app.core.observability import span as obs_span
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,8 @@ class PredictionEngine:
                 regressors.append(reg)
 
         # Prophet.fit() is CPU-bound — run in a thread to avoid blocking the event loop.
-        await asyncio.to_thread(model.fit, df)
+        with obs_span("prophet.train", rows=len(df), regressors=regressors):
+            await asyncio.to_thread(model.fit, df)
 
         self.model = model
         self.regressors = regressors
@@ -111,7 +113,8 @@ class PredictionEngine:
             future[reg] = features.get(reg, 0.0) if features else 0.0
 
         # Prophet.predict() is CPU-bound — run in a thread to avoid blocking the event loop.
-        forecast = await asyncio.to_thread(self.model.predict, future)
+        with obs_span("prophet.predict", target_date=target_date.isoformat()):
+            forecast = await asyncio.to_thread(self.model.predict, future)
         row = forecast.iloc[0]
 
         predicted = max(0, int(round(row['yhat'])))
