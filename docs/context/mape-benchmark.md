@@ -102,6 +102,6 @@ If `mape_j1_holdout > 0.22`:
 ## References
 
 - [Source: CLAUDE.md Décision #14] — Phase 0 DoD amended, gate non-negotiable
-- [Source: docs/bmad/_bmad-output/implementation-artifacts/10-2a-sandbox-as-partner.md] — story pack, Phase C
+- [Source: tools/bmad/_bmad-output/implementation-artifacts/10-2a-sandbox-as-partner.md] — story pack, Phase C
 - [Source: scripts/ops/measure_mape_j1.py] — holdout MAPE script (HOS-190 T7)
 - [Source: backend/app/api/routes/predictions.py:308] — `_compute_in_sample_mape` (for comparison)

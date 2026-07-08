@@ -11,5 +11,5 @@ Usage::
     llm = get_llm_provider()          # driven by LLM_BACKEND env var
     embedding = get_embedding_provider()  # driven by EMBEDDING_BACKEND env var
 
-See: docs/bmad/_bmad-output/implementation-artifacts/0-llm-provider-abstraction.md
+See: tools/bmad/_bmad-output/implementation-artifacts/0-llm-provider-abstraction.md
 """

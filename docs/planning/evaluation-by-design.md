@@ -286,7 +286,7 @@ The BMad-Method gap that surfaced this work merits explicit fix:
 |---|---|
 | Dev Agent DoD step 8 (Eval gate) | `CLAUDE.md` |
 | Décision architecturale #22 (Eval-by-design gate CI) | `CLAUDE.md` |
-| Workflow doc *"Eval-by-design extension for AI/ML BMad projects"* | `docs/bmad/eval-by-design-workflow.md` (Phase 4, after stories shipped) |
+| Workflow doc *"Eval-by-design extension for AI/ML BMad projects"* | `tools/bmad/eval-by-design-workflow.md` (Phase 4, after stories shipped) |
 | Technical article (REX) | See follow-up section below |
 
 ---

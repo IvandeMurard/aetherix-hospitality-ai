@@ -44,7 +44,7 @@ Swap Claude → Gemini → GPT sans réécriture. Claude reste provider principa
 
 ### 10 — Provider singleton via `lifespan` FastAPI
 
-`LLMProvider` + `EmbeddingProvider` instanciés une fois au démarrage, stockés dans `app.state`. Factory = construction uniquement. Providers closés proprement (`aclose()`) au shutdown. Détail → `docs/bmad/_bmad-output/planning-artifacts/architecture.md`.
+`LLMProvider` + `EmbeddingProvider` instanciés une fois au démarrage, stockés dans `app.state`. Factory = construction uniquement. Providers closés proprement (`aclose()`) au shutdown. Détail → `tools/bmad/_bmad-output/planning-artifacts/architecture.md`.
 
 ### 11 — Démo — stratégie données hybride
 
@@ -60,11 +60,11 @@ Apaleo sandbox = mock hôtel complet (5 properties, 100 réservations réelles B
 
 ### 14 — Phase 0 DoD amendée — MCP Server v0 inclus (17/04/2026)
 
-Suite directive PM 17/04/2026 (tweet Benioff *"headless for agents"*) : ship Aetherix MCP Server v0 (HOS-71, 3 tools) est désormais un critère de validation Phase 0, **APRÈS** gate MAPE interne. Si MAPE > 22%, pivot avant ship MCP. Détail → `docs/planning/phase-0-1-execution-plan.md`.
+Suite directive PM 17/04/2026 (tweet Benioff *"headless for agents"*) : ship Aetherix MCP Server v0 (HOS-71, 3 tools) est désormais un critère de validation Phase 0, **APRÈS** gate MAPE interne. Si MAPE > 22%, pivot avant ship MCP. Détail → `docs/_archive/planning/phase-0-1-execution-plan.md`.
 
 ### 15 — Phase 2 "Receipts" — scope locké (19/04/2026)
 
-Channel = WhatsApp primary + email opt-in (SendGrid). Inbound classifier = Haiku, log confidence, auto-`modified` si < 0.6. Auth web drill-down = MCP bearer + scope `receipts:read`. Tone = terse + sharp bullets + luxury feel (driver principal, données quantitatives, evidence historique, confidence, follow-up proactif). Gate = two-track : (a) technical-ship sur Apaleo Sandbox (round-trip daily Receipt + feedback → memory + 4 Sundays digest) ; (b) trust-signal (US-7 ablation) reporté au premier pilote réel. Détail → `docs/planning/phase-2-agent-receipts.md`.
+Channel = WhatsApp primary + email opt-in (SendGrid). Inbound classifier = Haiku, log confidence, auto-`modified` si < 0.6. Auth web drill-down = MCP bearer + scope `receipts:read`. Tone = terse + sharp bullets + luxury feel (driver principal, données quantitatives, evidence historique, confidence, follow-up proactif). Gate = two-track : (a) technical-ship sur Apaleo Sandbox (round-trip daily Receipt + feedback → memory + 4 Sundays digest) ; (b) trust-signal (US-7 ablation) reporté au premier pilote réel. Détail → `docs/_archive/planning/phase-2-agent-receipts.md`.
 
 ### 16 — Schema drift gate CI obligatoire (14/05/2026)
 
@@ -224,7 +224,7 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Trigger :** analyse concurrentielle approfondie Grevon (`docs/competitive/grevon-analysis.md`, 23/06/2026) — leur produit **Kore** revendique explicitement *"a typical PMS API gives you raw data — rates as numbers, room types as codes. Kore goes further: it enriches, validates, and translates that data into a format LLMs actually understand"*, en amont de tous leurs agents (Pulse/Echo/Ops). Vérification du code Aetherix a confirmé un gap réel : `PMSAdapter` (`backend/app/services/pms_sync.py`) existe comme interface normalisée (`get_occupancy`, `get_revenue`, `get_historical_data`, `update_staffing_in_pms`), mais le pipeline forecast (`data_transformer.py`) la **contourne** — il lit les champs Apaleo bruts directement ("arrival", "adults", "children") pour construire le dataframe Prophet. Aucun adapter Mews n'existe encore (Phase 4, Décision #23 / HOS-186).
 
-**Antécédent documentaire :** `docs/ARCHITECTURE.md` (obsolète, fév. 2026 — cf. CLAUDE.md §Points d'attention) nommait déjà ce composant — "PMS Adapters" listé dans une "Semantic Layer" planifiée Phase 5 — jamais construit. Le scope est tombé silencieusement quand l'architecture a pivoté (Qdrant→pgvector, Décision #3) sans décision explicite de retrait : c'est une dette de *process* (rien n'a flaggé la disparition), pas seulement une dette technique. Le "Semantic Layer" qui a survécu dans les docs courants (`docs/MARKET_INTELLIGENCE.md`, `docs/ROADMAP_NOW_NEXT_LATER.md`) ne désigne aujourd'hui que la couche RAG/pgvector (`fb_patterns` + `operational_memory`) — un concept différent (rétrieval de patterns historiques), pas la normalisation de flux PMS live.
+**Antécédent documentaire :** `docs/ARCHITECTURE.md` (obsolète, fév. 2026 — cf. CLAUDE.md §Points d'attention) nommait déjà ce composant — "PMS Adapters" listé dans une "Semantic Layer" planifiée Phase 5 — jamais construit. Le scope est tombé silencieusement quand l'architecture a pivoté (Qdrant→pgvector, Décision #3) sans décision explicite de retrait : c'est une dette de *process* (rien n'a flaggé la disparition), pas seulement une dette technique. Le "Semantic Layer" qui a survécu dans les docs courants (`docs/_archive/MARKET_INTELLIGENCE.md`, `docs/_archive/ROADMAP_NOW_NEXT_LATER.md`) ne désigne aujourd'hui que la couche RAG/pgvector (`fb_patterns` + `operational_memory`) — un concept différent (rétrieval de patterns historiques), pas la normalisation de flux PMS live.
 
 **Décision :** étendre la jurisprudence Provider (Décision #9/#10, déjà appliquée au POS via ADR-0006 D3) aux adapters PMS. Introduire un schéma canonique vendor-agnostique (dataclasses dans `backend/app/providers/pms/base.py`, miroir exact de `providers/pos/base.py`) entre les adapters (Apaleo aujourd'hui, Mews demain) et tout consommateur interne (`DataTransformer`, `PredictionEngine`, `StaffRecommender`). Aucun composant business ne doit plus jamais lire un champ vendor-spécifique directement — seuls les adapters connaissent le format natif du PMS source.
 

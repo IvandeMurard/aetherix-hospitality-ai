@@ -805,7 +805,7 @@ L'ADR est **ACCEPTED** quand :
    - Effort = table §8
    - Sequencing = sprint N → N+2
 5. **Post-EVAL-0/1/2/4 shipped (pilot gate)** : pilot Phase 3 (HOS-176) débloqué côté reliability
-6. **Post-EVAL-0..5 shipped** : rédiger `docs/bmad/eval-by-design-workflow.md` (asset BMad réutilisable, Phase 3 Track B technical write-up)
+6. **Post-EVAL-0..5 shipped** : rédiger `tools/bmad/eval-by-design-workflow.md` (asset BMad réutilisable, Phase 3 Track B technical write-up)
 7. **Post-EVAL-0..5 shipped** : rédiger article REX *"How we extended BMad-Method with Evaluation-by-Design for AI/ML products"* (Phase 3 Track B)
 
 ---

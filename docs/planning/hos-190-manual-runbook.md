@@ -1,6 +1,6 @@
 # HOS-190 — Manual runbook for ACs requiring live credentials / devices
 
-> Companion to `docs/bmad/_bmad-output/implementation-artifacts/10-2a-sandbox-as-partner.md`.
+> Companion to `tools/bmad/_bmad-output/implementation-artifacts/10-2a-sandbox-as-partner.md`.
 > Lists the steps that **cannot** be executed by a headless dev agent — they
 > require Apaleo sandbox credentials, a WhatsApp-paired phone, a screen recorder,
 > and Fly.io secret access. Once these are executed by Ivan, the artifacts (and
