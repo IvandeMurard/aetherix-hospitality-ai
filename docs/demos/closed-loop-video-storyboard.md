@@ -1,25 +1,38 @@
-# Storyboard — vidéo démo 3 min « closed loop » (HOS-310 AC3)
+# Storyboard — vidéo démo 3 min « closed loop » (HOS-310 AC3) — v2, trois écrans
 
-> Objectif : montrer la boucle **forecast → reco → feedback → réel → recalibration** en conditions
-> réelles de code (services réels, guardrails réels), en annonçant clairement « données sandbox,
-> boucle réelle ». Destinations : case study ivandemurard.com/aetherix + méta-repo.
+> Objectif : montrer **l'anticipation et la réaction de l'agent**, pas un terminal qui défile.
+> Layout : **terminal à gauche · schéma de la boucle au centre · fil WhatsApp à droite**.
+> Annoncer « données sandbox, mécanique réelle » à voix haute dès la scène 1.
 
-**Préparation** : terminal plein écran (police ≥ 16pt, thème sombre), dashboard Logfire ouvert dans
-un onglet (LOGFIRE_TOKEN posé — HOS-311 AC5), commande prête :
-`backend/.venv/Scripts/python scripts/ops/closed_loop_demo.py`
+## Préparation
 
-| # | Durée | Scène | À dire (FR, une phrase par scène) |
-|---|---|---|---|
-| 1 | 0:00–0:20 | Titre + case study ouvert sur le diagramme de la boucle | « Aetherix apprend de chaque service : voici la boucle complète, exécutée de bout en bout — données sandbox, mécanique réelle. » |
-| 2 | 0:20–0:50 | Lancer le script ; défilement des 7 premiers jours (APE ~8 %) | « Chaque soir : forecast J-1 par Prophet, recommandation staffing, receipt WhatsApp. Le manager valide d'un mot — 77 % d'acceptation ici. » |
-| 3 | 0:50–1:20 | **J10 : ⛔ rejeté G-3 (900 couverts)** — zoomer sur la ligne | « Jour 10 : l'export POS est bugué — 900 couverts pour 120 places. Le guardrail G-3 le rejette avec une raison typée : la donnée corrompue n'entre jamais dans l'entraînement. » |
-| 4 | 1:20–1:50 | **J15 : ⚡ choc de régime** ; les APE montent (16 % la semaine du choc) | « Jour 15 : nouveau contrat banquets, +25 % de demande. Le modèle dérive — c'est exactement le scénario qui tue les forecasts statiques. » |
-| 5 | 1:50–2:20 | Lignes « ↻ recalibration » puis semaine 4-5 (MAPE redescend à ~12 %) | « Recalibration hebdomadaire sur les couverts réels capturés : l'erreur post-choc passe de 16 à 12 % — la boucle absorbe le changement au lieu de le subir. » |
-| 6 | 2:20–2:45 | Basculer sur Logfire : trace d'un jour (span closed_loop.day → prophet.predict), event guardrail | « Tout est observable : chaque étape est tracée, chaque trip de guardrail est un événement typé — l'invariant NFR2 en pixels. » |
-| 7 | 2:45–3:00 | Rapport final à l'écran + lien méta-repo | « Script déterministe, rejouable à l'identique. Le code et le rapport sont publics — il ne manque que votre propriété. » |
+- **Gauche (terminal)** : `backend/.venv/Scripts/python scripts/ops/closed_loop_demo.py` (police ≥ 16pt).
+- **Centre (architecture)** : le diagramme de la boucle (forecast → reco → feedback → réel → G-3 → recalibration) en slide — surligner l'étape active à chaque scène (un simple slide avec 5 variantes surlignées suffit ; pas besoin d'app interactive).
+- **Droite (WhatsApp)** : `docs/demos/whatsapp_transcript.md` généré par le script — rendu dans un viewer markdown étroit (~380 px) pour l'effet fil de discussion. Scroller au jour affiché à gauche.
+- Optionnel scène 6 : onglet Logfire (si token posé) — sinon la scène 6 se fait sur le centre.
 
-**Chiffres-clés à l'écran (incruster si montage)** : acceptation 76,7 % · 1 rejet G-3 ·
-5 recalibrations · MAPE post-choc 15,9 % → 12,3 %.
+## Comment l'anticipation et la réaction sont montrées
 
-**Anti-piège** : dire « sandbox » à voix haute dès la scène 1 — la crédibilité du projet repose sur
-la séparation nette démo-mécanique (ici) vs accuracy réelle (benchmark Recruit, HOS-307).
+| Capacité | Où ça se voit (écran de droite) | Jour |
+|---|---|---|
+| **Anticipation** | Le receipt de la veille cite ses *drivers* : « 📍 Signal : événement local demain — impact +X % intégré » · « 🏨 Hôtel à 92 % d'occupation » — l'agent explique pourquoi demain ≠ la semaine dernière | J18, J23… |
+| **Auto-évaluation** | Chaque matin l'agent verbalise son écart : « Réel constaté : 92 (prévu 82, écart +11 %) » — il ne cache pas ses erreurs | tous les jours |
+| **Réaction : données corrompues** | « ⚠️ La donnée POS d'hier (900 couverts) est implausible — écartée, elle n'alimentera pas l'apprentissage. Pouvez-vous vérifier l'export caisse ? » | **J10** |
+| **Réaction : détection de dérive** | « 📈 Troisième sous-estimation consécutive — un changement de régime semble en cours. La recalibration l'intégrera » — l'agent *nomme* le pattern avant d'être corrigé | **J17** |
+| **Apprentissage** | « 🔁 Modèle recalibré sur les 7 derniers services » puis les écarts semaine 4-5 redescendent (visible à gauche : MAPE 15,9 → 12,3 %) | J21, J28 |
+
+## Séquencier (3 min)
+
+| # | Durée | Gauche | Centre | Droite | À dire |
+|---|---|---|---|---|---|
+| 1 | 0:00–0:20 | — | Boucle complète affichée | Premier receipt | « Aetherix apprend de chaque service. Données sandbox, mécanique réelle — voici la boucle, en entier. » |
+| 2 | 0:20–0:50 | Lancer, J1-J9 défilent | Surligner *forecast → reco* | Receipts + « OK 👍 » | « Chaque soir : prévision, staffing, un message. Le manager répond d'un mot — c'est tout le rituel. » |
+| 3 | 0:50–1:20 | **J10 ⛔ rejeté G-3** | Surligner *G-3 bounds* | Message ⚠️ export caisse | « Export POS bugué : 900 couverts pour 120 places. Le guardrail rejette, prévient le manager, et la donnée n'empoisonne pas l'apprentissage. » |
+| 4 | 1:20–1:50 | **J15 ⚡ choc**, APE montent | Surligner *réel vs prévu* | J17 : « troisième sous-estimation… » | « Nouveau contrat banquets, +25 %. Trois services plus tard, l'agent nomme lui-même la dérive — il ne subit pas en silence. » |
+| 5 | 1:50–2:20 | ↻ recalibrations, APE redescendent | Surligner *recalibration* | « 🔁 Modèle recalibré » + receipts justes | « Recalibration hebdomadaire sur les couverts réels : l'erreur post-choc passe de 16 à 12 %. La boucle absorbe le changement. » |
+| 6 | 2:20–2:45 | Rapport final | Logfire (trace + event guardrail) *ou* zoom NFR2 sur le schéma | J18 : anticipation événement | « Et tout est observable : chaque étape tracée, chaque trip typé. L'agent anticipe les signaux connus — événements, occupation — au lieu de répéter la semaine passée. » |
+| 7 | 2:45–3:00 | — | Boucle + lien méta-repo | — | « Déterministe, rejouable, public. Il ne manque que votre propriété. » |
+
+**Chiffres à incruster** : acceptation 76,7 % · 1 rejet G-3 · 5 recalibrations · MAPE post-choc 15,9 → 12,3 %.
+
+**Anti-piège** : la crédibilité repose sur la séparation nette démo-mécanique (ici) vs accuracy réelle (benchmark Recruit, HOS-307) — le dire, et pointer le benchmark dans la description de la vidéo.

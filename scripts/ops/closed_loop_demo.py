@@ -74,16 +74,28 @@ def _naive_guess(history: list[dict], target: date) -> float | None:
     return sum(same_dow[-4:]) / len(same_dow[-4:]) if same_dow else None
 
 
-def _receipt_text(day: date, pred, staffing: dict) -> str:
-    """Compact WhatsApp-style daily receipt (sandbox rendering)."""
-    return (
-        f"📋 Aetherix — {day.strftime('%a %d %b')}\n"
+def _receipt_text(day: date, pred, staffing: dict, row: dict) -> str:
+    """Compact WhatsApp-style daily receipt (sandbox rendering).
+
+    The *anticipation* is made explicit: when a known-in-advance signal
+    (local event, strong occupancy) drives the number, the receipt says so —
+    the agent explains why tomorrow won't look like last week.
+    """
+    lines = [
+        f"📋 Aetherix — {day.strftime('%a %d %b')}",
         f"Couverts attendus : {pred.predicted} (fourchette {pred.lower}–{pred.upper}, "
-        f"confiance {int(pred.confidence * 100)}%)\n"
+        f"confiance {int(pred.confidence * 100)}%)",
         f"Staffing : {staffing.get('servers', '?')} salle · "
-        f"{staffing.get('kitchen_staff', staffing.get('kitchen', '?'))} cuisine\n"
-        f"Répondre OK pour valider, ou votre estimation."
-    )
+        f"{staffing.get('kitchen_staff', staffing.get('kitchen', '?'))} cuisine",
+    ]
+    if row.get("event_impact", 0) > 0:
+        lines.append(f"📍 Signal : événement local demain — impact estimé "
+                     f"+{int(row['event_impact'] * 100)} % intégré au forecast.")
+    if row.get("occupancy", 0) >= 0.85:
+        lines.append(f"🏨 Hôtel à {int(row['occupancy'] * 100)} % d'occupation — "
+                     f"pression forte attendue sur le restaurant.")
+    lines.append("Répondre OK pour valider, ou votre estimation.")
+    return "\n".join(lines)
 
 
 async def run(days: int, out_path: Path) -> dict:
@@ -111,8 +123,17 @@ async def run(days: int, out_path: Path) -> dict:
 
     await retrain()
     retrains = 1
+    under_streak = 0  # consecutive >=10% under-estimations (drift narration)
 
     ledger: list[dict] = []
+    transcript: list[str] = [
+        "# Transcript WhatsApp — closed-loop demo (HOS-310)",
+        "",
+        "> Rendu du fil de conversation manager ↔ Aetherix sur les 30 jours simulés",
+        "> (écran de droite du storyboard vidéo). Généré par `closed_loop_demo.py`,",
+        "> déterministe. Données sandbox, mécanique réelle.",
+        "",
+    ]
     print(f"— Closed loop: {days} jours simulés, choc de régime au jour {SHIFT_DAY} "
           f"(+{int((SHIFT_FACTOR-1)*100)}%), recalibration hebdomadaire —\n")
 
@@ -127,15 +148,17 @@ async def run(days: int, out_path: Path) -> dict:
             staffing = await staffer.calculate_recommendation(
                 pred.predicted, confidence=pred.confidence
             )
-            receipt = _receipt_text(day, pred, staffing)
+            receipt = _receipt_text(day, pred, staffing, row)
 
             # 3. Simulated manager: compares to their own naive guess.
             guess = _naive_guess(history, day) or pred.predicted
             deviation = abs(pred.predicted - guess) / max(guess, 1.0)
             if deviation <= MANAGER_TOLERANCE or rng.random() < 0.15:
                 feedback, trusted_covers = "accepted", pred.predicted
+                manager_reply = "OK 👍"
             else:
                 feedback, trusted_covers = "modified", round(guess)
+                manager_reply = f"Je dirais plutôt {trusted_covers} couverts."
 
             # 4. Day passes — actual covers revealed; G-3 bounds gate before
             #    the outcome is allowed to feed training (feedback_guard).
@@ -165,11 +188,52 @@ async def run(days: int, out_path: Path) -> dict:
                   + ("  ⚡ choc de régime" if i == SHIFT_DAY else "")
                   + (f"  ({verdict.reason})" if not verdict.plausible else ""))
 
+            # WhatsApp transcript (right pane of the video): the agent's
+            # *reaction* is verbalized — it reports its own error the next
+            # morning, flags quarantined data, announces recalibrations.
+            transcript.append(f"### J{i} — {day.strftime('%A %d %B')}\n")
+            transcript.append("**Aetherix** (la veille, 17h) :\n> " + receipt.replace("\n", "\n> ") + "\n")
+            transcript.append(f"**Manager** :\n> {manager_reply}\n")
+            if not verdict.plausible:
+                transcript.append(
+                    "**Aetherix** (lendemain matin) :\n"
+                    f"> ⚠️ La donnée POS d'hier ({reported:.0f} couverts) est implausible "
+                    f"({verdict.reason}) — écartée, elle n'alimentera pas l'apprentissage. "
+                    "Pouvez-vous vérifier l'export caisse ?\n"
+                )
+            else:
+                delta_pct = 100 * (reported - pred.predicted) / max(reported, 1.0)
+                miss = (f"écart {delta_pct:+.0f} %" if abs(delta_pct) >= 10
+                        else "dans la fourchette")
+                transcript.append(
+                    "**Aetherix** (lendemain matin) :\n"
+                    f"> Réel constaté : {reported:.0f} couverts (prévu {pred.predicted}, {miss}).\n"
+                )
+                # Drift self-detection: 3 under-estimations >=10% in a row →
+                # the agent names the pattern instead of silently missing.
+                if delta_pct >= 10:
+                    under_streak += 1
+                    if under_streak == 3:
+                        transcript.append(
+                            "> 📈 Troisième sous-estimation consécutive — un changement de "
+                            "régime semble en cours (nouveau contrat ? groupe récurrent ?). "
+                            "La recalibration hebdomadaire l'intégrera ; fourchettes élargies "
+                            "d'ici là.\n"
+                        )
+                else:
+                    under_streak = 0
+
             # 5. Weekly recalibration on captured outcomes.
             if i % RETRAIN_EVERY == 0 and i < days:
                 await retrain()
                 retrains += 1
                 print(f"      ↻ recalibration #{retrains} (historique {len(history)} jours)")
+                transcript.append(
+                    "**Aetherix** (dimanche soir) :\n"
+                    f"> 🔁 Modèle recalibré sur les {RETRAIN_EVERY} derniers services "
+                    f"({len(history)} jours d'historique). Les prévisions de la semaine "
+                    "intègrent vos retours et les couverts réels.\n"
+                )
 
     # ------------------------------- report -------------------------------
     df = pd.DataFrame(ledger)
@@ -201,6 +265,10 @@ async def run(days: int, out_path: Path) -> dict:
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2))
+
+    # Right pane of the video: the full WhatsApp thread.
+    transcript_path = out_path.parent / "whatsapp_transcript.md"
+    transcript_path.write_text("\n".join(transcript), encoding="utf-8")
 
     m = report["metrics"]
     md = out_path.with_suffix(".md")
