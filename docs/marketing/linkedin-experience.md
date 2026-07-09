@@ -12,10 +12,10 @@
 
 **Founder & Product Engineer, Aetherix (Hospitality Agentic Mesh)** · Nov 2025 – present
 
-Learning AI by building an operational memory for hotel operations: a network of specialized,
-MCP-native agents that anticipate needs, check themselves against real outcomes, and learn from
-every service. The forecast is an organ, not the product. Human-in-the-loop by design: agents
-recommend, the manager validates.
+Learning AI by building a living operational memory for hotels, one that improves with every
+service. A network of specialized, MCP-native agents that anticipate needs, check themselves
+against real outcomes, and learn as they go. The forecast is an organ, not the product.
+Human-in-the-loop by design: agents recommend, the manager stays in control.
 
 The thesis (understand · measure · learn):
 - Understand like a human: contextual reasoning grounded in each property's own history.
@@ -24,21 +24,24 @@ The thesis (understand · measure · learn):
 - Learn like a network: per-property memory today, federated priors across properties next,
   to give independents the power of a hive.
 
-What is actually built (Aetherix, the F&B node, live on staging):
-- A closed learning loop: forecast, WhatsApp recommendation, manager feedback, outcome capture,
-  weekly recalibration. In a 30-day regime-shift demo, recalibration cut post-shift error from
-  15.9% to 12.3% (sandbox data, real mechanics, deterministic, script public).
-- Honest evaluation: a real-data benchmark (30 restaurants, Kaggle Recruit) published including
-  where the model does NOT beat the naive baseline; the forecast eval runs as a blocking CI gate
-  (deterministic Prophet-in-CI, inspired by Qonto's working-vs-reliable framework).
-- Reliability: typed runtime guardrails (dead-man's switch, feedback-to-training bounds, output
-  sanity), every trip logged with a machine-readable reason; a bad POS export (900 covers for
-  120 seats) is rejected before it can poison training. OpenTelemetry/Logfire traces down to LLM
-  cost per recommendation.
-- Delivery: WhatsApp push with a natural-language feedback loop; per-property private memory with
-  fallback on shared patterns; MCP server callable by any orchestration agent; tenant-scoped data.
-- Practiced incident response: a leaked-secrets incident handled end to end (history rewrite,
-  11/11 credential rotation, GitHub-side purge, public post-mortem).
+What it does for a manager (Aetherix, the F&B node, live on staging):
+- A daily rhythm you actually keep: the evening before, one WhatsApp message with tomorrow's
+  expected covers and the staffing to match. One tap to accept, or reply with your own number.
+  Your correction is what trains the model.
+- An agent that asks only when it matters: when it is unsure, it says so and shows a safe
+  fallback instead of a confident guess, and it stays quiet unless something is genuinely wrong.
+  No dashboard to check, no alert fatigue.
+- It gets better every week: yesterday's real covers come back, the miss is named out loud, and
+  the model recalibrates. When demand jumped 25% overnight in a stress test, the error fell back
+  from 15.9% to 12.3% on its own.
+- Honest about what it can and can't do: benchmarked on 30 real restaurants and published in
+  full, including the days it only matches a simple baseline. No inflated demo numbers.
+
+Under the hood, for the engineers: a closed learning loop with typed runtime guardrails (bad POS
+export of 900 covers for 120 seats is rejected before it can poison training), a blocking
+eval-gate in CI (deterministic Prophet-in-CI, inspired by Qonto's working-vs-reliable framework),
+end-to-end Logfire tracing down to LLM cost per recommendation, and a real leaked-secrets
+incident handled end to end (history rewrite, 11/11 credential rotation, public post-mortem).
 
 The wider mesh (honest status, not all built):
 - Aetherix, the F&B node: built (above).
@@ -59,10 +62,11 @@ pgvector · Supabase · Redis · Twilio · Fly.io · Apaleo API (OAuth2 + native
 
 **Fondateur & Product Engineer, Aetherix (Hospitality Agentic Mesh)** · Nov 2025 – présent
 
-Apprendre l'IA en construisant une mémoire opérationnelle pour l'hôtellerie : un réseau d'agents
-spécialisés, MCP-natifs, qui anticipent les besoins, se confrontent aux résultats réels et
-apprennent de chaque service. Le forecast est un organe, pas le produit. Human-in-the-loop par
-construction : les agents recommandent, le manager valide.
+Apprendre l'IA en construisant une mémoire opérationnelle vivante pour l'hôtellerie, qui
+s'améliore à chaque service. Un réseau d'agents spécialisés, MCP-natifs, qui anticipent les
+besoins, se confrontent aux résultats réels et apprennent au fil de l'eau. Le forecast est un
+organe, pas le produit. Human-in-the-loop par construction : les agents recommandent, le manager
+garde le contrôle.
 
 La thèse (comprendre · mesurer · apprendre) :
 - Comprendre comme un humain : raisonnement contextuel ancré dans l'historique propre à chaque
@@ -72,20 +76,24 @@ La thèse (comprendre · mesurer · apprendre) :
 - Apprendre comme un réseau : mémoire par établissement aujourd'hui, priors fédérés entre
   établissements ensuite, pour donner aux indépendants la puissance d'une ruche.
 
-Ce qui est réellement construit (Aetherix, le nœud F&B, en ligne sur staging) :
-- Une boucle d'apprentissage fermée : forecast, recommandation WhatsApp, feedback manager,
-  capture du résultat, recalibration hebdomadaire. Sur un choc de demande de +25 %, la
-  recalibration ramène l'erreur de 15,9 % à 12,3 % (données sandbox, mécanique réelle, script public).
-- Évaluation honnête : benchmark sur données réelles (30 restaurants, Kaggle Recruit) publié y
-  compris là où le modèle ne bat pas la baseline naïve ; l'éval forecast est un gate CI bloquant
-  (Prophet déterministe, inspiré du cadre "working vs reliable" de Qonto).
-- Fiabilité : guardrails runtime typés, chaque déclenchement loggé avec une raison machine-lisible ;
-  un export POS aberrant (900 couverts pour 120 places) est rejeté avant de polluer l'apprentissage.
-  Traces Logfire jusqu'au coût LLM par recommandation.
-- Livraison : push WhatsApp avec boucle de feedback en langage naturel ; mémoire privée par
-  établissement ; serveur MCP appelable par tout agent orchestrateur.
-- Réponse à incident pratiquée : fuite de secrets gérée de bout en bout (réécriture d'historique,
-  rotation 11/11 clés, purge GitHub, post-mortem public).
+Ce que ça fait pour un manager (Aetherix, le nœud F&B, en ligne sur staging) :
+- Un rituel quotidien qu'on tient vraiment : la veille au soir, un message WhatsApp avec les
+  couverts attendus demain et le staffing qui va avec. Un tap pour valider, ou votre propre
+  chiffre en réponse. Votre correction est ce qui entraîne le modèle.
+- Un agent qui ne sollicite que quand ça compte : en cas de doute, il le dit et propose un repli
+  sûr plutôt qu'une estimation péremptoire, et il reste silencieux sauf vrai problème. Pas de
+  dashboard à surveiller, pas de fatigue d'alertes.
+- Il progresse chaque semaine : les couverts réels de la veille reviennent, l'écart est nommé, le
+  modèle se recalibre. Quand la demande a bondi de 25 % du jour au lendemain en test, l'erreur
+  est retombée de 15,9 % à 12,3 % d'elle-même.
+- Honnête sur ce qu'il sait et ne sait pas faire : benchmark sur 30 restaurants réels, publié en
+  entier, y compris les jours où il égale seulement une baseline simple. Pas de chiffres de démo gonflés.
+
+Sous le capot, pour les ingénieurs : boucle d'apprentissage fermée avec guardrails runtime typés
+(un export POS de 900 couverts pour 120 places est rejeté avant de polluer l'entraînement),
+eval-gate bloquant en CI (Prophet déterministe, inspiré du cadre "working vs reliable" de Qonto),
+tracing Logfire de bout en bout jusqu'au coût LLM par recommandation, et une vraie fuite de
+secrets gérée de A à Z (réécriture d'historique, rotation 11/11 clés, post-mortem public).
 
 Le mesh élargi (statut honnête, tout n'est pas construit) :
 - Aetherix, nœud F&B : construit (ci-dessus).
@@ -130,6 +138,23 @@ frontier models).
 | **Cadrage** | forecast-led | mémoire-led (le forecast est un organe) |
 | **Fraîcheur** | "built May 2026" | preuve de juillet : benchmark réel, boucle fermée, guardrails, Logfire, incident |
 | **Formules gardées** | — | triade comprendre/mesurer/apprendre · "power of a hive" (au futur) |
+
+## Angle anti-fatigue HITL (matière à post + preuve en entretien)
+
+Le HITL d'Aetherix est conçu pour ne pas épuiser le manager. Cinq décisions le portent — utile
+en entretien ("comment évitez-vous la fatigue de validation ?") et comme post LinkedIn dédié :
+
+- **Décision #5** : raisonnement replié par défaut (réduction de charge cognitive).
+- **ADR-0007 §D6** : contrat d'abstention `AgentAbstention` — l'agent dit "je ne sais pas" plutôt
+  que d'émettre du bruit ; abstention partielle (le forecast reste affiché si la reco s'abstient).
+- **ADR-0009 G-4** : circuit-breaker à confiance étagée — confiance basse → rétrograde/flague,
+  jamais ne supprime ; seul le Tier 2 (dégradation grave) alerte, le Tier 1 est un caveat silencieux.
+- **Décision #15** : feedback entrant auto-classifié (auto-`modified` si confiance < 0.6) — l'agent
+  range le retour plutôt que de relancer.
+- **Décision #6 + seuils config-driven** : le manager contrôle quelles tâches exigent validation,
+  réglable en pilote sans redéploiement.
+
+Punchline : *"The agent earns trust by asking only when it matters."*
 
 ## Règles d'usage (inchangées)
 
