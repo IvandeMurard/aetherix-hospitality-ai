@@ -270,6 +270,54 @@ async def run(days: int, out_path: Path) -> dict:
     transcript_path = out_path.parent / "whatsapp_transcript.md"
     transcript_path.write_text("\n".join(transcript), encoding="utf-8")
 
+    # Memory tour — "what the system knows after 30 days" (wedge narrative:
+    # the product is the memory, not the forecast). Reflections use the exact
+    # format persisted by receipts.persist_actual_covers in production.
+    scored = df[df["ape_pct"].notna()]
+    worst = scored.nlargest(5, "ape_pct")
+    pre = scored[~scored["post_shift"]]
+    post = scored[scored["post_shift"]]
+    tour = [
+        "# Memory tour — ce que le système sait après 30 jours (HOS-310)",
+        "",
+        "> Étage 2 du « memory tour » (levier de visibilisation n°2, wedge note). Données",
+        "> sandbox ; le format des réflexions est celui persisté en production par",
+        "> `receipts.persist_actual_covers` → `operational_memory`.",
+        "",
+        "## Le régime appris",
+        f"- Demande moyenne avant le choc (J1-J{SHIFT_DAY-1}) : "
+        f"{pre['actual_reported'].mean():.0f} couverts/service",
+        f"- Demande moyenne après le choc (J{SHIFT_DAY}+) : "
+        f"{post['actual_reported'].mean():.0f} couverts/service (+"
+        f"{100*(post['actual_reported'].mean()/pre['actual_reported'].mean()-1):.0f} %)",
+        f"- Le modèle recalibré intègre ce nouveau régime : erreur "
+        f"{report['metrics']['mape_post_shift_before_recalibration_pct']} % la semaine du choc → "
+        f"{report['metrics']['mape_post_shift_after_recalibration_pct']} % ensuite",
+        "",
+        "## Réflexions mémorisées (les 5 écarts les plus instructifs)",
+    ]
+    for _, r in worst.iterrows():
+        tour.append(f"- `actual covers {r['actual_reported']:.0f} vs predicted "
+                    f"{r['predicted']} on {r['day']}` — APE {r['ape_pct']} %"
+                    + (" · post-choc" if r["post_shift"] else ""))
+    tour += [
+        "",
+        "## Événements systèmes mémorisés",
+        f"- J{CORRUPT_DAY} : outcome quarantainé (export POS à {CORRUPT_VALUE:.0f} couverts, "
+        "raison typée `implausible_feedback`) — jamais entré en training",
+        "- J17 : dérive auto-détectée (3 sous-estimations consécutives ≥ 10 %) et annoncée au manager",
+        f"- {report['metrics']['recalibrations']} recalibrations, "
+        f"{report['metrics']['outcomes_captured']} outcomes capturés",
+        "",
+        "## Ce que le manager a appris au système",
+        f"- {int((df['manager_feedback']=='modified').sum())} contre-propositions du manager "
+        "enregistrées (signal d'apprentissage futur : qui a raison, l'agent ou le manager ?)",
+        "",
+        "*C'est cet actif-là — la mémoire par propriété — qui se compose dans le temps. "
+        "Un concurrent copie le modèle en une semaine ; pas 30 jours d'outcomes capturés.*",
+    ]
+    (out_path.parent / "memory_tour.md").write_text("\n".join(tour), encoding="utf-8")
+
     m = report["metrics"]
     md = out_path.with_suffix(".md")
     md.write_text(
