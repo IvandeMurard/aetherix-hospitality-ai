@@ -57,6 +57,8 @@
 - `testing/e2e-apaleo-sandbox.md` (+ `testing/evidence/`) — E2E sandbox Apaleo
 - `mcp/getting-started.md` — consommer le MCP server Aetherix
 - `demos/README.md` — démos disponibles
+- `demos/demo-kit.md` — **kit de démo closed-loop (HOS-310)** : commandes, 3 écrans, moments clés J10/J15/J17, chiffres autorisés vs interdits, thèse cognitive — LE doc à ouvrir le jour du tournage
+- `demos/closed-loop-video-storyboard.md` · `demos/whatsapp_transcript.md` · `demos/closed_loop_demo.{md,json}` — séquencier 3 min, fil WhatsApp généré, rapport + ledger
 
 ## 📣 Marketing
 - `marketing/CASE_STUDY_UPDATE.md` — prompt case study public (ivandemurard.com/aetherix)
