@@ -8,7 +8,50 @@
 
 ---
 
-## ENTRÉE EXPÉRIENCE — version EN (à copier-coller)
+## POST / ENTRÉE COURTE (< 2000 caractères, 1974 — à copier-coller)
+
+> Version validée par Ivan (09/07). Format concis à thématiques, mémoire-led, statuts honnêtes,
+> preuve de juillet, ligne évaluation (eval-by-design 3 bras). Zéro cadratin. La version longue
+> ci-dessous reste pour un usage où la limite ne s'applique pas.
+
+```
+Learning AI by building a living operational memory for hotels, that improves with every service.
+
+A network of MCP-native agents that anticipate needs, check themselves against real outcomes, and learn. The forecast is an organ, not the product. Human-in-the-loop by design.
+
+The thesis:
+- Understand, like a human: contextual reasoning grounded in each property's history.
+- Measure, like a machine: every recommendation is stored next to its real outcome, so the system knows what it said and what happened.
+- Learn, like a network: per-property memory today, federated priors next, to give independents the power of a hive.
+
+The vision:
+- Aetherix, the F&B agent: forecast, staffing, memory. (Built)
+- Tacet, environmental-signal node. (Prototype)
+- Anima, Guest Cognition agent. (Design)
+- Orchestrator, supervisory agent. (Stub)
+
+How it works:
+- Zero-UI: push-first copilot in existing workflows. No dashboard, no alert fatigue.
+- HITL: agents recommend, humans validate. An agent that asks only when it matters.
+- Evaluation: eval-by-design, offline CI gate + runtime checks + real-outcome capture.
+- Feedback loop: continuous learning from data and human feedback.
+
+What's been built (July 2026):
+- Real-data benchmark: beats a naive baseline, published in full, including where it doesn't.
+- Closed learning loop: a 25% overnight demand shift absorbed, error 15.9% to 12.3% after recalibration.
+- Eval-by-Design as a hard CI gate (Qonto's "working vs reliable").
+- Runtime guardrails with typed reasons; Logfire tracing to LLM cost per recommendation.
+- Daily forecast (internal + external context); staffing calibrated to labor law and capture rates.
+- Dual memory (per-hotel private + shared patterns), WhatsApp feedback loop, MCP server, tenant-scoped.
+
+Code + demo on GitHub. Roadmap in Linear.
+
+Stack: Python 3.12 · FastAPI · Multi-LLM provider abstraction · Prophet · pgvector · Supabase · Redis · Twilio · Fly.io · Apaleo API (OAuth2 + native MCP).
+```
+
+---
+
+## ENTRÉE EXPÉRIENCE — version EN longue (à copier-coller)
 
 **Founder & Product Engineer, Aetherix (Hospitality Agentic Mesh)** · Nov 2025 – present
 
