@@ -4,6 +4,54 @@
 
 ---
 
+# ⚡ UPDATE v2 — Operational-memory narrative (09/07/2026, supersedes the prompt below where they conflict)
+
+> Source de vérité : `docs/context/positionnement-wedge.md`. Copy-paste THIS section into Lovable.
+
+**Reframe the entire page around one thesis: Aetherix is not a forecasting tool — it is an
+operational memory system that learns from every service. The forecast is an organ, not the product.**
+
+Concrete edits, in priority order:
+
+1. **Hero line** — replace the covers/forecast-led tagline with:
+   *"An operational memory for hotel F&B — it anticipates, checks itself every morning, says so
+   when it drifts, and learns from every service."* Keep the WhatsApp receipt mockup right below:
+   it IS the product surface.
+
+2. **Section order** — lead with the loop (the existing Memory → Prediction → Action → Learning
+   cycle section: promote it to section 1, rename it "The loop that learns"). "What it does"
+   comes after. Forecasting appears as one stage of the loop, never as the headline.
+
+3. **Numbers — replace ALL of them** (the 15.09% synthetic MAPE is retired, never show it again):
+   - Real-data benchmark: *"On 30 real restaurants (Kaggle Recruit dataset), the pipeline beats
+     the naive same-weekday baseline by 6 MAPE points (49.7% vs 55.9%) — and the benchmark
+     honestly documents where it doesn't."*
+   - Closed-loop demo (always labeled "sandbox data, real mechanics"): *"After a +25% demand
+     regime shift, weekly recalibration brought the error from 15.9% back to 12.3%. Corrupted POS
+     data (900 covers for 120 seats) was rejected by a typed guardrail and never reached training."*
+   - Never quote the simulated 76.7% acceptance as a product metric (simulated manager).
+
+4. **New section "Trust engineering, visible"** — three screenshot slots: Logfire end-to-end
+   trace, LLM cost per recommendation, typed guardrail trip event. One line:
+   *"Every guardrail trip carries a machine-readable reason. 'It degraded gracefully' is
+   verifiable, not folklore."*
+
+5. **Video slot** — embed the 3-min closed-loop video near the top, caption: *"Sandbox data,
+   real mechanics: watch the agent flag corrupted data, name its own drift, and recalibrate."*
+
+6. **Links** — the GitHub CTA now points to
+   `https://github.com/IvandeMurard/hospitality-agentic-mesh` (public meta-repo; the old
+   private-repo link 404'd for visitors). Cross-link Tacet.
+
+7. **Anima** — one short block only, framed as design thesis: *"The same cognitive architecture,
+   extended to guests: four memory layers, scope-gated access, privacy-first (DPIA before any
+   build). Aetherix is the proof; Anima is the promise."* Link to the meta-repo cognition note.
+
+8. **Keep**: the honest tone, the caveat discipline, the Calendly CTA. **Remove**: any remaining
+   "Semantic Layer" wording (legacy), any implication that the Mesh is fully built.
+
+---
+
 ## Target files
 
 Primary: `src/pages/Atherix.tsx`

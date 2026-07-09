@@ -19,6 +19,7 @@
 - `context/decisions-architecturales.md` — détail des 31 décisions (index 1-ligne dans CLAUDE.md)
 - `context/open-decisions.md` — décisions ouvertes + archive des résolues
 - `context/analyse-critique-2026-07.md` — **audit critique complet Aetherix+Tacet (07/07/2026)** : chaîne de valeur 5 maillons, circularité MAPE synthétique, différenciation, wedge/moat, risques crédibilité
+- `context/positionnement-wedge.md` — **le wedge acté (09/07)** : "mémoire opérationnelle, le forecast est un organe" — référence pour tout support externe (case study, méta-repo, article, LinkedIn) + discipline de langage
 - `context/data-conventions.md` — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
 - `context/vision-future.md` — vision long terme (Phase 5, Mesh, Aetherix Voice)
@@ -61,7 +62,9 @@
 - `demos/closed-loop-video-storyboard.md` · `demos/whatsapp_transcript.md` · `demos/closed_loop_demo.{md,json}` — séquencier 3 min, fil WhatsApp généré, rapport + ledger
 
 ## 📣 Marketing
-- `marketing/CASE_STUDY_UPDATE.md` — prompt case study public (ivandemurard.com/aetherix)
+- `marketing/CASE_STUDY_UPDATE.md` — prompt case study public (v2 09/07 en tête : récit mémoire opérationnelle, chiffres réels, slots vidéo/Logfire)
+- `marketing/article-operational-memory.md` — **draft article à publier** : "Operational memory is the moat AI wrappers don't have" (Dev.to/Medium)
+- `marketing/linkedin-experience.md` — **kit LinkedIn** : expérience EN/FR + headline + à-propos alignés wedge, règles chiffres autorisés/interdits
 - `marketing/positioning-snippets.md` — snippets de positionnement
 - `marketing/fiches/` — fiches RAG (html/pdf)
 
