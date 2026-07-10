@@ -188,6 +188,6 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 
 ## Points d'attention
 
-1. `.env.example` racine = ancien backend (`archive/legacy-backend`).
+1. Config env : source de vérité = `backend/.env.example` (le legacy `archive/` + son `.env.example` racine ont été retirés le 10/07/2026, snapshot récupérable via tag `legacy-backend-archive`).
 2. Hébergement staging = Fly.io `cdg` (Décision #17). Dev local Windows pour scripts utilitaires.
 3. Plan actif : **Epic 16 Proof & Visibility (HOS-300)** — 90 j, gel nouveaux ADRs / extension Mesh. Détail `docs/planning/plan-90j-proof-visibility.md` + audit `docs/context/analyse-critique-2026-07.md`.
