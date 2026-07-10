@@ -20,6 +20,7 @@
 - `context/open-decisions.md` — décisions ouvertes + archive des résolues
 - `context/analyse-critique-2026-07.md` — **audit critique complet Aetherix+Tacet (07/07/2026)** : chaîne de valeur 5 maillons, circularité MAPE synthétique, différenciation, wedge/moat, risques crédibilité
 - `context/positionnement-wedge.md` — **le wedge acté (09/07)** : "mémoire opérationnelle, le forecast est un organe" — référence pour tout support externe (case study, méta-repo, article, LinkedIn) + discipline de langage
+- `context/moat.md` — **ce qui est défendable, testé contre la menace plateforme** (09/07) : 4 couches de moat + stress test "et si Apaleo/Mews shippent un forecast natif ?" + risque résiduel nommé
 - `context/data-conventions.md` — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
 - `context/vision-future.md` — vision long terme (Phase 5, Mesh, Aetherix Voice)
@@ -46,8 +47,8 @@
 - Automatisation : `.github/workflows/veille-hebdomadaire.yml` (lundi 8h30) · `scripts/ops/veille_proactive.py`
 
 ## 🥊 Competitive
+- `competitive/concurrence.md` — **concurrence frontale F&B (09/07)** : Nory/Tenzo/5-Out/Avero, pourquoi le F&B hôtelier reste ouvert (restaurant-first + BI-first vs memory-led), où ils sont devant honnêtement
 - `competitive/apaleo-mcp-mapping.md` · `conduit-ai-analysis.md` · `grevon-analysis.md` · `otelai-analysis.md` · `th1-ai-analysis.md` · `travelos-mcp-analysis.md`
-- Page concurrence frontale (Nory/Tenzo/5-Out/Avero) = à produire, Story 16.13 (HOS-313)
 
 ## 🚀 Pilot & Ops
 - `pilot/onboarding-kit.md` · `pilot/outreach-template.md` · `pilot/credentials-sop.md`
