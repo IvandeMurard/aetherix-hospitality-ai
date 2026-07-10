@@ -29,7 +29,6 @@
 - `context/runbook-pre-pilot.md` — checklist pré-pilote
 - `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL
 - `context/linear-conventions.md` — protocole Epic/Story Linear
-- `context/monitoring-watchlist.md` — signaux à réévaluer à chaque phase (watchlist compétitive)
 - `context/security-review-2026-05-01.md` — audit sécurité mai (clôturé, Epic 12)
 - `context/security-review-2026-Q2.md` — audit différentiel pré-pilote Q2 (CLOSED, Décision #30)
 
@@ -41,15 +40,6 @@
 - `planning/hos-190-manual-runbook.md` — runbook manuel HOS-190
 - Phases 0-2 terminées → `_archive/planning/`
 
-## 📡 Veille
-- `veille/digest-2026-Q1-avril.md` — digest compressé mars/avril (originaux → `_archive/veille/`)
-- `veille/2026-06-*.md` · `veille/2026-07-*.md` — rapports du trimestre courant
-- Automatisation : `.github/workflows/veille-hebdomadaire.yml` (lundi 8h30) · `scripts/ops/veille_proactive.py`
-
-## 🥊 Competitive
-- `competitive/concurrence.md` — **concurrence frontale F&B (09/07)** : Nory/Tenzo/5-Out/Avero, pourquoi le F&B hôtelier reste ouvert (restaurant-first + BI-first vs memory-led), où ils sont devant honnêtement
-- `competitive/apaleo-mcp-mapping.md` · `conduit-ai-analysis.md` · `grevon-analysis.md` · `otelai-analysis.md` · `th1-ai-analysis.md` · `travelos-mcp-analysis.md`
-
 ## 🚀 Pilot & Ops
 - `pilot/onboarding-kit.md` · `pilot/outreach-template.md` · `pilot/credentials-sop.md`
 - `ops/latency-slo.md` — SLO latence · `ops/llm-fallback-runbook.md` — runbook fallback LLM
@@ -60,9 +50,11 @@
 - `mcp/getting-started.md` — consommer le MCP server Aetherix
 - `demos/README.md` — démos disponibles + closed-loop (`scripts/ops/closed_loop_demo.py`, sortie gitignorée `eval/reports/`)
 
-> **📣 Marketing/contenu = hors repo (09/07/2026).** Case study prompt, article, kit LinkedIn, posts LinkedIn/X, storyboard démo, transcript, memory tour, fiches : tout vit dans l'Obsidian vault `Aetherix - Marketing`. Le repo garde l'analyse stratégique (`context/positionnement-wedge.md`, `context/moat.md`, `competitive/concurrence.md`) et `marketing/positioning-snippets.md` (exception : cité comme provenance de décisions par ADR-0006 / open-decisions).
+> **📣 Marketing/contenu = hors repo (09/07/2026).** Case study prompt, article, kit LinkedIn, posts LinkedIn/X, storyboard démo, transcript, memory tour, fiches : tout vit dans l'Obsidian vault `Aetherix - Marketing`. Le repo garde l'analyse stratégique (`context/positionnement-wedge.md`, `context/moat.md`) et `marketing/positioning-snippets.md` (exception : cité comme provenance de décisions par ADR-0006 / open-decisions).
+>
+> **📡 Veille/Competitive = hors repo (10/07/2026).** Élargissement de la décision ci-dessus : toute la veille (hebdo + watchlist + analyses concurrentielles dédiées, y compris `competitive/concurrence.md`) vit désormais dans l'Obsidian vault, dossier `Veille/` (`Veille_Competitors_Market.md`, `Veille_Index.md`). Les anciens `docs/veille/`, `docs/context/monitoring-watchlist.md`, `docs/competitive/*` sont archivés → `_archive/veille/`, `_archive/context/monitoring-watchlist.md`, `_archive/competitive/` (historique git préservé, citations ADR/decisions-architecturales restent valides vers ces chemins archivés). **Non résolu à date** : le cron `.github/workflows/veille-hebdomadaire.yml` (lundi 07h30 UTC, `scripts/ops/veille_proactive.py`) continue de générer/committer `docs/veille/draft-*.md` — tourne sur runners GitHub cloud, sans accès au vault local. Décision à prendre : désactiver ou garder comme générateur brut à recopier manuellement.
 
 ## 🗄️ Hors docs/
 - `tools/bmad/` — framework BMad (agents SM/Dev/PM/QA…) — outillage, référencé par CLAUDE.md §BMad
-- `docs/_archive/` — tout ce qui précède les jalons actuels : phases 0-2, stratégies pré-Mesh (Problem_Statement, MVP_SCOPE, ROADMAP_NOW_NEXT_LATER, MARKET_INTELLIGENCE, AI_CONTEXT_LAYER, DEPLOYMENT/TROUBLESHOOTING pré-Fly), audits internes mai, veille mars/avril
+- `docs/_archive/` — tout ce qui précède les jalons actuels : phases 0-2, stratégies pré-Mesh (Problem_Statement, MVP_SCOPE, ROADMAP_NOW_NEXT_LATER, MARKET_INTELLIGENCE, AI_CONTEXT_LAYER, DEPLOYMENT/TROUBLESHOOTING pré-Fly), audits internes mai, veille mars/avril + juin/juillet (`_archive/veille/`), watchlist (`_archive/context/monitoring-watchlist.md`), analyses concurrentielles (`_archive/competitive/`)
 - `docs/metrics/` · `docs/linear/` — artefacts JSON historiques (backtest avril, import Linear)
