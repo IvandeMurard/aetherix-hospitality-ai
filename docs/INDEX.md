@@ -66,6 +66,7 @@
 - `marketing/CASE_STUDY_UPDATE.md` — prompt case study public (v2 09/07 en tête : récit mémoire opérationnelle, chiffres réels, slots vidéo/Logfire)
 - `marketing/article-operational-memory.md` — **draft article à publier** : "Operational memory is the moat AI wrappers don't have" (Dev.to/Medium)
 - `marketing/linkedin-experience.md` — **kit LinkedIn** : expérience EN/FR + headline + à-propos alignés wedge, règles chiffres autorisés/interdits
+- `marketing/social-posts.md` — **banque de posts LinkedIn + X** (fil mémoire Aetherix/Anima/Lore · évaluation · living operational architecture) — prêts à publier, courts, cadence conseillée
 - `marketing/positioning-snippets.md` — snippets de positionnement
 - `marketing/fiches/` — fiches RAG (html/pdf)
 
