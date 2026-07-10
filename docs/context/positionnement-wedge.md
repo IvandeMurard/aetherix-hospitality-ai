@@ -53,7 +53,5 @@ Statut des chiffres : voir `docs/demos/demo-kit.md` §4 (mesuré / démo mécani
 ## Applications (état au 09/07/2026)
 
 - Méta-repo public : récit renversé (lead = operational memory) — fait
-- Case study : prompt de refonte dans `docs/marketing/CASE_STUDY_UPDATE.md` — à exécuter (Lovable)
-- Article : draft `docs/marketing/article-operational-memory.md` — à publier
-- LinkedIn : `docs/marketing/linkedin-experience.md` — à copier dans le profil
+- Contenu marketing (case study prompt, article, kit LinkedIn, posts) → Obsidian vault `Aetherix - Marketing` (hors repo depuis le 09/07)
 - Anima : thèse publiée au méta-repo ("Cognition, not just prediction"), sans schémas (Décision #31)

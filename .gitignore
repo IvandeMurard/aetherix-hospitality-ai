@@ -64,3 +64,9 @@ eval/reports/
 
 # Benchmark raw datasets (Kaggle Recruit — download locally, ~9 MB)
 backend/data/benchmarks/
+
+# Generated demo artifacts (regenerate via scripts/ops/closed_loop_demo.py)
+eval/reports/
+docs/demos/*_transcript.md
+docs/demos/closed_loop_demo.*
+docs/demos/memory_tour.md

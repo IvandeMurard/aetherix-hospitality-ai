@@ -58,16 +58,9 @@
 ## 🧪 Testing & MCP
 - `testing/e2e-apaleo-sandbox.md` (+ `testing/evidence/`) — E2E sandbox Apaleo
 - `mcp/getting-started.md` — consommer le MCP server Aetherix
-- `demos/README.md` — démos disponibles
-- `demos/demo-kit.md` — **kit de démo closed-loop (HOS-310)** : commandes, 3 écrans, moments clés J10/J15/J17, chiffres autorisés vs interdits, thèse cognitive — LE doc à ouvrir le jour du tournage
-- `demos/closed-loop-video-storyboard.md` · `demos/whatsapp_transcript.md` · `demos/closed_loop_demo.{md,json}` — séquencier 3 min, fil WhatsApp généré, rapport + ledger
+- `demos/README.md` — démos disponibles + closed-loop (`scripts/ops/closed_loop_demo.py`, sortie gitignorée `eval/reports/`)
 
-## 📣 Marketing
-- `marketing/CASE_STUDY_UPDATE.md` — prompt case study public (v2 09/07 en tête : récit mémoire opérationnelle, chiffres réels, slots vidéo/Logfire)
-- `marketing/article-operational-memory.md` — **draft article à publier** : "Operational memory is the moat AI wrappers don't have" (Dev.to/Medium)
-- `marketing/linkedin-experience.md` — **kit LinkedIn** : expérience EN/FR + headline + à-propos alignés wedge, règles chiffres autorisés/interdits
-- `marketing/positioning-snippets.md` — snippets de positionnement
-- `marketing/fiches/` — fiches RAG (html/pdf)
+> **📣 Marketing/contenu = hors repo (09/07/2026).** Case study prompt, article, kit LinkedIn, posts LinkedIn/X, storyboard démo, transcript, memory tour, fiches : tout vit dans l'Obsidian vault `Aetherix - Marketing`. Le repo garde l'analyse stratégique (`context/positionnement-wedge.md`, `context/moat.md`, `competitive/concurrence.md`) et `marketing/positioning-snippets.md` (exception : cité comme provenance de décisions par ADR-0006 / open-decisions).
 
 ## 🗄️ Hors docs/
 - `tools/bmad/` — framework BMad (agents SM/Dev/PM/QA…) — outillage, référencé par CLAUDE.md §BMad
