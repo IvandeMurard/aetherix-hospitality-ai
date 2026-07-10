@@ -16,8 +16,6 @@ dependencies = [
     { name = "apscheduler" },
     { name = "asyncpg" },
     { name = "fastapi", extra = ["standard"] },
-    { name = "fastapi-mail" },
-    { name = "fastapi-pagination" },
     { name = "fastapi-users", extra = ["sqlalchemy"] },
     { name = "google-genai" },
     { name = "httpx" },
@@ -51,8 +49,6 @@ requires-dist = [
     { name = "apscheduler", specifier = ">=3.10.0,<4" },
     { name = "asyncpg", specifier = ">=0.29.0,<0.30" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.0,<0.116" },
-    { name = "fastapi-mail", specifier = ">=1.4.1,<2" },
-    { name = "fastapi-pagination", specifier = "==0.13.3" },
     { name = "fastapi-users", extras = ["sqlalchemy"], specifier = ">=13.0.0,<14" },
     { name = "google-genai", specifier = ">=1.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
@@ -78,15 +74,6 @@ dev = [
     { name = "pytest-mock", specifier = ">=3.14.0,<4" },
     { name = "pytest-timeout", specifier = ">=2.3.0" },
     { name = "ruff", specifier = ">=0.4.0" },
-]
-
-[[package]]
-name = "aiosmtplib"
-version = "2.0.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/8f/66/64d78bcb36c0a3da4610d5564c0422cb726051fb5dbd136a8839d8b91574/aiosmtplib-2.0.2.tar.gz", hash = "sha256:138599a3227605d29a9081b646415e9e793796ca05322a78f69179f0135016a3", size = 56295, upload-time = "2023-06-03T19:48:36.957Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/be/6902c91523a5faedee22e260e17fc23521fd63b2fec46dd5e5fcda62da8f/aiosmtplib-2.0.2-py3-none-any.whl", hash = "sha256:1e631a7a3936d3e11c6a144fb8ffd94bb4a99b714f2cb433e825d88b698e37bc", size = 27149, upload-time = "2023-06-03T19:48:35.562Z" },
 ]
 
 [[package]]
@@ -255,15 +242,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/85/23/756228cbc426049c264c86d163ec1b4fb1b06114f26b25fb63132af56126/bcrypt-4.1.2-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:69057b9fc5093ea1ab00dd24ede891f3e5e65bee040395fb1e66ee196f9c9b4a", size = 749705, upload-time = "2023-12-15T14:53:15.563Z" },
     { url = "https://files.pythonhosted.org/packages/ca/9e/abc56ba85897eeca1f3755343a7b6b55f63c048516ebc5790145a7cdfddb/bcrypt-4.1.2-cp39-abi3-win32.whl", hash = "sha256:02d9ef8915f72dd6daaef40e0baeef8a017ce624369f09754baf32bb32dba25f", size = 170970, upload-time = "2023-12-15T14:53:17.084Z" },
     { url = "https://files.pythonhosted.org/packages/53/5b/73803e5bf877e07739deaeecb2e356f4cc9ae3b766558959a898f7a993e0/bcrypt-4.1.2-cp39-abi3-win_amd64.whl", hash = "sha256:be3ab1071662f6065899fe08428e45c16aa36e28bc42921c4901a191fda6ee42", size = 158307, upload-time = "2023-12-15T14:53:18.422Z" },
-]
-
-[[package]]
-name = "blinker"
-version = "1.9.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/21/28/9b3f50ce0e048515135495f198351908d99540d69bfdc8c1d15b73dc55ce/blinker-1.9.0.tar.gz", hash = "sha256:b4ce2265a7abece45e7cc896e98dbebe6cead56bcf805a3d23136d145f5445bf", size = 22460, upload-time = "2024-11-08T17:25:47.436Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/10/cb/f2ad4230dc2eb1a74edf38f1a38b9b52277f75bef262d8908e60d957e13c/blinker-1.9.0-py3-none-any.whl", hash = "sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc", size = 8458, upload-time = "2024-11-08T17:25:46.184Z" },
 ]
 
 [[package]]
@@ -572,38 +550,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/63/e1/05c44e7bbc619e980fab0236cff9f5f323ac1aaa79434b4906febf98b1d3/fastapi_cloud_cli-0.15.0.tar.gz", hash = "sha256:d02515231f3f505f7669c20920343934570a88a08af9f9a6463ca2807f27ffe5", size = 45309, upload-time = "2026-03-11T22:31:32.455Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/40/cc/1ccca747f5609be27186ea8c9219449142f40e3eded2c6089bba6a6ecc82/fastapi_cloud_cli-0.15.0-py3-none-any.whl", hash = "sha256:9ffcf90bd713747efa65447620d29cfbb7b3f7de38d97467952ca6346e418d70", size = 32267, upload-time = "2026-03-11T22:31:33.499Z" },
-]
-
-[[package]]
-name = "fastapi-mail"
-version = "1.4.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiosmtplib" },
-    { name = "blinker" },
-    { name = "email-validator" },
-    { name = "jinja2" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "starlette" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/5f/94/9fc53e33436368973071979bdb8cc31455e67daed4fbc301885459853d53/fastapi_mail-1.4.1.tar.gz", hash = "sha256:9095b713bd9d3abb02fe6d7abb637502aaf680b52e177d60f96273ef6bc8bb70", size = 13301, upload-time = "2023-07-18T18:53:20.407Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/a3/c94fac41f430dd1a5586061aed04c5f1f6478b488a581d0b7c0b7c95ea76/fastapi_mail-1.4.1-py3-none-any.whl", hash = "sha256:fa5ef23b2dea4d3ba4587f4bbb53f8f15274124998fb4e40629b3b636c76c398", size = 14736, upload-time = "2023-07-18T18:53:18.667Z" },
-]
-
-[[package]]
-name = "fastapi-pagination"
-version = "0.13.3"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "fastapi" },
-    { name = "pydantic" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/10/4c/e98a1665b6ac2e9e4ed98450e4e0ea48108f3bc52de517d9a70cc22761c2/fastapi_pagination-0.13.3.tar.gz", hash = "sha256:40c2383aff13a3a0e4a2742dfbf004572e88458cd8f338d85f90a27e07abab4a", size = 550898, upload-time = "2025-06-25T21:22:15.287Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/73/ef1ab892c2d189d8b6bd72325e9e710df6737c3b7976e12aa5749a56ea01/fastapi_pagination-0.13.3-py3-none-any.whl", hash = "sha256:e1b1cc7fa5c773c61087845ef8a73ed6b516071c057418698b9242461573f44e", size = 50986, upload-time = "2025-06-25T21:22:13.591Z" },
 ]
 
 [[package]]
