@@ -10,7 +10,7 @@
 | Acteur | Cœur de cible | Ce qu'ils font bien | Angle |
 |---|---|---|---|
 | **Nory** | Groupes de restauration & hospitality (UK/IE), chaînes | Forecast demande + labor scheduling + inventory, produit mûr, vrais déploiements | Le plus proche de nous, mais orienté *chaînes de restaurants*, pas F&B intégré à l'hôtel |
-| **Tenzo** | Restaurants & chaînes | Analytics + forecast + intégrations POS multiples, dashboards | BI-first (on regarde des tableaux de bord), pas push-first agentique |
+| **Tenzo** (gotenzo.com) | Restaurants & chaînes — **+ page "Solutions Hotels" dédiée, IHG cité client** (à approfondir, cf. W15) | Analytics + forecast + intégrations POS multiples, dashboards | BI-first (on regarde des tableaux de bord), pas push-first agentique — mais signal hôtelier le plus concret trouvé à ce jour parmi ces 4 acteurs |
 | **5-Out** | Restaurants indépendants & petits groupes | Forecast ventes/labor, prédiction quasi temps réel, intégrations POS | Forecast-led, restaurant standalone, pas de contexte hôtelier |
 | **Avero** | F&B hôtelier & restauration | Analytics F&B établies, ancrage hôtelier réel, base installée | Le plus proche côté *hôtel*, mais analytics/reporting rétrospectif, pas agent prédictif à boucle fermée |
 
@@ -51,7 +51,9 @@ Quatre raisons structurelles, pas conjoncturelles :
 ## Ce qui ferait tomber l'analyse (à surveiller)
 
 - Un des acteurs ci-dessus **shippe une intégration PMS profonde + capture rate hôtelier** → notre
-  raison n°1 s'érode. À monitorer (watchlist).
+  raison n°1 s'érode. À monitorer (watchlist). **Tenzo est le candidat le plus proche identifié
+  (page hôtel dédiée + IHG client) — profondeur réelle (occupancy-aware ou pas) non confirmée,
+  cf. `nory-tenzo-5out-analysis.md` §"À vérifier" et watchlist W15.**
 - Un acteur passe **push-first agentique + boucle fermée instrumentée** → la raison n°2-3 s'érode.
 - Un PMS (Apaleo/Mews) internalise le F&B → scénario traité dans [`../context/moat.md`](../context/moat.md).
 

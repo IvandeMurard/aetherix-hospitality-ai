@@ -120,6 +120,21 @@
 **Mitigation** : positioning H-8 "specialist beats generalist" (cf. W10/W11) — applicable verbatim (suite généraliste vs F&B specialist). Apaleo Marketplace/Agent Hub listing rapide (HOS-180) pour devancer un chevauchement marketplace. Pas d'action immédiate sur le forecasting — scan mensuel jusqu'à signal Ops plus concret.
 **Doc dédié** : `docs/competitive/grevon-analysis.md` (créé 06-23).
 
+### W15 — Tenzo (gotenzo.com — restaurant analytics, signal hôtelier réel) — ajouté 2026-07-10
+
+**Profil rapide — analyse complète `docs/competitive/nory-tenzo-5out-analysis.md`** : plateforme "PerformanceOps" (Aggregate/Analyse/Automate/Predict/Act/AI), 90+ intégrations POS/labour/inventory. Déjà mentionnée en synthèse dans `docs/competitive/concurrence.md` (09/07) comme "Restaurants & chaînes, BI-first" — **cadrage à corriger** : une page `/solutions-hotels/` existe et **IHG** apparaît comme client cité, aux côtés de restaurants/pubs classiques (Caravan, TGI Friday's, Honest Burgers).
+**Risque** : c'est le signal le plus proche trouvé à ce jour du trigger d'érosion nommé dans `concurrence.md` ("un acteur shippe une intégration PMS profonde + capture rate hôtelier"). **Non confirmé si l'offre hôtelier est occupancy-aware (PMS) ou juste de l'analytics F&B classique appliquée aux points de vente d'un hôtel** — recherche bloquée par une panne outil (WebFetch classifier indisponible) cette session, 2 fetches ciblés échoués sur `/solutions-hotels/` et `/product-ai/` (architecture "MCP (AI connector)" — nature non confirmée : vrai Model Context Protocol ou nom interne réutilisé).
+⚠️ **Collision de nom** : `tenzo.ai` (trouvé en premier lieu) est une plateforme de recrutement IA sans rapport — le bon domaine est `gotenzo.com`.
+
+**Triggers à monitorer (mensuel jusqu'à clarification, puis trimestriel)** :
+- Détail `/solutions-hotels/` : mention explicite occupancy/PMS/capture rate (= Scénario proche W2 Scénario C, mais côté concurrent restaurant-analytics plutôt que PMS)
+- Nature confirmée du "MCP (AI connector)" — vrai MCP = nouvel acteur MCP-natif F&B à recouper avec thèse cross-cutting "MCP industry consensus"
+- Nouveaux clients hôteliers nommés au-delà d'IHG/Generator
+- Funding round ou expansion GTM hôtellerie explicite
+
+**Mitigation** : aucune action avant confirmation — voir `docs/competitive/nory-tenzo-5out-analysis.md` §"À vérifier" pour la liste exacte des 2 items bloqués. Si confirmé occupancy-aware : réévaluer position défensive raison n°1 de `concurrence.md`, probable ajustement du tableau comparatif (Tenzo passerait de "adjacent" à "candidat frontal" aux côtés d'Avero).
+**Doc dédié** : `docs/competitive/nory-tenzo-5out-analysis.md` (créé 07-10).
+
 ## Priorité 2 — monitoring tactique
 
 ### W3 — Meuze.ai (F&B restaurants, pivot hospitality risk)
@@ -173,6 +188,19 @@
 - Communication Cloudbeds mentionnant "covers" / "staffing prediction"
 
 **Mitigation** : monitor quarterly (cycle PMS release plus lent que startups) · Aetherix reste API-first Apaleo+Mews focused.
+
+### W16 — Nory + 5-Out (restaurant AI forecasting/labor, restaurant-only confirmé) — ajouté 2026-07-10
+
+**Profil rapide — analyse complète `docs/competitive/nory-tenzo-5out-analysis.md`** : deux plateformes AI forecasting + labor matures, financées, restaurant-first sans ambiguïté. **Nory** ("agentic AI restaurant OS" — Business Intelligence/Inventory/Workforce/Payroll), clients PF Chang's, Black Sheep Coffee (130 sites, 98% forecast accuracy). **5-Out** (sales forecasting jusqu'à J+21, météo+événements+social, labor/purchasing/prep), clients QSR/fine dining/ghost kitchens. **Aucune mention hôtel, PMS, ou occupancy-driven forecasting** trouvée pour l'un ou l'autre, même sur pages produit détaillées.
+**Risque** : faible et indirect — valide que le marché forecast+labor F&B est prouvé et payant (bonne nouvelle catégorie, mauvaise nouvelle = commodité déjà pourvue côté restaurant pur, cf. `concurrence.md`). Aucun signal d'expansion vers l'hôtellerie détecté à ce jour.
+
+**Triggers à monitorer (cadence trimestrielle — risque faible)** :
+- Mention hôtel/PMS/occupancy dans roadmap ou case study publique (l'un ou l'autre)
+- Funding round significatif (accélération GTM potentielle vers verticals adjacentes)
+- Partenariat PMS Apaleo/Mews publiquement annoncé
+
+**Mitigation** : aucune action requise — monitoring passif. Positioning H-8 applicable si jamais l'un des deux annonce une expansion hôtelière (specialist F&B hôtelier vs specialist F&B restaurant qui pivote).
+**Doc dédié** : `docs/competitive/nory-tenzo-5out-analysis.md` (créé 07-10).
 
 ### W5 — Jengu.ai (front-of-house adjacent) — **scan escaladé 2026-06-20**
 
