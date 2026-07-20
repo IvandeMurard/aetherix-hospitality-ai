@@ -634,7 +634,7 @@ Cohérent format `docs/planning/phase-3-pilot-validation.md` Track A + ADR-0006 
 Mention possibility (pas décision) :
 
 - **Switch Neo4j Aura** si Apache AGE benchmark hit limit > 1M nodes/hôtel ou si scale multi-tenant > 100 hôtels casse latency. Effort estimé 5-8j (export AGE → Cypher dump + provisioning + refactor transport layer `ContextGraphService`).
-- **CDC temps réel Supabase Realtime** sur `agent_action_log` pour ingest streaming (vs batch nightly). Trigger : besoin d'orchestrateur réactif sur events temps réel (cohérent open decision *"Interaction model event-driven Phase 4-5"* — futur ADR-0009).
+- **CDC temps réel Supabase Realtime** sur `agent_action_log` pour ingest streaming (vs batch nightly). Trigger : besoin d'orchestrateur réactif sur events temps réel (cohérent open decision *"Interaction model event-driven Phase 4-5"* — futur ADR-0013, corrigé 20/07/2026).
 - **Cypher arbitraire exposé MCP** : Phase 5 si query types whitelist (D6) atteint > 30 et bloque cas d'usage légitime orchestrateur. Gated par sandbox query limits + cost budget per call.
 
 ---
@@ -676,7 +676,7 @@ Mention possibility (pas décision) :
 | OQ1 | RLS native Apache AGE arrive-t-il Phase 5 ? Si oui, retirer mitigation `_inject_tenant_filter` ? | Monitoring releases AGE quarterly |
 | OQ2 | Cypher arbitraire exposé MCP scope `graph:query_advanced` réservé orchestrateur seulement (pas third-party) ? | Phase 5 si query types whitelist > 30 |
 | OQ3 | Causal scoring sur `CAUSED` edges = post-hoc Bayesian (placeholder Phase 4) → vraie causal inference Phase 5 (DoWhy / EconML) ? | Demand pilot data scientist |
-| OQ4 | Backfill streaming vs batch — CDC Supabase Realtime sur `agent_action_log` Phase 5 si réactif requis | Open decision *"Interaction model event-driven"* future ADR-0009 |
+| OQ4 | Backfill streaming vs batch — CDC Supabase Realtime sur `agent_action_log` Phase 5 si réactif requis | Open decision *"Interaction model event-driven"* future ADR-0013 (corrigé 20/07/2026) |
 | OQ5 | Suppression de nodes obsolètes (decay : `Outcome` > 3 ans pertinent encore ?) | Phase 5 si graph croît trop |
 
 ---
@@ -876,7 +876,7 @@ Pas de `GRAPH_DATABASE_URL` séparé (Path A). Pas de `GRAPH_FDW_ENABLED` (Path 
 ### Sessions BMad à enchaîner
 
 - [ ] **Session SM (Bob)** — créer **12 stories Linear Phase 4** : 6 stories POS (`HOS-POS-1`→`HOS-POS-6` via ADR-0006) + 6 stories GRAPH (`HOS-GRAPH-1`→`HOS-GRAPH-6` via ADR-0008 amendé Path C §13.8). Sequencing : POS sem 1-4, GRAPH sem 5-11 (graph dépend cohort features v2 P4-POS-5).
-- [ ] **Session Architect — ADR-0009 event-driven interaction model** — dernière open decision §Actives 04/06 non-tranchée. Logique enchaîner maintenant (cohérence cross-ADR : POS webhook + graphe CDC mentionnés OQ4 ADR-0008). Effort estimé : ~1.5-2h session Opus.
+- [ ] **Session Architect — ADR-0013 event-driven interaction model** (numéro corrigé 20/07/2026 — était référencé ADR-0009 par erreur, déjà pris par runtime guardrails) — dernière open decision §Actives 04/06 non-tranchée. Logique enchaîner maintenant (cohérence cross-ADR : POS webhook + graphe CDC mentionnés OQ4 ADR-0008). Effort estimé : ~1.5-2h session Opus.
 - [ ] **Session Analyst (Mary) — REX article Track B** : *"Building a context graph on Apache AGE + pgvector — knowledge extraction without the bottleneck"*. Draft **post P4-GRAPH-1/2/3 shippés** (pas avant code). Asset Phase 4 Track B Décision #18 portfolio reinforcement.
 
 ### Hygiène repo (rapide)
