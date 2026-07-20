@@ -19,6 +19,7 @@
 | H-7 | Federated by design — your hotel inherits the cohort's operational wisdom from Day 1, your raw data stays in your tenant. | Hive Memory Federated narrative — counter Meuze.ai's live federated claim (announced Phase 3, shipped Phase 4) |
 | H-8 | OtelAI manages 6 departments. Aetherix masters one — F&B. When 30-45% of operating costs depend on a single forecast, specialist beats generalist. | Anti multi-department generalist platforms (OtelAI, TH1.ai, Venli, AeroGuest) — vertical depth > horizontal breadth on operational decisions |
 | H-9 | PMS vendors are racing to become the decisioning layer. We bet F&B decisioning is too deep a discipline for any of them to build as a side feature — local incumbent or global platform. | Vs the "record vs learn" PMS consolidation thesis (Christian H., LinkedIn 06/2026) — extends H-8 one level up: vs PMS-level learning layers, not just F&B startups |
+| H-10 | Knowing that a cancellation wave, a noisy room, and a falling forecast confidence belong together, for this property, right now, takes an ontology. | Signal model framing (ADR-0012, repo privé — vocabulaire/mécanismes non exposés ici). Détaché de H-7 (Hive/federated) — axe différent : composition locale temps réel, pas apprentissage cross-hôtels |
 
 ## Human-AI collaboration framing — "Tandem bike" (Murati frame)
 
