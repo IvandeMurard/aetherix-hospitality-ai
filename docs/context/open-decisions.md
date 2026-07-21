@@ -177,7 +177,7 @@
 ### Interaction model — event-driven Phase 4-5 (04/06/2026)
 
 **Statut :** Open — pas urgent
-**Trigger :** Brief ADR-0009 futur
+**Trigger :** Brief ADR-0013 futur (réservé — corrigé 20/07/2026 : ADR-0009 déjà pris par runtime guardrails, Décision #27 ; ADR-0012 par le Signal Contract, Décision #31)
 **Origine :** Challenge Mira Murati (Thinking Machines, *"tandem bike"* + *"time-based interaction"*) → Aetherix actuel = fondamentalement turn-based (cron daily + reply WhatsApp batch).
 **Reframing PM Ivan 04/06 :** Pour notre cas (PMS-data anticipation, pas conversation continue) **event-driven > time-based**.
 

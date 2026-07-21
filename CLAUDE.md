@@ -96,7 +96,7 @@
 | 🟡 Open | Pricing model (HOS-179 P3-5) | Post-90j data pilote |
 | 🟡 Open | Apaleo Copilot scope F&B (canari) | Monitoring mensuel via watchlist |
 | 🟡 Open | Food waste tracking | À trancher Phase 4 vs Phase 5 |
-| 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0009 futur |
+| 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0013 futur (réservé — corrigé, ADR-0009 déjà pris par runtime guardrails) |
 | 🟡 Open | Politique exploration éthique (Anima / Learning Engine) | Design Learning Engine Phase 5 |
 | 🟡 Open | Reward multi-objectif (CSAT vs marge vs fidélisation) | Design Learning Engine Phase 5 |
 | 🟡 Open | Méthode off-policy evaluation (IPW / DR / DR-Learner) | Volume données post-pilote Phase 4 |
