@@ -53,6 +53,15 @@ for _stream in (sys.stdout, sys.stderr):
 # D1 — harness files expected to hold identical content. The first is canonical.
 HARNESS_FILES = ["CLAUDE.md", "AGENTS.md"]
 
+# D1 — lines allowed to differ between harnesses, as regex → justification.
+# Symmetric with PLANNED_PATHS: a divergence is acceptable only if it is written
+# down and justified. Without this, the first legitimate harness-specific
+# instruction (Claude Code skills vs Codex conventions) would make D1 shout with
+# no way to acknowledge it — and a linter nobody can silence gets deleted.
+# An entry matching nothing is reported in turn: a stale exception is an
+# unkept promise, same rule as PLANNED_PATHS.
+HARNESS_EXCEPTIONS: dict[str, str] = {}
+
 # D2 — docs scanned for backticked repo paths, and the prefixes that mark a
 # token as a repo path (anything else is prose, a URL, or an absolute path).
 DOC_SOURCES = [
@@ -117,6 +126,41 @@ def _read(rel: str) -> str | None:
 # ─── D1 · Harness drift ───────────────────────────────────────────────────────
 
 
+def _missing_harness(name: str) -> Finding:
+    """A declared harness file that is not on disk.
+
+    This is drift, never a skip. `AGENTS.md` untracked meant CI checked out a
+    repo without it, D1 bailed silently, and the report printed "✅ clean" for a
+    detector that never ran — a false negative on the detector that justifies
+    this story. A detector that loses its target must shout, not go quiet.
+    """
+    return Finding(
+        detector="D1",
+        title=f"Fichier harness déclaré mais introuvable : `{name}`",
+        detail=f"`{name}` figure dans `HARNESS_FILES` mais n'est pas sur le disque — "
+        "typiquement un fichier untracked que `actions/checkout` ne récupère pas. "
+        "Le détecteur n'a donc rien pu comparer : ce résultat n'est pas « clean », il est aveugle. "
+        "Soit committer le fichier, soit le retirer de `HARNESS_FILES`.",
+    )
+
+
+def _apply_exceptions(text: str, used: set[str]) -> list[str]:
+    """Drop lines covered by HARNESS_EXCEPTIONS, recording which ones matched."""
+    lines = text.splitlines()
+    if not HARNESS_EXCEPTIONS:
+        return lines
+
+    kept = []
+    for line in lines:
+        for pattern in HARNESS_EXCEPTIONS:
+            if re.search(pattern, line):
+                used.add(pattern)
+                break
+        else:
+            kept.append(line)
+    return kept
+
+
 def detect_harness_drift(result: Result) -> None:
     """CLAUDE.md and AGENTS.md must carry identical content.
 
@@ -128,13 +172,15 @@ def detect_harness_drift(result: Result) -> None:
     canonical, *others = HARNESS_FILES
     base = _read(canonical)
     if base is None:
-        result.skipped.append(f"D1: {canonical} introuvable")
+        result.findings.append(_missing_harness(canonical))
         return
+
+    used_exceptions: set[str] = set()
 
     for other in others:
         text = _read(other)
         if text is None:
-            result.skipped.append(f"D1: {other} introuvable")
+            result.findings.append(_missing_harness(other))
             continue
 
         # Normalise the one difference that is by design: the file's own name.
@@ -142,10 +188,14 @@ def detect_harness_drift(result: Result) -> None:
         if normalised == base:
             continue
 
+        left, right = _apply_exceptions(base, used_exceptions), _apply_exceptions(normalised, used_exceptions)
+        if left == right:
+            continue
+
         diff = list(
             difflib.unified_diff(
-                base.splitlines(),
-                normalised.splitlines(),
+                left,
+                right,
                 fromfile=canonical,
                 tofile=other,
                 lineterm="",
@@ -158,6 +208,17 @@ def detect_harness_drift(result: Result) -> None:
                 detector="D1",
                 title=f"{other} diverge de {canonical} ({changed} lignes)",
                 detail="```diff\n" + "\n".join(diff) + "\n```",
+            )
+        )
+
+    for pattern in sorted(set(HARNESS_EXCEPTIONS) - used_exceptions):
+        result.findings.append(
+            Finding(
+                detector="D1",
+                title=f"Exception harness périmée : `{pattern}`",
+                detail=f"Justifiée par « {HARNESS_EXCEPTIONS[pattern]} », mais ne correspond plus à aucune ligne. "
+                "La divergence a disparu — retirer l'entrée de `HARNESS_EXCEPTIONS`.",
+                severity="info",
             )
         )
 

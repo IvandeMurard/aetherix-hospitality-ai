@@ -63,14 +63,69 @@ def test_d1_detects_corrupted_find_replace(fake_repo):
     assert "Codex-sonnet-4-6" in result.drift[0].detail
 
 
-def test_d1_skips_when_a_harness_file_is_absent(fake_repo):
+def test_d1_missing_harness_file_is_drift_not_skip(fake_repo):
+    """The CI false negative: AGENTS.md untracked made D1 report "clean"."""
     _write(fake_repo, "CLAUDE.md", "# CLAUDE.md\n")
 
     result = hygiene.Result()
     hygiene.detect_harness_drift(result)
 
+    assert result.skipped == []
+    assert len(result.drift) == 1
+    assert "AGENTS.md" in result.drift[0].title
+    assert "introuvable" in result.drift[0].title
+
+
+def test_d1_missing_canonical_is_drift_too(fake_repo):
+    _write(fake_repo, "AGENTS.md", "# AGENTS.md\n")
+
+    result = hygiene.Result()
+    hygiene.detect_harness_drift(result)
+
+    assert result.skipped == []
+    assert len(result.drift) == 1
+    assert "CLAUDE.md" in result.drift[0].title
+
+
+def test_d1_exception_suppresses_a_justified_divergence(fake_repo, monkeypatch):
+    monkeypatch.setattr(
+        hygiene, "HARNESS_EXCEPTIONS", {r"^\*\*BMad modes\*\*": "conventions propres à chaque harness"}
+    )
+    _write(fake_repo, "CLAUDE.md", "# CLAUDE.md\n\n**BMad modes** — Claude\ncommun\n")
+    _write(fake_repo, "AGENTS.md", "# AGENTS.md\n\n**BMad modes** — Codex\ncommun\n")
+
+    result = hygiene.Result()
+    hygiene.detect_harness_drift(result)
+
     assert result.drift == []
-    assert any("AGENTS.md" in s for s in result.skipped)
+
+
+def test_d1_exception_does_not_mask_other_drift(fake_repo, monkeypatch):
+    monkeypatch.setattr(hygiene, "HARNESS_EXCEPTIONS", {r"^\*\*BMad modes\*\*": "justifié"})
+    _write(fake_repo, "CLAUDE.md", "# CLAUDE.md\n\n**BMad modes** — Claude\nLLM_MODEL claude-sonnet-4-6\n")
+    _write(fake_repo, "AGENTS.md", "# AGENTS.md\n\n**BMad modes** — Codex\nLLM_MODEL Codex-sonnet-4-6\n")
+
+    result = hygiene.Result()
+    hygiene.detect_harness_drift(result)
+
+    assert len(result.drift) == 1
+    assert "Codex-sonnet-4-6" in result.drift[0].detail
+    assert "BMad" not in result.drift[0].detail
+
+
+def test_d1_stale_exception_is_reported(fake_repo, monkeypatch):
+    """An exception matching nothing is an unkept promise — same rule as PLANNED_PATHS."""
+    monkeypatch.setattr(hygiene, "HARNESS_EXCEPTIONS", {r"^ZZZ jamais présent": "obsolète"})
+    body = "# CLAUDE.md\n\ncommun\n"
+    _write(fake_repo, "CLAUDE.md", body)
+    _write(fake_repo, "AGENTS.md", body.replace("CLAUDE.md", "AGENTS.md"))
+
+    result = hygiene.Result()
+    hygiene.detect_harness_drift(result)
+
+    assert result.drift == []
+    assert len(result.info) == 1
+    assert "périmée" in result.info[0].title
 
 
 # ─── D2 · Doc → code ──────────────────────────────────────────────────────────

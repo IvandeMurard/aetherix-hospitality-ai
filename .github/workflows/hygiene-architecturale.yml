@@ -126,7 +126,9 @@ jobs:
             exit 0
           fi
           git commit -m "hygiene: rapport de drift ${{ steps.detect.outputs.date }} [automated]"
-          git push --force origin "hygiene/drift-${{ steps.detect.outputs.date }}"
+          # --force-with-lease, never --force: the PR body invites corrections by
+          # hand in this branch, and a second run the same day must not erase them.
+          git push --force-with-lease origin "hygiene/drift-${{ steps.detect.outputs.date }}"
 
       - name: Open pull request
         if: steps.detect.outputs.drift == 'true' && env.SKIP_PR != 'true'
