@@ -1,0 +1,162 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Hygiène architecturale — HOS-320 (Story 16.18)
+#
+# Weekly static drift detection between what the repo *says* and what it *is*.
+# Opens a documentation-only PR when drift is found; a human merges it.
+#
+# Why documentation-only: this agent must never become a path by which an
+# automated process edits code, the eval dataset, or its own workflow. The
+# `guardrail` step below enforces that mechanically, not by convention —
+# `eval/golden_dataset.jsonl` is what gates merges (Décision #29), so an agent
+# that could write to it would be able to unlock its own changes.
+#
+# No secrets are needed: all four detectors are static (no network, no runtime).
+#
+# Manual run:
+#   Actions → Hygiène architecturale → Run workflow
+#   Set `guardrail_selftest: true` to prove the guardrail blocks an out-of-scope
+#   diff (HOS-320 DoD) — the job is then expected to FAIL.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Hygiène architecturale
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"   # Monday 09:00 UTC — after Veille Hebdomadaire (07:30)
+  workflow_dispatch:
+    inputs:
+      guardrail_selftest:
+        description: "Stage un fichier hors périmètre pour prouver que le garde-fou bloque (le job doit ÉCHOUER)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  detect:
+    name: "Détection de drift"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # No dependencies to install — the detectors are stdlib only.
+      - name: Run hygiene detectors
+        id: detect
+        run: |
+          DATE=$(date -u +"%Y-%m-%d")
+          REPORT="docs/testing/evidence/hygiene/report-${DATE}.md"
+          echo "date=$DATE"     >> "$GITHUB_OUTPUT"
+          echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+
+          set +e
+          python scripts/ops/hygiene_architecturale.py --report "$REPORT"
+          CODE=$?
+          set -e
+
+          case "$CODE" in
+            0) echo "✅ Aucun drift détecté."; echo "drift=false" >> "$GITHUB_OUTPUT" ;;
+            1) echo "⚠️  Drift détecté.";       echo "drift=true"  >> "$GITHUB_OUTPUT" ;;
+            *) echo "❌ Erreur du détecteur (exit $CODE)."; exit "$CODE" ;;
+          esac
+
+      - name: Print report
+        run: cat "${{ steps.detect.outputs.report }}"
+
+      # AC6 — a clean run produces nothing. No empty PR, no noise.
+      - name: No drift — stop here
+        if: steps.detect.outputs.drift == 'false'
+        run: echo "ℹ️  Rien à signaler, aucune PR ouverte."
+
+      - name: Stage report
+        if: steps.detect.outputs.drift == 'true'
+        run: |
+          git config user.name  "aetherix-hygiene[bot]"
+          git config user.email "aetherix-hygiene[bot]@users.noreply.github.com"
+          git checkout -B "hygiene/drift-${{ steps.detect.outputs.date }}"
+          git add "${{ steps.detect.outputs.report }}"
+
+          if [ "${{ github.event.inputs.guardrail_selftest }}" = "true" ]; then
+            echo "# selftest — ce fichier doit faire échouer le garde-fou" >> backend/app/__init__.py
+            git add backend/app/__init__.py
+            echo "🧪 Self-test : un fichier hors périmètre a été mis en index volontairement."
+          fi
+
+      # AC5 — the diff may only touch documentation. Enforced here so that no
+      # future edit to the script can widen the blast radius.
+      - name: Guardrail — documentation-only diff
+        if: steps.detect.outputs.drift == 'true'
+        run: |
+          FORBIDDEN=0
+          while IFS= read -r file; do
+            case "$file" in
+              docs/*|CLAUDE.md|AGENTS.md)
+                echo "  ✅ $file" ;;
+              *)
+                echo "  ❌ $file — hors périmètre documentaire"
+                FORBIDDEN=1 ;;
+            esac
+          done < <(git diff --cached --name-only)
+
+          if [ "$FORBIDDEN" -eq 1 ]; then
+            echo ""
+            echo "❌ Garde-fou déclenché : cette PR modifierait autre chose que de la documentation."
+            echo "   Périmètre autorisé : docs/**, CLAUDE.md, AGENTS.md."
+            echo "   Interdits par construction : backend/**, eval/**, scripts/**, .github/**."
+            exit 1
+          fi
+          echo "✅ Garde-fou franchi : diff documentaire uniquement."
+
+      - name: Commit and push
+        if: steps.detect.outputs.drift == 'true'
+        run: |
+          if git diff --cached --quiet; then
+            echo "ℹ️  Rapport identique au précédent — rien à committer."
+            echo "SKIP_PR=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          git commit -m "hygiene: rapport de drift ${{ steps.detect.outputs.date }} [automated]"
+          git push --force origin "hygiene/drift-${{ steps.detect.outputs.date }}"
+
+      - name: Open pull request
+        if: steps.detect.outputs.drift == 'true' && env.SKIP_PR != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="hygiene/drift-${{ steps.detect.outputs.date }}"
+
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            echo "ℹ️  PR déjà ouverte pour $BRANCH — rapport mis à jour par le push."
+            exit 0
+          fi
+
+          {
+            echo "Rapport automatique de l'agent d'hygiène architecturale (HOS-320, Story 16.18)."
+            echo
+            echo "**Cette PR n'applique aucune correction** — elle ajoute le rapport de drift."
+            echo "Les corrections sont à faire à la main dans cette branche, après lecture."
+            echo
+            echo "- Détecteurs statiques uniquement : pas de réseau, pas de secret, pas d'accès runtime."
+            echo "- Aucune écriture dans \`eval/golden_dataset.jsonl\` : le dataset garde le merge"
+            echo "  (Décision #29), l'agent ne doit pas pouvoir le modifier."
+            echo "- Périmètre du diff verrouillé par le garde-fou du workflow : \`docs/**\`, \`CLAUDE.md\`, \`AGENTS.md\`."
+            echo
+            echo "Les findings \`D4\` sont des **propositions** de scénarios eval, à rédiger par un humain."
+          } > /tmp/pr-body.md
+
+          gh pr create \
+            --base "${{ github.ref_name }}" \
+            --head "$BRANCH" \
+            --title "hygiene: drift architectural ${{ steps.detect.outputs.date }}" \
+            --label "eval-exempt" \
+            --body-file /tmp/pr-body.md
