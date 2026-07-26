@@ -154,6 +154,30 @@ def test_d2_accepts_existing_path_and_ignores_prose(fake_repo, monkeypatch):
     assert result.findings == []
 
 
+def test_d2_resolves_paths_carrying_line_anchors(fake_repo, monkeypatch):
+    """`file.py:128` and `file.py:128,141` are ordinary citation forms."""
+    monkeypatch.setattr(hygiene, "DOC_SOURCES", ["CLAUDE.md"])
+    _write(fake_repo, "backend/app/core/config.py", "x")
+    _write(fake_repo, "CLAUDE.md", "Voir `backend/app/core/config.py:128,141` et `backend/app/core/config.py:12`.")
+
+    result = hygiene.Result()
+    hygiene.detect_doc_paths(result)
+
+    assert result.findings == []
+
+
+def test_d2_line_anchor_on_missing_file_still_flags(fake_repo, monkeypatch):
+    monkeypatch.setattr(hygiene, "DOC_SOURCES", ["CLAUDE.md"])
+    monkeypatch.setattr(hygiene, "PLANNED_PATHS", {})
+    _write(fake_repo, "CLAUDE.md", "Voir `backend/app/ghost.py:42`.")
+
+    result = hygiene.Result()
+    hygiene.detect_doc_paths(result)
+
+    assert len(result.drift) == 1
+    assert "backend/app/ghost.py" in result.drift[0].title
+
+
 def test_d2_ignores_glob_patterns(fake_repo, monkeypatch):
     monkeypatch.setattr(hygiene, "DOC_SOURCES", ["CLAUDE.md"])
     _write(fake_repo, "CLAUDE.md", "Gates dans `scripts/eval/*.py` et `docs/adr/000X-*.md`.")

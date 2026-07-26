@@ -46,7 +46,7 @@
 - Communications product Apaleo mentionnant "covers" / "staffing prediction" / "F&B forecasting"
 
 **Mitigation activée 06-08 :**
-- ✅ Audit fonctionnel Copilot via session SM Linear story flaggée (livrable `docs/competitive/apaleo-copilot-functional-audit.md` + reco scope MCP v1 différenciateur)
+- ⏳ Audit fonctionnel Copilot via session SM Linear story flaggée — **story créée, livrable non écrit** : `docs/competitive/apaleo-copilot-functional-audit.md` n'existe pas (cohérent avec `docs/context/monitoring-watchlist.md` §58 « à créer »). Le ✅ précédent surclamait une livraison ; corrigé après détection par l'agent d'hygiène (HOS-320, D2). Base d'évidence réellement disponible : `docs/competitive/apaleo-mcp-mapping.md` (HOS-197).
 - (a) Shipper pilote HOS-176 Phase 3 avant Q4 2026 — déjà roadmap
 - (b) Outreach Apaleo Marketplace pour position de complément (pas concurrent) — à confirmer
 - (c) Accélérer Aetherix MCP v1 (`get_operational_predictions` = primitive prédictive F&B absente des 235 tools Apaleo natifs, différenciateur défensif identifié HOS-197)
@@ -281,7 +281,9 @@ Swap *"LLM persona generation"* → **cold-start meta-learner** ACCEPTÉ dans HO
 - Blending Bayesian model averaging (`n_eff_prior=30`, hard cutoff J+90)
 - Gate runtime auto-disable si Day-7 MAPE > 25%
 
-Nouvelle table `hotel_cohort_features` (coefficients agrégés, opt-in tenant). MCP tool `query_cohort_prior` ajouté. Validation pré-pilote : LOO sur 5 sandbox properties. LLM persona déplacé Phase 4. Détail → `docs/adr/0005-cold-start-meta-learner.md`. Action SM : amender HOS-174 (P3-7 amend + P3-7b/7c new, +8 pts).
+Nouvelle table `hotel_cohort_features` (coefficients agrégés, opt-in tenant). MCP tool `query_cohort_prior` ajouté. Validation pré-pilote : LOO sur 5 sandbox properties. LLM persona déplacé Phase 4. Action SM : amender HOS-174 (P3-7 amend + P3-7b/7c new, +8 pts).
+
+> ⚠️ **ADR-0005 n'a jamais été écrit.** Le numéro est réservé (`docs/adr/` saute de 0004 à 0006) et le détail de la décision vit uniquement dans cette entrée. Or `backend/app/core/config.py:128,141` et `backend/app/services/forecast_guardrail.py:3,17,47` citent « ADR-0005 » comme référence normative pour du code livré, et `docs/adr/0006-pos-integration.md` construit dessus (§D4 : `hotel_cohort_features` → v2). Décision référencée par du code en production sans ADR correspondant — détecté par l'agent d'hygiène (HOS-320, D2).
 
 ### [x] PMS priorité live — RÉSOLU 17/05/2026
 

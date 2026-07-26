@@ -71,16 +71,17 @@ DOC_SOURCES = [
 ]
 PATH_PREFIXES = ("backend/", "scripts/", "docs/", "eval/", ".github/", "tools/")
 
-# D2 — paths the docs cite on purpose for code that is not built yet. Keeping
-# this register explicit is the point: it separates "the doc is stale" (a bug)
-# from "the doc describes unbuilt code" (a known, dated intention). An entry
-# here is a promise — when the code lands, the entry goes.
+# D2 — paths the docs cite on purpose for something not written yet, code or
+# document. Keeping this register explicit is the point: it separates "the doc
+# is stale" (a bug) from "the doc describes an unbuilt thing" (a known, dated
+# intention). An entry here is a promise — when it lands, the entry goes.
 PLANNED_PATHS = {
     "backend/app/models/graph/": "Graphe de contexte — Décision #24 / ADR-0008, Phase 4",
     "backend/app/services/context_graph_service.py": "Graphe de contexte — Décision #24 / ADR-0008, Phase 4",
     "backend/app/services/context_graph_queries/": "Graphe de contexte — Décision #24 / ADR-0008, Phase 4",
     "backend/app/providers/pos/": "POS ingestion — Décision #23 / ADR-0006, Phase 4",
     "backend/app/providers/pms/base.py": "PMS canonical schema — Décision #28 / ADR-0006 amendé, Phase 4",
+    "docs/competitive/apaleo-copilot-functional-audit.md": "Audit Copilot — watchlist Apaleo, story SM créée, livrable non écrit",
 }
 
 # D3 — env var declarations.
@@ -226,6 +227,7 @@ def detect_harness_drift(result: Result) -> None:
 # ─── D2 · Doc → code ──────────────────────────────────────────────────────────
 
 _BACKTICKED = re.compile(r"`([^`\s]+)`")
+_LINE_ANCHOR = re.compile(r":\d+(?:[,-]\d+)*$")
 
 
 def detect_doc_paths(result: Result) -> None:
@@ -247,6 +249,9 @@ def detect_doc_paths(result: Result) -> None:
                 continue
             # Strip trailing punctuation the prose may have glued on.
             candidate = token.rstrip(".,;:)")
+            # `file.py:128` and `file.py:128,141` are ordinary citation forms —
+            # resolve the file, ignore the line anchors.
+            candidate = _LINE_ANCHOR.sub("", candidate)
             target = _ROOT / candidate
             if target.exists():
                 continue

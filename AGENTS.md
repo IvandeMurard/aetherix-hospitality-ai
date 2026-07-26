@@ -22,7 +22,7 @@
 | Base de données | Supabase (PostgreSQL) | Auth, real-time |
 | Vecteurs | pgvector (Supabase) | `fb_patterns` + `operational_memory`, Mistral 1024d, HNSW |
 | Cache | Redis (Upstash) | Session state, TTL 1h |
-| IA principale | Codex Sonnet | Reasoning + explainability. Multi-LLM via `LLMProvider` (Décision #9) |
+| IA principale | Claude Sonnet | Reasoning + explainability. Multi-LLM via `LLMProvider` (Décision #9) |
 | Forecast | Prophet (Meta) | Time-series covers + regressors (météo, events, occupancy) |
 | Frontend | Next.js (App Router) + shadcn/ui | Thin — vérification uniquement |
 | Alertes | WhatsApp via Twilio | Push-first, UI-less |
@@ -38,7 +38,7 @@
 
 | # | Décision | Date |
 |---|---|---|
-| 1 | Codex Sonnet > Mistral/GPT | — |
+| 1 | Claude Sonnet > Mistral/GPT | — |
 | 2 | Architecture mémoire 2 couches (Private + Hive) | — |
 | 3 | pgvector > Qdrant > Pinecone | — |
 | 4 | Voice opt-in (pas voice-first) | — |
@@ -62,12 +62,12 @@
 | 22 | Eval-by-design = offline gate CI + runtime eval + outcome eval (Qonto + BMad ; portée élargie 3 bras, amendé 19/06 ADR-0007 §13) | 04/06/2026 |
 | 23 | POS integration scope + adapter pattern (Phase 4) | 06/06/2026 |
 | 24 | Graphe de contexte Postgres recursive CTE (Phase 4) — Path C retenu cash-driven, AGE bloqué Supabase | 06/06/2026 |
-| 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — **exécuté 07/07/2026** (déclencheur pré-candidatures) : méta-repo public [`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) livré, Aetherix reste privé, cross-link tacet-app. ADR-0012 jamais migré (Décision #31) | 16/06/2026 |
+| 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — **exécuté 07/07/2026** (déclencheur pré-candidatures) : méta-repo public [`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) livré et vérifié (public, README propre, 0 fuite ADR-0012/Signal Contract), Aetherix reste privé, cross-link tacet-app. ADR-0012 jamais migré (Décision #31). **⚠️ Vérifié 21/07/2026 : lien case study ivandemurard.com/aetherix pointe encore vers le repo privé `aetherix-hospitality-ai` → 404 confirmé pour visiteur externe, pas encore reciblé vers le méta-repo (HOS-305 AC4 non clos)** | 16/06/2026 |
 | 26 | Anima = Guest Cognition Layer · confidence-weighted claims (schema, pas couche) · Segment double portée (local + Hive prior) · Learning Engine tier Mesh séparé · outcome-capture instrumentation Phase 4 | 17/06/2026 |
 | 27 | Phase de mise en conformité (Epic 12 — runtime guardrails post-audit) **clôturée** : G-1→G-5 livrés (heartbeat/dead-man's switch, alerting error-rate/timeout, bornes feedback→training, circuit-breaker forecast tiered-confidence, bornes sanity outputs) + 6 findings QA-S4 ; G-6 prompt-injection **différé Phase 4**. Invariant : tout trip guardrail loggé avec raison typée (NFR2). Pattern = **ADR-0009** ; frontière runtime (Bras B) vs offline-eval (Bras A) = ADR-0007 §13 ; audit clôturé `docs/context/security-review-2026-05-01.md` | 20/06/2026 |
 | 28 | PMS canonical schema — jurisprudence Provider (#9/#10) étendue aux adapters PMS, amendement **ADR-0006** | 23/06/2026 |
 | 29 | Eval-gate EVAL-1 passé **WARN→blocking** (HOS-274) : exit 1/2 bloque le merge, exit 3 (WARN) reste non-bloquant. Précondition prouvée par canari CI (PR #185) — Prophet-in-CI **déterministe** : 3 runs, MAPE 25.40 % identique, 0 régression, variance 0.00pp vs baseline re-figée (PR #175). Frontière paths (doivent porter couverture vs runtime-guardrails Bras B légitimement exempts) = **ADR-0007 §D2.g**. Rollback = `EVAL_GATE_BLOCKING="false"` | 04/07/2026 |
-| 30 | Audit différentiel pré-pilote 2026-Q2 (HOS-277) **CLOSED** : NO-GO levé → **GO conditionnel** (sandbox Apaleo + dataset non-PII). Q2-01 (fuite `.env.fly`) → repo PRIVATE + historique purgé (filter-repo) + rotation 11/11 clés (résidu `refs/pull/*` → ticket Support, non-bloquant) ; Q2-02 AsyncSession (HOS-288) + Q2-03 PII WhatsApp (HOS-289) corrigés (PR #187). Doc = `docs/context/security-review-2026-Q2.md` (bannière CLOSED) | 04/07/2026 |
+| 30 | Audit différentiel pré-pilote 2026-Q2 (HOS-277) **CLOSED** : NO-GO levé → **GO conditionnel** (sandbox Apaleo + dataset non-PII). Q2-01 (fuite `.env.fly`) → repo PRIVATE + historique purgé (filter-repo) + rotation 11/11 clés ; **résidu `refs/pull/*` clos 22/07/2026** (HOS-304 : ticket GitHub Support, 32 PRs déréférencées, commit `7070837` non résolvable — 422 confirmé) ; Q2-02 AsyncSession (HOS-288) + Q2-03 PII WhatsApp (HOS-289) corrigés (PR #187). Doc = `docs/context/security-review-2026-Q2.md` (bannière CLOSED) | 04/07/2026 |
 | 31 | Hospitality Agentic Mesh Signal Contract (**ADR-0012**) : `DomainSignal` namespaced par bounded context nœud (`environmental.*` Tacet, `guest.*` Anima, `fnb.*` Aetherix, `operational.*`/`orchestrator.*` Orchestrateur) · `SignalComposite` = perception cross-domaine, jamais de champ actionable (frontière décision protégée, ADR-0004 D5) · `CollectivePattern` = alias `fb_patterns`/Hive prior Anima · calibration à 3 niveaux (cohorte Hive / apprentissage local / override manager) · pas de `decay_rate` sur Signal (réservé ADR-0011 D2) · gel terminologique post-acceptation · **exception explicite Décision #25/ADR-0010 Q2 : reste privé, ne migre jamais vers le méta-repo public malgré le critère cross-cutting** | 06/07/2026 |
 
 ---
@@ -96,7 +96,7 @@
 | 🟡 Open | Pricing model (HOS-179 P3-5) | Post-90j data pilote |
 | 🟡 Open | Apaleo Copilot scope F&B (canari) | Monitoring mensuel via watchlist |
 | 🟡 Open | Food waste tracking | À trancher Phase 4 vs Phase 5 |
-| 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0009 futur |
+| 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0013 futur (réservé — corrigé, ADR-0009 déjà pris par runtime guardrails) |
 | 🟡 Open | Politique exploration éthique (Anima / Learning Engine) | Design Learning Engine Phase 5 |
 | 🟡 Open | Reward multi-objectif (CSAT vs marge vs fidélisation) | Design Learning Engine Phase 5 |
 | 🟡 Open | Méthode off-policy evaluation (IPW / DR / DR-Learner) | Volume données post-pilote Phase 4 |
@@ -120,7 +120,7 @@ Trois niveaux de mesure de la valeur. **Principe de stickiness :** publiés acti
 ## Fichiers clés
 
 ```
-backend/app/providers/    — abstraction LLM + Embedding (Codex, mistral, gemini, fallback)
+backend/app/providers/    — abstraction LLM + Embedding (claude, mistral, gemini, fallback)
 backend/app/services/     — exécution F&B (forecast, staffing, memory, receipts) — pas d'orchestration (ADR-0004)
 backend/app/integrations/ — Obsidian, Linear, Apaleo, Twilio, SendGrid
 backend/app/mcp_server.py — MCP Server v0 (HOS-71, PR #73) — tools atomiques uniquement
@@ -138,7 +138,7 @@ scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian,
 ## Variables d'environnement
 
 ```
-ANTHROPIC_API_KEY     — Codex API
+ANTHROPIC_API_KEY     — Claude API
 LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
 LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad
 OBSIDIAN_VAULT_PATH   — C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitality
@@ -149,8 +149,8 @@ SUPABASE_URL          — PostgreSQL + pgvector
 SUPABASE_KEY          — Anon key
 DATABASE_URL          — asyncpg DSN
 MISTRAL_API_KEY       — Embeddings 1024d (mistral-embed)
-LLM_BACKEND           — "Codex" (défaut) | "gemini" | "openai"
-LLM_MODEL             — "Codex-sonnet-4-6" (défaut)
+LLM_BACKEND           — "claude" (défaut) | "gemini" | "openai"
+LLM_MODEL             — "claude-sonnet-4-6" (défaut)
 EMBEDDING_BACKEND     — "mistral" (défaut) | "openai"
 EMBEDDING_MODEL       — "mistral-embed" (défaut)
 REDIS_URL             — Upstash (session state)
@@ -163,7 +163,7 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 
 **Linear** — Workspace `Hospitalityagent`, team `2f6bb5e2-d735-4769-9377-11fe186aa0ad`. Conventions Epic/Story → `docs/context/linear-conventions.md`. Verify session : `list_teams` doit retourner "Hospitalityagent".
 
-**Obsidian** — Vault `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality`. MCP : Codex Desktop + Codex. Reports : `AI Reports/Intelligence/`.
+**Obsidian** — Vault `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`.
 
 **BMad modes** — Déclare en début de conversation. Veille · SM (Bob) · Dev (Amelia) · Architect (Winston) · PM · Analyst (Mary) · QA · Tech Writer. Files in `tools/bmad/_bmad/bmm/agents/`.
 
@@ -175,7 +175,7 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 2. Auditer ce qui existe dans le codebase
 3. Implémenter la story (migration DB, ORM, schemas, service, worker, route)
 4. Tests — CI green
-5. Commit + Push sur la branche désignée (`Codex/<story-suffix>`)
+5. Commit + Push sur la branche désignée (`claude/<story-suffix>`)
 6. Ouvrir une PR contre `main`
 7. Marquer la Linear issue → Done + poster l'URL PR en commentaire
 8. **Eval gate (Décision #22)** : si la story touche `app/services/{forecast,staffing,recommendation,memory,inbound_parser}*`, `app/providers/`, ou les prompts → mettre à jour `eval/golden_dataset.jsonl` avec ≥ 1 scenario + `make eval` green + `scripts/ci/check_eval_coverage.py` validé. Exception via label PR `eval-exempt` (refactor / doc / infra-only).
@@ -191,3 +191,4 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 1. Config env : source de vérité = `backend/.env.example` (le legacy `archive/` + son `.env.example` racine ont été retirés le 10/07/2026, snapshot récupérable via tag `legacy-backend-archive`).
 2. Hébergement staging = Fly.io `cdg` (Décision #17). Dev local Windows pour scripts utilitaires.
 3. Plan actif : **Epic 16 Proof & Visibility (HOS-300)** — 90 j, gel nouveaux ADRs / extension Mesh. Détail `docs/planning/plan-90j-proof-visibility.md` + audit `docs/context/analyse-critique-2026-07.md`.
+4. **Adversarial review externe (GPT, 20/07/2026)** — confirme indépendamment l'audit interne (gel Mesh/Anima/Context Graph/Hive tant que 5 conditions non prouvées : données PMS/POS réelles, horizon de décision réel, forecast > baseline naïve, adoption manager, unit economics). Ajoute 3 stories sous Epic 16 : HOS-316 (protocole de preuve pré-enregistré, à geler avant lecture des résultats HOS-307/308/309), HOS-317 (Decision Ledger — consolidation mémoire/feedback/outcome, pas de nouvelle brique), HOS-318 (gate honnêteté métriques + taxonomie Built/Shadow-mode/Synthetic PoC/Design/Research). Corpus complet + synthèse : `C:\Users\ivand\OneDrive\Documents\aetherix-gpt-review-corpus\` (`07_executive_action_plan.md`, `08_analysis_companion.md`). Non encore arbitré comme Décision architecturale formelle.
