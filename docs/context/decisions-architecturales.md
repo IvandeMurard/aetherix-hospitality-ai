@@ -72,7 +72,7 @@ Invariant **"ORM = miroir exact des migrations"**. Tout merge bloqué si une col
 
 ### 17 — Hébergement Fly.io (14/05/2026)
 
-Backend déployé sur Fly.io, région `cdg` (Paris). 1 instance always-on (`min_machines_running=1`) — requis par APScheduler in-process. Image Docker Python 3.12 + uv multi-stage. Secrets via `flyctl secrets set` (jamais commités). Latence Paris ↔ Supabase Stockholm ~30ms (acceptable Phase 0). URL staging : `https://aetherix-backend.fly.dev`. Détail déploiement : `docs/secrets_handling.md`. Remplace l'ancienne contrainte *"local Windows / GitHub uniquement"*.
+Backend déployé sur Fly.io, région `cdg` (Paris). 1 instance always-on (`min_machines_running=1`) — requis par APScheduler in-process. Image Docker Python 3.12 + uv multi-stage. Secrets via `flyctl secrets set` (jamais commités). Latence Paris ↔ Supabase Stockholm ~30ms (acceptable Phase 0). URL staging : `https://aetherix-backend.fly.dev`. Détail déploiement : `docs/SECURITY/secrets_handling.md`. Remplace l'ancienne contrainte *"local Windows / GitHub uniquement"*.
 
 ### 18 — Phase 3 cut serré + portfolio reinforcement (17/05/2026)
 
