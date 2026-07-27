@@ -156,9 +156,28 @@ jobs:
             echo "Les findings \`D4\` sont des **propositions** de scénarios eval, à rédiger par un humain."
           } > /tmp/pr-body.md
 
-          gh pr create \
+          # Creating the PR needs "Allow GitHub Actions to create and approve pull
+          # requests" (Settings → Actions → General). Without it `gh pr create`
+          # fails, but the branch and its report are already pushed — the work is
+          # not lost, only the last click. Failing the job here would show a red X
+          # every week for a settings issue, which trains everyone to ignore the
+          # run. Warn loudly, hand over the one-click link, and exit clean.
+          if ! gh pr create \
             --base "${{ github.ref_name }}" \
             --head "$BRANCH" \
             --title "hygiene: drift architectural ${{ steps.detect.outputs.date }}" \
             --label "eval-exempt" \
             --body-file /tmp/pr-body.md
+          then
+            COMPARE="${{ github.server_url }}/${{ github.repository }}/compare/${{ github.ref_name }}...$BRANCH?expand=1"
+            echo "::warning title=PR non créée::Le rapport est poussé sur $BRANCH mais la PR n'a pas pu être ouverte. Ouvrir ici : $COMPARE"
+            {
+              echo "### ⚠️ Rapport poussé, PR non ouverte"
+              echo
+              echo "Le drift a été détecté et le rapport est commité sur \`$BRANCH\`."
+              echo "L'ouverture automatique de la PR a échoué — vérifier **Settings → Actions → General →"
+              echo "Workflow permissions → « Allow GitHub Actions to create and approve pull requests »**."
+              echo
+              echo "[Ouvrir la PR en un clic]($COMPARE)"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
