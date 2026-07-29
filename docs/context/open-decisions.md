@@ -283,7 +283,9 @@ Swap *"LLM persona generation"* → **cold-start meta-learner** ACCEPTÉ dans HO
 
 Nouvelle table `hotel_cohort_features` (coefficients agrégés, opt-in tenant). MCP tool `query_cohort_prior` ajouté. Validation pré-pilote : LOO sur 5 sandbox properties. LLM persona déplacé Phase 4. Action SM : amender HOS-174 (P3-7 amend + P3-7b/7c new, +8 pts).
 
-> ⚠️ **ADR-0005 n'a jamais été écrit.** Le numéro est réservé (`docs/adr/` saute de 0004 à 0006) et le détail de la décision vit uniquement dans cette entrée. Or `backend/app/core/config.py:128,141` et `backend/app/services/forecast_guardrail.py:3,17,47` citent « ADR-0005 » comme référence normative pour du code livré, et `docs/adr/0006-pos-integration.md` construit dessus (§D4 : `hotel_cohort_features` → v2). Décision référencée par du code en production sans ADR correspondant — détecté par l'agent d'hygiène (HOS-320, D2).
+Détail complet → `docs/adr/0005-cold-start-meta-learner.md` (rédigé rétroactivement le 27/07/2026 — le numéro était réservé depuis le 28/05 mais le fichier n'existait pas, gap détecté par l'agent d'hygiène HOS-320 D2).
+
+> ⚠️ **Statut d'implémentation** : la décision est actée, l'essentiel ne l'est pas. Seul le principe « dégrader, ne pas éteindre » (D6) est en production, généralisé par Epic 12 G-4. La table `hotel_cohort_features` et le tool `query_cohort_prior` **n'existent pas dans le code**, et la validation LOO n'a pas eu lieu — alors que `docs/adr/0006-pos-integration.md` §1.2 les évoque au présent. Voir ADR-0005 §0.
 
 ### [x] PMS priorité live — RÉSOLU 17/05/2026
 
