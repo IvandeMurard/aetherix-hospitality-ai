@@ -35,6 +35,7 @@
 
 ## 🗺️ Planning
 - `planning/plan-90j-proof-visibility.md` — **plan actif (Epic 16, HOS-300)** : preuve empirique + visibilité, juil.→oct. 2026, phases A→E + draft ticket GitHub Support
+- `planning/protocole-de-preuve.md` — **protocole de preuve pré-enregistré (HOS-316)** : baseline, horizon de décision, métriques, seuils d'arrêt — GELÉ, s'applique à HOS-308/309/312 (HOS-307 hors garantie, §0)
 - `planning/phase-3-pilot-validation.md` · `planning/phase-3-sprint-plan.md` — Phase 3 pilote
 - `planning/pilot-readiness-test-plan.md` — test plan readiness pilote (Epic Pilot-Readiness)
 - `planning/evaluation-by-design.md` — plan d'implémentation eval-by-design (Décision #22, ADR-0007)
