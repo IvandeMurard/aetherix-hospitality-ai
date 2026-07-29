@@ -2,6 +2,7 @@
 
 > **But :** valider les **qualités agentiques** d'Aetherix avant/pendant le pilote design-partner (gate [HOS-176](https://linear.app/hospitalityagent/issue/HOS-176)). Complète la conformité sécurité (audit Q2 CLOSED, `security-review-2026-Q2.md`) et l'eval-by-design (ADR-0007).
 > **Statut :** DRAFT 2026-07-04.
+> **Seuils produit :** ce plan couvre les qualités **système** (bras A/B/C). Les seuils de décision **produit** — baseline, horizon utile, Δ vs baseline, adoption, marge — sont pré-enregistrés et gelés dans [`protocole-de-preuve.md`](protocole-de-preuve.md) (HOS-316). Recouvrement assumé sur #6 (anticipation) et #8 (calibration HITL), tous deux Bras C.
 > **Scope :** 15 capacités. **HORS-scope v1 : l'amélioration continue autonome** (meta-learner HOS-181/192/193 — non construit, différé Phase 4, cf. §Hors-scope).
 
 ---
