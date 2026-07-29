@@ -141,7 +141,7 @@ scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian,
 ANTHROPIC_API_KEY     — Claude API
 LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
 LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad
-OBSIDIAN_VAULT_PATH   — C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitality
+OBSIDIAN_VAULT_PATH   — C:/Users/ivand/OneDrive/Documents/Agentic AI Hospitality
 APALEO_CLIENT_ID      — OAuth2
 APALEO_CLIENT_SECRET  — OAuth2
 COMPOSIO_API_KEY      — Apaleo MCP via Composio (Inventory API uniquement)
@@ -163,7 +163,7 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 
 **Linear** — Workspace `Hospitalityagent`, team `2f6bb5e2-d735-4769-9377-11fe186aa0ad`. Conventions Epic/Story → `docs/context/linear-conventions.md`. Verify session : `list_teams` doit retourner "Hospitalityagent".
 
-**Obsidian** — Vault `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`.
+**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille (10/07/2026) : dossier `Veille/` = source de vérité unique** (hebdo + watchlist + analyses concurrentielles) — plus dans le repo (`docs/veille/`, `docs/context/monitoring-watchlist.md`, `docs/competitive/*` archivés, cf. `docs/INDEX.md`).
 
 **BMad modes** — Déclare en début de conversation. Veille · SM (Bob) · Dev (Amelia) · Architect (Winston) · PM · Analyst (Mary) · QA · Tech Writer. Files in `tools/bmad/_bmad/bmm/agents/`.
 
