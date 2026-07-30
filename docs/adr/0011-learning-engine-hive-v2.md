@@ -150,3 +150,13 @@ Le log de `propensity` est non-négociable : l'évaluation off-policy nécessite
 - **Définition multi-objectif du reward** : CSAT vs marge vs fidélisation vs disponibilité opérationnelle — conflit non résolu intentionnellement
 - **Méthode off-policy evaluation** : IPW, doubly-robust, DR-learner — choix Phase 5 selon volume de données
 - **Floor k-anonymat couche Segment** : taille minimum cohorte pour éviter ré-identification individuelle dans les agrégats
+
+---
+
+## Addendum 2026-07-20 — validation externe narratif DPIA/éthique (veille)
+
+> Sources : Edmondo Grassi, "The Remains of the Stay: Memory, Identity, and the Afterlife of the Guest" (Hotel Yearbook 2026) ; EmpathyEyes (empathy-eyes.com). Détail complet : vault Obsidian `Veille/Veille_Regulatory_Governance.md` §WEEK OF JUL 20 et `Veille/Veille_Guest_Experience.md` §WEEK OF JUL 13.
+
+**Renforce D2 (`decay_rate`, confidence-weighted claims)** — Grassi (sociologue, San Raffaele) nomme sans le savoir le risque exact que D2 corrige : l'IA remplace la mémoire humaine du concierge — qui "oublie et pardonne" — par une "tertiary retention" algorithmique qui ne connaît "ni la grâce ni l'oubli", créant une asymétrie où *"the system will know them better than they remember themselves."* `decay_rate` n'est donc pas qu'un paramètre technique de pondération — c'est la réponse architecturale directe à un risque éthique documenté indépendamment : une mémoire qui s'efface/se pondère dans le temps plutôt qu'une rétention parfaite et permanente. Citable tel quel dans tout narratif DPIA formel ou pitch investisseur sur "pourquoi Anima n'est pas de la surveillance" : *"whether to remember is an act of care or an exercise of power"* (Grassi) — Anima choisit le camp du care par construction (D1 garde anti-god-object, D2 decay, D4 store personal-data-free séparé).
+
+**Renforce D5 (reframing du moat)** — EmpathyEyes (smart glasses hôtelier, staff-initiated, retrieval PMS pur, "no biometric data collected or stored") valide en marché que la partie "affichage/retrieval du contexte guest" est déjà bâtie par un tiers, sans couche de cognition propre (pas de confidence-weighted claims, pas d'inférence cohort pour un guest inconnu, pas de mémoire qui apprend). Confirme par la négative que le moat Anima n'est pas "afficher le contexte au bon moment" (commodité, bâtie ailleurs) mais la profondeur cognitive (D2-D4) que ce type de device ne fait pas et pourrait un jour consommer plutôt que concurrencer.
