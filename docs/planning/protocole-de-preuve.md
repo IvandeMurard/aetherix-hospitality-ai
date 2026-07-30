@@ -206,6 +206,10 @@ Un ÉCHEC est un résultat livrable. Il se publie.
 | [HOS-309](https://linear.app/hospitalityagent/issue/HOS-309) Interviews F&B ×5 | Backlog | ✅ Oui | Managers /5 dont une décision bascule (§4.2) |
 | [HOS-312](https://linear.app/hospitalityagent/issue/HOS-312) Unit economics | Backlog | ✅ Oui | Marge brute / propriété (§4.4) |
 
+Chacune des quatre issues porte un commentaire pointant vers ce protocole comme référence de
+succès/échec (HOS-316 AC3, posté le 30/07/2026) — pour HOS-307, ce commentaire renvoie au §0
+(transparence sur le séquençage), pas à un pré-enregistrement.
+
 Articulation avec le reste du dispositif :
 - `docs/planning/pilot-readiness-test-plan.md` — capacités agentiques (bras A/B/C, ADR-0007 §13). Ce
   protocole ne s'y substitue pas : il fixe les seuils **produit**, le test plan couvre les qualités
