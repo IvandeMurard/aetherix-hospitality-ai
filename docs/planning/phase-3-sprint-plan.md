@@ -58,7 +58,7 @@ Epic 16 se clôt à S3 (23/08), soit ~6 semaines avant sa deadline — ce qui li
 | Item | Pts | État |
 |------|----:|------|
 | **HOS-285** audit Apaleo Trace Agent | 2 | ✅ **Livré** → `docs/competitive/apaleo-trace-agent-analysis.md`. Couverture F&B = **NON** (4 sources). Canari W2 **dé-escaladé**, vecteur reformulé. |
-| **V1 — vérifier HOS-113 / HOS-114** | 0 | ⬜ **Non fait** — voir §Risques R1. Reste ouvert, conditionne S4. |
+| **V1 — vérifier HOS-113 / HOS-114** | 0 | ✅ **Fait 30/07** — HOS-114 à délier (G-6 livré, 12 tests verts) ; HOS-113 reste blocker mais réduit à ~2-3 pts. Incertitude « +0 à +8 pts » **résolue**. Voir §Risques R1 / R1b. |
 | _PM parallèle_ | — | **HOS-319** en cours — hors capacité dev |
 
 > **Bonus S0** : HOS-278 a été livré en avance (voir S1).
@@ -103,7 +103,7 @@ Epic 16 se clôt à S3 (23/08), soit ~6 semaines avant sa deadline — ce qui li
 | **HOS-218** EVAL-2 cold-start — abstention Union + propagation orchestrateur | 11 | 2 |
 | **HOS-214** extraction des prompts inline restants | 11 | 2 |
 | **HOS-219** persist parse confidence | 11 | 1 |
-| **HOS-113 / HOS-114** si confirmés blockers en S0 | 7 | **? (+0 à +8)** |
+| **HOS-113** SEC-3 — reliquat : headers de sécurité + rate limit API publique + durcissement CORS prod | 7 | **~2-3** |
 
 > HOS-177 livre **l'instrumentation** ; la *mesure* sur données réelles n'arrive qu'après go-live.
 
@@ -252,7 +252,8 @@ Ce que le décalage préserve en revanche : le recrutement partenaire cesse d'ê
 
 | # | Trigger | Action |
 |---|---------|--------|
-| **R1** | **HOS-113 / HOS-114 confirmés blockers durs de HOS-176** (vérification S0) | Les estimer et les insérer en S4. Chemin critique alourdi de +0 à +8 pts. Si HOS-294 (golden prompt-injection, Done 22/07) couvre l'intention de SEC-4 → délier HOS-114 dans Linear et ne garder que HOS-113. |
+| **R1** | ~~HOS-113 / HOS-114 confirmés blockers durs~~ — **VÉRIFIÉ 30/07, incertitude résolue** | **HOS-114 : à délier de HOS-176.** La défense G-6 est **livrée et verte** — `reasoning_service._build_prompt` clôture le `cognitive_context` non fiable dans `<UNTRUSTED_MANAGER_NOTES>` + cadrage data-only, instruction amplificatrice retirée ; `tests/security/test_prompt_injection.py` = **12 passed** (xfail levés). Couvre AC2 + AC3 de SEC-4 sur la surface réellement exploitable. Restent AC1 (`input_sanitizer.py`), AC4 (audit log), AC5 (dégradation gracieuse) — **durcissement, pas blocker**. **HOS-113 : reste un blocker réel mais réduit (~2-3 pts)** — voir R1b. |
+| **R1b** | **Reliquat SEC-3 à livrer avant go-live** | ✅ CORS configuré (`main.py:201`) mais `allow_methods=["*"]` + `allow_headers=["*"]` avec `allow_credentials=True` → **durcir `CORS_ORIGINS` en prod**. ✅ Rate limiting Redis fail-open (ADR-0003 D6) mais **scopé aux tools MCP uniquement** (`check_rate_limit(hotel_id, tool_name)`) → **surface API publique et webhooks non limités**. ❌ **Headers de sécurité totalement absents** (ni HSTS, ni CSP, ni X-Frame-Options, ni X-Content-Type-Options). |
 | **R2** | **HOS-319 sans partenaire signé au 25/09** | HOS-176 sort de la fenêtre — **ne pas le décaler une seconde fois**. Basculer S9 sur HOS-286 + HOS-287 et acter le pilote en Phase 3+. Ne jamais coder HOS-176 « spec-only » sans creds réelles. |
 | **R3** | **HOS-308 : aucun export POS obtenu en S2** | Ne pas bloquer S3. Replier sur le seul benchmark Recruit (HOS-307, Done) pour le critère de sortie FR1, et retirer HOS-308 du prérequis de HOS-176 — en actant que le go-live perd sa deuxième lecture de performance réelle. |
 | **R4** | ~~HOS-278 conclut « Aetherix = couche F&B de Copilot via A2A »~~ — **LEVÉ le 30/07** | HOS-278 a conclu : **A2A annoncé mais non spécifié** (aucune spec, auth model ni endpoint publics) → **Aetherix reste MCP standalone**. **HOS-180 confirmé tel quel, pas de re-spécification.** Décision consignée : `docs/context/apaleo-a2a-spike-decision.md`. Conditions de bascule B1-B4 en veille, re-vérification trimestrielle au 30/10. |
