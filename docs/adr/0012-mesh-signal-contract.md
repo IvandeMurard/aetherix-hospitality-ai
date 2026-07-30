@@ -193,7 +193,7 @@ Non-bloquants pour l'acceptation — à respecter au moment de l'implémentation
 ## 5. Conséquences si accepté
 
 - Nouvelle ligne d'index CLAUDE.md §Décisions architecturales (Décision #31, à ajouter après validation)
-- `docs/mesh-architecture.md` §5 (Naming) s'enrichit de : `DomainSignal`, `SignalComposite`, `RecommendationCandidate`, `CollectivePattern` (alias ontologique de `fb_patterns` + Hive prior Anima — pas un nouveau store)
+- `docs/mesh-architecture.md` §5 (Naming) s'enrichit d'une ligne **« Signal Contract »** générique (cross-nœud, non public) — sans le vocabulaire (`DomainSignal`/`SignalComposite`/`RecommendationCandidate`/`CollectivePattern`), conformément à l'exception D-scope : ce vocabulaire reste exclusivement dans cet ADR (repo privé)
 - Décision ouverte à créer dans `open-decisions.md` : "Seuils de calibration SignalComposite — trigger : données pilote Phase 3"
 - Implémentation reste Phase 4 (ne bloque pas Phase 3 pilote — ce contrat est un accord de vocabulaire cross-nœud, pas un chantier immédiat)
 
@@ -201,4 +201,4 @@ Non-bloquants pour l'acceptation — à respecter au moment de l'implémentation
 
 ## 6. Statut
 
-**Accepted 2026-07-06.** Propagé : CLAUDE.md §Décisions architecturales (Décision #31), `docs/context/decisions-architecturales.md` (détail #31), `docs/mesh-architecture.md` §5 (Naming), `docs/context/open-decisions.md` (nouvelle décision ouverte : seuils de calibration). Implémentation reste Phase 4, gated par le tranchage de "Interaction model event-driven Phase 4-5" (§2bis).
+**Accepted 2026-07-06.** Propagé : CLAUDE.md §Décisions architecturales (Décision #31), `docs/context/decisions-architecturales.md` (détail #31), `docs/mesh-architecture.md` §5 (Naming — ligne générique « Signal Contract », vocabulaire volontairement redacté, cf. D-scope), `docs/context/open-decisions.md` (nouvelle décision ouverte : seuils de calibration). Implémentation reste Phase 4, gated par le tranchage de "Interaction model event-driven Phase 4-5" (§2bis).
