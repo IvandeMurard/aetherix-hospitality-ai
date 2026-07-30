@@ -251,6 +251,23 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Gel terminologique post-acceptation :** tout changement de vocabulaire futur passe par amendement d'ADR explicite, pas un renommage silencieux.
 
+---
+
+### 32 — Processus de calibration LLM-judge, pré-requis EVAL-6 (ADR-0007 §14) (30/07/2026)
+
+**Trigger :** veille comparative — Airbnb Engineering, "Eval-Driven Development: Lessons from Evaluating GenAI at Scale" (medium.com/airbnb-engineering). Comparaison avec eval-by-design Aetherix : gap identifié — EVAL-6 (LLM-as-judge sur la qualité du reasoning, Phase 4) n'avait jamais de processus documenté pour faire confiance au juge avant de le déployer en autonomie. Détail comparatif complet : vault Obsidian `Veille/Veille_Tech_Stack.md` §JUL 20, 2026.
+
+**Décision :** avant qu'EVAL-6 ne score en autonomie sur trafic échantillonné, le juge doit être calibré contre un jugement humain de référence :
+- **Rubrique binaire** = miroir exact de la définition "bad output" déjà contractuelle dans `FAILURE_THRESHOLDS.md` (mauvaise attribution de cause / événement inventé / chiffre inventé) — le juge n'invente pas de nouveaux critères.
+- **Golden set dédié** `eval/judge_calibration_set.jsonl` (schema distinct de `golden_dataset.jsonl` — texte-libre + verdict humain, pas input→valeur attendue), minimum 50 exemples incluant les 3 catégories d'échec.
+- **Juge = Claude Sonnet via `LLMProvider`** (Décision #9), call séparé sans accès au prompt de génération original (évite le biais d'auto-cohérence). Escalade à Opus-juge si la calibration échoue de façon répétée.
+- **Métrique = Cohen's kappa ≥ 0.8** (pas le % d'accord brut — corrige le déséquilibre de classe PASS/FAIL), sur 2 runs consécutifs avant d'autoriser le scoring autonome.
+- **Recalibration** sur triggers explicites (changement prompt/modèle, swap provider) + trimestrielle systématique — pas un calendrier fixe seul.
+
+**Pourquoi maintenant plutôt qu'au moment de construire EVAL-6** : coût de correction nul aujourd'hui (EVAL-6 n'est pas encore construit, Phase 4) — documenter le processus avant plutôt que de découvrir le gap une fois le juge déjà déployé sans calibration.
+
+**Détail complet :** `docs/adr/0007-evaluation-by-design.md` §14. Amende `docs/planning/evaluation-by-design.md` (EVAL-6 acceptance criteria) et `eval/FAILURE_THRESHOLDS.md` (ligne LLM reasoning).
+
 **Amendement 06/07/2026 — reste privé, exception au méta-repo public :** décision Ivan — contrairement à `mesh-architecture.md`, ce document ne migre jamais vers le méta-repo public (Décision #25/ADR-0010 Q2), malgré son caractère cross-cutting (≥2 nœuds). C'est l'IP différenciante du produit, pas de la gouvernance/infra. Amendement correspondant : ADR-0010 §Q2. Si une mention publique apparaît un jour, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
 
 **Document canonique :** `docs/adr/0012-mesh-signal-contract.md`.
