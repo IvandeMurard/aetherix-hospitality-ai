@@ -1,6 +1,6 @@
 # Story 16.12: Unit economics — coût complet par propriété/mois vs pricing
 
-Status: ready-for-dev
+Status: review
 
 > **Linear**: [HOS-312](https://linear.app/hospitalityagent/issue/HOS-312) · **Epic**: 16 ([HOS-300](https://linear.app/hospitalityagent/issue/HOS-300)) · **Priorité**: 🟠 High · **Estimate**: 1 pt · **Sprint**: S1 (03/08 → 09/08)
 > **Type**: analyse chiffrée — aucun code de production (script d'extraction toléré). **PR `eval-exempt`**
@@ -77,10 +77,24 @@ Maillon 5 de la chaîne de valeur — **jamais calculé**. C'est le dernier des 
 
 ### Agent Model Used
 
-_(à remplir par l'agent d'implémentation)_
+Bob (Scrum Master) exécutant `dev-story` · claude-opus-5 · 2026-07-30
 
 ### Debug Log References
 
+- Aucun test automatisé — analyse chiffrée, aucun code de production. PR à marquer `eval-exempt`.
+- Aucun script d'extraction Logfire écrit : le trafic instrumenté depuis le 26/07 est du sandbox, pas de la production.
+
 ### Completion Notes List
 
+- **AC1 ✅** — Coût complet chiffré. **≈ 0,75 $/propriété/mois de LLM**, calculé sur les tarifs Anthropic vérifiés (Sonnet 4.6 : 3/15 $ · Haiku 4.5 : 1/5 $ par MTok) × volumétrie dérivée du code (dispatchers APScheduler, `receipts.py`, `mcp_server.py`). Twilio ≈ 1,60 $ (facturation **par conversation**, pas par message). Infra Fly/Supabase/Upstash estimée depuis `fly.toml`.
+- **AC2 ✅** — 3 scénarios : **8,05 $** @ 1 propriété · **5,42 $** @ 10 · **3,29 $** @ 50. Points de bascule identifiés : Supabase free→Pro (~25 $, entre 1 et 10 propriétés) et RAM Fly (Prophet `fit()` devient dimensionnant vers 30 propriétés).
+- **AC3 ✅** — Marge brute **> 94 %** au prix le plus bas de la fourchette marché (Venli 99 €), dès 10 propriétés.
+- **AC4 ✅** — `docs/Cost_Model.md` **réécrit** (v2.0). La v0.1.0 du 02/12/2025 modélisait un stack disparu (Qdrant, ElevenLabs, Vercel, Render) et un framing « restaurants à 49 $/mois » — c'était une réécriture, pas une mise à jour.
+- **🎯 Conclusion structurante pour HOS-179 : le coût de service n'est pas la contrainte.** Le coût marginal d'une propriété (~2,35 $) est négligeable devant tout prix envisageable. Le pricing **ne peut donc pas se construire en cost-plus** — c'est un arbitrage valeur / disposition à payer. L'écart entre l'ancrage Venli (99-299 €) et la reco interne (500-2 500 $) est un **facteur 5 à 8 que ce modèle ne justifie pas** et qui devra se défendre sur la valeur mesurée au pilote.
+- **Contre-intuitif** : le LLM n'est pas le poste dominant. Le socle fixe l'est — `min_machines_running = 1` + `auto_stop_machines = "off"` fait tourner la machine Fly 24/7 même sans trafic (contrainte des workers APScheduler).
+- **Levier identifié, non retenu** : le prompt caching diviserait le poste input par ~10 (≈ 0,25 $/propriété). Gain absolu trop faible aujourd'hui — à reconsidérer au-delà de ~50 propriétés.
+- **⚠ Limite assumée — T1 exécutée en mode estimé, pas mesuré.** Logfire est actif (HOS-311, Done 26/07) mais n'a accumulé que du trafic sandbox. L'extrapoler aurait présenté du synthétique comme du réel — exactement ce que [HOS-318](https://linear.app/hospitalityagent/issue/HOS-318) interdit. Chaque chiffre porte son statut **Calculé / Estimé** et le doc s'ouvre sur cet avertissement. **À re-mesurer après le go-live (HOS-176).**
+
 ### File List
+
+- `docs/Cost_Model.md` *(réécrit — v2.0)*
