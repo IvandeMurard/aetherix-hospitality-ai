@@ -150,7 +150,19 @@ Trigger : (a) Meuze.ai *"POS-only restaurants"* concurrent identifié 01/06 — 
 
 **Débloque** : ADR-0008 graphe de contexte (open decision 04/06/2026) · open decision *"Food waste tracking"* Option B mesure précise.
 
-### 24 — Graphe de contexte Postgres recursive CTE (Phase 4) (06/06/2026)
+### 24 — Graphe de contexte Postgres recursive CTE — 🛑 **DIFFÉRÉ Phase 4 (PM sign-off 31/07/2026)** (06/06/2026)
+
+> **Statut 31/07/2026** : ADR-0008 passe `Accepted` → **`Deferred (Phase 4)`** dans son ensemble (ADR-0008 §17.6). Backlog P4-GRAPH-1→6 sorti de la Phase 4, aucune story Linear à créer au kickoff.
+>
+> **Cause** : la moitié du graphe repose sur `hotel_cohort_features`, table inexistante dont le socle Hive est gelé. Le nœud `Cohort` étant la frontière d'anonymisation (§6), les 3 query types cross-propriétés ne sont pas dégradables. Les 3 restants sont intra-propriété et recouvrent largement `operational_memory` + pgvector — alors que la justification écrite du graphe (§1.2/§1.3) porte sur la réutilisation cross-propriétés. **La valeur différenciante est exactement la partie gelée.**
+>
+> **Arbitrage de calendrier, pas de conception** : aucune ligne de §1-§16 n'est invalidée. Path C, schema 8 nodes / 9 edges, 6 query types, DDL, patterns CTE, isolation RLS, kill-switch restent la référence au moment de la reprise. Rien à réécrire.
+>
+> **Précondition de reprise** : ADR-0006 §10.4 dans l'ordre — gel Hive levé → ADR-0005 D1-D5 construits → D7 (LOO) exécuté → ADR-0006 §D4 levé → puis ADR-0008.
+>
+> **Effet transitif** : ADR-0011 (Learning Engine, Phase 5) déclare une dépendance à ADR-0008 — différée par conséquence.
+>
+> Le détail ci-dessous documente la conception, qui reste valide et non amendée.
 
 Trigger : (a) convergence session PM 04/06 thèse *"knowledge extraction = the real bottleneck"* (Mira Murati Thinking Machines + Hyperspell + GBrain + projet personnel Lore — `memory/market_signals_2026Q2.md`) ; (b) cohort matching v2 ADR-0006 = late-fusion **scalar** (`α × cos_pms + β × cos_pos`), insuffisant pour traverser *"event A causé outcome B chez hôtel co-cohorte 18 mois plus tôt"* ; (c) foundation Anima Phase 4 (Décision #20 — 4 couches Working/Episodic/Semantic/Segment) nécessite des relations explicites guest × stay × event × intervention ; (d) Aetherix Voice Phase 5+ (Lore-inspired tacit knowledge capture, `docs/context/vision-future.md`) pré-requis knowledge graph.
 

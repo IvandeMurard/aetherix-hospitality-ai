@@ -134,7 +134,7 @@ Le log de `propensity` est non-négociable : l'évaluation off-policy nécessite
 
 **Phase 5 (Learning Engine) :**
 - Learning Engine + HiveMemory v2 comme nœud Mesh distinct — ADR séparé au moment du build
-- Dépend de ADR-0013 (event-driven interaction model, futur — réservé, corrigé 20/07/2026 : le numéro 0009 est déjà pris par runtime guardrails/Décision #27) + ADR-0008 (context graph, Décision #24)
+- Dépend de ADR-0013 (event-driven interaction model, futur — réservé, corrigé 20/07/2026 : le numéro 0009 est déjà pris par runtime guardrails/Décision #27) + ADR-0008 (context graph, Décision #24 — ⚠️ **différé Phase 4 le 31/07/2026**, ADR-0008 §17.6 : cette dépendance est donc différée par transitivité ; reprise conditionnée à ADR-0006 §10.4)
 - Méthode off-policy evaluation à choisir Phase 5 (IPW / doubly-robust / DR-learner)
 
 **Cross-cutting :**

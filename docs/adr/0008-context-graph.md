@@ -1,7 +1,11 @@
 # ADR 0008 — Context Graph: Postgres recursive CTE layer on top of pgvector
 
-> **Status**: **Accepted — Path C retenu (Postgres recursive CTE)** · **Date**: 2026-06-06 · **Author**: Architect (Winston, Opus 4.7)
-> **⚠️ Amendé 2026-07-31 (§17)** : les parties **dépendantes de la cohorte** sont **différées** — `hotel_cohort_features` n'existe pas et son socle est gelé. Le nœud `Cohort` étant la frontière d'anonymisation (§6), les 3 query types cross-propriétés **ne peuvent pas être dégradés** : ils partent ou ne partent pas. Périmètre Phase 4 : 6 → **3 query types**, 26 → **21 pts**. **§17.5 pose une question ouverte non tranchée** : la valeur résiduelle d'un graphe intra-propriété justifie-t-elle 21 points en Phase 4 ? Recommandation Architect = différer l'ADR en entier.
+> **Status**: 🛑 **DEFERRED (Phase 4) — PM sign-off 31/07/2026** · Conception Path C **conservée intacte**, aucune ligne de §1-§16 invalidée.
+> **Status historique** : Accepted — Path C retenu (Postgres recursive CTE) · **Date**: 2026-06-06 · **Author**: Architect (Winston, Opus 4.7)
+>
+> **Pourquoi différé (§17)** : la moitié du graphe repose sur `hotel_cohort_features`, table qui n'existe pas et dont le socle Hive est gelé par l'audit. Le nœud `Cohort` étant la **frontière d'anonymisation** (§6), les 3 query types cross-propriétés ne sont pas dégradables — ils partent ou ne partent pas. Les 3 restants sont intra-propriété et recouvrent largement pgvector, alors que §1.2/§1.3 justifient le graphe par la réutilisation **cross-propriétés**. La valeur différenciante est exactement la partie gelée.
+>
+> **Précondition de reprise** : ADR-0006 §10.4 dans l'ordre — gel Hive levé (5 conditions de l'audit) → ADR-0005 D1-D5 construits → D7 (LOO) exécuté → ADR-0006 §D4 levé → **puis** cet ADR. Le schema et le backfill ne se périment pas ; rien n'est à réécrire.
 > **Phase**: 4 (Scale & Distribution) — primary foundation Anima Phase 4 Guest Context Node
 > **Linear**: HOS-GRAPH-1 → HOS-GRAPH-6 (à créer par SM Phase 4 kickoff — story breakdown amendé §13.6)
 > **Implémente**: CLAUDE.md Décision architecturale #24 (ajoutée par cette session, libellé amendé "Postgres recursive CTE Phase 4")
@@ -1346,9 +1350,9 @@ Inchangés : Path C (recursive CTE, Décision #24), tenant isolation par RLS, ki
 
 **Précondition de levée** : identique à ADR-0006 §10.4, dans le même ordre — gel Hive levé → ADR-0005 D1-D5 construits → D7 (LOO) exécuté. Puis ADR-0006 §D4 levé, **puis** seulement ce §17.
 
-### 17.5 Question ouverte — la valeur résiduelle du graphe Phase 4
+### 17.5 La valeur résiduelle du graphe Phase 4 — analyse (tranchée en §17.6)
 
-Ce point n'est **pas tranché ici** : c'est un arbitrage de périmètre, pas de correction.
+Posée initialement comme question ouverte, cette section a servi de base au sign-off PM du 31/07/2026 (§17.6). Elle est conservée telle quelle : c'est le raisonnement qui a produit la décision, pas un débat encore actif.
 
 Les 3 query types survivants sont tous des traversées **intra-propriété** : « ce cas est-il connu », « qu'est-ce qui a causé ce pic », « quelles interventions sur cette recommandation ». Or §1.1 décrit le problème initial comme le manque de relations explicites — et §1.2/§1.3 justifient le graphe par la **réutilisation de patterns cross-propriétés** (« qu'a fait le chef de cette cohorte la dernière fois qu'IFA et la pluie sont tombées ensemble »).
 
@@ -1363,9 +1367,22 @@ D'où la question : **21 points pour un graphe intra-propriété à 3 requêtes,
 - Le coût du report est faible : le schema et le backfill ne se périment pas.
 - À l'inverse, le coût de livrer maintenant est réel : 21 points de surface à maintenir, à documenter, et à faire passer par les gates, pendant la fenêtre de 90 jours consacrée à la preuve.
 
-Décision à prendre par le PM. Si « livrer quand même », §17.4 s'applique tel quel. Si « différer en entier », ADR-0008 passe Accepted → Deferred dans son ensemble et la présente section devient sa justification.
+### 17.6 PM sign-off — 31/07/2026 : **option (B), ADR-0008 Phase 4 différé en entier**
 
-### 17.6 Références
+**Décision prise.** ADR-0008 passe `Accepted` → **`Deferred (Phase 4)`** dans son ensemble. La présente section en est la justification.
+
+Ce qui découle :
+
+- **§17.4 ne s'applique plus.** Le rescope à 5 stories / 21 pts était l'option (A) ; il n'y a pas de périmètre Phase 4 réduit à livrer. Les chiffres restent consignés ci-dessus pour mémoire de l'analyse.
+- **Aucune ligne de §1 à §16 n'est invalidée.** Path C, le schema 8 nodes / 9 edges, les 6 query types, la DDL, les patterns CTE, l'isolation RLS, le kill-switch : la conception reste la référence au moment de la reprise. Ce report est un **arbitrage de calendrier, pas de conception**.
+- **Le backlog P4-GRAPH-1 → 6 sort de la Phase 4.** Aucune story Linear à créer au kickoff.
+- **ADR-0011 (Learning Engine, Phase 5)** déclare une dépendance à ADR-0008 (§137). Elle est désormais différée par transitivité — signalé, non amendé ici.
+
+**Rationale du PM, alignée sur la recommandation Architect** : le gel de l'audit vise les briques dont la valeur n'est pas prouvée. Un graphe intra-propriété qui double `operational_memory` + pgvector en est le cas d'école. Livrer 21 points dont la justification écrite porte sur une capacité absente ajouterait de l'architecture sans preuve — le ratio même que l'audit reproche — et consommerait un sprint de la fenêtre de 90 jours consacrée à la preuve.
+
+**Ce qui reprend le graphe** : la précondition d'ADR-0006 §10.4, dans l'ordre. Rien avant.
+
+### 17.7 Références
 
 - `docs/adr/0006-pos-integration.md` §10 — arbitrage §D4, précondition de levée §10.4
 - `docs/adr/0005-cold-start-meta-learner.md` §0 — statut d'implémentation par élément
