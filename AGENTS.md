@@ -60,7 +60,7 @@
 | 20 | Anima — architecture mémoire 4 couches + DPIA gate | 19/05/2026 |
 | 21 | Apaleo MCP — convention nommage native + sales evidence Anthropic | 26/05/2026 |
 | 22 | Eval-by-design = offline gate CI + runtime eval + outcome eval (Qonto + BMad ; portée élargie 3 bras, amendé 19/06 ADR-0007 §13) | 04/06/2026 |
-| 23 | POS integration scope + adapter pattern (Phase 4) | 06/06/2026 |
+| 23 | POS integration scope + adapter pattern (Phase 4) — **§D4 cohort v2 différé 31/07/2026** (ADR-0006 §10) : `hotel_cohort_features` v1 n'existe pas et son socle Hive est gelé ; la FK dans la migration P4-POS-2 bloquait tout le backlog POS. Ingestion POS reste livrable : 5 stories / 19 pts | 06/06/2026 |
 | 24 | Graphe de contexte Postgres recursive CTE (Phase 4) — Path C retenu cash-driven, AGE bloqué Supabase | 06/06/2026 |
 | 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — **exécuté 07/07/2026** (déclencheur pré-candidatures) : méta-repo public [`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) livré et vérifié (public, README propre, 0 fuite ADR-0012/Signal Contract), Aetherix reste privé, cross-link tacet-app. ADR-0012 jamais migré (Décision #31). **⚠️ Vérifié 21/07/2026 : lien case study ivandemurard.com/aetherix pointe encore vers le repo privé `aetherix-hospitality-ai` → 404 confirmé pour visiteur externe, pas encore reciblé vers le méta-repo (HOS-305 AC4 non clos)** | 16/06/2026 |
 | 26 | Anima = Guest Cognition Layer · confidence-weighted claims (schema, pas couche) · Segment double portée (local + Hive prior) · Learning Engine tier Mesh séparé · outcome-capture instrumentation Phase 4 | 17/06/2026 |
