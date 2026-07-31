@@ -696,7 +696,7 @@ Cohérent format `docs/planning/phase-3-pilot-validation.md` Track A. Linear IDs
 
 ## 9. Amendment 2026-06-23 — PMS canonical schema (jurisprudence Provider étendue)
 
-> **Trigger** : analyse concurrentielle approfondie Grevon (`docs/competitive/grevon-analysis.md`) — leur produit Kore revendique explicitement la normalisation des données PMS brutes en format canonique avant tout consommateur agent. Implémente CLAUDE.md Décision #28.
+> **Trigger** : analyse concurrentielle approfondie Grevon (`docs/_archive/competitive/grevon-analysis.md`) — leur produit Kore revendique explicitement la normalisation des données PMS brutes en format canonique avant tout consommateur agent. Implémente CLAUDE.md Décision #28.
 > **Linear** : Epic 15 (HOS-279) — Story 15.1 (HOS-280), Story 15.2 (HOS-281). Parallélisable avec Epic 13 POS (HOS-254) et le pilote Apaleo Phase 3 Track A.
 > **Distinct de** : HOS-186 ("PMS Connector universel", niveau Orchestrateur↔PMS, Décision #19) — backlog Phase 4 post-Track A, scope cross-node. Cet amendement est interne au node Aetherix (adapters↔pipeline forecast), orthogonal à HOS-186.
 
@@ -745,6 +745,6 @@ Faire la normalisation *au moment* d'écrire l'adapter Mews mélangerait deux ri
 
 ### 9.6 Références additionnelles
 
-- `docs/competitive/grevon-analysis.md` — analyse déclencheur
+- `docs/_archive/competitive/grevon-analysis.md` — analyse déclencheur
 - `docs/context/decisions-architecturales.md` — Décision #28
 - HOS-186, HOS-254, HOS-279, HOS-280, HOS-281

@@ -46,14 +46,14 @@
 - Communications product Apaleo mentionnant "covers" / "staffing prediction" / "F&B forecasting"
 
 **Mitigation activée 06-08 :**
-- ⏳ Audit fonctionnel Copilot via session SM Linear story flaggée — **story créée, livrable non écrit** : `docs/competitive/apaleo-copilot-functional-audit.md` n'existe pas (cohérent avec `docs/context/monitoring-watchlist.md` §58 « à créer »). Le ✅ précédent surclamait une livraison ; corrigé après détection par l'agent d'hygiène (HOS-320, D2). Base d'évidence réellement disponible : `docs/competitive/apaleo-mcp-mapping.md` (HOS-197).
+- ⏳ Audit fonctionnel Copilot via session SM Linear story flaggée — **story créée, livrable non écrit** : `docs/competitive/apaleo-copilot-functional-audit.md` n'existe pas (cohérent avec `docs/_archive/context/monitoring-watchlist.md` §58 « à créer »). Le ✅ précédent surclamait une livraison ; corrigé après détection par l'agent d'hygiène (HOS-320, D2). Base d'évidence réellement disponible : `docs/competitive/apaleo-mcp-mapping.md` (HOS-197).
 - (a) Shipper pilote HOS-176 Phase 3 avant Q4 2026 — déjà roadmap
 - (b) Outreach Apaleo Marketplace pour position de complément (pas concurrent) — à confirmer
 - (c) Accélérer Aetherix MCP v1 (`get_operational_predictions` = primitive prédictive F&B absente des 235 tools Apaleo natifs, différenciateur défensif identifié HOS-197)
 
 **État actuel mapping :** ✅ Mapping livré (HOS-197, 2026-06-03) → [`docs/competitive/apaleo-mcp-mapping.md`](../competitive/apaleo-mcp-mapping.md) — 235 tools classés (5 consommés / 44 border-zone F&B / 186 inutilisés), leading indicators LI-1 → LI-5, reco MCP v1 = accélérer HOS-71 v1 (`get_operational_predictions`).
 
-**Aussi présent dans :** `docs/context/monitoring-watchlist.md` W2 (status FIRED 06-08, cadence bi-hebdo).
+**Aussi présent dans :** `docs/_archive/context/monitoring-watchlist.md` W2 (status FIRED 06-08, cadence bi-hebdo).
 
 ### Food waste tracking
 
@@ -223,7 +223,7 @@
 
 **Décision :** Phase 4 confirmé · **Tech retenue = Postgres recursive CTE sur Supabase managed** (Path C, PM sign-off 06/06/2026 pour raison financière) · Apache AGE rejeté car non supporté Supabase managed jun 2026 (vérifié GitHub Discussion supabase/#40285 + Supabase docs extensions) · Reco Architect initiale = Path A (Fly Postgres dédié + AGE + FDW, +$15-30/mois) non-suivie pour cash discipline pre-pilote · Schema = 8 node tables + 9 edge tables `aetherix_graph.*` + RLS Postgres natives 17 policies · Coexistence permanente pgvector + CTE (pas de cutover — pgvector reste source recall sémantique flou, CTE source recall relationnel/path via single-transaction `WITH RECURSIVE` + UNION ALL avec pgvector cosine) · `MemoryRecallService.recall()` étendu backward-compat param `recall_strategy: Literal["cosine_only","path_find","hybrid","cohort_traversal"]` default `"cosine_only"` zéro régression callers Phase 0-3 · Cohort matching v3 multi-dim path traversal (γ × cos_pms + δ × cos_pos + ε × path_match_score) extension ADR-0006 D4 · Forward-compat schema Anima Phase 4 (`Guest`/`Stay`/`Sentiment` réservés non créés, DPIA gate reste blocker Anima) · MCP tool atomique `query_context_graph(query_type, depth)` scope `graph:read` whitelist 6 query types Phase 4 (templates SQL CTE, pas Cypher) · Tenant isolation RLS Postgres natives (simplifié vs Path A `_inject_tenant_filter`) + canary eval `graph-tenant-isolation-001` blocking + `GRAPH_BACKEND=disabled` kill-switch · SLO latence p95 amendé < 1200ms (vs 800ms Path A — verbosité CTE acceptable cash-driven trade-off).
 
-**Réversibilité Phase 5+** : si Supabase ajoute support Apache AGE (monitor `docs/context/monitoring-watchlist.md` WT1 trimestriel + cron `check-supabase-apache-age-compatibility`), Path A redevient option viable. Migration CTE schema → AGE Cypher MERGE documentée ADR-0008 §16, effort estimé 1-2 sprints.
+**Réversibilité Phase 5+** : si Supabase ajoute support Apache AGE (monitor `docs/_archive/context/monitoring-watchlist.md` WT1 trimestriel + cron `check-supabase-apache-age-compatibility`), Path A redevient option viable. Migration CTE schema → AGE Cypher MERGE documentée ADR-0008 §16, effort estimé 1-2 sprints.
 
 **Date :** 06/06/2026 (session Architect Opus dédiée, brief PM 04/06 — formalisation + résolution + amendment Path C même session, pré-requis ADR-0006 POS tranché 06/06 même journée).
 
@@ -236,7 +236,7 @@
 - `docs/context/decisions-architecturales.md` H3 §24 détail complet amendé Path C (Q1-Q7 + DDL 17 tables `aetherix_graph.*` + cohort v3 + Anima forward-compat + 6 query types CTE templates + eval gate `context_graph_query`)
 - `docs/adr/0008-context-graph.md` document canonique (Accepted Path C, 9 risques + amendment §13 PM sign-off + §16 patterns CTE override D1/D2/D4/D6)
 - `docs/context/memory-architecture.md` section ajoutée "Couche graphe Phase 4 (ADR-0008)" amendée Path C
-- `docs/context/monitoring-watchlist.md` WT1 — réouvrir Path A si Supabase ajoute AGE Phase 5+
+- `docs/_archive/context/monitoring-watchlist.md` WT1 — réouvrir Path A si Supabase ajoute AGE Phase 5+
 - Cron `check-supabase-apache-age-compatibility` (1er trim 9h) — notification user si statut change
 - Débloque Anima Phase 4 (forward-compat schema réservé `Guest`/`Stay`/`Sentiment`) · Aetherix Voice Phase 5+ (expressivité CTE inférieure à Cypher reconnue, à reconsidérer si AGE disponible Phase 5+)
 
@@ -321,4 +321,4 @@ WhatsApp primary retenu (cf. Décision #15 OQ1 — Receipts channel = WhatsApp +
 
 - **Update protocol** : décision tranchée → déplacer de §Actives à §Resolved avec date + rationale. **Ne pas supprimer.**
 - **Index CLAUDE.md** : pour chaque décision active = 1 ligne dans `CLAUDE.md` §Décisions ouvertes (statut + 1-ligne summary). Le détail (alternatives, échéance, dépendances, sources) vit ici.
-- **Cross-références** : ADR (`docs/adr/`) pour décisions techniques validées. Watchlist (`docs/context/monitoring-watchlist.md`) pour monitors récurrents perpétuels (Conduit.ai, Apaleo Copilot, etc.).
+- **Cross-références** : ADR (`docs/adr/`) pour décisions techniques validées. Watchlist (`docs/_archive/context/monitoring-watchlist.md`) pour monitors récurrents perpétuels (Conduit.ai, Apaleo Copilot, etc.).

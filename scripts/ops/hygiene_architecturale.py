@@ -82,6 +82,7 @@ PLANNED_PATHS = {
     "backend/app/providers/pos/": "POS ingestion — Décision #23 / ADR-0006, Phase 4",
     "backend/app/providers/pms/base.py": "PMS canonical schema — Décision #28 / ADR-0006 amendé, Phase 4",
     "docs/competitive/apaleo-copilot-functional-audit.md": "Audit Copilot — watchlist Apaleo, story SM créée, livrable non écrit",
+    "eval/judge_calibration_set.jsonl": "LLM-as-judge EVAL-6 — ADR-0007 §14, critère bloquant Phase 4",
 }
 
 # D3 — env var declarations.
@@ -433,11 +434,26 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Agent d'hygiène architecturale (HOS-320)")
     parser.add_argument("--report", help="Chemin du rapport Markdown à écrire")
     parser.add_argument("--json", action="store_true", help="Émettre le résultat en JSON sur stdout")
+    parser.add_argument(
+        "--detectors",
+        help="Codes séparés par des virgules (ex. D1). Par défaut : tous. "
+        "Le contrôle PR bloquant n'exécute que D1 — voir .github/workflows/ci.yml.",
+    )
     args = parser.parse_args()
 
+    selected = None
+    if args.detectors:
+        selected = {c.strip().upper() for c in args.detectors.split(",") if c.strip()}
+        known = {code for code, _, _ in DETECTORS}
+        unknown = selected - known
+        if unknown:
+            print(f"❌ Détecteur(s) inconnu(s) : {', '.join(sorted(unknown))}", file=sys.stderr)
+            return 2
+
     result = Result()
-    for _, _, detector in DETECTORS:
-        detector(result)
+    for code, _, detector in DETECTORS:
+        if selected is None or code in selected:
+            detector(result)
 
     today = datetime.date.today().isoformat()
 
