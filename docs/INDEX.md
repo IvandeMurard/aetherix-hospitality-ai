@@ -9,7 +9,7 @@
 
 ## ⚖️ Dette CLAUDE.md — dépassement du plafond
 
-`CLAUDE.md` se donne un **plafond dur de 150 lignes** (facts + INDEX uniquement). Il est à **197 lignes au 30/07/2026**, soit ~47 de trop. Le dépassement est structurel, pas accidentel : les sections INDEX ont grossi à mesure que les décisions s'accumulaient.
+`CLAUDE.md` se donne un **plafond dur de 170 lignes** (facts + INDEX uniquement), relevé de 150 le 31/07 et contrôlé en CI. Il était à **196 lignes** quand la règle en disait 150 : dépassement structurel — les sections INDEX grossissent à mesure que les décisions s'accumulent — et surtout **non détecté, faute de contrôle**. C'est ce trou qui a motivé le détecteur D5.
 
 ### Refactoring du 30/07 — fait
 
@@ -28,11 +28,11 @@
 | `## Décisions ouvertes — INDEX` | 20 | Idem. |
 | `## Fichiers clés` | 17 | **Diagnostic initial erroné** — j'avais écrit « recoupe ce catalogue ». Faux : c'est une carte du **code** (`backend/app/*`, `scripts/*`), ce catalogue liste la **documentation**. À conserver. |
 
-> ⚖️ **Le plafond de 150 mérite d'être rediscuté.** Il reste 16 lignes à trouver, et le seul gisement est constitué des deux index de décisions — soit le contenu principal du fichier. Un plafond qui oblige à supprimer ce pour quoi le fichier existe est mal calibré : le projet est passé de 24 à 31 décisions depuis que le chiffre a été posé. **Deux options** : relever le plafond à ~170 en assumant la croissance de l'index, ou compresser l'index en titres courts et accepter d'ouvrir `decisions-architecturales.md` plus souvent. **Arbitrage Ivan, non tranché.**
+> ⚖️ **Plafond relevé à 170 le 31/07/2026 (arbitrage Ivan).** Il restait 16 lignes à trouver et le seul gisement était constitué des deux index de décisions — soit le contenu principal du fichier. Un plafond qui oblige à supprimer ce pour quoi le fichier existe est mal calibré : l'index a grandi depuis que 150 a été posé. Le plafond est désormais **contrôlé en CI par le détecteur D5**, qui le lit dans la ligne de règle de `CLAUDE.md` — il n'est donc pas dupliqué dans le script.
 
-> ⚠️ **Drift constaté au passage** : `CLAUDE.md` annonçait « 24 décisions architecturales » quand ce catalogue en compte 31. Le compte a été retiré de `CLAUDE.md` plutôt que corrigé — un nombre codé en dur dans deux fichiers dérive à chaque ajout. Candidat à un contrôle de l'agent d'hygiène ([HOS-320](https://linear.app/hospitalityagent/issue/HOS-320)), au même titre que le plafond de lignes.
+> ⚠️ **Drift de comptage — résolu le 31/07.** Trois chiffres différents circulaient pour le même ensemble : deux docs et le fichier source lui-même annonçaient des totaux qui ne correspondaient ni entre eux, ni au décompte réel. Le détecteur **D6** les a tous les trois trouvés dès son premier run — y compris celui que la note précédente de cette section avait elle-même introduit. **Correctif appliqué : les comptes codés en dur ont été retirés, pas corrigés.** Un nombre dupliqué dérive au premier ajout ; le décompte se lit désormais en comptant les sections de la source.
 
-**Non traité dans cette session** — c'est un chantier de refactoring documentaire à part entière, pas un à-côté d'un re-baseline de sprint.
+**Traité le 31/07** : plafond relevé à 170, refactoring appliqué, et les deux règles (plafond + comptes) sont désormais contrôlées en CI — elles ne peuvent plus dériver en silence.
 
 ---
 
@@ -46,11 +46,11 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 | `docs/_archive/` | 47 fichiers : anciennes veilles, **`monitoring-watchlist.md`**, MVP_SCOPE, Problem_Statement, ROADMAP, presentation, `internal/`, `handoff/` | Archive de phases closes |
 | `tools/bmad/_bmad/` | Install BMAD vendorée (233 fichiers) | Outillage tiers réinstallable. **`tools/bmad/_bmad-output/` reste versionné** — il porte les stories. |
 
-> ⚠️ **Migration de la veille incomplète.** CLAUDE.md déclare depuis le 10/07 que le vault Obsidian `Veille/` est la source de vérité unique pour « hebdo + watchlist + analyses concurrentielles ». Les hebdos y sont bien (8 notes thématiques + index + canvas), **mais la watchlist n'y a jamais été portée** — elle est restée dans `docs/_archive/context/monitoring-watchlist.md`. Le canari W2 et ses triggers n'ont donc pas de foyer dans la source de vérité déclarée. **À reprendre côté Obsidian.**
+> ✅ **Migration de la veille achevée le 30/07.** La watchlist, restée trois semaines dans le repo malgré la consolidation du 10/07, est portée dans le vault Obsidian : `Veille/Veille_Watchlist.md` (hub) + trois sous-notes (W2 Apaleo, concurrents, tech & Mesh). Le canari W2 a de nouveau un foyer dans la source de vérité déclarée.
 
 **⚠️ Lecture des références.** Plusieurs docs en ligne — `CLAUDE.md`, `AGENTS.md`, `context/open-decisions.md`, `context/decisions-architecturales.md`, `adr/0006`, `adr/0008`, `marketing/positioning-snippets.md`, `Cost_Model.md` — citent encore `monitoring-watchlist.md`, `docs/veille/` ou `docs/_archive/`. **Ces liens sont valides en local et ne sont pas des drifts** : ils pointent vers des fichiers présents sur la machine, absents du dépôt distant. Un clone frais ne les résoudra pas.
 
-> **Note pour l'agent d'hygiène ([HOS-320](https://linear.app/hospitalityagent/issue/HOS-320))** : ne pas signaler ces trois chemins comme références cassées. C'est une règle d'exclusion à ajouter, pas un drift à corriger.
+> ✅ **Exclusion implémentée le 31/07** — `LOCAL_ONLY_PREFIXES` dans `scripts/ops/hygiene_architecturale.py`. Sans elle, le détecteur D2 remontait **7 faux positifs** dès le premier run en CI. Un contrôle qui crie au loup est désactivé en quinze jours.
 
 **Le canari concurrentiel W2 (Apaleo Copilot scope F&B) vit désormais hors dépôt.** Sa re-vérification trimestrielle est fixée au **30/10/2026** (voir `context/apaleo-a2a-spike-decision.md` §Conditions de bascule, qui reste en ligne). Ne pas compter sur le dépôt pour la rappeler.
 
@@ -65,7 +65,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
   - `0010-multi-repo-strategy` · `0011-learning-engine-hive-v2` · `0012-mesh-signal-contract` (**privé à jamais**, Décision #31)
 
 ## 🧭 Context (détail par domaine)
-- `context/decisions-architecturales.md` — détail des 31 décisions (index 1-ligne dans CLAUDE.md)
+- `context/decisions-architecturales.md` — détail des décisions architecturales (index 1-ligne dans CLAUDE.md ; compte non figé, cf. détecteur D6)
 - `context/open-decisions.md` — décisions ouvertes + archive des résolues
 - `context/analyse-critique-2026-07.md` — **audit critique complet Aetherix+Tacet (07/07/2026)** : chaîne de valeur 5 maillons, circularité MAPE synthétique, différenciation, wedge/moat, risques crédibilité
 - `context/positionnement-wedge.md` — **le wedge acté (09/07)** : "mémoire opérationnelle, le forecast est un organe" — référence pour tout support externe (case study, méta-repo, article, LinkedIn) + discipline de langage

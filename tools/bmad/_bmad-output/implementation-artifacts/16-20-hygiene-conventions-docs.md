@@ -1,6 +1,6 @@
 # Story 16.20: Agent d'hygiène — contrôles de conventions documentaires
 
-Status: ready-for-dev
+Status: review
 
 > **Linear**: *(à créer — proposition ci-dessous)* · **Epic**: 16 ([HOS-300](https://linear.app/hospitalityagent/issue/HOS-300)) · **Priorité**: 🟡 Medium · **Estimate**: 2 pts proposés · **Sprint**: non planifié
 > **Type**: extension de l'agent d'hygiène existant — PR-only, zéro surface runtime. **PR `eval-exempt`**
@@ -107,10 +107,30 @@ L'arbitrage est documenté et **non tranché** dans `docs/INDEX.md` §Dette CLAU
 
 ### Agent Model Used
 
-_(à remplir par l'agent d'implémentation)_
+Bob (Scrum Master) executant dev-story - claude-opus-5 - 2026-07-31
 
 ### Debug Log References
 
+- `pytest backend/tests/scripts/test_hygiene_architecturale.py` : **34 passed** (25 avant, +9).
+- Gate CI simule (`--detectors D1,D5,D6`) : **exit 0**.
+- Rapport complet : 0 drift, 7 info -> `docs/testing/evidence/hygiene/report-2026-07-31-conventions.md`.
+
 ### Completion Notes List
 
+- **AC1 (D5) OK** - plafond lu dans le fichier via `plafond dur (\d+) lignes`, jamais code en dur. Un test verifie explicitement qu'elever le plafond declare suffit a lever le finding.
+- **AC2 (D6) OK** - **3 drifts reels trouves au premier run** : `AGENTS.md` et le fichier source lui-meme annoncaient 24, `docs/INDEX.md` annoncait 31, la realite etait 29. Correctif : les comptes codes en dur ont ete **retires**, pas corriges.
+- **AC3 OK** - `LOCAL_ONLY_PREFIXES` : sans elle, D2 remontait **7 faux positifs** des le premier run.
+- **AC4 OK** - chaque finding porte l'ecart chiffre.
+- **Piege d'amorcage resolu par l'arbitrage Ivan** : plafond releve de 150 a 170. D5 et D6 partent donc directement en **blocking**, sans passer par une phase WARN.
+- **Deux regressions de mon propre refactoring du 30/07, trouvees par l'agent lui-meme** : D1 cassait (AGENTS.md non resynchronise) et D3 lisait une section vide (`Variables d'environnement` extraite sans repointer le detecteur). D3 a ete repointe, son regex accepte les deux formats, et un garde-fou a ete ajoute : zero variable lue = drift, pas silence.
+- **Portee elargie en CI** : le job passe de `--detectors D1` a `D1,D5,D6`, renomme `conventions-docs`. D2/D3/D4 restent report-only - ils produisent legitimement des `info` qui ne doivent pas casser une PR.
+- **Entree PLANNED_PATHS periemee retiree** (`apaleo-copilot-functional-audit.md`) : le fichier fantome a ete supprime des docs le 30/07, l'entree ne couvrait plus rien.
+
 ### File List
+
+- `scripts/ops/hygiene_architecturale.py` *(D5 + D6 + LOCAL_ONLY_PREFIXES + D3 repointe)*
+- `backend/tests/scripts/test_hygiene_architecturale.py` *(+9 tests)*
+- `.github/workflows/ci.yml` *(gate elargi a D1,D5,D6)*
+- `CLAUDE.md` + `AGENTS.md` *(plafond 170, resynchronises)*
+- `docs/INDEX.md`, `docs/context/decisions-architecturales.md` *(comptes retires)*
+- `docs/testing/evidence/hygiene/report-2026-07-31-conventions.md` *(preuve)*

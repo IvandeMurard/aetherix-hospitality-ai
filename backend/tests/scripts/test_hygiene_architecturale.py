@@ -208,14 +208,21 @@ def test_d2_planned_paths_are_info_not_drift(fake_repo, monkeypatch):
 # ─── D3 · Env sync ────────────────────────────────────────────────────────────
 
 
-def _env_doc(*names: str) -> str:
-    lines = "\n".join(f"{n}     — description" for n in names)
-    return f"# CLAUDE.md\n\n## Variables d'environnement\n\n```\n{lines}\n```\n\n---\n\n## Suite\n"
+def _env_doc_table(*names):
+    """The shape the extracted doc uses since 30/07 (Markdown table)."""
+    rows = "\n".join("| `%s` | description |" % n for n in names)
+    return "# Variables\n\n| Variable | Role |\n|---|---|\n" + rows + "\n"
+
+
+def _env_doc_block(*names):
+    """The original shape (`VAR - description` in a code block). Still supported."""
+    lines = "\n".join("%s     — description" % n for n in names)
+    return "# Variables\n\n```\n" + lines + "\n```\n"
 
 
 def test_d3_flags_documented_but_undeclared_var(fake_repo):
     _write(fake_repo, "backend/.env.example", "ANTHROPIC_API_KEY=sk-ant-...\n")
-    _write(fake_repo, "CLAUDE.md", _env_doc("ANTHROPIC_API_KEY", "LOGFIRE_TOKEN"))
+    _write(fake_repo, hygiene.ENV_DOC, _env_doc_table("ANTHROPIC_API_KEY", "LOGFIRE_TOKEN"))
 
     result = hygiene.Result()
     hygiene.detect_env_sync(result)
@@ -225,9 +232,9 @@ def test_d3_flags_documented_but_undeclared_var(fake_repo):
 
 
 def test_d3_undocumented_var_is_info_only(fake_repo):
-    """`.env.example` is exhaustive; CLAUDE.md documents a curated subset."""
+    """`.env.example` is exhaustive; the doc carries a curated subset."""
     _write(fake_repo, "backend/.env.example", "ANTHROPIC_API_KEY=x\nMAIL_SERVER=mailhog\n")
-    _write(fake_repo, "CLAUDE.md", _env_doc("ANTHROPIC_API_KEY"))
+    _write(fake_repo, hygiene.ENV_DOC, _env_doc_table("ANTHROPIC_API_KEY"))
 
     result = hygiene.Result()
     hygiene.detect_env_sync(result)
@@ -237,15 +244,146 @@ def test_d3_undocumented_var_is_info_only(fake_repo):
     assert "MAIL_SERVER" in result.info[0].detail
 
 
-def test_d3_skips_when_env_section_missing(fake_repo):
+def test_d3_still_reads_the_legacy_code_block_shape(fake_repo):
+    """The doc moved out of CLAUDE.md on 30/07; both shapes must keep parsing."""
+    _write(fake_repo, "backend/.env.example", "ANTHROPIC_API_KEY=x\nLOGFIRE_TOKEN=y\n")
+    _write(fake_repo, hygiene.ENV_DOC, _env_doc_block("ANTHROPIC_API_KEY", "LOGFIRE_TOKEN"))
+
+    result = hygiene.Result()
+    hygiene.detect_env_sync(result)
+
+    assert result.drift == []
+
+
+def test_d3_unreadable_doc_is_drift_not_silence(fake_repo):
+    """Zero parsed variables must shout.
+
+    Extracting the section on 30/07 without repointing D3 would have left it
+    reading an empty heading and reporting every var as 'undocumented' info -
+    a detector that sees nothing while printing clean.
+    """
     _write(fake_repo, "backend/.env.example", "ANTHROPIC_API_KEY=x\n")
-    _write(fake_repo, "CLAUDE.md", "# CLAUDE.md\n\nPas de section env.\n")
+    _write(fake_repo, hygiene.ENV_DOC, "# Variables\n\nAucune variable ici.\n")
+
+    result = hygiene.Result()
+    hygiene.detect_env_sync(result)
+
+    assert len(result.drift) == 1
+    assert "aveugle" in result.drift[0].detail
+
+
+def test_d3_skips_when_doc_missing(fake_repo):
+    _write(fake_repo, "backend/.env.example", "ANTHROPIC_API_KEY=x\n")
 
     result = hygiene.Result()
     hygiene.detect_env_sync(result)
 
     assert result.drift == []
     assert result.skipped
+
+
+# ─── D5 · Plafond de lignes ───────────────────────────────────────────────────
+
+
+def _sized_doc(limit, lines):
+    head = "> **Regle.** plafond dur %d lignes\n" % limit
+    return head + "\n".join("ligne %d" % i for i in range(lines - 1)) + "\n"
+
+
+def _only_claude(monkeypatch):
+    monkeypatch.setattr(hygiene, "DOC_SIZE_LIMITS", ["CLAUDE.md"])
+
+
+def test_d5_under_the_ceiling_is_clean(fake_repo, monkeypatch):
+    _only_claude(monkeypatch)
+    _write(fake_repo, "CLAUDE.md", _sized_doc(170, 50))
+
+    result = hygiene.Result()
+    hygiene.detect_doc_size(result)
+
+    assert result.findings == []
+
+
+def test_d5_flags_overflow_with_the_delta(fake_repo, monkeypatch):
+    _only_claude(monkeypatch)
+    _write(fake_repo, "CLAUDE.md", _sized_doc(150, 196))
+
+    result = hygiene.Result()
+    hygiene.detect_doc_size(result)
+
+    assert len(result.drift) == 1
+    assert "196" in result.drift[0].title and "150" in result.drift[0].title
+    assert "+46" in result.drift[0].detail
+
+
+def test_d5_ceiling_is_read_from_the_file_not_hardcoded(fake_repo, monkeypatch):
+    """Raising the declared ceiling must be enough to clear the finding.
+
+    A limit duplicated in this script and in the doc is exactly the divergence
+    D6 exists to catch - so D5 must never hold its own copy.
+    """
+    _only_claude(monkeypatch)
+    _write(fake_repo, "CLAUDE.md", _sized_doc(400, 196))
+
+    result = hygiene.Result()
+    hygiene.detect_doc_size(result)
+
+    assert result.findings == []
+
+
+def test_d5_missing_declaration_is_drift(fake_repo, monkeypatch):
+    _only_claude(monkeypatch)
+    _write(fake_repo, "CLAUDE.md", "# Sans regle de plafond\n")
+
+    result = hygiene.Result()
+    hygiene.detect_doc_size(result)
+
+    assert len(result.drift) == 1
+    assert "plafond" in result.drift[0].title
+
+
+# ─── D6 · Coherence des comptes ───────────────────────────────────────────────
+
+
+def _decisions(n):
+    return "\n".join("### %d — Decision %d\n\nDetail.\n" % (i, i) for i in range(1, n + 1))
+
+
+def test_d6_matching_count_is_clean(fake_repo):
+    _write(fake_repo, "docs/context/decisions-architecturales.md", _decisions(29))
+    _write(fake_repo, "CLAUDE.md", "Index des 29 decisions architecturales.\n")
+
+    result = hygiene.Result()
+    hygiene.detect_count_coherence(result)
+
+    assert result.findings == []
+
+
+def test_d6_flags_every_stale_claim(fake_repo):
+    """The real case, 31/07: three figures live for the same set."""
+    _write(
+        fake_repo,
+        "docs/context/decisions-architecturales.md",
+        "Detail des 24 décisions.\n" + _decisions(29),
+    )
+    _write(fake_repo, "AGENTS.md", "24 décisions architecturales\n")
+    _write(fake_repo, "docs/INDEX.md", "detail des 31 décisions\n")
+
+    result = hygiene.Result()
+    hygiene.detect_count_coherence(result)
+
+    assert len(result.drift) == 3
+    assert all("29" in f.title for f in result.drift)
+
+
+def test_d6_blind_when_entry_pattern_matches_nothing(fake_repo):
+    _write(fake_repo, "docs/context/decisions-architecturales.md", "Aucune section au format attendu.\n")
+
+    result = hygiene.Result()
+    hygiene.detect_count_coherence(result)
+
+    assert len(result.drift) == 1
+    assert "aveugle" in result.drift[0].detail
 
 
 # ─── D4 · Eval gaps ───────────────────────────────────────────────────────────
