@@ -7,6 +7,26 @@
 
 ---
 
+## ⚖️ Dette CLAUDE.md — dépassement du plafond
+
+`CLAUDE.md` se donne un **plafond dur de 150 lignes** (facts + INDEX uniquement). Il est à **197 lignes au 30/07/2026**, soit ~47 de trop. Le dépassement est structurel, pas accidentel : les sections INDEX ont grossi à mesure que les décisions s'accumulaient.
+
+| Section | Lignes | Diagnostic |
+|---------|-------:|------------|
+| `## Décisions architecturales — INDEX` | 41 | **Principal contributeur.** Une ligne par décision, mais elles sont longues. Le détail vit déjà dans `context/decisions-architecturales.md` — l'index peut se réduire à `#N — titre court` sans le résumé. |
+| `## Variables d'environnement` | 23 | **N'est pas un fact de session ni un index.** Candidat naturel à l'extraction vers `docs/ops/`. |
+| `## Décisions ouvertes — INDEX` | 20 | Même traitement que l'index architectural. |
+| `## Fichiers clés` | 17 | Recoupe partiellement ce catalogue — fusion possible. |
+| `## Dev Agent — Definition of Done` | 16 | Procédural, pas un fact. Candidat à `tools/bmad/` ou `docs/testing/`. |
+
+**Le gain le plus rapide** : extraire `Variables d'environnement` (23 lignes) et `Dev Agent — DoD` (16) vers des sous-fichiers. À eux deux ils ramènent le fichier à ~158 lignes sans toucher aux index.
+
+> ⚠️ **Drift constaté au passage** : `CLAUDE.md` annonçait « 24 décisions architecturales » quand ce catalogue en compte 31. Le compte a été retiré de `CLAUDE.md` plutôt que corrigé — un nombre codé en dur dans deux fichiers dérive à chaque ajout. Candidat à un contrôle de l'agent d'hygiène ([HOS-320](https://linear.app/hospitalityagent/issue/HOS-320)), au même titre que le plafond de lignes.
+
+**Non traité dans cette session** — c'est un chantier de refactoring documentaire à part entière, pas un à-côté d'un re-baseline de sprint.
+
+---
+
 ## 🔒 Convention « local-only » (élagage du 30/07/2026)
 
 Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ensembles restent **sur disque mais hors versionnement** — ils sont toujours présents dans l'historique Git, seulement plus dans les commits à venir :

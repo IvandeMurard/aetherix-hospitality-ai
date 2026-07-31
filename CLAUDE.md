@@ -1,8 +1,8 @@
 # CLAUDE.md — Aetherix
 
 > Source de vérité partagée. Chargé automatiquement à chaque session.
-> **Règle :** ce fichier = facts de session + INDEX uniquement. Détail décisions → `docs/context/decisions-architecturales.md` (24 décisions architecturales) + `docs/context/open-decisions.md` (décisions ouvertes + archive résolues). Cible ≤ 150 lignes.
-> Mettre à jour après chaque décision : ajouter une ligne d'INDEX ici + le détail complet dans le sous-fichier correspondant.
+> **Règle — NE PAS SURCHARGER CE FICHIER.** Facts + INDEX uniquement, **plafond dur 150 lignes** (dépassé : 195 au 30/07 → `docs/INDEX.md` §Dette CLAUDE.md).
+> Une décision = **une ligne d'index ici**, le détail en **sous-section** du fichier dédié : `context/decisions-architecturales.md` · `context/open-decisions.md` · `docs/INDEX.md`. Ni narratif, ni justification, ni historique ici : si ça ne tient pas en une ligne, ça va en sous-section et on met le lien.
 
 ---
 
@@ -164,8 +164,7 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 
 **Linear** — Workspace `Hospitalityagent`, team `2f6bb5e2-d735-4769-9377-11fe186aa0ad`. Conventions Epic/Story → `docs/context/linear-conventions.md`. Verify session : `list_teams` doit retourner "Hospitalityagent".
 
-**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille (10/07/2026) : dossier `Veille/` = source de vérité unique** (hebdo + watchlist + analyses concurrentielles) — plus dans le repo, cf. `docs/INDEX.md` §Convention local-only.
-> **Migration achevée le 30/07/2026.** La watchlist était restée dans le repo trois semaines malgré la consolidation du 10/07 → portée dans `Veille/Veille_Watchlist.md`, **désormais source de vérité** pour W1-W14, WT1-WT3 et le monitoring Mesh (Anima/Tacet). Le cron `veille-hebdomadaire.yml` — qui ne pouvait pas écrire dans un vault local, et était en échec — est **désactivé et sorti du dépôt** : la veille passe exclusivement par la scheduled task Cowork. **Ne pas chercher le canari W2 dans le repo, il n'y est plus.** Prochaine échéance datée : re-vérification A2A **30/10/2026**.
+**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille + watchlist = `Veille/` uniquement** (migration achevée 30/07/2026, plus rien dans le repo). Détail → `docs/INDEX.md` §Convention local-only.
 
 **BMad modes** — Déclare en début de conversation. Veille · SM (Bob) · Dev (Amelia) · Architect (Winston) · PM · Analyst (Mary) · QA · Tech Writer. Files in `tools/bmad/_bmad/bmm/agents/`.
 
