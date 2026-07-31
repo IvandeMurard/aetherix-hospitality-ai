@@ -164,7 +164,8 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 
 **Linear** — Workspace `Hospitalityagent`, team `2f6bb5e2-d735-4769-9377-11fe186aa0ad`. Conventions Epic/Story → `docs/context/linear-conventions.md`. Verify session : `list_teams` doit retourner "Hospitalityagent".
 
-**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille (10/07/2026) : dossier `Veille/` = source de vérité unique** (hebdo + watchlist + analyses concurrentielles) — plus dans le repo (`docs/veille/`, `docs/_archive/context/monitoring-watchlist.md`, `docs/competitive/*` archivés, cf. `docs/INDEX.md`).
+**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille (10/07/2026) : dossier `Veille/` = source de vérité unique** (hebdo + watchlist + analyses concurrentielles) — plus dans le repo, cf. `docs/INDEX.md` §Convention local-only.
+> **Migration achevée le 30/07/2026.** La watchlist était restée dans le repo trois semaines malgré la consolidation du 10/07 → portée dans `Veille/Veille_Watchlist.md`, **désormais source de vérité** pour W1-W14, WT1-WT3 et le monitoring Mesh (Anima/Tacet). Le cron `veille-hebdomadaire.yml` — qui ne pouvait pas écrire dans un vault local, et était en échec — est **désactivé et sorti du dépôt** : la veille passe exclusivement par la scheduled task Cowork. **Ne pas chercher le canari W2 dans le repo, il n'y est plus.** Prochaine échéance datée : re-vérification A2A **30/10/2026**.
 
 **BMad modes** — Déclare en début de conversation. Veille · SM (Bob) · Dev (Amelia) · Architect (Winston) · PM · Analyst (Mary) · QA · Tech Writer. Files in `tools/bmad/_bmad/bmm/agents/`.
 
