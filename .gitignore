@@ -70,3 +70,21 @@ eval/reports/
 docs/demos/*_transcript.md
 docs/demos/closed_loop_demo.*
 docs/demos/memory_tour.md
+
+# --- Élagage 2026-07-30 : le dépôt ne porte plus que le code et la doc vivante ---
+# Ces fichiers restent SUR DISQUE — ils ne sont simplement plus versionnés.
+# Détrackés via `git rm --cached`, donc toujours présents dans l'historique.
+
+# Veille concurrentielle et stratégique — conservée en local (décision Ivan, 30/07/2026).
+# Inclut monitoring-watchlist.md : le canari W2 Apaleo vit désormais hors dépôt.
+docs/veille/*
+!docs/veille/.gitkeep
+docs/_archive/
+
+# Workflow CI de veille — sans objet depuis que la veille est locale
+# (il était par ailleurs en échec, cf. plan-90j-proof-visibility.md §Phase A).
+.github/workflows/veille-hebdomadaire.yml
+
+# BMAD vendoré — outillage tiers réinstallable, pas du code Aetherix.
+# `tools/bmad/_bmad-output/` reste versionné : il porte les stories (produit de travail).
+tools/bmad/_bmad/

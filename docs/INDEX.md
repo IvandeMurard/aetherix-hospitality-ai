@@ -7,6 +7,55 @@
 
 ---
 
+## ⚖️ Dette CLAUDE.md — dépassement du plafond
+
+`CLAUDE.md` se donne un **plafond dur de 150 lignes** (facts + INDEX uniquement). Il est à **197 lignes au 30/07/2026**, soit ~47 de trop. Le dépassement est structurel, pas accidentel : les sections INDEX ont grossi à mesure que les décisions s'accumulaient.
+
+### Refactoring du 30/07 — fait
+
+| Section | Avant | Après | Destination |
+|---------|------:|------:|-------------|
+| `## Variables d'environnement` | 23 | 3 | ✅ [`ops/environment-variables.md`](ops/environment-variables.md) |
+| `## Dev Agent — Definition of Done` | 16 | 3 | ✅ [`context/dev-agent-dod.md`](context/dev-agent-dod.md) |
+
+**Résultat : 195 → 166 lignes.** (L'estimation initiale de ~158 était optimiste — les lignes de pointeur comptent aussi.)
+
+### Ce qui reste, et pourquoi ça ne bougera pas facilement
+
+| Section | Lignes | Diagnostic révisé |
+|---------|-------:|-------------------|
+| `## Décisions architecturales — INDEX` | 41 | **C'est la raison d'être du fichier.** Compressible en `#N — titre court` sans le résumé, mais on perd la lisibilité en session. |
+| `## Décisions ouvertes — INDEX` | 20 | Idem. |
+| `## Fichiers clés` | 17 | **Diagnostic initial erroné** — j'avais écrit « recoupe ce catalogue ». Faux : c'est une carte du **code** (`backend/app/*`, `scripts/*`), ce catalogue liste la **documentation**. À conserver. |
+
+> ⚖️ **Le plafond de 150 mérite d'être rediscuté.** Il reste 16 lignes à trouver, et le seul gisement est constitué des deux index de décisions — soit le contenu principal du fichier. Un plafond qui oblige à supprimer ce pour quoi le fichier existe est mal calibré : le projet est passé de 24 à 31 décisions depuis que le chiffre a été posé. **Deux options** : relever le plafond à ~170 en assumant la croissance de l'index, ou compresser l'index en titres courts et accepter d'ouvrir `decisions-architecturales.md` plus souvent. **Arbitrage Ivan, non tranché.**
+
+> ⚠️ **Drift constaté au passage** : `CLAUDE.md` annonçait « 24 décisions architecturales » quand ce catalogue en compte 31. Le compte a été retiré de `CLAUDE.md` plutôt que corrigé — un nombre codé en dur dans deux fichiers dérive à chaque ajout. Candidat à un contrôle de l'agent d'hygiène ([HOS-320](https://linear.app/hospitalityagent/issue/HOS-320)), au même titre que le plafond de lignes.
+
+**Non traité dans cette session** — c'est un chantier de refactoring documentaire à part entière, pas un à-côté d'un re-baseline de sprint.
+
+---
+
+## 🔒 Convention « local-only » (élagage du 30/07/2026)
+
+Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ensembles restent **sur disque mais hors versionnement** — ils sont toujours présents dans l'historique Git, seulement plus dans les commits à venir :
+
+| Chemin | Contenu | Pourquoi hors dépôt |
+|--------|---------|---------------------|
+| `docs/veille/` | Veilles hebdomadaires | Source de vérité = vault Obsidian `Agentic AI Hospitality/Veille/` (acté 10/07, CLAUDE.md §Obsidian) |
+| `docs/_archive/` | 47 fichiers : anciennes veilles, **`monitoring-watchlist.md`**, MVP_SCOPE, Problem_Statement, ROADMAP, presentation, `internal/`, `handoff/` | Archive de phases closes |
+| `tools/bmad/_bmad/` | Install BMAD vendorée (233 fichiers) | Outillage tiers réinstallable. **`tools/bmad/_bmad-output/` reste versionné** — il porte les stories. |
+
+> ⚠️ **Migration de la veille incomplète.** CLAUDE.md déclare depuis le 10/07 que le vault Obsidian `Veille/` est la source de vérité unique pour « hebdo + watchlist + analyses concurrentielles ». Les hebdos y sont bien (8 notes thématiques + index + canvas), **mais la watchlist n'y a jamais été portée** — elle est restée dans `docs/_archive/context/monitoring-watchlist.md`. Le canari W2 et ses triggers n'ont donc pas de foyer dans la source de vérité déclarée. **À reprendre côté Obsidian.**
+
+**⚠️ Lecture des références.** Plusieurs docs en ligne — `CLAUDE.md`, `AGENTS.md`, `context/open-decisions.md`, `context/decisions-architecturales.md`, `adr/0006`, `adr/0008`, `marketing/positioning-snippets.md`, `Cost_Model.md` — citent encore `monitoring-watchlist.md`, `docs/veille/` ou `docs/_archive/`. **Ces liens sont valides en local et ne sont pas des drifts** : ils pointent vers des fichiers présents sur la machine, absents du dépôt distant. Un clone frais ne les résoudra pas.
+
+> **Note pour l'agent d'hygiène ([HOS-320](https://linear.app/hospitalityagent/issue/HOS-320))** : ne pas signaler ces trois chemins comme références cassées. C'est une règle d'exclusion à ajouter, pas un drift à corriger.
+
+**Le canari concurrentiel W2 (Apaleo Copilot scope F&B) vit désormais hors dépôt.** Sa re-vérification trimestrielle est fixée au **30/10/2026** (voir `context/apaleo-a2a-spike-decision.md` §Conditions de bascule, qui reste en ligne). Ne pas compter sur le dépôt pour la rappeler.
+
+---
+
 ## 🏛️ Architecture
 - `ARCHITECTURE.md` — pointeur architecture (v0.3.0, 07/07/2026) : où trouver quoi + résumé 10 lignes. La vérité vit dans CLAUDE.md / mesh-architecture.md / ADRs
 - `mesh-architecture.md` — **SOURCE DE VÉRITÉ CROSS-REPOS** (Mesh : Aetherix + Tacet + Orchestrateur + Anima)
