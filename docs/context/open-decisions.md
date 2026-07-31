@@ -55,6 +55,26 @@
 
 **Aussi présent dans :** `docs/_archive/context/monitoring-watchlist.md` W2 (status FIRED 06-08, cadence bi-hebdo).
 
+### Graphe de contexte Phase 4 — livrer amputé ou différer en entier ? (31/07/2026)
+
+**Statut :** Open — arbitrage de périmètre, pas de correction
+**Origine :** ADR-0008 §17.5, amendement du 31/07/2026
+**Trigger :** avant SM kickoff Phase 4
+
+**Contexte.** L'arbitrage §17 a différé toutes les parties d'ADR-0008 dépendantes de la cohorte, parce que `hotel_cohort_features` n'existe pas et que son socle Hive est gelé par l'audit. Le nœud `Cohort` étant la frontière d'anonymisation (§6), les 3 query types cross-propriétés ne sont pas dégradables : ils partent ou ne partent pas.
+
+**Ce qui reste livrable :** 3 query types **intra-propriété** — `edge_case_lookup`, `cause_diagnosis`, `intervention_chain` — pour 21 points, 5 stories.
+
+**La tension.** §1.2 et §1.3 justifient le graphe par la réutilisation de patterns **cross-propriétés** (« qu'a fait le chef de cette cohorte la dernière fois qu'IFA et la pluie sont tombées ensemble »). La valeur différenciante est donc précisément la partie gelée. Ce qui survit recouvre largement ce que `operational_memory` + pgvector servent déjà (§1.1).
+
+**Options :**
+- **(A) Livrer amputé** — §17.4 s'applique tel quel : 5 stories, 21 pts, 3 query types. Le schema et le backfill sont posés, la cohorte se branchera dessus quand le gel sera levé.
+- **(B) Différer ADR-0008 Phase 4 en entier** — l'ADR passe Accepted → Deferred, §17 devient sa justification.
+
+**Reco Architect : (B).** Le gel de l'audit vise les briques dont la valeur n'est pas prouvée, et un graphe intra-propriété qui double pgvector en est le cas d'école. Livrer 21 points de plomberie dont la justification écrite porte sur une capacité absente ajoute de l'architecture sans preuve — le ratio même que l'audit reproche. Le coût du report est faible (schema et backfill ne se périment pas) ; le coût de livrer maintenant est réel (21 points de surface à maintenir, documenter et faire passer les gates, pendant la fenêtre de 90 jours consacrée à la preuve).
+
+**Dépendances :** ADR-0006 §10.4 (précondition de levée cohorte) · Décision #24 · HOS-300 NFR2
+
 ### Food waste tracking
 
 **Statut :** Open
