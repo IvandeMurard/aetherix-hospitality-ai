@@ -861,3 +861,115 @@ L'ADR-0007 v1 cadre eval-by-design essentiellement comme un **gate CI pre-merge*
 - **Ré-armement Bras A** (gate offline → blocking) tracké : HOS-216 (machinerie, WARN) → HOS-274 (flip blocking après N PR vertes).
 - **Rattachement Bras C** au framework : à scoper Phase 4 (outcome-capture, Décision #26). Pas d'issue dédiée à ce jour → candidat backlog.
 - **Cross-link CLAUDE.md** : Décision #22 à amender (ajouter lien vers cet addendum + reformuler « gate CI » → « offline + runtime + outcome »). **À confirmer PO avant édition de la source de vérité** — non fait dans cet addendum.
+
+---
+
+## 14. Addendum — 2026-07-30 · Processus de calibration LLM-judge (pré-requis EVAL-6)
+
+> **Status**: Accepted · **Date**: 2026-07-30 · **Auteur**: PM (session Claude Code)
+> **Trigger**: veille comparative — Airbnb Engineering, "Eval-Driven Development: Lessons from Evaluating GenAI at Scale" (medium.com/airbnb-engineering, 2026). Comparaison détaillée : vault Obsidian `Veille/Veille_Tech_Stack.md` §JUL 20, 2026.
+> **Comble** : gap identifié — EVAL-6 (`docs/planning/evaluation-by-design.md` §Phase 4, `eval/FAILURE_THRESHOLDS.md` ligne "LLM reasoning") mentionne un "human spot-check" et un "judge model" sans jamais spécifier *comment* faire confiance à ce juge avant de l'utiliser à l'échelle.
+> **Implémente** : Décision #32 (CLAUDE.md)
+
+### 14.1 Constat
+
+Airbnb documente un principe absent de l'ADR-0007 v1/§13 : un LLM-as-judge n'est fiable que s'il est **calibré contre un jugement humain de référence avant d'être déployé en autonomie** — golden set dédié, métrique d'accord quantifiée, seuil explicite, recalibration périodique. Sans ça, EVAL-6 risque de construire un juge qui semble fonctionner (rubrique plausible) sans jamais avoir vérifié qu'il est d'accord avec Ivan sur ce qui compte comme une explication correcte.
+
+### 14.2 Décision — processus de calibration EVAL-6
+
+**Ce juge évalue une seule dimension** (fidélité factuelle de l'explication de reasoning — pas de "god evaluator" multi-dimensions, cohérent Airbnb §"keep evaluators focused" et avec le principe déjà appliqué dans ce repo d'1 juge = 1 responsabilité étroite).
+
+**D14.a — Rubrique = miroir exact de `FAILURE_THRESHOLDS.md`, pas une nouvelle définition.**
+
+Le juge ne doit pas réinterpréter ce qu'est une "bad explanation" — il applique la définition déjà contractuelle (§Failure definitions, ligne "LLM reasoning") :
+
+```
+Score 1 (PASS) sauf si l'explication contient AU MOINS UN des éléments suivants :
+  (a) attribue le driver demande/staffing à une cause absente du contexte d'input
+      (mauvaise météo/event/occupancy invoqué)
+  (b) référence un événement, une réservation ou un pattern absent des données d'input
+  (c) énonce une valeur numérique (covers, % occupancy, effectif staff) qui ne correspond
+      pas au payload input/prédiction fourni
+Score 0 (FAIL) si (a) ou (b) ou (c).
+```
+
+Binaire, pas d'échelle 1-5 — cohérent Airbnb ("ambiguity is the enemy... if a human can't apply the rubric consistently, an LLM certainly can't") et avec la nature contractuelle déjà établie de `FAILURE_THRESHOLDS.md`.
+
+**D14.b — Golden set de calibration : nouveau fichier, schema distinct de `golden_dataset.jsonl`.**
+
+`golden_dataset.jsonl` teste input→output attendu (tolérance numérique). Le golden set de calibration teste texte-libre→verdict humain — schema différent, fichier séparé : `eval/judge_calibration_set.jsonl`.
+
+```json
+{
+  "schema_version": "1.0.0",
+  "id": "judge-cal-001",
+  "recommendation_id": "synthetic",
+  "input_context": {
+    "hotel_id": "demo-hotel", "date": "2025-03-01",
+    "occupancy": 0.76, "weather_score": 0.3, "event_impact": 0.0,
+    "predicted_covers": 90
+  },
+  "explanation_text": "Covers forecast at 90 reflects typical weekday demand, no major weather or event impact this period.",
+  "human_verdict": "pass",
+  "human_verdict_reason": "Attribution cohérente avec input_context, aucun chiffre ni événement inventé.",
+  "failure_category": null,
+  "created_at": "2026-07-30",
+  "author": "ivan"
+}
+```
+
+Pour un cas FAIL synthétique (injection délibérée, cf. Airbnb "synthetic acceptable") :
+
+```json
+{
+  "id": "judge-cal-002",
+  "explanation_text": "Covers forecast at 90 driven by the jazz festival downtown this weekend.",
+  "human_verdict": "fail",
+  "human_verdict_reason": "Référence un événement (jazz festival) absent de input_context.event_impact=0.0",
+  "failure_category": "b_invented_event"
+}
+```
+
+**Volume minimum avant premier run de calibration : 50 exemples** (borne basse Airbnb), incluant les 3 catégories d'échec (a/b/c) + des cas PASS variés (jour normal, event réel, weather réel). Avant le premier pilote réel (pas encore de vraies recommandations en prod), ces 50 exemples sont **construits manuellement par Ivan** — bonnes explications tirées de `golden_dataset.jsonl` existant + corruption délibérée pour générer les cas FAIL. Post-pilote (Phase 4), enrichir avec de vrais cas ambigus rencontrés en prod (alimente aussi EVAL-7).
+
+**D14.c — Modèle juge : Claude Sonnet via `LLMProvider` (Décision #9), pas un nouvel outil/SDK.**
+
+Cohérent Décision #1 (Sonnet = reasoning principal) et rejet déjà acté deepeval/Braintrust pour Phase 3 (§ADR-0007 corps). Le juge appelle `LLMProvider.complete()` avec un prompt dédié (rubrique D14.a + `input_context` + `explanation_text`, **jamais** le prompt original qui a généré l'explication — le juge ne doit voir que le résultat à évaluer, pas le raisonnement de génération, pour éviter un biais d'auto-cohérence).
+
+**Tension notée, non résolue ici** : Sonnet évalue une sortie générée par Sonnet (même famille de modèle) — risque de biais de préférence correlé (les erreurs que Sonnet ne "voit" pas en générant, il risque de ne pas les voir non plus en jugeant). Airbnb recommande "stronger LLMs" comme juges. Si la calibration D14.d échoue de façon répétée avec Sonnet-juge, **escalader à Opus comme juge uniquement** (pas comme générateur — coût maîtrisé, un seul call léger par recommandation échantillonnée) avant de conclure que le problème est la rubrique plutôt que le juge.
+
+**D14.d — Métrique de calibration : Cohen's kappa, seuil ≥ 0.8.**
+
+Kappa plutôt que le simple % d'accord brut cité par Airbnb ("80-90%") : la distribution PASS/FAIL du golden set est probablement déséquilibrée (la plupart des recommandations sont correctes) — un % d'accord brut est gonflé par le hasard sur la classe majoritaire. Kappa corrige pour l'accord attendu par chance. Seuil ≥ 0.8 = "almost perfect agreement" (Landis & Koch), traduction rigoureuse de la fourchette Airbnb "high 80s-90s" one fois l'effet de classe déséquilibrée retiré.
+
+**Procédure** :
+1. Run le juge sur les 50+ exemples de `judge_calibration_set.jsonl`
+2. Calculer kappa(verdict juge, `human_verdict`)
+3. Si kappa < 0.8 : analyser les désaccords un par un, affiner la rubrique/prompt/few-shot examples, ré-itérer
+4. Si kappa ≥ 0.8 sur 2 runs consécutifs (stabilité, pas un coup de chance) : juge calibré, autorisé à scorer en autonomie sur trafic échantillonné
+
+**Règle d'arrêt (adaptée du principe Airbnb "if experts disagree, stop before automating")** : solo-founder aujourd'hui — Ivan est le seul labeliseur humain, donc pas de désaccord inter-humain à ce stade. La règle s'applique à la place au binôme **juge vs Ivan** : tant que kappa < 0.8, EVAL-6 **ne scoring pas en autonomie** — chaque désaccord juge/Ivan est un signal que la rubrique ou le prompt du juge a un angle mort, pas que "le juge se trompe parfois". Réserver la version originale de la règle (désaccord inter-humain) pour le jour où un second reviewer (rôle QA BMad, ou hire) rejoint le golden-set labeling.
+
+**D14.e — Recalibration : triggers explicites, pas de calendrier fixe seul.**
+
+Recalibrer si l'un de ces événements survient (le calendrier fixe seul — Airbnb dit "périodiquement" — est insuffisant sans triggers événementiels) :
+- Changement de prompt ou de modèle sur le reasoning engine généré (le juge évalue un output qui a changé de distribution)
+- Swap de provider (Décision #9 — passage Claude→Gemini/GPT fallback)
+- Trimestriel, systématique, même sans changement détecté (dérive lente du golden set vs réalité terrain)
+- Accumulation de désaccords juge/PM sur le spot-check hebdomadaire EVAL-7 au-delà d'un seuil (à définir au moment du build EVAL-7 — pas fixé ici, dépend du volume réel)
+
+### 14.3 Conséquences
+
+- **EVAL-6 acceptance criteria amendé** : ajouter à `docs/planning/evaluation-by-design.md` §Phase 4 — "kappa ≥ 0.8 sur `eval/judge_calibration_set.jsonl` (2 runs consécutifs) avant d'activer le sampling live" comme critère bloquant, pas une note annexe.
+- **`eval/FAILURE_THRESHOLDS.md`** : la ligne "LLM reasoning" référence désormais ce processus de calibration plutôt qu'un simple seuil de spot-check humain (5%) sans méthode de confiance sur le juge qui, à terme, fera une partie de ce spot-check.
+- **Pas de nouvel outil** : réutilise `LLMProvider` (Décision #9/#10) + JSONL custom (cohérent rejet deepeval/Braintrust Phase 3, §ADR-0007 corps).
+- **Effort estimé** : +0.5 jour dev sur l'estimation EVAL-6 existante (construction golden set calibration + script kappa) — ajustement mineur, pas un nouveau bloc de stories.
+
+### 14.4 Alternatives rejetées
+
+| Alternative | Raison du rejet |
+|---|---|
+| % d'accord brut (Airbnb tel quel) | Gonflé par déséquilibre de classe PASS/FAIL — kappa est le choix rigoureux à petit N |
+| Juge = même call que le générateur (self-eval inline) | Biais d'auto-cohérence maximal — le juge doit être un call séparé, sans accès au prompt de génération |
+| Calendrier de recalibration fixe seul (ex. "tous les trimestres") | Insuffisant — un changement de prompt/provider entre deux recalibrations planifiées invaliderait silencieusement le juge |
+| Nouvel outil dédié (deepeval/Braintrust) pour cette seule calibration | Déjà tranché Phase 3 : re-évaluer seulement si volume EVAL-6/7 > 1000 runs/mois (§ADR-0007 corps, section Stories Phase 4) |

@@ -16,7 +16,7 @@ Created by HOS-204 (EVAL-0). Consumed by EVAL-1…EVAL-5.
 | Layer | "Bad output" definition | Unacceptable threshold |
 |---|---|---|
 | **Forecast (Prophet)** | MAPE deviates from baseline by > 3pp on any category, or > 22% rolling 7-day average | Rolling 7d > 22% triggers alert; > 25% triggers auto-disable of cold-start meta-learner (per ADR-0005) |
-| **LLM reasoning** | Factually incorrect explanation (attributes spike to wrong cause, references non-existent event, invents numbers) | > 5% of recs flagged in human spot-check (Phase 4 — EVAL-6) |
+| **LLM reasoning** | Factually incorrect explanation (attributes spike to wrong cause, references non-existent event, invents numbers) | > 5% of recs flagged in human spot-check (Phase 4 — EVAL-6). **Judge calibration required first**: Cohen's kappa ≥ 0.8 vs human verdict on `eval/judge_calibration_set.jsonl`, 2 consecutive runs — see ADR-0007 §14 |
 | **Inbound parser (Haiku)** | Misclassifies manager intent (accepted / rejected / modified) | accuracy < 90% on stratified eval set; precision per intent < 0.85 |
 | **Memory recall** | No relevant hit returned when one exists in same hotel context; or returns hit with mean similarity below threshold | precision@5 < 0.7 on annotated eval set (full eval = Phase 4 EVAL-8; Phase 3 = smoke only) |
 | **Cold-start meta-learner** | Day-1 MAPE > 25% on LOO backtest | Gate already in ADR-0005 — runtime auto-disable |

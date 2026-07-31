@@ -72,7 +72,7 @@ Base    ── Golden dataset + failure definitions    ← Phase 3 EVAL-0 (BLOCK
 | Layer | "Bad output" definition | Unacceptable threshold |
 |---|---|---|
 | **Forecast (Prophet)** | MAPE deviates from baseline by > 3pp on any category, or > 22% rolling 7-day average | Rolling 7d > 22% triggers alert; > 25% triggers auto-disable of cold-start meta-learner (per ADR-0005) |
-| **LLM reasoning** | Factually incorrect explanation (attributes spike to wrong cause, references non-existent event, invents numbers) | > 5% of recs flagged in human spot-check (Phase 4 EVAL-6) |
+| **LLM reasoning** | Factually incorrect explanation (attributes spike to wrong cause, references non-existent event, invents numbers) | > 5% of recs flagged in human spot-check (Phase 4 EVAL-6) — judge must be calibrated first, see ADR-0007 §14 |
 | **Inbound parser (Haiku)** | Misclassifies manager intent (accepted/rejected/modified) | accuracy < 90% on stratified eval set; precision per intent < 0.85 |
 | **Memory recall** | No relevant hit returned when one exists in same hotel context; or returns hit with mean similarity below threshold | precision@5 < 0.7 on annotated eval set |
 | **Cold-start meta-learner** | Day-1 MAPE > 25% on LOO backtest | Gate already in ADR-0005 — runtime auto-disable |
@@ -268,7 +268,7 @@ These thresholds are **the contract**. Updating them = explicit decision (PR + C
 
 Noted for context, full scoping in Phase 4 planning:
 
-- **EVAL-6** — LLM-as-judge on reasoning quality (sample N recs/week, judge model evaluates explanation factual accuracy)
+- **EVAL-6** — LLM-as-judge on reasoning quality (sample N recs/week, judge model evaluates explanation factual accuracy). **Blocking acceptance criteria (ADR-0007 §14, added 30/07/2026)**: judge calibrated to Cohen's kappa ≥ 0.8 vs human verdict on `eval/judge_calibration_set.jsonl` (2 consecutive runs) before enabling live sampling — do not ship a judge that hasn't been checked against Ivan's own labels first.
 - **EVAL-7** — Human eval loops (sample manager replies → PM annotation queue → feed golden dataset; weekly)
 - **EVAL-8** — Memory recall precision@k vs annotated truth (build annotated set of "ideal hit" per query, measure recall quality)
 - **EVAL-9** — Adversarial probes extended (beyond prompt injection: anomalous data injection, weird timezone, broken PMS feed, malicious manager reply)
