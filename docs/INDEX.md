@@ -7,6 +7,26 @@
 
 ---
 
+## 🔒 Convention « local-only » (élagage du 30/07/2026)
+
+Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ensembles restent **sur disque mais hors versionnement** — ils sont toujours présents dans l'historique Git, seulement plus dans les commits à venir :
+
+| Chemin | Contenu | Pourquoi hors dépôt |
+|--------|---------|---------------------|
+| `docs/veille/` | Veilles hebdomadaires | Source de vérité = vault Obsidian `Agentic AI Hospitality/Veille/` (acté 10/07, CLAUDE.md §Obsidian) |
+| `docs/_archive/` | 47 fichiers : anciennes veilles, **`monitoring-watchlist.md`**, MVP_SCOPE, Problem_Statement, ROADMAP, presentation, `internal/`, `handoff/` | Archive de phases closes |
+| `tools/bmad/_bmad/` | Install BMAD vendorée (233 fichiers) | Outillage tiers réinstallable. **`tools/bmad/_bmad-output/` reste versionné** — il porte les stories. |
+
+> ⚠️ **Migration de la veille incomplète.** CLAUDE.md déclare depuis le 10/07 que le vault Obsidian `Veille/` est la source de vérité unique pour « hebdo + watchlist + analyses concurrentielles ». Les hebdos y sont bien (8 notes thématiques + index + canvas), **mais la watchlist n'y a jamais été portée** — elle est restée dans `docs/_archive/context/monitoring-watchlist.md`. Le canari W2 et ses triggers n'ont donc pas de foyer dans la source de vérité déclarée. **À reprendre côté Obsidian.**
+
+**⚠️ Lecture des références.** Plusieurs docs en ligne — `CLAUDE.md`, `AGENTS.md`, `context/open-decisions.md`, `context/decisions-architecturales.md`, `adr/0006`, `adr/0008`, `marketing/positioning-snippets.md`, `Cost_Model.md` — citent encore `monitoring-watchlist.md`, `docs/veille/` ou `docs/_archive/`. **Ces liens sont valides en local et ne sont pas des drifts** : ils pointent vers des fichiers présents sur la machine, absents du dépôt distant. Un clone frais ne les résoudra pas.
+
+> **Note pour l'agent d'hygiène ([HOS-320](https://linear.app/hospitalityagent/issue/HOS-320))** : ne pas signaler ces trois chemins comme références cassées. C'est une règle d'exclusion à ajouter, pas un drift à corriger.
+
+**Le canari concurrentiel W2 (Apaleo Copilot scope F&B) vit désormais hors dépôt.** Sa re-vérification trimestrielle est fixée au **30/10/2026** (voir `context/apaleo-a2a-spike-decision.md` §Conditions de bascule, qui reste en ligne). Ne pas compter sur le dépôt pour la rappeler.
+
+---
+
 ## 🏛️ Architecture
 - `ARCHITECTURE.md` — pointeur architecture (v0.3.0, 07/07/2026) : où trouver quoi + résumé 10 lignes. La vérité vit dans CLAUDE.md / mesh-architecture.md / ADRs
 - `mesh-architecture.md` — **SOURCE DE VÉRITÉ CROSS-REPOS** (Mesh : Aetherix + Tacet + Orchestrateur + Anima)

@@ -26,10 +26,10 @@ Capacité : **dev solo, 8-10 pts / sprint-semaine**. Fenêtre jusqu'au J+90 d'Ep
 
 | Périmètre | Reste à faire |
 |-----------|--------------:|
-| Epic 16 — Proof & Visibility | ~23 pts (dont 2 stories non estimées) |
-| Epic 10 — Pilot Validation | ~45 pts |
+| Epic 16 — Proof & Visibility | **~13 pts** *(révisé 30/07 : HOS-321 livré −5, HOS-278 livré −3, HOS-313 aux ⅔ −2)* |
+| Epic 10 — Pilot Validation | ~42 pts *(HOS-285 et HOS-278 livrés)* |
 | Epic 11 — Evaluation by Design | ~19 pts |
-| **Total** | **~87 pts** |
+| **Total** | **~74 pts** |
 
 **Tout ne tient pas dans la fenêtre.** Arbitrage retenu :
 
@@ -38,7 +38,9 @@ Capacité : **dev solo, 8-10 pts / sprint-semaine**. Fenêtre jusqu'au J+90 d'Ep
 3. **HOS-308 est traité comme item partagé** — il sert FR1 d'Epic 16 *et* lève le prérequis PM de HOS-176.
 4. **La chaîne cold-start et Hive Memory sont décalées après le J+90 d'Epic 16** (S5+), sauf signature partenaire anticipée qui ferait remonter HOS-176.
 
-Epic 16 se clôt à S3 (23/08), soit ~6 semaines avant sa deadline — ce qui libère S4→S9 pour Phase 3.
+Epic 16 se clôt à **S2 (16/08)**, soit ~7 semaines avant sa deadline — ce qui libère **S3→S9** pour Phase 3.
+
+> **Révision du 30/07 (fin de journée).** Le reste-à-faire est passé de ~87 à ~74 pts en une journée : HOS-285 et HOS-278 livrés (audits Apaleo), HOS-321 livré en parallèle par une autre session, HOS-313 constaté aux deux tiers fait. **~13 pts de capacité libérés** — la reprise de Phase 3 avance d'une semaine et le chemin critique vers HOS-176 regagne de la marge.
 
 ---
 
@@ -86,14 +88,14 @@ Epic 16 se clôt à S3 (23/08), soit ~6 semaines avant sa deadline — ce qui li
 
 > **HOS-308 porte une dépendance externe** (obtenir un export POS 12+ mois d'un restaurateur du réseau). S'il ne rentre pas, voir §Risques R3 — il ne doit pas bloquer S3.
 
-### S3 — lun 17/08 → dim 23/08 · « Clôture J+90 » (~8 pts)
+### S3 — lun 17/08 → dim 23/08 · « Clôture J+90 » (~3 pts restants)
 
-| Item | Épique | Pts |
-|------|--------|----:|
-| **HOS-314** contenu & distribution — article eval-gate, LinkedIn, registries MCP | 16 | 3 |
-| **HOS-321** layer eval `guardrail` — 11 raisons typées Epic 12 | 16 | 5 |
+| Item | Épique | Pts | État |
+|------|--------|----:|------|
+| **HOS-314** contenu & distribution — article eval-gate, LinkedIn, registries MCP | 16 | 3 | ⬜ À faire |
+| ~~**HOS-321** layer eval `guardrail`~~ | 16 | ~~5~~ | ✅ **Livré le 30/07** (commit `aeb68a3`) — couvre **13** raisons typées d'Epic 12, pas 11 comme estimé initialement |
 
-> **Point de bascule.** À l'issue de S3, les 5 critères de sortie d'Epic 16 sont atteints ou à portée, ~6 semaines avant le 05/10. Phase 3 reprend la capacité à partir de S4.
+> **Point de bascule — avancé.** Avec HOS-321 livré, S3 ne porte plus que HOS-314. **Epic 16 peut se clôturer dès S2**, soit ~7 semaines avant sa deadline du 05/10. Phase 3 reprend donc la capacité à partir de **S3**, une semaine plus tôt que prévu au re-baseline.
 
 ### S4 — lun 24/08 → dim 30/08 · « Reprise Phase 3 : trust + dette eval » (~8 pts + SEC)
 
@@ -210,7 +212,7 @@ Epic 16 se clôt à S3 (23/08), soit ~6 semaines avant sa deadline — ce qui li
   HOS-309 ─┤
   HOS-317 ─┤
   HOS-314 ─┤
-  HOS-321 ─┴──► critères de sortie J+90 (05/10)
+  HOS-321 ✅┴──► critères de sortie J+90 (05/10)
 
 
   PHASE 4 — hors séquencement Phase 3
@@ -290,7 +292,7 @@ Aucune transition n'a été faite. À valider par Ivan avant exécution :
 | HOS-308 | Backlog | **Todo** | S2 |
 | HOS-309 | Backlog | **Todo** | S2 |
 | HOS-314 | Backlog | **Todo** | S3 |
-| HOS-321 | Backlog | **Todo** | S3 |
+| HOS-321 | Backlog | **Done** — livré le 30/07 (`aeb68a3`), statut Linear à corriger | — |
 | HOS-177 | Backlog | **Todo** | S4 |
 | HOS-214 · HOS-219 | Backlog | **Todo** | S4 |
 | HOS-317 · HOS-318 | Todo | **estimer** (non pointées) | S1-S2 |
