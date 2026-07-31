@@ -19,11 +19,33 @@
 
 **Reco interne :** $500-$2,500/property/mois selon scope modules activés.
 
-### Apaleo Copilot scope F&B (canari à surveiller) — 🚨 FIRED 06-08
+### Apaleo Copilot scope F&B (canari à surveiller) — 🚨 FIRED 06-08, **DÉ-ESCALADÉ 07-30**
 
-**Statut :** Open — **canari FIRED** (veille hebdo 06-08-2026). Monitor cadence ↑ : bi-hebdo au lieu de mensuel jusqu'à clarification scénario.
+**Statut :** Open — **canari dé-escaladé** après audit ([HOS-285](https://linear.app/hospitalityagent/issue/HOS-285), 30/07/2026). Cadence de monitoring : **retour au mensuel** (bi-hebdo levé — 7 semaines sans nouveau signal F&B).
 
-**Date documentation :** 01/06/2026 · **Trigger fired :** 08/06/2026
+**Date documentation :** 01/06/2026 · **Trigger fired :** 08/06/2026 · **Audit livré :** 30/07/2026
+
+**Status update 07-30 — audit fonctionnel livré** → [`docs/competitive/apaleo-trace-agent-analysis.md`](../competitive/apaleo-trace-agent-analysis.md)
+
+Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni couverts, ni staffing, ni prévision.** Tâches réelles = amenities, room setup, dietary requirements, celebrations → créées dans Sweeply (~30/jour, 3,5 h/semaine économisées à THE FLAG Zürich). Agent **réactif** (transforme une intention déjà écrite), pas prédictif. Aucun chevauchement avec le pipeline Aetherix.
+
+⚠️ **Reformulation du vecteur de risque.** Apaleo ne construit pas les agents — il fournit les rails : Agent Hub (marketplace vendor-neutral + monétisation) et Agent Factory (co-construction co-financée). Trace Agent a été bâti avec un tiers en **prototype 1 mois / production 2,5 mois**. Le scénario à surveiller n'est plus « Apaleo absorbe le F&B » (scénario C, peu probable — hors de son modèle) mais **« un tiers publie un agent F&B sur Agent Hub en un trimestre »**. La catégorie F&B est **vacante** au 30/07 (agents cités : Email Booking, Corporate Sales, Digital Twin, CRM & Guest Experience).
+
+**Nouveau trigger d'escalade** : publication sur Agent Hub d'un agent tiers touchant covers / F&B forecasting / staffing / labour planning → escalade immédiate, indépendamment du scope du Copilot.
+
+#### Volet protocole — A2A : **TRANCHÉ 30/07/2026** ([HOS-278](https://linear.app/hospitalityagent/issue/HOS-278))
+
+**Décision : Aetherix reste MCP standalone.** Wait-and-see argumenté sur A2A. 1-pager complet → [`docs/context/apaleo-a2a-spike-decision.md`](apaleo-a2a-spike-decision.md).
+
+**Constat déterminant** : A2A est un **cap annoncé, pas une interface disponible**. Au 30/07/2026, `apaleo.dev` ne documente que deux chemins d'intégration tiers — **Claude Plugin** et **MCP Server** (OAuth 2.0, ~230 tools). Aucune spec A2A, aucun modèle d'auth, aucun endpoint. Les mentions A2A (page produit, communication Copilot) sont **au futur** : *« third-party apps and agents will also be able to connect »*. La veille des 20-22/06 avait raison sur l'annonce, mais a surestimé sa maturité en la traitant comme un chemin actionnable avant le pilote M4 — **la cible n'existait pas**.
+
+**Pourquoi attendre ne coûte rien** : la Décision #19 (Aetherix = F&B execution node appelé par un orchestrateur externe) rend Aetherix structurellement prêt pour un branchement A2A futur. Aucune dette d'architecture à provisionner. Le risque, lui, est produit et asymétrique : se brancher en A2A ferait disparaître le Daily Receipt derrière l'UI Copilot et commoditiserait la couche exécution — soit précisément le wedge.
+
+**Conditions de bascule (rouvrir si l'une se déclenche)** : **B1** spec A2A publique sur `apaleo.dev` · **B2** un tiers publie un agent F&B via Agent Hub/A2A *(partagé avec le trigger ci-dessus)* · **B3** un design partner exige la livraison via Copilot · **B4** Apaleo conditionne le référencement Agent Hub à une connexion A2A. Sinon, re-vérification **trimestrielle** — premier point au **30/10/2026**.
+
+**Conséquence plan de sprint** : [HOS-180](https://linear.app/hospitalityagent/issue/HOS-180) (Agent Hub listing, S7) **confirmé tel quel, pas de re-spécification** — risque R4 de `phase-3-sprint-plan.md` **levé**.
+
+**Limite** : sources publiques uniquement. Une spec A2A peut exister en *closed alpha* (ce fut le cas du MCP server Apaleo). Un e-mail au canal développeurs Apaleo trancherait en 48 h — **action PM non faite**.
 
 **Status update 06-08 :** Apaleo a officiellement lancé son AI Copilot (Hospitality Net mai 2026). Scope actuel = chat interface embedded + check arrivals + extend stays + plan housekeeping + resolve overbookings + assign rooms. **F&B explicite pas encore**, mais expansion technique triviale depuis cette base.
 
@@ -46,7 +68,7 @@
 - Communications product Apaleo mentionnant "covers" / "staffing prediction" / "F&B forecasting"
 
 **Mitigation activée 06-08 :**
-- ⏳ Audit fonctionnel Copilot via session SM Linear story flaggée — **story créée, livrable non écrit** : `docs/competitive/apaleo-copilot-functional-audit.md` n'existe pas (cohérent avec `docs/_archive/context/monitoring-watchlist.md` §58 « à créer »). Le ✅ précédent surclamait une livraison ; corrigé après détection par l'agent d'hygiène (HOS-320, D2). Base d'évidence réellement disponible : `docs/competitive/apaleo-mcp-mapping.md` (HOS-197).
+- ✅ **Audit fonctionnel livré 30/07/2026** → [`docs/competitive/apaleo-trace-agent-analysis.md`](../competitive/apaleo-trace-agent-analysis.md) (HOS-285). Le fichier annoncé de longue date sous le nom `apaleo-copilot-functional-audit.md` n'a jamais existé (drift D2, détecté par l'agent d'hygiène HOS-320) ; l'audit a été livré sous le nom du ticket qui l'a effectivement porté — **un seul fichier, pas deux**. Base d'évidence complémentaire : `docs/competitive/apaleo-mcp-mapping.md` (HOS-197).
 - (a) Shipper pilote HOS-176 Phase 3 avant Q4 2026 — déjà roadmap
 - (b) Outreach Apaleo Marketplace pour position de complément (pas concurrent) — à confirmer
 - (c) Accélérer Aetherix MCP v1 (`get_operational_predictions` = primitive prédictive F&B absente des 235 tools Apaleo natifs, différenciateur défensif identifié HOS-197)

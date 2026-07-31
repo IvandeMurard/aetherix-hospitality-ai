@@ -1,423 +1,152 @@
-# F&B Operations Agent - Cost Model
+# Aetherix — Modèle de coûts (unit economics)
 
-**Version:** 0.1.0 (MVP Phase 0)  
-**Last Updated:** December 2, 2025  
-**Author:** Ivan de Murard
-
----
-
-## Overview
-
-This document details the complete cost structure for the F&B Operations Agent, from MVP development through production scaling to 1,000+ restaurants.
-
-**Key Highlights:**
-- **MVP Cost:** $6.65/restaurant/month (well under $10 target)
-- **Scale Cost (500 restaurants):** $1.14/restaurant/month (-78% savings)
-- **Pro Tier Margin:** 89% gross margin ($49 revenue - $6.65 cost)
-- **Break-even:** 1 customer (instant profitability)
-
-**Full Cost Model (Google Sheets):**  
-https://docs.google.com/spreadsheets/d/1K2AZVUdOeTxWzZQb5FaFIbh_nJXkuGvjTrcNk0Z_OPQ/edit?usp=sharing
+> **Story** : [HOS-312](https://linear.app/hospitalityagent/issue/HOS-312) (Story 16.12) — Unit economics, coût complet par propriété/mois
+> **Version** : 2.0 · **Date** : 2026-07-30 · **Owner** : Ivan
+> **Remplace** : version 0.1.0 du 02/12/2025 — modélisait un stack qui n'existe plus (Qdrant, ElevenLabs, Vercel, Render, framing « restaurants » à 49 $/mois). **Ne pas s'y référer.**
+> **Alimente** : [HOS-179](https://linear.app/hospitalityagent/issue/HOS-179) (pricing decision doc, S8)
 
 ---
 
-## 1. Monthly Operating Expenses (Per Restaurant)
+## Statut des chiffres (taxonomie HOS-318)
 
-### MVP Configuration (1 Restaurant)
+| Poste | Statut | Base |
+|-------|--------|------|
+| Coûts LLM | **Calculé** | Tarifs publics Anthropic × volumétrie dérivée du code (`mcp_server.py`, `receipts.py`, dispatchers APScheduler) |
+| Fly.io · Supabase · Upstash · Twilio | **Estimé** | Configuration réelle (`fly.toml`) × grilles publiques — **à confronter aux factures réelles** |
+| Volumétrie d'usage | **Estimé** | Rythme nominal modélisé, non observé — aucune propriété en production à ce jour |
 
-| Service | Tier | Monthly Cost | Usage | Notes |
-|---------|------|--------------|-------|-------|
-| **Claude API** | Pay-as-you-go | $1.65 | 100 predictions | $0.0165/prediction (3K input + 500 output tokens) |
-| **Qdrant Cloud** | Free | $0 | <1GB storage | 50 patterns ~100MB, well under limit |
-| **ElevenLabs** | Starter | $5.00 | 30K chars | Voice synthesis + transcription (opt-in) |
-| **Supabase** | Free | $0 | <500MB database | PostgreSQL + Auth + Real-time |
-| **Vercel** | Hobby | $0 | <100GB bandwidth | Next.js hosting, auto-deploy |
-| **Render.com** | Free | $0 | Sleep after 15min | FastAPI backend (acceptable for demo) |
-| **Redis (Upstash)** | Free | $0 | <10K requests/day | Session state, conversation context |
-| **PredictHQ** | Free | $0 | 1,000 calls/month | Events API (concerts, festivals) |
-| **TOTAL MVP** | - | **$6.65** | - | Conservative estimate |
-
-**Cost Breakdown Detail:**
-
-**Claude API Calculation:**
-```
-Input: 3,000 tokens × $3/MTok = $0.009
-Output: 500 tokens × $15/MTok = $0.0075
-Per prediction: $0.0165
-
-100 predictions/month: $0.0165 × 100 = $1.65/month
-```
-
-**ElevenLabs Optimization:**
-- Free tier: 10,000 chars/month
-- MVP usage estimate: ~2,500 chars (50 predictions × 50 chars)
-- **Could use free tier, but keeping Starter ($5) as safety buffer**
-- Optimized cost: $1.65/month (Claude only)
-
-**Why these services:**
-- **Claude Sonnet 4:** Best reasoning quality for explainability
-- **Qdrant:** Fastest vector search, generous free tier
-- **ElevenLabs:** Best voice quality (natural, conversational)
-- **Supabase:** PostgreSQL + Auth + Real-time in one platform
-- **Vercel:** Optimized for Next.js, auto-deploy from GitHub
-- **Render:** Docker-ready, easy backend deployment
+⚠️ **Aucun chiffre de ce document n'est mesuré.** L'observabilité Logfire ([HOS-311](https://linear.app/hospitalityagent/issue/HOS-311)) est active depuis le 26/07, mais le trafic accumulé est du sandbox, pas de la production — l'extrapoler serait présenter du synthétique comme du réel, exactement ce que la gate d'honnêteté ([HOS-318](https://linear.app/hospitalityagent/issue/HOS-318)) interdit. **À re-mesurer après le go-live ([HOS-176](https://linear.app/hospitalityagent/issue/HOS-176)).**
 
 ---
 
-## 2. Development Costs (One-Time)
+## 1. Tarifs unitaires retenus
 
-### Phase 0-2 (MVP Development)
+**LLM (Anthropic, vérifié 2026-07-30)** :
 
-| Item | Cost | Notes |
-|------|------|-------|
-| **Developer Time** | $0 | Portfolio project (80-120h invested) |
-| **Cursor Pro** | $20/month | AI-assisted coding (already subscribed, optional) |
-| **Warp Pro** | $0 | Terminal included in existing subscription |
-| **Figma** | $0 | Free tier (Figma Make used for mockups) |
-| **GitHub** | $0 | Public repositories (unlimited) |
-| **Domain Name** | $12/year | Optional (can use .vercel.app free subdomain) |
-| **TOTAL ONE-TIME** | **$0-32** | Minimal upfront investment |
+| Modèle | Rôle dans le pipeline | Input $/MTok | Output $/MTok |
+|--------|----------------------|-------------:|--------------:|
+| `claude-sonnet-4-6` | Modèle par défaut — raisonnement, Receipt, digest | 3,00 | 15,00 |
+| `claude-haiku-4-5` | Classification inbound (routing HOS-283, `receipts.py:132`) | 1,00 | 5,00 |
+| `gemini-2.0-flash` | Fallback (Décision LLM provider) | — | — |
+| `mistral-embed` | Embeddings mémoire opérationnelle | négligeable | — |
 
-**Notes:**
-- No API setup fees (all services free tier or pay-as-you-go)
-- No hosting setup fees (Vercel, Render, Supabase free tiers)
-- Cursor Pro optional (can use VS Code free)
-- Domain optional for MVP (vercel.app works for demo)
+**Infrastructure** — configuration réelle :
 
----
+| Service | Configuration | Nature |
+|---------|--------------|--------|
+| Fly.io | 1× `shared-cpu-1x`, 1024 MB RAM, région `cdg`, `min_machines_running = 1`, `auto_stop_machines = "off"` | **Fixe** |
+| Supabase | PostgreSQL + pgvector + RLS | **Fixe** (par palier) |
+| Upstash | Redis — rate limiting, state | Fixe puis variable |
+| Twilio | WhatsApp Business — **facturation par conversation (fenêtre 24 h)**, pas par message | **Variable** |
 
-## 3. Scale Scenarios (Economies of Scale)
-
-### Cost Per Restaurant at Different Scales
-
-| Restaurants | Predictions/Month | Claude API | Qdrant | ElevenLabs | Other | **Total Cost** | **Per Restaurant** | **Savings** |
-|-------------|-------------------|------------|--------|------------|-------|----------------|-------------------|-------------|
-| **1** | 100 | $1.65 | $0 | $5.00 | $0 | **$6.65** | **$6.65** | - |
-| **5** | 500 | $8.25 | $0 | $5.00 | $0 | **$13.25** | **$2.65** | -60% |
-| **50** | 5,000 | $82.50 | $25 | $5.00 | $10 | **$122.50** | **$2.45** | -63% |
-| **500** | 50,000 | $825 | $95 | $22 | $50 | **$992** | **$1.98** | -70% |
-| **1,000** | 100,000 | $1,650 | $149 | $99 | $100 | **$1,998** | **$2.00** | -70% |
-
-**Scale Economics Drivers:**
-
-1. **Fixed Costs Amortized:**
-   - Qdrant $25/month ÷ 50 restaurants = $0.50 each
-   - Backend hosting $10/month ÷ 50 restaurants = $0.20 each
-
-2. **Volume Discounts:**
-   - Claude API: Bulk pricing negotiations at 50K+ predictions
-   - ElevenLabs: Enterprise tier cheaper per-character at scale
-
-3. **Efficiency Gains:**
-   - Batch predictions (process multiple restaurants in one API call)
-   - Shared embeddings (reuse similar patterns across restaurants)
-   - Cached results (reduce duplicate Claude API calls)
-
-**Break-Even Points:**
-- **5 restaurants:** $2.65/restaurant (profitable at $49/month Pro tier)
-- **50 restaurants:** $2.45/restaurant (89% margin maintained)
-- **500 restaurants:** $1.98/restaurant (strong unit economics)
+> ⚠️ `auto_stop_machines = "off"` + `min_machines_running = 1` : la machine Fly tourne **24/7 même sans trafic** — les workers APScheduler doivent rester vivants. C'est un coût fixe incompressible, pas un coût à l'usage.
 
 ---
 
-## 4. Revenue Model (Pricing Tiers)
+## 2. Volumétrie modélisée (1 propriété, rythme nominal)
 
-### Proposed Pricing Structure
+| Opération | Fréquence | Modèle | Input ~ | Output ~ |
+|-----------|----------:|--------|--------:|---------:|
+| Daily Receipt (forecast → reco → explication) | 30 / mois | Sonnet 4.6 | 3 500 | 400 |
+| Parsing message manager entrant | 15 / mois | Haiku 4.5 | 800 | 50 |
+| Réponse + écriture mémoire | 15 / mois | Sonnet 4.6 | 2 000 | 200 |
+| Digest hebdomadaire | 4 / mois | Sonnet 4.6 | 5 000 | 600 |
+| Forecast Prophet | 30 / mois | — | **aucun appel LLM** (calcul local) | — |
 
-| Tier | Price | Predictions | Restaurants | Key Features | Target Customer |
-|------|-------|-------------|-------------|--------------|----------------|
-| **Free** | $0/month | 10/month | 1 | Basic predictions, email support | Trial / small cafes |
-| **Pro** | $49/month | Unlimited | 1 | + Voice input, priority support, analytics | Independent restaurants |
-| **Team** | $199/month | Unlimited | Up to 5 | + Multi-location dashboard, API access, account manager | Small chains |
-| **Enterprise** | Custom | Unlimited | Unlimited | + White-label, SSO/RBAC, custom integrations, SLA 99.9% | Hotel chains |
+> Le forecast lui-même ne coûte pas de tokens : Prophet tourne sur la machine Fly. Le LLM n'intervient que pour l'explicabilité et la conversation.
 
----
+### Coût LLM résultant
 
-### Unit Economics (Pro Tier)
+| Poste | Calcul | $/mois |
+|-------|--------|-------:|
+| Daily Receipt | 30 × [(3 500/1M × 3) + (400/1M × 15)] | **0,495** |
+| Parsing inbound (Haiku) | 15 × [(800/1M × 1) + (50/1M × 5)] | **0,016** |
+| Réponse + mémoire | 15 × [(2 000/1M × 3) + (200/1M × 15)] | **0,135** |
+| Digest hebdo | 4 × [(5 000/1M × 3) + (600/1M × 15)] | **0,096** |
+| Embeddings | — | ~0,01 |
+| **Total LLM / propriété / mois** | | **≈ 0,75 $** |
 
-**Pro Tier Analysis:**
-```
-Revenue:        $49/month
-Cost (COGS):    $6.65/month (MVP scale)
-Gross Margin:   $42.35 (89%)
+**Le LLM n'est pas le poste dominant.** C'est le résultat le plus contre-intuitif de ce modèle : à 0,75 $/propriété/mois, le coût d'inférence est inférieur au coût WhatsApp et très inférieur au socle fixe.
 
-LTV (Lifetime Value):
-- Avg subscription: 24 months (industry benchmark SaaS B2B)
-- Churn: 5%/month (1 / 0.05 = 20 months effective)
-- LTV: $49 × 20 months = $980
-
-CAC (Customer Acquisition Cost) Target:
-- LTV:CAC ratio: 3:1 (healthy SaaS metric)
-- Max CAC: $980 ÷ 3 = $327
-
-Break-even: 1 customer (instant profitability)
-```
-
-**Why $49/month Pro tier:**
-- **Competitive:** vs 7shifts ($30-50), HotSchedules ($50-100), Fourth ($75-150)
-- **Value-based:** Time saved (5-8h → 2h) = 6h/week × $25/hour = $150/week value
-- **Affordable:** <$2/day for average restaurant ($1M revenue)
-- **Positioning:** "Premium but accessible" (not cheapest, best AI quality)
-
-**Gross Margin Sustainability:**
-```
-At scale (500 restaurants):
-- Cost: $1.98/restaurant
-- Revenue: $49/month
-- Margin: $47.02 (96%)
-
-Strong SaaS margins maintained across scales.
-```
+> **Levier non exploité** : le prompt système est stable d'un appel à l'autre. Le prompt caching (~0,1× en lecture) diviserait le poste input par ~10, soit ≈ 0,25 $/propriété/mois. Gain absolu faible aujourd'hui — à considérer seulement au-delà de ~50 propriétés.
 
 ---
 
-## 5. Sensitivity Analysis
+## 3. Coûts variables non-LLM
 
-### What-If Scenarios
+**Twilio WhatsApp — le piège de facturation.** La facturation est **par conversation** (fenêtre de 24 h), pas par message. Un Daily Receipt suivi de 3 échanges de feedback = **1 conversation**, pas 4. Se tromper ici fausse le coût variable d'un ordre de grandeur.
 
-**Scenario A: High Usage (200 predictions/month)**
-```
-Claude API: $1.65 × 2 = $3.30
-ElevenLabs: Same ($5.00)
-Total: $8.30/month
+- 30 Daily Receipts/mois = 30 conversations ouvertes minimum
+- Les réponses manager dans la fenêtre sont incluses
+- Catégorie *utility*, France : ordre de grandeur **0,05 $/conversation** → **≈ 1,60 $/propriété/mois** *(à confirmer sur facture)*
 
-Still <$10 target ✅
-Margin: $49 - $8.30 = $40.70 (83%)
-```
-
-**Scenario B: Free Tier Optimization (ElevenLabs free)**
-```
-Claude API: $1.65
-ElevenLabs: $0 (free tier)
-Total: $1.65/month
-
-Ultra-lean MVP ✅
-Margin: $49 - $1.65 = $47.35 (97%)
-```
-
-**Scenario C: Claude API Price Increase (+50%)**
-```
-Claude API: $1.65 × 1.5 = $2.48
-ElevenLabs: $5.00
-Total: $7.48/month
-
-Still profitable ✅
-Margin: $49 - $7.48 = $41.52 (85%)
-```
-
-**Scenario D: Competition Forces Price Down ($29/month)**
-```
-Revenue: $29/month
-Cost: $6.65
-Margin: $22.35 (77%)
-
-Still healthy margin ✅
-But need 2x customers for same revenue
-```
-
-**Risk Mitigation:**
-- ✅ 89% margin provides pricing flexibility
-- ✅ Free tiers reduce downside risk
-- ✅ Multiple revenue streams (Pro/Team/Enterprise)
-- ✅ Cost decreases with scale (economies of scale)
+**Coût variable total ≈ 2,35 $/propriété/mois** (0,75 LLM + 1,60 WhatsApp).
 
 ---
 
-## 6. Comparison with Alternatives
+## 4. Trois scénarios de volume
 
-### Cost vs Competitors
+| | 1 propriété | 10 propriétés | 50 propriétés |
+|---|---:|---:|---:|
+| **Fixe** — Fly.io | ~5,70 | ~5,70 | ~12 (montée en gamme) |
+| **Fixe** — Supabase | 0 (free) | ~25 (Pro) | ~25 (Pro) |
+| **Fixe** — Upstash | 0 (free) | 0 (free) | ~10 |
+| **Sous-total fixe** | **~5,70** | **~30,70** | **~47** |
+| **Variable** — 2,35 × N | 2,35 | 23,50 | 117,50 |
+| **TOTAL / mois** | **~8,05 $** | **~54,20 $** | **~164,50 $** |
+| **Coût / propriété** | **8,05 $** | **5,42 $** | **3,29 $** |
 
-| Solution | Cost/Restaurant/Month | Features | Our Advantage |
-|----------|----------------------|----------|---------------|
-| **7shifts** | $30-50 | Scheduling, forecasting, time tracking | + AI reasoning, PMS integration |
-| **HotSchedules** | $50-100 | Scheduling, forecasting, POS integration | Cheaper, better AI |
-| **Fourth** | $75-150 | Labor management, analytics, forecasting | 6x cheaper, specialized F&B |
-| **Toast** | $69-165 | POS + scheduling (bundled) | Unbundled (no POS lock-in) |
-| **Manual (spreadsheets)** | $0 | Manager time 5-8h/week | Saves $150/week labor cost |
+**Points de bascule à connaître** :
 
-**Our positioning:**
-- **Not cheapest** (vs 7shifts low-end $30)
-- **Best AI quality** (explainable reasoning, voice-enabled)
-- **PMS-integrated** (Mews, Apaleo native)
-- **Hospitality-specific** (not generic retail scheduling)
-
-**Value proposition math:**
-```
-Manager time saved: 6h/week × $25/hour = $150/week = $650/month
-Cost: $49/month
-ROI: ($650 - $49) / $49 = 1,227% ROI
-Payback period: <1 week
-```
+- **Supabase free → Pro** (~25 $/mois) : le saut le plus brutal. Il tombe entre 1 et 10 propriétés selon la croissance de `operational_memory` (pgvector). À 1 propriété il double presque le coût total.
+- **Fly.io** : 1 GB de RAM suffit tant que Prophet `fit()` reste séquentiel. Au-delà de ~30 propriétés, le fit quotidien devient le facteur dimensionnant, pas le trafic HTTP.
+- **Dérive non linéaire à surveiller** : le contexte RAG grossit avec la mémoire opérationnelle accumulée. Le coût LLM par appel n'est donc pas constant dans le temps, même à volumétrie d'usage constante. Non chiffrable aujourd'hui — à instrumenter via Logfire après le pilote.
 
 ---
 
-## 7. Key Assumptions & Risks
+## 5. Confrontation au pricing — marge brute
 
-### Cost Assumptions
+| Ancrage | Prix / propriété / mois | Source |
+|---------|------------------------:|--------|
+| **Venli** (concurrent Apaleo-native, mid-market) | 99 – 299 € | Watchlist §W12 — anchor identifié pour HOS-179 |
+| **Reco interne Aetherix** | 500 – 2 500 $ | `open-decisions.md` §pricing |
 
-**Validated:**
-- ✅ Claude API pricing confirmed (Anthropic pricing page, Dec 2025)
-- ✅ Qdrant free tier confirmed (<1GB storage)
-- ✅ ElevenLabs pricing confirmed (free 10K chars, Starter $5/month)
-- ✅ Supabase, Vercel, Render free tiers confirmed
+Marge brute selon le scénario :
 
-**Estimates:**
-- ⚠️ 100 predictions/month average (could be 50-200 range)
-- ⚠️ 3K input + 500 output tokens per prediction (varies by complexity)
-- ⚠️ 50 patterns per restaurant (depends on historical data richness)
+| Prix retenu | Coût @ 1 prop. | Coût @ 10 prop. | Marge @ 10 prop. |
+|-------------|---------------:|----------------:|-----------------:|
+| 99 € (~107 $) | 8,05 $ | 5,42 $ | **94,9 %** |
+| 299 € (~323 $) | 8,05 $ | 5,42 $ | **98,3 %** |
+| 500 $ | 8,05 $ | 5,42 $ | **98,9 %** |
+| 2 500 $ | 8,05 $ | 5,42 $ | **99,8 %** |
 
-### Risk Factors
+### Conclusion pour HOS-179
 
-**Price Risk:**
-- Claude API could increase prices (mitigated by 89% margin buffer)
-- Free tiers could be restricted (mitigated by paying tiers as backup)
+**Les unit economics ne sont pas la contrainte.** La marge brute dépasse 94 % au prix le plus bas de la fourchette marché, dès 10 propriétés. Le coût marginal d'une propriété supplémentaire (~2,35 $) est négligeable devant tout prix envisageable.
 
-**Usage Risk:**
-- Restaurants use more predictions than estimated (mitigated by unlimited Pro tier)
-- Voice usage higher than expected (mitigated by free tier buffer)
+**Conséquence directe sur la décision pricing** : elle ne peut pas être construite en cost-plus — le coût ne contraint rien. C'est un arbitrage **valeur / disposition à payer / positionnement**, à trancher sur :
 
-**Competition Risk:**
-- Competitors lower prices (mitigated by differentiation: AI quality, PMS integration)
-- 7shifts adds AI reasoning (mitigated by hospitality specialization)
+1. la valeur mesurée chez le pilote (trust-KPI, [HOS-177](https://linear.app/hospitalityagent/issue/HOS-177)) — pas disponible avant novembre ;
+2. l'ancrage concurrentiel (Venli 99-299 €, marché mid-market Apaleo) ;
+3. l'écart à expliquer entre cet ancrage et la reco interne 500-2 500 $ — **un facteur 5 à 8 que ce modèle de coûts ne justifie pas** et qui doit se défendre sur la valeur.
 
-**Mitigation Strategy:**
-1. **High margins (89%)** → Can absorb 2x cost increase
-2. **Multiple tiers** → Capture different customer segments
-3. **Economies of scale** → Cost decreases as we grow
-4. **Free tier optimization** → ElevenLabs free tier reduces cost 75%
+**Le vrai risque économique n'est pas le coût de service, c'est le coût d'acquisition et le churn** — hors périmètre de cette story.
 
 ---
 
-## 8. Financial Projections (3-Year)
+## 6. Limites
 
-### Revenue Scenarios
-
-**Conservative (Year 1: 50 customers, 20% MoM growth):**
-```
-Year 1: 50 customers × $49 × 12 months = $29,400 revenue
-Year 2: 150 customers × $49 × 12 months = $88,200 revenue
-Year 3: 400 customers × $49 × 12 months = $235,200 revenue
-
-Total 3-year revenue: $352,800
-Gross margin (89%): $314,000
-```
-
-**Moderate (Year 1: 100 customers, 30% MoM growth):**
-```
-Year 1: 100 customers × $49 × 12 months = $58,800 revenue
-Year 2: 350 customers × $49 × 12 months = $205,800 revenue
-Year 3: 1,000 customers × $49 × 12 months = $588,000 revenue
-
-Total 3-year revenue: $852,600
-Gross margin (89%): $758,800
-```
-
-**Aggressive (Year 1: 200 customers, 40% MoM growth):**
-```
-Year 1: 200 customers × $49 × 12 months = $117,600 revenue
-Year 2: 800 customers × $49 × 12 months = $470,400 revenue
-Year 3: 2,500 customers × $49 × 12 months = $1,470,000 revenue
-
-Total 3-year revenue: $2,058,000
-Gross margin (89%): $1,831,620
-```
-
-**Key Metrics (Year 3 Moderate):**
-- ARR (Annual Recurring Revenue): $588,000
-- MRR (Monthly Recurring Revenue): $49,000
-- COGS: ~$2,000/month (1,000 customers × $2/restaurant)
-- Gross Margin: 96% (at scale)
+- **Aucun chiffre mesuré** (voir §Statut). Volumétrie nominale modélisée, pas observée.
+- **Grilles infra à confronter aux factures réelles** — Fly.io, Supabase, Upstash, Twilio. Les ordres de grandeur suffisent à la conclusion §5 (la marge reste > 90 % même si les coûts infra doublent), mais pas à un business plan.
+- **Twilio France, catégorie utility** — tarif à confirmer ; varie par pays et par catégorie de conversation.
+- **Hors périmètre** : CAC, churn, LTV, coûts de support, temps fondateur. Cette story chiffre le **coût de service**, pas le modèle d'affaires.
+- **À re-mesurer après HOS-176** — quand du trafic réel existe.
 
 ---
 
-## 9. Funding Requirements
+## Sources
 
-### Bootstrap-Friendly Model
-
-**MVP (Phase 0-2):**
-- Development: $0 (portfolio project, own time)
-- Infrastructure: $6.65/month (free tiers + Claude API)
-- Total investment: <$100 for 3 months
-
-**Growth (Phase 3-4):**
-- Marketing: $5,000-10,000 (content marketing, SEO, partnerships)
-- Sales: $0 (founder-led sales, Mews/Apaleo marketplace)
-- Infrastructure: Scales with revenue (pay-as-you-go)
-
-**No external funding required:**
-- ✅ Instant profitability (89% margins)
-- ✅ Free tier acquisition (viral loop)
-- ✅ Low CAC target ($327, achievable via content + partnerships)
-- ✅ Fast payback period (<1 week ROI for customers)
-
-**Self-sustaining from Month 1 with 2 paying customers:**
-```
-Revenue: 2 × $49 = $98/month
-Costs: 2 × $6.65 = $13.30/month
-Profit: $84.70/month (covers founder ramen 🍜)
-```
-
----
-
-## 10. Summary & Recommendations
-
-### Key Takeaways
-
-1. **MVP Cost: $6.65/month** (conservative, <$10 target ✅)
-2. **Scale Cost: $1.98/month at 500 restaurants** (-70% savings)
-3. **Pro Tier Margin: 89%** (healthy SaaS economics)
-4. **Break-even: 1 customer** (instant profitability)
-5. **Bootstrap-friendly:** No external funding needed
-
-### Recommendations
-
-**Phase 0-1 (MVP Development):**
-- ✅ Use free tiers aggressively (Qdrant, Supabase, Vercel, Render)
-- ✅ Optimize ElevenLabs (try free tier first, upgrade only if needed)
-- ✅ Monitor Claude API usage (set alerts at $5/month)
-
-**Phase 2-3 (First Customers):**
-- ✅ Validate pricing ($49 Pro tier) with 5-10 beta customers
-- ✅ Track actual vs estimated usage (predictions/month, tokens/prediction)
-- ✅ Measure ROI (time saved, accuracy improvement)
-
-**Phase 4+ (Scale):**
-- ✅ Negotiate volume discounts (Claude API, ElevenLabs at 50+ customers)
-- ✅ Add Team tier ($199) to capture multi-location customers
-- ✅ Explore Enterprise tier (custom pricing for hotel chains)
-
-### Cost Model Health Check
-
-✅ **Sustainable:** $6.65/month < $10 target  
-✅ **Scalable:** -70% cost reduction at scale  
-✅ **Profitable:** 89% margin maintained  
-✅ **Defensible:** High margins allow pricing flexibility  
-✅ **Competitive:** $49/month vs $50-150 market range  
-
-**Decision:** ✅ Cost model approved for Phase 1 implementation
-
----
-
-## Appendix
-
-### Sources
-
-- **Claude API Pricing:** https://www.anthropic.com/pricing (verified Dec 2025)
-- **Qdrant Cloud Pricing:** https://qdrant.tech/pricing/ (verified Dec 2025)
-- **ElevenLabs Pricing:** https://elevenlabs.io/pricing (verified Dec 2025)
-- **Supabase Pricing:** https://supabase.com/pricing (verified Dec 2025)
-- **Vercel Pricing:** https://vercel.com/pricing (verified Dec 2025)
-- **Render Pricing:** https://render.com/pricing (verified Dec 2025)
-
-### Related Documents
-
-- **Problem Statement:** `docs/_archive/Problem_Statement.md`
-- **MVP Scope:** `docs/_archive/MVP_SCOPE.md`
-- **Architecture:** `docs/ARCHITECTURE.md`
-- **Google Sheet (Live):** https://docs.google.com/spreadsheets/d/1K2AZVUdOeTxWzZQb5FaFIbh_nJXkuGvjTrcNk0Z_OPQ/edit?usp=sharing
-
----
-
-**Document Version:** 1.0  
-**Last Updated:** December 2, 2025  
-**Next Review:** After Phase 2 (first paying customers, validate actual costs)
+- Tarifs Anthropic vérifiés le 2026-07-30 (Sonnet 4.6 : 3/15 $ · Haiku 4.5 : 1/5 $ par MTok)
+- Configuration : `fly.toml` · `backend/app/providers/factory.py` · `backend/app/services/receipts.py:132` · `backend/app/main.py` (jobs APScheduler)
+- Ancrages pricing : `docs/context/monitoring-watchlist.md` §W12 · `docs/context/open-decisions.md` §pricing
+- Cadrage : `docs/planning/plan-90j-proof-visibility.md` §Phase C
