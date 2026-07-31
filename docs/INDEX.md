@@ -11,15 +11,24 @@
 
 `CLAUDE.md` se donne un **plafond dur de 150 lignes** (facts + INDEX uniquement). Il est à **197 lignes au 30/07/2026**, soit ~47 de trop. Le dépassement est structurel, pas accidentel : les sections INDEX ont grossi à mesure que les décisions s'accumulaient.
 
-| Section | Lignes | Diagnostic |
-|---------|-------:|------------|
-| `## Décisions architecturales — INDEX` | 41 | **Principal contributeur.** Une ligne par décision, mais elles sont longues. Le détail vit déjà dans `context/decisions-architecturales.md` — l'index peut se réduire à `#N — titre court` sans le résumé. |
-| `## Variables d'environnement` | 23 | **N'est pas un fact de session ni un index.** Candidat naturel à l'extraction vers `docs/ops/`. |
-| `## Décisions ouvertes — INDEX` | 20 | Même traitement que l'index architectural. |
-| `## Fichiers clés` | 17 | Recoupe partiellement ce catalogue — fusion possible. |
-| `## Dev Agent — Definition of Done` | 16 | Procédural, pas un fact. Candidat à `tools/bmad/` ou `docs/testing/`. |
+### Refactoring du 30/07 — fait
 
-**Le gain le plus rapide** : extraire `Variables d'environnement` (23 lignes) et `Dev Agent — DoD` (16) vers des sous-fichiers. À eux deux ils ramènent le fichier à ~158 lignes sans toucher aux index.
+| Section | Avant | Après | Destination |
+|---------|------:|------:|-------------|
+| `## Variables d'environnement` | 23 | 3 | ✅ [`ops/environment-variables.md`](ops/environment-variables.md) |
+| `## Dev Agent — Definition of Done` | 16 | 3 | ✅ [`context/dev-agent-dod.md`](context/dev-agent-dod.md) |
+
+**Résultat : 195 → 166 lignes.** (L'estimation initiale de ~158 était optimiste — les lignes de pointeur comptent aussi.)
+
+### Ce qui reste, et pourquoi ça ne bougera pas facilement
+
+| Section | Lignes | Diagnostic révisé |
+|---------|-------:|-------------------|
+| `## Décisions architecturales — INDEX` | 41 | **C'est la raison d'être du fichier.** Compressible en `#N — titre court` sans le résumé, mais on perd la lisibilité en session. |
+| `## Décisions ouvertes — INDEX` | 20 | Idem. |
+| `## Fichiers clés` | 17 | **Diagnostic initial erroné** — j'avais écrit « recoupe ce catalogue ». Faux : c'est une carte du **code** (`backend/app/*`, `scripts/*`), ce catalogue liste la **documentation**. À conserver. |
+
+> ⚖️ **Le plafond de 150 mérite d'être rediscuté.** Il reste 16 lignes à trouver, et le seul gisement est constitué des deux index de décisions — soit le contenu principal du fichier. Un plafond qui oblige à supprimer ce pour quoi le fichier existe est mal calibré : le projet est passé de 24 à 31 décisions depuis que le chiffre a été posé. **Deux options** : relever le plafond à ~170 en assumant la croissance de l'index, ou compresser l'index en titres courts et accepter d'ouvrir `decisions-architecturales.md` plus souvent. **Arbitrage Ivan, non tranché.**
 
 > ⚠️ **Drift constaté au passage** : `CLAUDE.md` annonçait « 24 décisions architecturales » quand ce catalogue en compte 31. Le compte a été retiré de `CLAUDE.md` plutôt que corrigé — un nombre codé en dur dans deux fichiers dérive à chaque ajout. Candidat à un contrôle de l'agent d'hygiène ([HOS-320](https://linear.app/hospitalityagent/issue/HOS-320)), au même titre que le plafond de lignes.
 
