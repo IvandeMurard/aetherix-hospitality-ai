@@ -7,6 +7,7 @@ tests assert detector *logic* rather than the current state of the real repo
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -299,6 +300,34 @@ def test_d4_skips_pycache(fake_repo):
 
 
 # ─── Report ───────────────────────────────────────────────────────────────────
+
+
+def test_detectors_flag_runs_only_the_selected_one(fake_repo, monkeypatch, capsys):
+    """The blocking PR gate runs `--detectors D1`; D2/D3/D4 must stay silent."""
+    _write(fake_repo, "CLAUDE.md", "# CLAUDE.md\n\nVoir `docs/ghost.md`.\n")
+    _write(fake_repo, "AGENTS.md", "# AGENTS.md\n\nVoir `docs/ghost.md`.\n")
+    monkeypatch.setattr(sys, "argv", ["hygiene", "--detectors", "D1", "--json"])
+
+    assert hygiene.main() == 0  # D2 would have flagged docs/ghost.md
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["drift_count"] == 0
+    assert {f["detector"] for f in payload["findings"]} <= {"D1"}
+
+
+def test_detectors_flag_still_fails_on_selected_drift(fake_repo, monkeypatch):
+    _write(fake_repo, "CLAUDE.md", '# CLAUDE.md\n\nLLM_MODEL "claude-sonnet-4-6"\n')
+    _write(fake_repo, "AGENTS.md", '# AGENTS.md\n\nLLM_MODEL "Codex-sonnet-4-6"\n')
+    monkeypatch.setattr(sys, "argv", ["hygiene", "--detectors", "D1", "--json"])
+
+    assert hygiene.main() == 1
+
+
+def test_unknown_detector_code_is_an_error_not_a_silent_pass(monkeypatch):
+    """A typo in the CI invocation must not look like a green run."""
+    monkeypatch.setattr(sys, "argv", ["hygiene", "--detectors", "D9"])
+
+    assert hygiene.main() == 2
 
 
 def test_report_states_clean_when_no_drift():

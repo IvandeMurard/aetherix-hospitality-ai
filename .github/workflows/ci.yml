@@ -165,3 +165,43 @@ jobs:
 
       - name: Validate golden dataset
         run: python scripts/eval/validate_dataset.py
+
+  # ---------------------------------------------------------------------------
+  # HOS-320 D1 — CLAUDE.md and AGENTS.md must stay twins.
+  #
+  # Blocking on every PR, unlike the other three detectors which stay on the
+  # weekly cron. D1 is the only one that qualifies: it is binary, instant, and
+  # has an escape hatch (HARNESS_EXCEPTIONS) for a legitimate divergence. D2/D3
+  # findings are judgement calls and D4 is a backlog — blocking on those would
+  # teach everyone to bypass the gate.
+  #
+  # Added only after the drift recurred: it first appeared as a one-off
+  # find-replace, then came back the next time CLAUDE.md was edited without
+  # resyncing AGENTS.md. Building the guard before the second occurrence would
+  # have been speculative.
+  # ---------------------------------------------------------------------------
+  harness-drift:
+    name: harness-drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Stdlib only — no install step needed.
+      - name: Check CLAUDE.md ↔ AGENTS.md
+        run: |
+          if ! python scripts/ops/hygiene_architecturale.py --detectors D1; then
+            echo ""
+            echo "❌ Les deux fichiers de harness ont divergé."
+            echo "   Ils doivent porter un contenu identique — seul leur propre nom diffère."
+            echo ""
+            echo "   Resynchroniser :"
+            echo "     python -c \"from pathlib import Path; Path('AGENTS.md').write_text(Path('CLAUDE.md').read_text(encoding='utf-8').replace('CLAUDE.md','AGENTS.md'), encoding='utf-8')\""
+            echo ""
+            echo "   Si la divergence est légitime (instruction propre à un harness),"
+            echo "   l'inscrire dans HARNESS_EXCEPTIONS avec sa justification."
+            exit 1
+          fi

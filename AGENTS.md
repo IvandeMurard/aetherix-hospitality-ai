@@ -69,6 +69,7 @@
 | 29 | Eval-gate EVAL-1 passé **WARN→blocking** (HOS-274) : exit 1/2 bloque le merge, exit 3 (WARN) reste non-bloquant. Précondition prouvée par canari CI (PR #185) — Prophet-in-CI **déterministe** : 3 runs, MAPE 25.40 % identique, 0 régression, variance 0.00pp vs baseline re-figée (PR #175). Frontière paths (doivent porter couverture vs runtime-guardrails Bras B légitimement exempts) = **ADR-0007 §D2.g**. Rollback = `EVAL_GATE_BLOCKING="false"` | 04/07/2026 |
 | 30 | Audit différentiel pré-pilote 2026-Q2 (HOS-277) **CLOSED** : NO-GO levé → **GO conditionnel** (sandbox Apaleo + dataset non-PII). Q2-01 (fuite `.env.fly`) → repo PRIVATE + historique purgé (filter-repo) + rotation 11/11 clés ; **résidu `refs/pull/*` clos 22/07/2026** (HOS-304 : ticket GitHub Support, 32 PRs déréférencées, commit `7070837` non résolvable — 422 confirmé) ; Q2-02 AsyncSession (HOS-288) + Q2-03 PII WhatsApp (HOS-289) corrigés (PR #187). Doc = `docs/context/security-review-2026-Q2.md` (bannière CLOSED) | 04/07/2026 |
 | 31 | Hospitality Agentic Mesh Signal Contract (**ADR-0012**) : `DomainSignal` namespaced par bounded context nœud (`environmental.*` Tacet, `guest.*` Anima, `fnb.*` Aetherix, `operational.*`/`orchestrator.*` Orchestrateur) · `SignalComposite` = perception cross-domaine, jamais de champ actionable (frontière décision protégée, ADR-0004 D5) · `CollectivePattern` = alias `fb_patterns`/Hive prior Anima · calibration à 3 niveaux (cohorte Hive / apprentissage local / override manager) · pas de `decay_rate` sur Signal (réservé ADR-0011 D2) · gel terminologique post-acceptation · **exception explicite Décision #25/ADR-0010 Q2 : reste privé, ne migre jamais vers le méta-repo public malgré le critère cross-cutting** | 06/07/2026 |
+| 32 | Processus de calibration LLM-judge, pré-requis EVAL-6 (**ADR-0007 §14**) : rubrique binaire miroir `FAILURE_THRESHOLDS.md` · golden set dédié `eval/judge_calibration_set.jsonl` · juge Sonnet via `LLMProvider` (Décision #9) · Cohen's kappa ≥ 0.8 avant scoring autonome · recalibration sur triggers explicites | 30/07/2026 |
 
 ---
 
@@ -141,7 +142,7 @@ scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian,
 ANTHROPIC_API_KEY     — Claude API
 LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
 LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad
-OBSIDIAN_VAULT_PATH   — C:/Users/IVAN/OneDrive/Documents/Agentic AI Hospitality
+OBSIDIAN_VAULT_PATH   — C:/Users/ivand/OneDrive/Documents/Agentic AI Hospitality
 APALEO_CLIENT_ID      — OAuth2
 APALEO_CLIENT_SECRET  — OAuth2
 COMPOSIO_API_KEY      — Apaleo MCP via Composio (Inventory API uniquement)
@@ -163,7 +164,7 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 
 **Linear** — Workspace `Hospitalityagent`, team `2f6bb5e2-d735-4769-9377-11fe186aa0ad`. Conventions Epic/Story → `docs/context/linear-conventions.md`. Verify session : `list_teams` doit retourner "Hospitalityagent".
 
-**Obsidian** — Vault `C:\Users\IVAN\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`.
+**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille (10/07/2026) : dossier `Veille/` = source de vérité unique** (hebdo + watchlist + analyses concurrentielles) — plus dans le repo (`docs/veille/`, `docs/_archive/context/monitoring-watchlist.md`, `docs/competitive/*` archivés, cf. `docs/INDEX.md`).
 
 **BMad modes** — Déclare en début de conversation. Veille · SM (Bob) · Dev (Amelia) · Architect (Winston) · PM · Analyst (Mary) · QA · Tech Writer. Files in `tools/bmad/_bmad/bmm/agents/`.
 

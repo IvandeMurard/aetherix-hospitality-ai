@@ -831,7 +831,7 @@ GRAPH_FDW_ENABLED     — "true" (default Phase 4 — active queries hybrides cr
 - `docs/context/decisions-architecturales.md` H3 §24 amendé (Q1 backend = Path C)
 - `docs/context/open-decisions.md` §Resolved 06/06/2026 (sous-décision Q1 backend = Path C cash-driven)
 - `docs/context/memory-architecture.md` couche graphe Phase 4 mention Path C
-- `docs/context/monitoring-watchlist.md` WT1 — trigger si Supabase ajoute AGE → réouvrir Path A possibility
+- `docs/_archive/context/monitoring-watchlist.md` WT1 — trigger si Supabase ajoute AGE → réouvrir Path A possibility
 
 **Next step** : SM (Bob) crée 6 stories Linear (HOS-GRAPH-1...6, breakdown amendé §13.6) — pas 5 comme initialement prévu Path A.
 
@@ -866,7 +866,7 @@ Pas de `GRAPH_DATABASE_URL` séparé (Path A). Pas de `GRAPH_FDW_ENABLED` (Path 
 ### Pré-Phase 4 (bloquants techniques) — Path C accepted
 
 - [x] **PM sign-off §13 Q1 amendment** — Path C accepted 06/06/2026 (raison financière, cf. §13.7). Documenté `docs/context/open-decisions.md` §Resolved + `docs/context/decisions-architecturales.md` §24 amendé.
-- [x] **Reminder Supabase AGE compatibility** — cron `check-supabase-apache-age-compatibility` créé (trimestriel, 1er du mois 9h) + entrée `docs/context/monitoring-watchlist.md` WT1 (réouvre Path A si Supabase ajoute AGE Phase 5+).
+- [x] **Reminder Supabase AGE compatibility** — cron `check-supabase-apache-age-compatibility` créé (trimestriel, 1er du mois 9h) + entrée `docs/_archive/context/monitoring-watchlist.md` WT1 (réouvre Path A si Supabase ajoute AGE Phase 5+).
 - [ ] **Smoke test schema CTE sur Supabase** — `CREATE SCHEMA aetherix_graph; CREATE TABLE aetherix_graph.test (id UUID PRIMARY KEY); SELECT 1 FROM aetherix_graph.test;` puis `DROP SCHEMA aetherix_graph CASCADE;` → confirme Supabase permet schema custom + DDL standard (très probable, mais 5min de validation).
 - [ ] **Benchmark recursive CTE 3-hop sur dataset mock** — créer dataset synthétique 50K nodes / 150K edges + lancer 6 query types templates SQL CTE → mesurer p95 vs SLO amendé Path C 1200ms. Si dépassement systématique → ajustement indexes + MV avant ship.
 - ~~Provisionner Fly Postgres dédié graphe~~ (Path A — non retenu)
@@ -883,7 +883,7 @@ Pas de `GRAPH_DATABASE_URL` séparé (Path A). Pas de `GRAPH_FDW_ENABLED` (Path 
 
 - [ ] **Commit + PR ADRs 0006 + 0008 + amendement §13** — branch `architect/adr-0006-0008-graphe-pos` + PR contre `main`. Inclure tous updates `CLAUDE.md` / `decisions-architecturales.md` / `open-decisions.md` / `memory-architecture.md` + nouveau `ADR-0008` + ADR-0006 untracked. Note PR : ADR-0006 était `Accepted` mais untracked depuis 06/06 — cette session le finalise dans le repo.
 - [ ] **Créer placeholder ADR-0005** — `docs/adr/0005-cold-start-meta-learner.md` actuellement référencé partout (ADR-0006, ADR-0007, ADR-0008, `open-decisions.md` §Resolved 28/05) mais **fichier absent**. Soit le rédiger (spec inline existante à formaliser), soit ajouter note explicative dans `open-decisions.md` §Resolved 28/05 ligne *"ADR-0005 = spec inline `query_cohort_prior` MCP tool, pas ADR dédié — formalisation différée Phase 4 si pertinent"*.
-- [ ] **Update watchlist** — `docs/context/monitoring-watchlist.md` W1 Conduit + W2 Apaleo : ajouter trigger *"annonces 'knowledge graph' / 'context awareness' / 'graph-based memory'"* — concurrents pourraient claim narrative knowledge extraction post-Phase 4 ship Aetherix.
+- [ ] **Update watchlist** — `docs/_archive/context/monitoring-watchlist.md` W1 Conduit + W2 Apaleo : ajouter trigger *"annonces 'knowledge graph' / 'context awareness' / 'graph-based memory'"* — concurrents pourraient claim narrative knowledge extraction post-Phase 4 ship Aetherix.
 
 ### Post-ship Phase 4 (long-terme)
 
