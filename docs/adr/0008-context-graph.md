@@ -1,6 +1,11 @@
 # ADR 0008 — Context Graph: Postgres recursive CTE layer on top of pgvector
 
-> **Status**: **Accepted — Path C retenu (Postgres recursive CTE)** · **Date**: 2026-06-06 · **Author**: Architect (Winston, Opus 4.7)
+> **Status**: 🛑 **DEFERRED (Phase 4) — PM sign-off 31/07/2026** · Conception Path C **conservée intacte**, aucune ligne de §1-§16 invalidée.
+> **Status historique** : Accepted — Path C retenu (Postgres recursive CTE) · **Date**: 2026-06-06 · **Author**: Architect (Winston, Opus 4.7)
+>
+> **Pourquoi différé (§17)** : la moitié du graphe repose sur `hotel_cohort_features`, table qui n'existe pas et dont le socle Hive est gelé par l'audit. Le nœud `Cohort` étant la **frontière d'anonymisation** (§6), les 3 query types cross-propriétés ne sont pas dégradables — ils partent ou ne partent pas. Les 3 restants sont intra-propriété et recouvrent largement pgvector, alors que §1.2/§1.3 justifient le graphe par la réutilisation **cross-propriétés**. La valeur différenciante est exactement la partie gelée.
+>
+> **Précondition de reprise** : ADR-0006 §10.4 dans l'ordre — gel Hive levé (5 conditions de l'audit) → ADR-0005 D1-D5 construits → D7 (LOO) exécuté → ADR-0006 §D4 levé → **puis** cet ADR. Le schema et le backfill ne se périment pas ; rien n'est à réécrire.
 > **Phase**: 4 (Scale & Distribution) — primary foundation Anima Phase 4 Guest Context Node
 > **Linear**: HOS-GRAPH-1 → HOS-GRAPH-6 (à créer par SM Phase 4 kickoff — story breakdown amendé §13.6)
 > **Implémente**: CLAUDE.md Décision architecturale #24 (ajoutée par cette session, libellé amendé "Postgres recursive CTE Phase 4")
@@ -1277,3 +1282,109 @@ Templates SQL versionnés dans `backend/app/services/context_graph_queries/` (un
 - Cache LRU sur `query_context_graph` (TTL 5min, déjà §5 R2) — déjà prévu pour Path A, encore plus critique Path C
 - Materialized views pour `cohort_outcome_band` agrégats (refresh nightly) — cohérent ADR-0003 pattern MV
 - Indexes composites supplémentaires si benchmarks révèlent bottleneck spécifique (story P4-GRAPH-6 cleanup)
+
+---
+
+## 17. Amendment 2026-07-31 — dépendance cohorte : la moitié du graphe repose sur une table inexistante
+
+> **Statut** : les parties **dépendantes de la cohorte** passent Accepted → **Deferred**. Le reste de l'ADR (Path C, schema hors cohorte, 3 query types single-property) reste Accepted, **mais sa valeur résiduelle est mise en question ouverte — §17.5**.
+> **Déclencheur** : arbitrage ADR-0006 §10 (31/07/2026), lui-même issu de la rédaction rétroactive d'ADR-0005 déclenchée par l'agent d'hygiène (HOS-320 D2).
+
+### 17.1 Constat
+
+`hotel_cohort_features` (ADR-0005) et `hotel_cohort_features_pos` (ADR-0006 §D4, **différé** par ADR-0006 §10) **n'existent pas**. Contrairement à ADR-0006 où la cohorte n'apportait qu'une amélioration de qualité, **elle est ici structurelle**. Elle traverse l'ADR à cinq niveaux :
+
+| Niveau | Élément | Source |
+|---|---|---|
+| Schema | node type `Cohort` | §D2 — alimenté par `hotel_cohort_features` + `_pos` |
+| Schema | edges `BELONGS_TO_COHORT`, `SIMILAR_TO` (porte `late_fusion_score` d'ADR-0006 D4) | §D2 |
+| Backfill | étape 7 « Cohort + SIMILAR_TO from `hotel_cohort_features*` » | §D3 |
+| Recall | `recall_strategy="cohort_traversal"` + cohort matching v3 (`γ × cos_pms + δ × cos_pos + ε × path_match_score`) | §D4 |
+| Requêtes | **3 des 6 query types** | §D6 |
+
+### 17.2 Le point décisif : la cohorte est le mécanisme de souveraineté, pas un filtre de qualité
+
+§6 est explicite :
+
+> *« Federated Hive narrative — raw data stays in your tenant, operational patterns travel anonymized. Cohort nodes `Cohort` portent uniquement features agrégées (déjà anonymisées via ADR-0005 + ADR-0006). Pas de leak via le graphe. »*
+
+Le nœud `Cohort` **est** la frontière d'anonymisation. Un saut cross-property n'est légitime que parce qu'il transite par lui.
+
+Conséquence : les trois query types cohorte **ne peuvent pas être dégradés en version « sans filtre cohorte »**. Retirer le filtre ne réduirait pas la qualité — il ferait traverser directement du nœud `Hotel` d'un tenant vers les nœuds `Outcome` d'un autre. C'est exactement la fuite de données brutes que §6 interdit, et que le canari `graph-tenant-isolation-001` traite en FAIL bloquant.
+
+**Il n'y a donc pas de mode dégradé. Ces trois query types partent, ou ne partent pas.**
+
+| Query type | Dépend de la cohorte | Sort en Phase 4 |
+|---|---|---|
+| `event_outcome_history` | oui (filtré cohorte) | ❌ différé |
+| `senior_wisdom_path` | oui (filtré cohorte) | ❌ différé |
+| `cohort_outcome_band` | oui (intégralement) | ❌ différé |
+| `edge_case_lookup` | non | ✅ |
+| `cause_diagnosis` | non | ✅ |
+| `intervention_chain` | non | ✅ |
+
+### 17.3 La chaîne de stories est déjà cassée
+
+**P4-GRAPH-4 dépend explicitement de `ADR-0006 P4-POS-5`** (§13.8), story sortie du périmètre Phase 4 par ADR-0006 §10. Or P4-GRAPH-4 est la dépendance de P4-GRAPH-5 (le tool MCP) et P4-GRAPH-6 (le gate eval).
+
+Autrement dit : **le livrable terminal d'ADR-0008 — la seule surface exposée à l'orchestrateur — est bloqué**, 11 des 26 points inatteignables, sans qu'aucune ligne d'ADR-0008 ne le signale.
+
+### 17.4 Effets — périmètre Phase 4 rescopé
+
+| Élément | Avant | Après |
+|---|---|---|
+| node types | 8 | **7** (`Cohort` différé) |
+| edge types | 9 | **7** (`BELONGS_TO_COHORT`, `SIMILAR_TO` différés) |
+| RLS policies (P4-GRAPH-1) | 17 | **14** |
+| Backfill étape 7 (§D3) | incluse | **retirée** |
+| `recall_strategy` Literal | 4 valeurs | **3** (`cohort_traversal` différé) |
+| Cohort matching v3 (§D4) | Accepted | **Deferred** — hérite de la précondition ADR-0006 §10.4 |
+| query types (§D6) | 6 | **3** |
+| P4-GRAPH-4 (`recall_strategy` + dual-read) | Phase 4, 5 pts | **différé** — dépend de P4-POS-5 |
+| P4-GRAPH-5 dépend de | P4-GRAPH-4 | **P4-GRAPH-3** |
+| Scenarios eval (§D7) | 10 | **~4** à rescoper — 6 portent sur des query types différés |
+| Thresholds `precision@5 senior_wisdom_path`, `band coverage cohort_outcome_band` | gate | **différés** |
+| Total Phase 4 | 6 stories, 26 pts | **5 stories, 21 pts** |
+
+Inchangés : Path C (recursive CTE, Décision #24), tenant isolation par RLS, kill-switch `GRAPH_BACKEND=disabled`, canari `graph-tenant-isolation-001` (**maintenu — il reste le garde-fou du jour où la cohorte reviendra**).
+
+**Précondition de levée** : identique à ADR-0006 §10.4, dans le même ordre — gel Hive levé → ADR-0005 D1-D5 construits → D7 (LOO) exécuté. Puis ADR-0006 §D4 levé, **puis** seulement ce §17.
+
+### 17.5 La valeur résiduelle du graphe Phase 4 — analyse (tranchée en §17.6)
+
+Posée initialement comme question ouverte, cette section a servi de base au sign-off PM du 31/07/2026 (§17.6). Elle est conservée telle quelle : c'est le raisonnement qui a produit la décision, pas un débat encore actif.
+
+Les 3 query types survivants sont tous des traversées **intra-propriété** : « ce cas est-il connu », « qu'est-ce qui a causé ce pic », « quelles interventions sur cette recommandation ». Or §1.1 décrit le problème initial comme le manque de relations explicites — et §1.2/§1.3 justifient le graphe par la **réutilisation de patterns cross-propriétés** (« qu'a fait le chef de cette cohorte la dernière fois qu'IFA et la pluie sont tombées ensemble »).
+
+**La valeur différenciante du graphe est précisément la partie gelée.** Ce qui reste recouvre largement ce que `operational_memory` + pgvector servent déjà.
+
+D'où la question : **21 points pour un graphe intra-propriété à 3 requêtes, est-ce justifié en Phase 4 ?**
+
+**Recommandation Architect : non — différer ADR-0008 Phase 4 en entier**, plutôt que le livrer amputé. Rationale :
+
+- Le gel de l'audit vise les briques dont la valeur n'est pas prouvée. Un graphe intra-propriété qui double pgvector est le cas d'école.
+- Livrer 21 points de plomberie dont la justification écrite (§1.2) porte sur une capacité absente, c'est ajouter de l'architecture sans preuve — exactement le ratio que l'audit reproche.
+- Le coût du report est faible : le schema et le backfill ne se périment pas.
+- À l'inverse, le coût de livrer maintenant est réel : 21 points de surface à maintenir, à documenter, et à faire passer par les gates, pendant la fenêtre de 90 jours consacrée à la preuve.
+
+### 17.6 PM sign-off — 31/07/2026 : **option (B), ADR-0008 Phase 4 différé en entier**
+
+**Décision prise.** ADR-0008 passe `Accepted` → **`Deferred (Phase 4)`** dans son ensemble. La présente section en est la justification.
+
+Ce qui découle :
+
+- **§17.4 ne s'applique plus.** Le rescope à 5 stories / 21 pts était l'option (A) ; il n'y a pas de périmètre Phase 4 réduit à livrer. Les chiffres restent consignés ci-dessus pour mémoire de l'analyse.
+- **Aucune ligne de §1 à §16 n'est invalidée.** Path C, le schema 8 nodes / 9 edges, les 6 query types, la DDL, les patterns CTE, l'isolation RLS, le kill-switch : la conception reste la référence au moment de la reprise. Ce report est un **arbitrage de calendrier, pas de conception**.
+- **Le backlog P4-GRAPH-1 → 6 sort de la Phase 4.** Aucune story Linear à créer au kickoff.
+- **ADR-0011 (Learning Engine, Phase 5)** déclare une dépendance à ADR-0008 (§137). Elle est désormais différée par transitivité — signalé, non amendé ici.
+
+**Rationale du PM, alignée sur la recommandation Architect** : le gel de l'audit vise les briques dont la valeur n'est pas prouvée. Un graphe intra-propriété qui double `operational_memory` + pgvector en est le cas d'école. Livrer 21 points dont la justification écrite porte sur une capacité absente ajouterait de l'architecture sans preuve — le ratio même que l'audit reproche — et consommerait un sprint de la fenêtre de 90 jours consacrée à la preuve.
+
+**Ce qui reprend le graphe** : la précondition d'ADR-0006 §10.4, dans l'ordre. Rien avant.
+
+### 17.7 Références
+
+- `docs/adr/0006-pos-integration.md` §10 — arbitrage §D4, précondition de levée §10.4
+- `docs/adr/0005-cold-start-meta-learner.md` §0 — statut d'implémentation par élément
+- `docs/context/analyse-critique-2026-07.md` — gel Hive, 5 conditions
+- HOS-320 (détection D2) · HOS-300 NFR2 — un amendement qui *restreint* le périmètre n'est pas concerné par le gel

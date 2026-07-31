@@ -1,6 +1,7 @@
 # ADR 0006 — POS Integration : scope, provider abstraction, cohort impact
 
 > **Status**: Accepted · **Date**: 2026-06-06 · **Author**: Architect (Winston, Opus)
+> **⚠️ Amendé 2026-07-31 (§10)** : **§D4 différé** — la table `hotel_cohort_features` sur laquelle il construit n'existe pas, et son socle (ADR-0005 / Hive) est gelé par l'audit. D1, D2, D3, D5-D7 et §9 restent Accepted ; l'ingestion POS reste livrable Phase 4 (5 stories, 19 pts).
 > **Phase**: 4 (Scale & Distribution) — blocking pré-requis pour ADR-0008 (graphe de contexte)
 > **Linear**: HOS-POS-1 → HOS-POS-6 (à créer par SM Phase 4 kickoff)
 > **Implémente**: CLAUDE.md Décision architecturale #23 (à ajouter via cette session)
@@ -22,7 +23,7 @@ Deux triggers convergents semaine du 2026-06-01 :
 
 ### 1.2 Trigger architecture
 
-ADR-0005 (cold-start meta-learner) repose sur `hotel_cohort_features` — coefficients agrégés Prophet + hyperparams calibrés, dérivés exclusivement PMS (occupancy, segment, capacité, saisonnalité). **Insuffisant** pour différencier deux hôtels de même profil PMS mais à F&B opposé (e.g. boutique BER 80 chambres breakfast-heavy vs boutique BER 80 chambres dinner-heavy avec brasserie publique). Cohort matching v2 = ajouter features POS-driven.
+ADR-0005 (cold-start meta-learner) **prévoit** `hotel_cohort_features` — coefficients agrégés Prophet + hyperparams calibrés, dérivés exclusivement PMS (occupancy, segment, capacité, saisonnalité). ⚠️ **Cette table n'est pas construite** (ADR-0005 §0, amendement §10) : le raisonnement ci-dessous porte sur la *conception* d'ADR-0005, pas sur un système en place. Ce profil PMS seul est **insuffisant** pour différencier deux hôtels de même profil PMS mais à F&B opposé (e.g. boutique BER 80 chambres breakfast-heavy vs boutique BER 80 chambres dinner-heavy avec brasserie publique). Cohort matching v2 = ajouter features POS-driven.
 
 ADR-0008 futur (graphe de contexte, open decision 04/06/2026) cible un schema `hotel × event × weather × time × outcome` — `outcome` ne peut pas être *"covers PMS-service-derived"* sans granularité item / ticket / time-of-day. POS = pré-requis schema.
 
@@ -600,10 +601,10 @@ Cohérent format `docs/planning/phase-3-pilot-validation.md` Track A. Linear IDs
 | **P4-POS-2** | Schema migration Alembic `pos_integration_v0.sql` (DDL §D5) + ORM SQLAlchemy + RLS test + `check_schema_drift.py` green | 3 | P4-POS-1 |
 | **P4-POS-3** | `LightspeedKSeriesAdapter` v1 read-only — OAuth2 + pagination + mapping payload → schema + write-guard + tests sandbox | 5 | P4-POS-2 |
 | **P4-POS-4** | `OracleMicrosSimphonyAdapter` v1 stub conditionnel (gate : pilote Lightspeed validé MAPE -1pt) — OPERA Cloud Simphony API REST | 5 | P4-POS-3 + gate |
-| **P4-POS-5** | `hotel_cohort_features_pos` table + worker quotidien aggregation + late-fusion blending dans `query_cohort_prior` + LOO validation ≥ 2 sandbox properties | 5 | P4-POS-3 |
-| **P4-POS-6** | `pos_anomaly` ≥ 8 scenarios `eval/golden_dataset.jsonl` + `FAILURE_THRESHOLDS.md` POS section + `check_eval_coverage.py` enforce (Décision #22) | 3 | P4-POS-5 |
+| ~~**P4-POS-5**~~ | ~~`hotel_cohort_features_pos` table + worker quotidien aggregation + late-fusion blending dans `query_cohort_prior` + LOO validation ≥ 2 sandbox properties~~ | ~~5~~ | **⛔ HORS PÉRIMÈTRE PHASE 4** — §D4 différé (§10). Précondition : gel Hive levé + ADR-0005 D1-D5 construits + D7 exécuté. La DDL `hotel_cohort_features_pos` sort de `pos_integration_v0.sql` et part avec cette story. |
+| **P4-POS-6** | `pos_anomaly` ≥ 8 scenarios `eval/golden_dataset.jsonl` + `FAILURE_THRESHOLDS.md` POS section + `check_eval_coverage.py` enforce (Décision #22) | 3 | P4-POS-3 |
 
-**Total** : 6 stories, **24 points**, ~6 sprint-weeks single-dev. P4-POS-4 parallélisable post-pilote Lightspeed.
+**Total** : **5 stories, 19 points** (amendement §10 — P4-POS-5 retirée), ~5 sprint-weeks single-dev. P4-POS-4 parallélisable post-pilote Lightspeed.
 
 **Pré-requis externes** : compte sandbox Lightspeed dev + cred (PM/Ivan, J-15 avant kickoff P4-POS-3 — partner program self-serve J+3 ouvré confirmé).
 
@@ -647,11 +648,11 @@ Cohérent format `docs/planning/phase-3-pilot-validation.md` Track A. Linear IDs
 - [x] §5 security checklist read-only + RLS + PII
 - [x] §6 DoD opérationnel ci-dessous
 
-**Operational DoD — gate ship POS Phase 4** (Story P4-POS-3 + P4-POS-5 + P4-POS-6) :
+**Operational DoD — gate ship POS Phase 4** (Story P4-POS-3 + P4-POS-6 — *P4-POS-5 retirée par l'amendement §10*) :
 
 1. **Adapter Lightspeed** : `is_configured == True` + sandbox 1+ propriété + roundtrip `fetch_transactions(date_from=J-7, date_to=J)` retourne ≥ 100 transactions parseables.
 2. **Schema migration** : `check_schema_drift.py` green (Décision #16) + tests RLS 3/3 pass.
-3. **Cohort matching v2** : LOO validation ≥ 2 sandbox properties → **MAPE_v2 ≤ MAPE_v1 - 1 pt** sur covers dinner. Sinon gate runtime auto-disable fallback v1.
+3. ~~**Cohort matching v2** : LOO validation ≥ 2 sandbox properties → **MAPE_v2 ≤ MAPE_v1 - 1 pt** sur covers dinner.~~ **Retiré du gate Phase 4** (§10) — réintégré avec P4-POS-5 quand §D4 sera levé. Ne conditionne plus le ship POS.
 4. **Eval gate** : `pos_anomaly` ≥ 8 scenarios dans `golden_dataset.jsonl` + `check_eval_coverage.py` green (Décision #22).
 5. **Latence SLO** : `fetch_transactions` p95 < 800ms (analogue MCP).
 6. **Documentation** : article Track B Phase 4 reinforcement *"PMS+POS fusion for hotel F&B forecasting"* drafté (cf. snippet H-6).
@@ -748,3 +749,68 @@ Faire la normalisation *au moment* d'écrire l'adapter Mews mélangerait deux ri
 - `docs/_archive/competitive/grevon-analysis.md` — analyse déclencheur
 - `docs/context/decisions-architecturales.md` — Décision #28
 - HOS-186, HOS-254, HOS-279, HOS-280, HOS-281
+
+---
+
+## 10. Amendment 2026-07-31 — §D4 différé : le socle `hotel_cohort_features` n'existe pas
+
+> **Statut §D4** : Accepted → **Deferred**. Le reste de l'ADR (D1, D2, D3, D5, D6, D7, §9) est **inchangé et reste Accepted**.
+> **Déclencheur** : rédaction rétroactive d'ADR-0005 (27/07/2026), elle-même déclenchée par le détecteur D2 de l'agent d'hygiène architecturale (HOS-320).
+
+### 10.1 Constat
+
+`hotel_cohort_features` — la table sur laquelle §D4 construit — **n'existe pas**. Vérifié le 31/07/2026 : aucune migration, aucun modèle ORM, aucune référence dans `backend/`. Le tool `query_cohort_prior` qu'ADR-0005 D5 spécifie et que §D4 propose d'étendre n'existe pas davantage.
+
+ADR-0005 §0 documente le détail : de cette décision, seul le **principe** « dégrader, ne pas éteindre » (D6) est en production, généralisé par Epic 12 G-4. Le mécanisme d'apprentissage — cohort matching, blending BMA, table de features, validation LOO — est resté au stade Design.
+
+Trois conséquences, par ordre de gravité.
+
+**(a) Le blocage est à la story 2, pas à la story 5.** La DDL de `hotel_cohort_features_pos` (§D5, ligne `REFERENCES hotel_cohort_features(cohort_id)`) vit **dans la migration `pos_integration_v0.sql`**, portée par **P4-POS-2**. Cette migration échouerait à l'application : la table cible de la clé étrangère n'existe pas. P4-POS-2 étant la dépendance de P4-POS-3 → 4 → 5 → 6, **l'intégralité du backlog POS Phase 4 est bloquée dès le deuxième jour de sprint**, pour une raison sans rapport avec le POS.
+
+**(b) §1.2 affirme au présent ce qui n'est pas construit.** « ADR-0005 repose sur `hotel_cohort_features` » se lit comme un état de fait. C'est une intention. Corrigé ci-dessous.
+
+**(c) Trois versions sont empilées sur un socle absent.** ADR-0005 v1 (non bâti) → ADR-0006 §D4 v2 → **ADR-0008 §Q4 v3** (`γ × cos_pms + δ × cos_pos + ε × path_match_score`). ADR-0008 hérite mécaniquement du même blocage. Non amendé ici — c'est le périmètre d'ADR-0008 — mais signalé.
+
+### 10.2 Arbitrage
+
+**§D4 est différé, pas rejeté.** Son raisonnement de conception tient : les 3 features POS-driven discriminent effectivement ce que le profil PMS seul ne discrimine pas (§1.2, boutique breakfast-heavy vs dinner-heavy). Ce n'est pas la décision qui est fausse, c'est son socle qui est absent — **et délibérément gelé**.
+
+Car le blocage n'est pas un simple retard d'ingénierie. Le cohort matching *est* la Hive, et la Hive fait partie des cinq briques que l'audit interne (`analyse-critique-2026-07.md`) et la revue adverse externe du 20/07 ont gelées tant que la valeur n'est pas prouvée sur données réelles. Construire v1 pour débloquer v2 reviendrait à lever le gel par la porte de service.
+
+Maintenir §D4 en `Accepted` pendant que son fondement est gelé, c'est exactement le motif « architecture sans preuve » que l'audit reproche au projet. Le geste honnête est de le dire dans l'ADR, pas de le laisser se découvrir au sprint planning de la Phase 4.
+
+### 10.3 Effets — ce qui change
+
+| Élément | Avant | Après |
+|---|---|---|
+| §D4 statut | Accepted | **Deferred** |
+| DDL `hotel_cohort_features_pos` | dans `pos_integration_v0.sql` (P4-POS-2) | **extraite** vers une migration future, livrée avec P4-POS-5 |
+| P4-POS-5 (cohort v2 + LOO, 5 pts) | Phase 4 | **hors périmètre Phase 4** — bloquée, précondition §10.4 |
+| P4-POS-6 dépend de | P4-POS-5 | **P4-POS-3** |
+| Total Phase 4 | 6 stories, 24 points | **5 stories, 19 points** |
+| DoD opérationnel §6, item 3 (LOO cohort v2) | gate de ship Phase 4 | **retiré** du gate — réintégré avec P4-POS-5 |
+
+**Ce qui n'est pas touché** : D1 (vendors + phase), D2/D3 (Protocol + adapter pattern), D5 (schema `pos_transaction`), D6, D7, et l'amendement §9 (PMS canonical schema, Décision #28). L'ingestion POS elle-même reste livrable en Phase 4.
+
+C'est le point de l'arbitrage : **couper la dépendance vers du travail gelé rend le POS effectivement shippable**, au lieu de le laisser bloqué par une table que personne ne prévoyait de construire.
+
+### 10.4 Précondition de levée — chaîne explicite
+
+§D4 redevient actionnable quand, **dans cet ordre** :
+
+1. Le gel Hive est levé — les 5 conditions de l'audit sont prouvées (données PMS/POS réelles, horizon de décision réel, forecast > baseline naïve, adoption manager, unit economics). Suivi : HOS-307 / HOS-308 / HOS-309 / HOS-312.
+2. ADR-0005 D1-D5 sont **construits** : table `hotel_cohort_features`, tool `query_cohort_prior`, cohort matching hybride, blending BMA.
+3. ADR-0005 D7 est **exécuté** : validation leave-one-out sur 5 propriétés sandbox — jamais réalisée à ce jour.
+
+Tant que (1) n'est pas acquis, (2) et (3) ne doivent pas être entamés. Cette story n'est pas « à replanifier plus tard » : elle est **conditionnée à une preuve qui n'existe pas encore**.
+
+### 10.5 Correction de §1.2
+
+La phrase « ADR-0005 (cold-start meta-learner) repose sur `hotel_cohort_features` » doit se lire : *« ADR-0005 **prévoit** `hotel_cohort_features` — coefficients agrégés Prophet + hyperparams calibrés, dérivés exclusivement PMS. Cette table **n'est pas construite** (ADR-0005 §0). Le raisonnement ci-dessous porte sur la conception d'ADR-0005, pas sur un système en place. »*
+
+### 10.6 Références
+
+- `docs/adr/0005-cold-start-meta-learner.md` §0 — statut d'implémentation par élément
+- `docs/context/analyse-critique-2026-07.md` — gel Hive
+- `docs/adr/0008-context-graph.md` §Q4 — v3, hérite du même blocage
+- HOS-320 (détection D2) · HOS-300 NFR2 (gel nouveaux ADRs — un amendement qui *restreint* le périmètre n'est pas concerné)

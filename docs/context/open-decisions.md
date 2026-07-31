@@ -65,7 +65,7 @@
 
 ### Graphe de contexte Q1 backend — amendment 06/06/2026 (sous-décision ADR-0008)
 
-**Statut :** Open — sous-décision résiduelle ADR-0008 (§13). Architecture §2 D2-D7 **tranchée Accepted**, seul le **backend hosting Apache AGE** reste à arbitrer.
+**Statut :** ✅ **RÉSOLU 06/06/2026 — Path C retenu** (PM sign-off, ADR-0008 §13.7). Entrée conservée pour l'historique des alternatives. ⚠️ Doublement caduque depuis le **31/07/2026** : ADR-0008 Phase 4 est différé en entier (voir §Resolved). Cette entrée traînait en §Actives alors qu'elle était tranchée depuis presque deux mois.
 
 **Trigger :** Vérification R6 ADR-0008 post-rédaction (06/06/2026) — Apache AGE **non supporté** Supabase managed (vérifié via GitHub Discussion supabase/#40285 + Supabase docs extensions, jun 2026 = pas dans la liste pre-approved, extension C non-trusted, pas de roadmap).
 
@@ -272,6 +272,22 @@
 - README §Roadmap Phase 4 highlights : *"Federated HiveMemory ship (announced Phase 3)"*
 - `docs/marketing/positioning-snippets.md` H-7 snippet (cohort intelligence + raw data sovereignty + Day-1 unlock)
 - `docs/context/vision-future.md` Phase 4 narrative
+
+### [x] Graphe de contexte Phase 4 — RÉSOLU 31/07/2026 → différé en entier
+
+**Verdict PM : option (B) — ADR-0008 Phase 4 différé en entier.** L'ADR passe `Accepted` → `Deferred (Phase 4)` ; backlog P4-GRAPH-1→6 sorti du périmètre, aucune story Linear à créer au kickoff.
+
+**Question posée** (ADR-0008 §17.5) : après le report des parties dépendantes de la cohorte, restait un graphe **intra-propriété** à 3 query types (`edge_case_lookup`, `cause_diagnosis`, `intervention_chain`) pour 21 points. Fallait-il le livrer amputé (A) ou différer l'ADR en entier (B) ?
+
+**Rationale du verdict** — la valeur différenciante du graphe est exactement la partie gelée. §1.2/§1.3 le justifient par la réutilisation de patterns cross-propriétés ; ce qui survit recouvre largement `operational_memory` + pgvector (§1.1). Livrer 21 points dont la justification écrite porte sur une capacité absente ajouterait de l'architecture sans preuve — le ratio que l'audit de juillet reproche — et consommerait un sprint de la fenêtre de 90 jours consacrée à la preuve. Le coût du report est faible : schema et backfill ne se périment pas.
+
+**Arbitrage de calendrier, pas de conception.** Aucune ligne de §1-§16 d'ADR-0008 n'est invalidée.
+
+**Reprise** : précondition ADR-0006 §10.4, dans l'ordre — gel Hive levé (5 conditions de l'audit) → ADR-0005 D1-D5 construits → D7 (LOO) exécuté → ADR-0006 §D4 levé → puis ADR-0008.
+
+**Effet transitif** : ADR-0011 (Learning Engine, Phase 5) déclare une dépendance à ADR-0008 — différée par conséquence.
+
+**Détection à l'origine** : agent d'hygiène architecturale (HOS-320, détecteur D2) → rédaction rétroactive ADR-0005 → arbitrage ADR-0006 §10 → arbitrage ADR-0008 §17.
 
 ### [x] Hive Memory scope Phase 3 — RÉSOLU 28/05/2026 → ADR-0005
 

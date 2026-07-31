@@ -76,9 +76,9 @@ PATH_PREFIXES = ("backend/", "scripts/", "docs/", "eval/", ".github/", "tools/")
 # is stale" (a bug) from "the doc describes an unbuilt thing" (a known, dated
 # intention). An entry here is a promise — when it lands, the entry goes.
 PLANNED_PATHS = {
-    "backend/app/models/graph/": "Graphe de contexte — Décision #24 / ADR-0008, Phase 4",
-    "backend/app/services/context_graph_service.py": "Graphe de contexte — Décision #24 / ADR-0008, Phase 4",
-    "backend/app/services/context_graph_queries/": "Graphe de contexte — Décision #24 / ADR-0008, Phase 4",
+    "backend/app/models/graph/": "Graphe de contexte — Décision #24 / ADR-0008 DIFFÉRÉ 31/07/2026, reprise conditionnée ADR-0006 §10.4",
+    "backend/app/services/context_graph_service.py": "Graphe de contexte — Décision #24 / ADR-0008 DIFFÉRÉ 31/07/2026, reprise conditionnée ADR-0006 §10.4",
+    "backend/app/services/context_graph_queries/": "Graphe de contexte — Décision #24 / ADR-0008 DIFFÉRÉ 31/07/2026, reprise conditionnée ADR-0006 §10.4",
     "backend/app/providers/pos/": "POS ingestion — Décision #23 / ADR-0006, Phase 4",
     "backend/app/providers/pms/base.py": "PMS canonical schema — Décision #28 / ADR-0006 amendé, Phase 4",
     "docs/competitive/apaleo-copilot-functional-audit.md": "Audit Copilot — watchlist Apaleo, story SM créée, livrable non écrit",
