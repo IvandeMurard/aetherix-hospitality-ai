@@ -57,9 +57,15 @@ CATEGORIES = {
     "ood_edge",
     "parser_intent",
     "pos_anomaly",
+    # HOS-321 — runtime-guardrail trip scenarios. Distinct from the forecast
+    # categories above: these assert that the right *typed reason* fires (NFR2 /
+    # ADR-0009), not a business value. Does not reopen ADR-0007 §D2.g, which
+    # exempts runtime guardrails from EVAL-1 *metric* coverage — a different
+    # object.
+    "guardrail_trip",
 }
 
-LAYERS = {"forecast", "recommendation", "receipt", "parser", "drift", "latency"}
+LAYERS = {"forecast", "recommendation", "receipt", "parser", "drift", "latency", "guardrail"}
 
 # EVAL-0 AC0.1 "unblocking minimum" — unblocks EVAL-1 / EVAL-2 / EVAL-4.
 EVAL0_MIN_COUNTS = {

@@ -98,6 +98,53 @@ def monitored_jobs() -> tuple[str, ...]:
     return tuple(_MONITORED_JOBS)
 
 
+# ─── Pure trip predicates (HOS-321) ──────────────────────────────────────────
+# The decisions below used to live inline in the async, DB-bound job bodies, so
+# nothing could assert them without a database. Extracted as pure functions —
+# same convention as forecast_guardrail / output_sanity / error_rate_monitor —
+# so the `guardrail` eval layer can lock the typed reason each condition emits.
+# Behaviour is unchanged: the async paths now call these instead of inlining the
+# comparison. What NFR2 guarantees is the *typed reason*, so that is what these
+# return and what the eval asserts.
+
+
+def evaluate_dead_man(gap_min: float, window_min: Optional[int]) -> Optional[tuple[str, str]]:
+    """Trip when a monitored job has not run within its tolerated window.
+
+    `window_min is None` means the job is not registered → never trips.
+    """
+    if window_min is None or gap_min <= window_min:
+        return None
+    return (
+        REASON_DEAD_MAN,
+        f"No successful run for {gap_min:.0f} min (window {window_min} min). "
+        "Dead-man's switch tripped.",
+    )
+
+
+def evaluate_partial(failed: int, dispatched: int) -> Optional[tuple[str, str]]:
+    """Trip when a run completed but some per-hotel dispatches failed.
+
+    Per-hotel failures are otherwise silent — the job itself succeeded, so the
+    dead-man's switch stays quiet by design.
+    """
+    if failed <= 0:
+        return None
+    return (
+        REASON_PARTIAL,
+        f"{failed}/{dispatched + failed} hotels failed.",
+    )
+
+
+def evaluate_job_error(exc: BaseException | str | None) -> Optional[tuple[str, str]]:
+    """Trip when a job raised. Unconditional given an exception — the value here
+    is locking the reason string, which is the contract NFR2 actually enforces.
+    """
+    if exc is None:
+        return None
+    return (REASON_JOB_ERROR, f"Job failed. Error: {exc!r}" if not isinstance(exc, str) else exc)
+
+
 async def _write_event(
     job_name: str,
     event_type: str,
@@ -221,15 +268,10 @@ async def _run_heartbeat_monitor_job() -> None:
                 # (SQLite default). Normalise to naive-UTC for the gap comparison.
                 last_naive = last.replace(tzinfo=None) if last.tzinfo else last
                 gap_min = (now - last_naive).total_seconds() / 60
-                if gap_min > window:
-                    await record_trip(
-                        job_name,
-                        REASON_DEAD_MAN,
-                        (
-                            f"No successful run of '{job_name}' for {gap_min:.0f} min "
-                            f"(window {window} min). Dead-man's switch tripped."
-                        ),
-                    )
+                breach = evaluate_dead_man(gap_min, window)
+                if breach:
+                    reason, detail = breach
+                    await record_trip(job_name, reason, f"'{job_name}': {detail}")
         logger.info("heartbeat_monitor: complete job_id=%s", job_id)
     except Exception as exc:
         logger.exception("heartbeat_monitor: fatal error job_id=%s", job_id)

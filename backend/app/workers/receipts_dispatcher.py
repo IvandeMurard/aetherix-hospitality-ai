@@ -34,7 +34,8 @@ from app.services.receipts import ReceiptsService
 from app.workers.heartbeat import (
     JOB_RECEIPT_DISPATCHER,
     JOB_WEEKLY_DIGEST,
-    REASON_PARTIAL,
+    REASON_PARTIAL,  # noqa: F401 — re-exported: tests and call sites assert against it
+    evaluate_partial,
     record_heartbeat,
     record_trip,
 )
@@ -147,12 +148,10 @@ async def _run_dispatch_loop(
         )
 
         # AC1 — per-hotel failures are otherwise silent; trip one aggregated alert.
-        if failed:
-            await record_trip(
-                job_name,
-                REASON_PARTIAL,
-                f"{label}: {failed}/{dispatched + failed} hotels failed. job_id={job_id}.",
-            )
+        breach = evaluate_partial(failed, dispatched)
+        if breach:
+            reason, detail = breach
+            await record_trip(job_name, reason, f"{label}: {detail} job_id={job_id}.")
         # AC2 — heartbeat marks a completed run (even with partial failures, the
         # job itself ran → the dead-man's switch should not trip).
         await record_heartbeat(job_name)
