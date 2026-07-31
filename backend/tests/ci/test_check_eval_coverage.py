@@ -47,9 +47,34 @@ def _set_changed(monkeypatch, files: list[str]):
     monkeypatch.setattr(gate, "get_changed_files", lambda base_ref: files)
 
 
+def _guardrail_payload():
+    return (
+        0,
+        {
+            "result": {"layer": "guardrail", "accuracy": 1.0, "reasons_covered": []},
+            "diff": {"has_baseline": True, "regressed": False, "lost_reasons": []},
+        },
+    )
+
+
+# Green payload per layer, so a test only has to specify the layer it is about.
+# Adding a layer to EVALUABLE_LAYERS previously broke every test here with a
+# KeyError (HOS-321); defaulting keeps the fixture from being a tripwire.
+_DEFAULT_PAYLOADS = {
+    "parser": _parser_payload,
+    "guardrail": _guardrail_payload,
+    "forecast": lambda: _forecast_payload(pass_cats=3),
+}
+
+
 def _set_engine(monkeypatch, by_layer: dict):
     def fake(layer, json_out, md_out):
-        return by_layer[layer]
+        if layer in by_layer:
+            return by_layer[layer]
+        default = _DEFAULT_PAYLOADS.get(layer)
+        if default is None:
+            raise AssertionError(f"no stub payload for evaluable layer {layer!r}")
+        return default()
     monkeypatch.setattr(gate, "invoke_run_all", fake)
 
 

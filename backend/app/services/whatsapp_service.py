@@ -25,6 +25,24 @@ MOCK_FORECAST_TOOL = "mock_forecast_guardrail"
 REASON_MOCK_FORECAST = "mock_forecast_suppressed"
 
 
+def evaluate_mock_suppression(
+    is_mock: bool, demo_mode: bool | None = None
+) -> tuple[str, str] | None:
+    """Trip when an untrained-model forecast would reach a manager (HOS-303).
+
+    Pure predicate extracted for the `guardrail` eval layer (HOS-321). In
+    DEMO_MODE the numbers are allowed through but visibly marked, so no trip:
+    the guardrail protects the *manager-facing* path, not the demo path.
+    """
+    demo = DEMO_MODE if demo_mode is None else demo_mode
+    if not is_mock or demo:
+        return None
+    return (
+        REASON_MOCK_FORECAST,
+        "prediction.is_mock=True outside DEMO_MODE; covers withheld from reply.",
+    )
+
+
 async def _record_mock_forecast_trip(hotel_id: str) -> None:
     """Log one typed trip row when mock covers are withheld from a reply."""
     try:
@@ -173,7 +191,7 @@ class WhatsAppService:
         try:
             forecast = await self.engine.get_forecast(tenant_id, date.today(), "dinner", {})
             prediction = forecast.get("prediction", {})
-            if prediction.get("is_mock") and not DEMO_MODE:
+            if evaluate_mock_suppression(bool(prediction.get("is_mock"))):
                 # HOS-303: the model is not trained — the hardcoded fallback
                 # covers must never reach a manager. Typed trip + date-only
                 # context (same minimal shape as the forecast-failure path).

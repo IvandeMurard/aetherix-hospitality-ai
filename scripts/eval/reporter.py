@@ -21,7 +21,56 @@ def _pct(x: float | None) -> str:
 def render_markdown(result: dict, diff: dict) -> str:
     if result.get("layer") == "parser":
         return _render_parser_md(result, diff)
+    if result.get("layer") == "guardrail":
+        return _render_guardrail_md(result, diff)
     return _render_forecast_md(result, diff)
+
+
+def _render_guardrail_md(result: dict, diff: dict) -> str:
+    """Guardrail trip report — HOS-321.
+
+    Leads with reason coverage rather than accuracy: the question this layer
+    answers is "which typed reasons (NFR2) has no scenario exercised", which is
+    what the hygiene agent's D4 detector watches.
+    """
+    lines = [
+        "# Eval report — guardrail",
+        "",
+        f"- **Accuracy**: {_pct(result['accuracy'])}  ·  n={result['n']} "
+        f"({result['n_negative']} négatifs)",
+        f"- **Raisons typées couvertes**: {result['n_reasons_covered']}",
+        "",
+        "## Raisons couvertes",
+        "",
+    ]
+    lines += [f"- `{reason}`" for reason in result["reasons_covered"]] or ["_aucune_"]
+
+    failures = result.get("failures") or []
+    lines += ["", "## Scénarios en échec", ""]
+    if not failures:
+        lines.append("Aucun.")
+    else:
+        lines += ["| id | guard | attendu | obtenu | erreur |", "|---|---|---|---|---|"]
+        for f in failures:
+            lines.append(
+                f"| {f['id']} | {f['guard']} | {f['expected'] or '—'} | "
+                f"{f['actual'] or '—'} | {f.get('error') or '—'} |"
+            )
+
+    lines.append("")
+    if not diff.get("has_baseline"):
+        lines.append("_Pas de baseline figée — première exécution._")
+    elif diff.get("lost_reasons"):
+        lines.append(
+            "⚠️ **Régression** — raisons perdues depuis la baseline : "
+            + ", ".join(f"`{r}`" for r in diff["lost_reasons"])
+        )
+    elif diff.get("regressed"):
+        lines.append(f"⚠️ **Régression** — accuracy {diff.get('accuracy_delta_pp')}pp vs baseline.")
+    else:
+        lines.append("✅ Aucune régression vs baseline.")
+
+    return "\n".join(lines) + "\n"
 
 
 def _render_parser_md(result: dict, diff: dict) -> str:

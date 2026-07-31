@@ -15,11 +15,19 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import baselines, eval_forecast, eval_parser, reporter
+from . import baselines, eval_forecast, eval_guardrail, eval_parser, reporter
 from .loader import DEFAULT_DATASET
 
-_RUNNERS = {"forecast": eval_forecast.run, "parser": eval_parser.run}
-_DIFFS = {"forecast": baselines.diff_forecast, "parser": baselines.diff_parser}
+_RUNNERS = {
+    "forecast": eval_forecast.run,
+    "parser": eval_parser.run,
+    "guardrail": eval_guardrail.run,
+}
+_DIFFS = {
+    "forecast": baselines.diff_forecast,
+    "parser": baselines.diff_parser,
+    "guardrail": baselines.diff_guardrail,
+}
 
 
 def main() -> int:
@@ -66,6 +74,15 @@ def main() -> int:
                 f"coverage {(result['interval_coverage_pct'] or 0) * 100:.1f}% · "
                 f"regressions {len(diff['regressions'])}"
             )
+        elif layer == "guardrail":
+            summary = (
+                f"accuracy {(result['accuracy'] or 0) * 100:.1f}% · n={result['n']} "
+                f"({result['n_negative']} négatifs) · "
+                f"{result['n_reasons_covered']} raisons couvertes · "
+                f"regressed={diff['regressed']}"
+            )
+            if diff.get("lost_reasons"):
+                summary += f" · PERDUES: {', '.join(diff['lost_reasons'])}"
         else:  # parser
             summary = (
                 f"accuracy {(result['accuracy'] or 0) * 100:.1f}% · n={result['n']} · "

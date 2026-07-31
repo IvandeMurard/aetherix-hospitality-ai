@@ -1,0 +1,241 @@
+{
+  "layer": "guardrail",
+  "accuracy": 1.0,
+  "n": 27,
+  "n_negative": 11,
+  "reasons_covered": [
+    "cold_start_meta_learner_drift",
+    "confidence_below_threshold",
+    "dead_man_timeout",
+    "error_rate_spike",
+    "implausible_feedback",
+    "job_error",
+    "labor_budget_exceeded",
+    "llm_timeout_spike",
+    "mock_forecast_suppressed",
+    "output_absurd_delta",
+    "output_over_capacity",
+    "partial_hotel_failures",
+    "tool_failure_spike"
+  ],
+  "n_reasons_covered": 13,
+  "failures": [],
+  "results": [
+    {
+      "id": "gr-fcst-tier1",
+      "guard": "forecast_guardrail",
+      "expected": "confidence_below_threshold",
+      "actual": "confidence_below_threshold",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fcst-tier2-conf",
+      "guard": "forecast_guardrail",
+      "expected": "cold_start_meta_learner_drift",
+      "actual": "cold_start_meta_learner_drift",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fcst-tier2-mape",
+      "guard": "forecast_guardrail",
+      "expected": "cold_start_meta_learner_drift",
+      "actual": "cold_start_meta_learner_drift",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fcst-nominal",
+      "guard": "forecast_guardrail",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fb-below-min",
+      "guard": "feedback_guard",
+      "expected": "implausible_feedback",
+      "actual": "implausible_feedback",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fb-capacity",
+      "guard": "feedback_guard",
+      "expected": "implausible_feedback",
+      "actual": "implausible_feedback",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fb-historical",
+      "guard": "feedback_guard",
+      "expected": "implausible_feedback",
+      "actual": "implausible_feedback",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fb-nominal",
+      "guard": "feedback_guard",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-out-capacity",
+      "guard": "output_sanity",
+      "expected": "output_over_capacity",
+      "actual": "output_over_capacity",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-out-absurd",
+      "guard": "output_sanity",
+      "expected": "output_absurd_delta",
+      "actual": "output_absurd_delta",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-out-budget",
+      "guard": "output_sanity",
+      "expected": "labor_budget_exceeded",
+      "actual": "labor_budget_exceeded",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-out-nominal",
+      "guard": "output_sanity",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-err-rate",
+      "guard": "error_rate_monitor",
+      "expected": "error_rate_spike",
+      "actual": "error_rate_spike",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-err-tools",
+      "guard": "error_rate_monitor",
+      "expected": "tool_failure_spike",
+      "actual": "tool_failure_spike",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-err-llm",
+      "guard": "error_rate_monitor",
+      "expected": "llm_timeout_spike",
+      "actual": "llm_timeout_spike",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-err-nominal",
+      "guard": "error_rate_monitor",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-err-low-volume",
+      "guard": "error_rate_monitor",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-hb-deadman",
+      "guard": "heartbeat_dead_man",
+      "expected": "dead_man_timeout",
+      "actual": "dead_man_timeout",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-hb-deadman-nominal",
+      "guard": "heartbeat_dead_man",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-hb-deadman-unregistered",
+      "guard": "heartbeat_dead_man",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-hb-partial",
+      "guard": "heartbeat_partial",
+      "expected": "partial_hotel_failures",
+      "actual": "partial_hotel_failures",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-hb-partial-nominal",
+      "guard": "heartbeat_partial",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-hb-job-error",
+      "guard": "heartbeat_job_error",
+      "expected": "job_error",
+      "actual": "job_error",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-hb-job-error-nominal",
+      "guard": "heartbeat_job_error",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-mock-suppressed",
+      "guard": "mock_forecast",
+      "expected": "mock_forecast_suppressed",
+      "actual": "mock_forecast_suppressed",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-mock-demo-allowed",
+      "guard": "mock_forecast",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-mock-real-forecast",
+      "guard": "mock_forecast",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    }
+  ]
+}

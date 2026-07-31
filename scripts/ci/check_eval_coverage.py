@@ -101,7 +101,7 @@ _BASELINE_SUFFIX = "_baseline.json"
 # Layers that actually have a runner wired in scripts/eval/run_all.py today.
 # Detected-but-unevaluable layers (recommendation/recall/receipt/drift/latency)
 # surface as a note, never a hard fail (their runners land in EVAL-3/5 / Phase 4).
-EVALUABLE_LAYERS = ("forecast", "parser")
+EVALUABLE_LAYERS = ("forecast", "parser", "guardrail")
 
 
 # ---------------------------------------------------------------------------

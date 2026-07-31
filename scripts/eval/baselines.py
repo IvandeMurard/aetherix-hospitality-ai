@@ -53,6 +53,39 @@ def diff_parser(result: dict, baseline: dict | None) -> dict:
     }
 
 
+def diff_guardrail(result: dict, baseline: dict | None) -> dict:
+    """Guardrail regression (HOS-321) — any drop is a regression, no tolerance.
+
+    Deliberately stricter than forecast/parser: those measure a stochastic
+    quantity where a small delta is noise. This layer measures whether a typed
+    reason still fires, which is binary. Losing one covered reason means a
+    failure path went untested — there is no acceptable margin.
+    """
+    if not baseline:
+        return {"has_baseline": False, "regressed": False, "lost_reasons": []}
+
+    base_reasons = set(baseline.get("reasons_covered") or [])
+    cur_reasons = set(result.get("reasons_covered") or [])
+    lost = sorted(base_reasons - cur_reasons)
+
+    base_acc = baseline.get("accuracy")
+    cur_acc = result.get("accuracy")
+    acc_dropped = (
+        base_acc is not None and cur_acc is not None and cur_acc < base_acc
+    )
+
+    return {
+        "has_baseline": True,
+        "regressed": bool(lost) or acc_dropped,
+        "lost_reasons": lost,
+        "accuracy_delta_pp": (
+            round((cur_acc - base_acc) * 100, 2)
+            if base_acc is not None and cur_acc is not None
+            else None
+        ),
+    }
+
+
 def diff_forecast(result: dict, baseline: dict | None) -> dict:
     """Per-category MAPE delta vs baseline + regression verdict.
 
