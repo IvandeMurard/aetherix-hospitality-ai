@@ -102,7 +102,6 @@
 | 🟡 Open | Politique exploration éthique (Anima / Learning Engine) | Design Learning Engine Phase 5 |
 | 🟡 Open | Reward multi-objectif (CSAT vs marge vs fidélisation) | Design Learning Engine Phase 5 |
 | 🟡 Open | Méthode off-policy evaluation (IPW / DR / DR-Learner) | Volume données post-pilote Phase 4 |
-| 🟡 Open | Floor k-anonymat couche Segment | Avant build Segment production (Epic 4) |
 | 🟡 Open | Seuils de calibration SignalComposite (ADR-0012) | Données pilote Phase 3 réelles |
 
 Resolved decisions archive (Graphe de contexte Apache AGE 06/06, POS integration scope 06/06, Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.

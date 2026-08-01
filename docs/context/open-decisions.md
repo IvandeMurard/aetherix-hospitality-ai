@@ -174,28 +174,6 @@ Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni co
 
 ---
 
-### Floor k-anonymat couche Segment (17/06/2026)
-
-**Statut :** Open — à trancher avant build Segment Phase 4
-**Origine :** ADR-0011 D3 — décision explicitement déférée
-**Trigger :** Build couche Segment production (Epic 4, HOS-231)
-
-**Enjeu :** la couche Segment produit des agrégats de cohortes anonymisés. Si une cohorte est trop petite, les agrégats peuvent être suffisamment distinctifs pour ré-identifier un guest individuel (ex : "business traveler, late arrival, suite, anniversaire demain" = 1 seule personne sur la période).
-
-**DPIA link :** ce floor est à la fois un contrôle privacy et le mécanisme qui rend la Hive prior RGPD-safe (Décision #20 + ADR-0011 D3).
-
-**Options :**
-- **(A)** Floor k=5 — minimum usuel de k-anonymat, très restrictif pour petits hôtels
-- **(B)** Floor k=10 — pratique courante en analytics santé / RH — conservateur
-- **(C)** Floor adaptatif selon taille property : k=5 (> 200 chambres) / k=10 (< 200 chambres) — proportionnel au risque de ré-identification
-- **(D)** Différentielle privacy (DP-noise) à la place du floor — plus rigoureux, significativement plus complexe, standard ML fédéré
-
-**Reco préliminaire :** Option C pour Phase 4 local. Option D à évaluer si la Hive prior fédérée Phase 5 nécessite des garanties formelles pour les régulateurs.
-
-**Dépendances :** DPIA gate Décision #20 · Epic 2 compliance gate (HOS-229) · Hive prior Phase 5 design
-
----
-
 ### Interaction model — event-driven Phase 4-5 (04/06/2026)
 
 **Statut :** Open — pas urgent
@@ -230,6 +208,32 @@ Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni co
 ---
 
 ## Resolved (archive)
+
+### [x] Floor k-anonymat couche Segment — RÉSOLU 01/08/2026 (HOS-323, arbitrage Ivan)
+
+**Ouverte le** 17/06/2026 (ADR-0011 D3, décision explicitement déférée) · **tranchée** dans la foulée de la DPIA Anima ([`dpia-anima-2026-08.md`](dpia-anima-2026-08.md) §10.3, mur W2).
+
+**Décision — trois éléments indissociables :**
+
+1. **Plancher `k = 20` clients par cohorte** avant qu'un agrégat Segment puisse être calculé et servi.
+2. **Garde de concentration** : un attribut de cohorte homogène au-delà de ~90 % n'est pas servi, quelle que soit la taille de la cohorte.
+3. **Aucune revendication d'anonymat.** La couche Segment reste dans le régime des **données personnelles** : durée de conservation, base légale et droits des personnes s'y appliquent.
+
+**Sous le seuil : dégradation vers une cohorte plus grossière.** On ne baisse jamais k — on remonte en granularité. « Femme d'affaires solo, 2 nuits, réservation directe, sensible bruit » (cohorte de 6) devient « voyageur d'affaires courte durée » (cohorte de 400). Une seule couche, un seul seuil, une dégradation qui reste utile. Les options « ne rien servir » et « remonter au Hive prior » sont écartées : la première tue la promesse *premier séjour traité comme un habitué* sur la traîne de distribution, la seconde délègue le problème à une brique *Research* sans socle qui le reproduit à son échelle.
+
+**Pourquoi pas k=5** (l'option (A) de la formulation initiale) : k=5 est le seuil usuel du contrôle de divulgation statistique, et il vaut pour des **comptages**. La couche Segment sert des **attributs** (« 73 % late check-out », « sensible bruit »). Si une cohorte de 5 est homogène sur l'attribut, appartenir à la cohorte révèle l'attribut — c'est l'attaque par homogénéité, la critique classique de k-anonymat qui a motivé la l-diversité. D'où la garde de concentration : elle en approxime l'effet sans en importer la machinerie.
+
+**Pourquoi pas k=50** : sur l'ICP (lifestyle 40-150 chambres, Apaleo/Mews), 80 chambres à 70 % d'occupation et LOS 2,1 donnent ~9 700 séjours/an. Le volume n'est pas le problème — la **granularité** l'est : les 6 tags croisés de [`memory-architecture.md`](memory-architecture.md) produisent des centaines de cellules distribuées en loi de puissance. `k = f(volume × fenêtre / granularité)`. k=50 ne laisserait vivre que la tête de distribution.
+
+**Pourquoi ne rien revendiquer** — c'est le point le plus important, et il découle d'une contrainte assumée : **aucune relecture juridique n'est finançable à ce stade**. L'anonymat est la qualification la plus lourde de tout le dossier (elle décide si Segment est dans ou hors du RGPD). On ne s'appuie pas sur une qualification qu'on ne peut pas faire valider : la revendiquer à tort coûte infiniment plus que ne pas la revendiquer. Et le coût est **nul aujourd'hui** — la couche n'est pas construite. La revendication reste ouverte plus tard, adossée à une analyse de ré-identification et à la relecture du DPO du design-partner (la DPIA appartient de toute façon au responsable de traitement, donc à l'hôtel).
+
+**Effet sur ADR-0011 D4** — le store outcome reste **pseudonyme par défaut** pour la même raison. La formule « personal-data-free by construction » ne peut pas être maintenue sans preuve ; elle est marquée contestée dans la Décision #26.
+
+**Application downstream :** CLAUDE.md + AGENTS.md §Décisions ouvertes (ligne retirée) · `mesh-architecture.md` §2 couche 4 · `memory-architecture.md` §Couche 2 · `dpia-anima-2026-08.md` §6, §10.3, §11 bis · détecteur D8 (`hygiene_architecturale.py`).
+
+**Ce qui reste ouvert :** la **preuve** de non-ré-identification (analyse formelle), et la valeur de k pour la Hive prior fédérée Phase 5 — qui est un problème distinct, à l'échelle du réseau, avec son propre plancher hôtels (≥ 5 propriétés, Story 7.5 AC4). La différentielle privacy (option (D) initiale) reste l'option à évaluer si une garantie formelle devient nécessaire pour un régulateur.
+
+---
 
 ### [x] Multi-repo strategy + governance — RÉSOLU 16/06/2026 → ADR-0010 (Décision #25)
 

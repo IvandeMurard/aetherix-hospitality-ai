@@ -275,7 +275,7 @@ Le cœur de la commande. État actuel de la spec, problème, et proposition.
 | **Working** | « Durée du séjour » (TTL Redis) | « Durée du séjour » est un **événement**, pas une durée : que se passe-t-il en cas de no-show, de séjour prolongé, de check-out non enregistré ? Un TTL Redis est une éviction — il ne prouve rien sur les réplicas, snapshots et sauvegardes. | **Check-out + 24 h**, plafond dur **7 j** quel que soit l'état du séjour | Événement `check_out`, ou expiration du plafond | TTL **+** job de balayage des clés orphelines **+** politique de rétention des sauvegardes Redis alignée (≤ 7 j) |
 | **Episodic** | « Séjour + 30 j » | Le 30 j n'est justifié nulle part. Il est en outre **incohérent** avec le 90 j retenu pour les données PMS brutes (Story 7.5, AC5) : deux durées pour des données qui décrivent le même séjour. | **Séjour + 30 j**, conservé mais **justifié** : fenêtre de réclamation/litige post-séjour. Aligner explicitement ou documenter l'écart avec le 90 j PMS | `check_out + 30 j` | Job `pg_cron` de suppression, **pas** d'archivage silencieux |
 | **Semantic** | **∞ (permanent)** | ⚠️ **Non conforme en l'état.** « Permanent » est l'exact contraire de la limitation de conservation. Aucune finalité ne justifie une conservation illimitée d'un profil comportemental. `decay_rate` **pondère**, il ne supprime pas. | **36 mois glissants depuis le dernier séjour** (24 mois si la base est le consentement — alignement sur la doctrine CNIL prospection), prolongeable par re-consentement explicite | `last_stay_date + 36 mois`, ou retrait du consentement (immédiat) | Suppression de la ligne **et du vecteur** pgvector ; purge du cache d'embeddings ; cascade §8 |
-| **Segment (local)** | ∞ | Acceptable **uniquement si** l'agrégat est réellement anonyme. Un k-means nocturne sur les clients d'une seule propriété, avec cohortes potentiellement petites, ne l'est pas par défaut (§10.3). | ∞ **si et seulement si** k ≥ plancher validé **et** absence de rebuild attributif ; sinon **alignement sur Semantic (36 mois)** | Recompute nocturne | Recompute avec filtre de plancher ; suppression des cohortes sous le plancher |
+| **Segment (local)** | ∞ | Acceptable **uniquement si** l'agrégat est réellement anonyme. Un k-means nocturne sur les clients d'une seule propriété, avec cohortes potentiellement petites, ne l'est pas par défaut (§10.3). | **Aligné sur Semantic (36 mois)** — arbitrage HOS-323 du 01/08 : aucun anonymat revendiqué, donc la couche reste dans le régime données personnelles | Recompute nocturne | Recompute avec plancher **k = 20** + garde de concentration ~90 % ; sous le seuil, **dégradation vers une cohorte plus grossière** (jamais un k plus bas) |
 | **Segment (Hive prior)** | ∞ (Phase 5) | Idem, aggravé : agrégation cross-propriétés sous responsabilité Aetherix (§2). | ∞ sous les mêmes conditions **+** opt-out hôtel effectif rétroactivement | — | Recalcul du prior à l'exclusion de l'hôtel sorti — **techniquement non trivial**, à prévoir dès le design |
 | **Store outcome** (D4) | Non spécifiée | Une rétention non spécifiée sur un store dont la nature juridique est contestée (§10.2) est le pire des deux mondes. | À spécifier explicitement, bornée par le besoin d'apprentissage (proposition : **24 mois**), et **re-qualifiée** avant toute décision | — | Suppression ou ré-agrégation |
 
@@ -426,6 +426,20 @@ build — c'est le **prérequis qui détermine si la couche 4 est un traitement 
 ou pas**, donc si elle est dans le périmètre de la DPIA, des droits et des durées. Il devrait être
 tranché ici, avant, et pas à la construction.
 
+> ✅ **Tranché le 01/08/2026** (HOS-323, arbitrage Ivan) — `open-decisions.md` §Resolved.
+> **k = 20** clients par cohorte · **garde de concentration** : un attribut homogène au-delà de ~90 %
+> n'est pas servi (k-anonymat seul ne protège pas des **attributs** — attaque par homogénéité, d'où
+> la l-diversité ; k=5 vaut pour des comptages, pas pour « 73 % late check-out ») · sous le seuil,
+> **dégradation vers une cohorte plus grossière**, jamais un k plus bas.
+>
+> **Et surtout : aucun anonymat n'est revendiqué.** La couche 4 reste dans le régime des données
+> personnelles. Motif assumé — aucune relecture juridique n'est finançable à ce stade, et l'anonymat
+> est la qualification la plus lourde du dossier. On ne s'appuie pas sur une qualification qu'on ne
+> peut pas faire valider ; la revendiquer à tort coûte bien plus que ne pas la revendiquer, et
+> s'en abstenir ne coûte **rien aujourd'hui** puisque la couche n'est pas construite. La
+> revendication reste ouverte plus tard, adossée à une analyse de ré-identification et à la
+> relecture du DPO du design-partner — à qui la DPIA appartient de toute façon (§2).
+
 À noter que la Décision #24 (graphe de contexte) désignait déjà `Cohort` comme la **frontière
 d'anonymisation** — la frontière est identifiée dans le corpus, mais elle n'a jamais été chiffrée.
 
@@ -455,6 +469,14 @@ pas une DPIA opposable, et ça ne le sera jamais tant que quatre choses manquero
 
 1. **Une relecture par un conseil / DPO.** Trois qualifications structurantes en dépendent : base
    légale de Semantic, statut art. 9 des préférences alimentaires, frontière AI Act.
+   **Contrainte assumée (01/08/2026) : aucune relecture juridique n'est finançable à ce stade.**
+   Elle n'est pas abandonnée, elle est **déplacée sur W5** : la DPIA appartient au responsable de
+   traitement, donc à l'hôtel, qui a un DPO ou un conseil — la faire relire par lui est d'ailleurs
+   plus crédible que de la faire relire par le sien. En attendant, la posture par défaut est
+   **conservatrice partout où une qualification ne peut pas être validée** — c'est le raisonnement
+   qui a produit l'arbitrage HOS-323 (aucun anonymat revendiqué, §10.3). Appuis gratuits qui
+   sécurisent la forme sans remplacer l'avis : guide PIA et logiciel PIA de la CNIL, cliniques
+   juridiques universitaires, heures juridiques d'incubateur.
 2. **Les quatre arbitrages du §10.** Deux d'entre eux (rétention Semantic, plancher k-anonymat)
    déterminent le périmètre même du traitement — on ne peut pas finaliser une DPIA sans eux.
 3. **Les 13 mesures bloquantes du §9.2** conçues, pas seulement listées.
@@ -466,13 +488,13 @@ pas une DPIA opposable, et ça ne le sera jamais tant que quatre choses manquero
 | # | Condition | Dépend de |
 |---|---|---|
 | C1 | Arbitrage des 4 points du §10 (Ivan) | — |
-| C2 | Plancher de k-anonymat tranché et chiffré | C1 · `open-decisions.md` |
+| ~~C2~~ | ~~Plancher de k-anonymat tranché et chiffré~~ — ✅ **fait 01/08/2026** (HOS-323 : k=20, garde de concentration, aucun anonymat revendiqué, dégradation vers cohorte plus grossière) | — |
 | C3 | Durées de conservation §6 actées comme spec, y compris la rétention bornée de Semantic | C1 |
 | C4 | Design consentement + opposition + rectification (M-4, M-5, M-6) | C3 |
 | C5 | `docs/GDPR-DATA-INVENTORY.md` livré (Story 7.5, non fait) — préalable factuel, Anima ne peut pas être conforme si Aetherix n'a pas son propre inventaire | Story 7.5 / HOS-115 |
 | C6 | DPA à deux étages rédigée | §2 · C5 |
 | C7 | Un design-partner identifié, responsable de traitement, qui adopte la DPIA | pilote réel |
-| C8 | Relecture juridique | C1-C6 |
+| C8 | Relecture juridique — **portée par le DPO / conseil du design-partner**, non finançable en propre | C7 |
 | C9 | DSAR testée de bout en bout sur le système réel | build |
 
 **Séquencement par rapport au gel Epic 16.** C1, C2 et C3 sont des décisions, pas du build : elles
@@ -492,7 +514,7 @@ le plan 90 j proscrit. La lecture honnête : ce document rend le gate *document�
 | # | Mur | Pourquoi il ne se reformule pas | Débloqué par | Placement |
 |---|---|---|---|---|
 | **W1** | **Rectification d'une inférence** — une personne doit pouvoir contester « sensible bruit » ou « déçu précédemment », et la contestation doit survivre au recompute nocturne | Un droit sans mécanisme est une phrase. Ici il n'existe **aucun** chemin : les claims sont dérivées, jamais amendables | Design (M-5) | 🔒 Phase 4 — gelé |
-| **W2** | **Anonymat de Segment et du store outcome** | Propriété empirique. Aucune formulation ne rend anonyme une cohorte de 4 personnes | Un **chiffre** (plancher k) + une analyse de ré-identification | 🟢 **Arbitrage — sprint courant** (le chiffre), 🔒 la preuve |
+| **W2** | **Anonymat de Segment et du store outcome** | Propriété empirique. Aucune formulation ne rend anonyme une cohorte de 4 personnes | Un **chiffre** (plancher k) + une analyse de ré-identification | ✅ **Chiffre tranché 01/08** (k=20 + garde, aucun anonymat revendiqué — HOS-323) · 🔒 la preuve reste à produire |
 | **W3** | **Consentement libre pour Semantic** — donc découplé de la réservation | Contrainte commerciale imposée à l'hôtel, pas une clause à rédiger. Un consentement groupé avec la résa est nul, quelle que soit sa rédaction | Négociation design-partner | 🔒 Phase 4 — dépend de W5 |
 | **W4** | **DSAR testée de bout en bout** (accès + effacement, incluant vecteurs pgvector et sauvegardes) | Un test passe ou ne passe pas. C'est le seul point du dossier qui produit une preuve binaire | Build (M-7) | 🔒 Phase 4 — gelé |
 | **W5** | **Aucun responsable de traitement n'existe** — zéro design-partner | La DPIA appartient au responsable. Sans hôtel, ce document reste un exercice | Recrutement design-partner (Epic 16) | 🟠 **Déjà dans le plan actif** — c'est la dépendance racine |

@@ -17,13 +17,15 @@ Objectif : passer d'un agent de "semantic search" à un agent **self-improving p
 
 ## Couche 2 — Hive Memory (cross-hôtels, anonymat à prouver)
 
-> ⚠️ **« Anonymisé » est ici une intention de design, pas une propriété démontrée** (D8, 01/08/2026).
-> Deux planchers distincts la conditionnent, et un seul est écrit : ≥ 5 **propriétés** avant
-> publication d'un pattern (Story 7.5 AC4, protège les hôtels) ; ≥ k **clients** par cohorte
-> (protège les personnes) — **non tranché**, arbitrage [HOS-323](https://linear.app/hospitalityagent/issue/HOS-323).
-> Tant que k n'est pas chiffré, le statut RGPD de cette couche est **pseudonyme par défaut**, pas
-> anonyme (considérant 26 + WP29 05/2014). Rappel de contexte : la Hive n'est pas construite —
-> `hotel_cohort_features` v1 n'existe pas, socle gelé (Décision #23 §D4), statut *Research*.
+> ⚠️ **« Anonymisé » est une intention de design, pas une propriété démontrée** (D8, 01/08/2026).
+> Deux planchers distincts la conditionnent : ≥ 5 **propriétés** avant publication d'un pattern
+> (Story 7.5 AC4, protège les hôtels) ; ≥ **20 clients** par cohorte + garde de concentration ~90 %
+> (protège les personnes — arbitrage [HOS-323](https://linear.app/hospitalityagent/issue/HOS-323),
+> 01/08/2026, détail `open-decisions.md` §Resolved).
+> **Aucun anonymat n'est revendiqué** : statut RGPD **pseudonyme par défaut** (considérant 26 +
+> WP29 05/2014), tant qu'aucune analyse de ré-identification ni relecture juridique n'existe.
+> Rappel de contexte : la Hive n'est pas construite — `hotel_cohort_features` v1 n'existe pas,
+> socle gelé (Décision #23 §D4), statut *Research*.
 
 - **Technologie :** pgvector Supabase — tables agrégées anonymisées (Phase 0-2). Backboard.io à réévaluer Phase 3+.
 - **Périmètre :** patterns agrégés et anonymisés (anonymat **à prouver**, cf. bandeau ci-dessus), groupés par tags : `quartier`, `typologie` (city/resort/airport), `clientèle` (leisure/business/MICE), `segment` (4*/5*/boutique), `taille_resto`, `saison` — noter que ce croisement de 6 tags est précisément ce qui fait fondre la taille de cohorte
