@@ -1,12 +1,14 @@
-"""Aetherix MCP Server v0 — inbound, agent-callable (ADR 0001 · HOS-71 · P1-2).
+"""Aetherix MCP Server — inbound, agent-callable (ADR 0001 · HOS-71 · P1-2).
 
 Exposes three tools to third-party agents (Claude Desktop, enterprise hubs):
   - get_operational_predictions
   - get_recommendations_with_memory_context
   - submit_feedback_to_memory
 
-Mounted by `app/main.py` at `/mcp/v0`. Single-process, shared lifespan with
-the main FastAPI app (ADR D2).
+Backs the `/mcp/v1/` route (ADR-0004). The `/mcp/v0/` route was retired on
+2026-08-01 (HOS-315); `get_recommendations_with_memory_context` stays
+dispatchable here for the stdio surface but is no longer advertised.
+Single-process, shared lifespan with the main FastAPI app (ADR D2).
 
 hotel_id is resolved from the bearer token server-side — **never** from tool
 input (ADR D4, multi-tenant isolation). Tool schemas do not expose it.
