@@ -72,11 +72,13 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - `context/moat.md` — **ce qui est défendable, testé contre la menace plateforme** (09/07) : 4 couches de moat + stress test "et si Apaleo/Mews shippent un forecast natif ?" + risque résiduel nommé
 - `context/data-conventions.md` — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
+- `context/decision-ledger.md` — **Decision Ledger (01/08, HOS-317)** : audit des 5 tables + l'unique arête manquante (`operational_memory.recommendation_id`, aucune table nouvelle) · schéma contexte→reco→réponse manager→outcome · requête bout-en-bout (service + vue `decision_ledger`) · §5 ce qui reste non fermé · vocabulaire *outcome-tracked* et non *self-improving*
 - `context/vision-future.md` — vision long terme (Phase 5, Mesh, Aetherix Voice)
 - `context/demo-apaleo.md` — Demo PRD Apaleo + résultats probe sandbox (HOS-190 AC1)
 - `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — **benchmark données réelles Recruit (08/07, HOS-307)** : naïve vs Prophet vs LightGBM, MAPE+MdAPE J+1→J+7 · verdict AC4 arbitré 01/08 = **PASS formel + clause pivot déclenchée volontairement** (Décision #33) · l'ancien 15.09 % synthétique = circulaire, gate interne uniquement
 - `context/status-taxonomy.md` — **taxonomie de statut (HOS-318, Décision #33)** : Built / Shadow-mode / Synthetic PoC / Design / Research · doc de référence unique, applicable à toute surface · état des 10 briques · appliqué par le détecteur D7
 - `context/audit-surfaces-publiques-2026-08.md` — **audit des surfaces publiques (01/08, HOS-318 AC1)** : état par surface + correctifs prêts à coller pour le case study et le méta-repo
+- `context/perimetre-et-conformite-prospect.md` — **fiche prospect (01/08, HOS-313 AC4+AC5)** : périmètre honnête (built vs north-star, bus factor solo nommé comme risque) + one-pager conformité (rôles processor/controller + DPA, RGPD WhatsApp Q2-03 corrigé, posture sandbox/non-PII) — posture + feuille de route, pas un certificat
 - `context/dpia-anima-2026-08.md` — **DPIA Anima — analyse RGPD/CNIL (01/08, HOS-229)** : gate Décision #20 **non levé** · obligation art. 35 établie (6/9 critères WP248) · durées de conservation par couche (Working/Episodic/Semantic/Segment) · droits des personnes · profilage émotionnel + frontière AI Act (biométrique = ligne rouge) · 13 mesures bloquantes + 9 conditions de levée · §10 = 4 conclusions qui remettent en cause l'archi 4 couches, signalées non appliquées
 - `context/runbook-pre-pilot.md` — checklist pré-pilote
 - `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL

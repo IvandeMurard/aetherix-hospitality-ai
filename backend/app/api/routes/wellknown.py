@@ -43,7 +43,7 @@ _AGENT_MANIFEST = {
             "name": "submit_feedback_to_memory",
             "description": (
                 "Record manager outcome for a past recommendation "
-                "(self-improving loop)."
+                "(outcome-tracked operational history)."
             ),
             "endpoint": "/mcp/v1/",
             "method": "POST",

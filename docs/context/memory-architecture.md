@@ -3,7 +3,9 @@
 > Chargé par les sessions Architect, Dev, et Veille quand pertinent.
 > **Mettre à jour :** quand une décision sur la mémoire (pgvector, Backboard, MemoryProvider) est prise ou révisée.
 
-Objectif : passer d'un agent de "semantic search" à un agent **self-improving per-property**, dont les décisions s'améliorent en continu grâce à la preuve d'impact (recommandation suivie + outcome positif).
+Objectif : passer d'un agent de "semantic search" à un agent qui tient un **historique opérationnel outcome-tracked par propriété** — contexte, recommandation, réponse manager, outcome réel, tous liés (le **Decision Ledger**, cf. [`decision-ledger.md`](decision-ledger.md)).
+
+> **Vocabulaire (HOS-317 AC4)** — on écrit *outcome-tracked*, pas *self-improving* : enregistrer un outcome est un fait vérifiable en base ; s'améliorer grâce à lui est une affirmation de performance non encore démontrée sur données réelles (à trancher par HOS-316). Le flux d'amélioration continue décrit plus bas est la **cible de design**, pas un comportement mesuré.
 
 ---
 
