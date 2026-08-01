@@ -13,7 +13,7 @@ Meilleur reasoning, 200K ctx, explainability critique pour notre cas (recommanda
 
 ### 2 — Architecture mémoire 2 couches
 
-Private Memory (pgvector par hôtel) + Hive Memory (cross-hôtels anonymisé). Backboard réévaluer Phase 3+. Détail → `docs/context/memory-architecture.md`.
+Private Memory (pgvector par hôtel) + Hive Memory (cross-hôtels, dite « anonymisée » — ⚠️ **propriété non prouvée**, plancher de k-anonymat non tranché (HOS-323), statut RGPD **pseudonyme par défaut** en attendant). Backboard réévaluer Phase 3+. Détail → `docs/context/memory-architecture.md`.
 
 ### 3 — pgvector > Qdrant > Pinecone
 
@@ -89,12 +89,21 @@ Le Guest Context Node Anima (Phase 4) nécessite une séparation stricte des cou
 
 - **Working** — Redis · TTL séjour · décisions immédiates
 - **Episodic** — PostgreSQL time-filtered · séjour + 30j · contextuelles
-- **Semantic** — pgvector permanent · profil
+- **Semantic** — pgvector durable **borné 36 mois** glissants depuis le dernier séjour (amendement DPIA 01/08, ci-dessous) · profil
 - **Segment** — k-means anonymisé cross-guests
 
 MCP tool `query_guest_profile` prend un paramètre `scope` obligatoire. **Gate non-négociable avant tout build :** analyse RGPD/CNIL + DPIA formelle (profil émotionnel = donnée personnelle sensible). HiveMemory (Aetherix) et SensoryMemory (Tacet) servent d'embryons technologiques. PoC hackathon (juin 2026, synthétique, jetable) a validé l'architecture 4-couches + scope-gating + split *Anima informe / Orchestrateur décide*. Détail → `docs/mesh-architecture.md` §2 Anima.
 
 **Amendé par Décision #26 (17/06/2026) :** Anima renommée "Guest Cognition Layer" · Segment enrichie double portée (local + Hive prior) · `ProfileSnapshot` confidence-weighted (schema, pas couche) · Learning Engine = tier Mesh séparé (pas 5e couche) · instrumentation outcome-capture Phase 4. DPIA gate et 4 couches **inchangés**. Détail complet → `docs/adr/0011-learning-engine-hive-v2.md`.
+
+**Amendement DPIA (01/08/2026, HOS-229) — le gate reste fermé, et il est désormais documenté.** L'analyse RGPD/CNIL formelle est livrée : [`docs/context/dpia-anima-2026-08.md`](dpia-anima-2026-08.md). Obligation art. 35 établie sans ambiguïté (6 critères pleins + 2 partiels sur les 9 du WP248) — le gate n'est pas une prudence maison. **Verdict : non levé**, 13 mesures bloquantes et 9 conditions de levée (§9.2 et §11 du doc). Quatre corrections apportées à la présente décision :
+
+1. **Durées de conservation — la couche Semantic n'est plus « ∞ ».** « Permanent » est incompatible avec l'art. 5(1)(e) ; `decay_rate` pondère, il n'efface pas. Semantic devient **durable borné** : 36 mois glissants depuis le dernier séjour (24 si base = consentement), prolongeable par re-consentement. Working = check-out + 24 h, plafond dur 7 j (« durée du séjour » est un événement, pas une durée). Episodic = séjour + 30 j, à justifier et à réconcilier avec le 90 j PMS brut (Story 7.5 AC5). Segment ∞ **conditionnel** au plancher de k-anonymat. Tableau complet → doc §6. La séparation en 4 couches est **confirmée et renforcée** : c'est elle qui rend possible une durée par finalité, donc une mesure de minimisation opposable.
+2. **Vocabulaire — « donnée personnelle sensible » était imprécis.** L'état émotionnel inféré n'est pas une donnée de l'art. 9 en soi ; il est **hautement personnel** au sens WP248, et devient art. 9 par ce qu'il révèle (santé, conviction religieuse — cf. l'exemple `menu végétarien` de la couche Episodic). Conséquence opérationnelle : les `drivers` de `get_emotional_risk` doivent être une **énumération fermée**, jamais une sortie libre de LLM.
+3. **Frontière AI Act (règlement (UE) 2024/1689) — ligne rouge écrite.** Anima échappe au régime haut risque *uniquement* parce qu'elle infère depuis du texte et du comportement, pas depuis du biométrique (art. 3(39)). Toute entrée **voix ou visage** — donc la rencontre avec « Aetherix Voice » (`vision-future.md`, Phase 5) — bascule le système en Annexe III + art. 9 + art. 50(3) et change l'ordre de grandeur du coût de conformité. Seconde ligne rouge : **aucune inférence émotionnelle sur le personnel** (art. 5(1)(f) = pratique *interdite*, pas régulée).
+4. **Rôle RGPD — la fédération fait sortir Aetherix de la sous-traitance.** Working/Episodic/Semantic + Segment local = sous-traitant pour le compte de l'hôtel. **Segment Hive prior (Phase 5) = Aetherix responsable de traitement** (finalité, moyens et bénéficiaires déterminés seul). La DPA type (Story 7.5 / HOS-115) doit être **à deux étages**, pas un modèle sous-traitant standard.
+
+**Trois arbitrages restent ouverts** (doc §10, signalés sans être appliqués — ils ne consomment pas d'heures de preuve et ne rompent pas le gel Epic 16) : (a) qualification du store outcome ADR-0011 D4, dont l'anonymat est affirmé et non prouvé — position par défaut **pseudonyme** tant que l'analyse de ré-identification n'existe pas ; (b) **plancher de k-anonymat** de la couche Segment — ce n'est pas un paramètre de build, c'est ce qui détermine si la couche 4 est ou non un traitement de données personnelles (cf. `open-decisions.md`) ; (c) absence de chemin de **rectification** d'une claim inférée. Le reste (consentement, opposition, DSAR, DPA, tests) est du travail Phase 4 et **reste gelé** — la DPIA appartient au responsable de traitement, donc à un hôtel, et il n'y en a aucun à ce jour.
 
 ### 21 — Apaleo MCP — convention de nommage native + sales evidence (26/05/2026, sales 28/05/2026)
 
@@ -219,7 +228,7 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **D3 — Segment double portée :** couche Segment = deux fonctions explicites : **Local** ("guests like this, at this hotel" — cohortes anonymisées propriété, nightly recompute) + **Hive prior** ("guests like this, across all network hotels" — agrégats fédérés, Phase 5). Similarité inter-hotels apprise (embeddings metadata hotel), pas hard-codée. Partial pooling hiérarchique + détection divergence (safety valve negative transfer). Shift 80/20 → 20/80 (Hive prior → Guest knowledge) au fil des séjours : analogue concierge expérimenté.
 
-**D4 — Learning Engine tier Mesh séparé (Phase 5) + instrumentation Phase 4 :** policy/outcome learning = tier Mesh distinct, pas une 5e couche Anima. Dès Phase 4 : logger triple **de-identified** `(context-features, action, propensity, outcome)` à chaque décision Orchestrateur, dans un store séparé d'Anima (personal-data-free by construction). `propensity` non-négociable pour off-policy evaluation future (IPW / doubly-robust). HiveMemory v2 (Phase 5) : partage de priors/policies appris, pas de données.
+**D4 — Learning Engine tier Mesh séparé (Phase 5) + instrumentation Phase 4 :** policy/outcome learning = tier Mesh distinct, pas une 5e couche Anima. Dès Phase 4 : logger triple **de-identified** `(context-features, action, propensity, outcome)` à chaque décision Orchestrateur, dans un store séparé d'Anima (annoncé « personal-data-free by construction » — ⚠️ **claim contestée, non prouvée** : l'absence d'identifiant direct ne fait pas l'anonymat, analyse de ré-identification à produire, position par défaut **pseudonyme** en attendant — DPIA §10.2). `propensity` non-négociable pour off-policy evaluation future (IPW / doubly-robust). HiveMemory v2 (Phase 5) : partage de priors/policies appris, pas de données.
 
 **D5 — Reframing moat :** le moat est la position dans la boucle act-and-measure (seul acteur qui agit + capture + attribue causalement + fédère), pas la taille du corpus.
 

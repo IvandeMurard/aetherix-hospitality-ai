@@ -57,7 +57,7 @@
 | 17 | Hébergement Fly.io | 14/05/2026 |
 | 18 | Phase 3 cut serré + portfolio reinforcement | 17/05/2026 |
 | 19 | Orchestrateur séparé — Aetherix = F&B execution node | 19/05/2026 |
-| 20 | Anima — architecture mémoire 4 couches + DPIA gate | 19/05/2026 |
+| 20 | Anima — architecture mémoire 4 couches + DPIA gate — **analyse RGPD/CNIL livrée 01/08/2026 (HOS-229, `docs/context/dpia-anima-2026-08.md`) : gate NON levé**, 13 mesures bloquantes ; Semantic n'est plus « ∞ » (36 mois glissants) ; biométrique/voix + émotion sur le personnel = lignes rouges AI Act ; Hive prior fait d'Aetherix un responsable de traitement | 19/05/2026 |
 | 21 | Apaleo MCP — convention nommage native + sales evidence Anthropic | 26/05/2026 |
 | 22 | Eval-by-design = offline gate CI + runtime eval + outcome eval (Qonto + BMad ; portée élargie 3 bras, amendé 19/06 ADR-0007 §13) | 04/06/2026 |
 | 23 | POS integration scope + adapter pattern (Phase 4) — **§D4 cohort v2 différé 31/07/2026** (ADR-0006 §10) : `hotel_cohort_features` v1 n'existe pas et son socle Hive est gelé ; la FK dans la migration P4-POS-2 bloquait tout le backlog POS. Ingestion POS reste livrable : 5 stories / 19 pts | 06/06/2026 |

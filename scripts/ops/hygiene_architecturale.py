@@ -5,7 +5,7 @@ Detects drift between what the repo *says* and what the repo *is*, then emits a
 Markdown report. It never edits code and never writes to the eval dataset: the
 workflow turns its output into a documentation-only PR that a human merges.
 
-Seven detectors, all static and deterministic — no network, no secrets, no
+Eight detectors, all static and deterministic — no network, no secrets, no
 runtime access. That is deliberate: a hygiene agent that needs credentials is a
 new attack surface, and Epic 16 NFR2 freezes new runtime surface.
 
@@ -18,6 +18,9 @@ new attack surface, and Epic 16 NFR2 freezes new runtime surface.
   D6  count coherence — hardcoded counts match the source they summarise
   D7  metric honesty  — the circular synthetic MAPE never appears unqualified
                         (HOS-318, taxonomie docs/context/status-taxonomy.md)
+  D8  falsifiability  — a *property* asserted as fact (permanent, anonymised,
+                        "by construction") carries what would make it false
+                        (HOS-229, docs/context/dpia-anima-2026-08.md §10)
 
 Usage:
   python scripts/ops/hygiene_architecturale.py
@@ -149,6 +152,101 @@ METRIC_CLAIM_EXCEPTIONS = {
     "tools/bmad/": "Sorties BMad archivées — packs de story figés, pas une surface de claim.",
     "docs/testing/evidence/": "Rapports d'exécution horodatés, y compris ceux de cet agent.",
 }
+
+# D8 — property claims. D7 polices claims about *maturity* (does it run?); D8
+# polices claims about *properties* (is it true?). The DPIA (HOS-229) found the
+# same defect four times — "permanent", "anonymisé", "personal-data-free by
+# construction", "aggregations anonymisées" — each a property written as an
+# established fact, none carrying anything that could prove it wrong. Décision
+# #33 fixed the maturity half; this is the other half.
+#
+# Scanned surfaces are *living* docs only, where a claim is load-bearing today.
+# ADRs are excluded for the same reason D7 excludes them: a dated record is not
+# rewritten, the qualification belongs in the docs that cite it. That is not a
+# loophole — every claim that matters is restated on one of these surfaces
+# (ADR-0011 D4's "personal-data-free by construction" is caught via
+# decisions-architecturales.md §26).
+PROPERTY_CLAIM_SOURCES = [
+    "CLAUDE.md",
+    "AGENTS.md",
+    "docs/mesh-architecture.md",
+    "docs/context/decisions-architecturales.md",
+    "docs/context/open-decisions.md",
+    "docs/context/memory-architecture.md",
+    "docs/context/moat.md",
+    "docs/context/perimetre-et-conformite-prospect.md",
+]
+
+# A claim is acknowledged — anywhere in the window — when the text says the work
+# is not done. Naming a claim as unproven is the point; D8 asks for honesty, not
+# for the proof itself.
+PROPERTY_CLAIM_ACKNOWLEDGED = re.compile(
+    r"à prouver|non prouv|pas prouv|contest|pseudonym|DPIA|à borner|non conforme|"
+    r"reste ouvert|décision ouverte|à trancher|hypothèse",
+    re.IGNORECASE,
+)
+
+# Each family: what asserts the property, what would make it falsifiable, and how
+# far the qualifier may sit. `window: 0` means same line — a retention period
+# belongs in the same table cell as the claim it bounds, otherwise the row above
+# ("Séjour + 30j") silently vouches for the row below ("∞").
+PROPERTY_CLAIMS = (
+    {
+        "code": "conservation",
+        "label": "conservation illimitée",
+        "pattern": re.compile(
+            r"(?<![\w-])(permanent[es]?|illimit[ée]e?s?|ind[ée]finiment)(?![\w-])|∞",
+            re.IGNORECASE,
+        ),
+        "qualifier": re.compile(
+            r"\b\d+\s*(?:j\b|jours?|mois|ans?|ann[ée]es?|h\b|heures?)|born[ée]|"
+            r"r[ée]tention|art\.?\s*5\(1\)\(e\)",
+            re.IGNORECASE,
+        ),
+        "window": 0,
+        # "Coexistence permanente pgvector + AGE" and "archive policy: garder
+        # indéfiniment" are permanence claims about *architecture* and *repo
+        # history* — no data subject, no art. 5(1)(e). D8 is about stored
+        # personal data; firing on these would train the reader to skim.
+        "exclude": re.compile(r"coexistence|migration path|archive|historique", re.IGNORECASE),
+        "hint": "Une durée de conservation illimitée ne se justifie pas par une analyse de "
+        "proportionnalité (art. 5(1)(e) RGPD). Nommer la durée dans la même phrase/cellule, "
+        "ou marquer la claim comme non conforme / à borner. Réf. "
+        "`docs/context/dpia-anima-2026-08.md` §6.",
+    },
+    {
+        "code": "anonymat",
+        "label": "anonymat affirmé",
+        "pattern": re.compile(
+            r"anonymis[ée]|anonymized|de-identified|d[ée]-identifi|personal-data-free|"
+            r"sans donn[ée]es? personnelles",
+            re.IGNORECASE,
+        ),
+        "qualifier": re.compile(
+            r"k\s*[-≥>=]|k-anonym|plancher|seuil|WP29|consid[ée]rant 26|r[ée]-identif",
+            re.IGNORECASE,
+        ),
+        "window": 3,
+        "hint": "L'anonymat est une propriété empirique, pas un adjectif : l'absence "
+        "d'identifiant direct ne suffit pas (considérant 26 + WP29 05/2014 — individualisation, "
+        "corrélation, inférence). Nommer le plancher de k-anonymat, ou dire que la preuve "
+        "n'existe pas encore. Réf. `docs/context/dpia-anima-2026-08.md` §10.2 et §10.3.",
+    },
+    {
+        "code": "auto-justification",
+        "label": "assertion auto-justifiée",
+        # "by design" is deliberately absent: eval-by-design and privacy-by-design
+        # are legitimate compounds here, and a detector that fires on Décision #22
+        # gets switched off within a fortnight.
+        "pattern": re.compile(r"(?<!-)by construction|par construction", re.IGNORECASE),
+        "qualifier": re.compile(r"(?!)"),  # never matches — only an acknowledgement clears this
+        "window": 3,
+        "hint": "« by construction » présente une conclusion comme une prémisse : c'est "
+        "exactement la forme d'affirmation que personne ne peut vérifier. Écrire ce qui la "
+        "rendrait fausse, ou la marquer comme non prouvée.",
+    },
+)
+
 
 # ─── Detector plumbing ────────────────────────────────────────────────────────
 
@@ -598,6 +696,71 @@ def detect_metric_honesty(result: Result) -> None:
         result.skipped.append("D7: aucun fichier .md scanné")
 
 
+# ─── D8 · Propriétés falsifiables ─────────────────────────────────────────────
+
+
+def detect_property_claims(result: Result) -> None:
+    """A property written as an established fact must carry its falsifier.
+
+    HOS-229: the DPIA found four such claims in the corpus, all load-bearing,
+    none checkable — "Semantic: permanent", "aggregations anonymisées",
+    "personal-data-free by construction". Each one silently decided a legal
+    question (retention, GDPR scope) by choosing an adjective.
+
+    The bar is deliberately low: naming the claim as unproven clears it. D8 asks
+    for the falsifier, not the proof — demanding proof from a linter would make
+    it unmergeable, and an unmergeable detector gets deleted.
+    """
+    scanned = 0
+    for rel in PROPERTY_CLAIM_SOURCES:
+        text = _read(rel)
+        if text is None:
+            result.skipped.append(f"D8: `{rel}` absent")
+            continue
+
+        scanned += 1
+        lines = text.splitlines()
+        # One finding per file and family: "anonymisé" written four times in
+        # memory-architecture.md is one unproven claim, not four. Reporting it
+        # four times buries the other seven families under repetition.
+        hits: dict[str, list[tuple[int, str]]] = {}
+        for i, line in enumerate(lines):
+            for claim in PROPERTY_CLAIMS:
+                if not claim["pattern"].search(line):
+                    continue
+                exclude = claim.get("exclude")
+                if exclude is not None and exclude.search(line):
+                    continue
+                window = claim["window"]
+                lo = max(0, i - window)
+                around = "\n".join(lines[lo : i + window + 1])
+                if claim["qualifier"].search(around) or PROPERTY_CLAIM_ACKNOWLEDGED.search(around):
+                    continue
+                hits.setdefault(claim["code"], []).append((i + 1, line.strip()))
+
+        for claim in PROPERTY_CLAIMS:
+            occurrences = hits.get(claim["code"])
+            if not occurrences:
+                continue
+            first_line, first_text = occurrences[0]
+            others = ", ".join(str(n) for n, _ in occurrences[1:])
+            detail = f"Ligne : `{first_text[:160]}`\n\n"
+            if others:
+                detail += f"Même claim non qualifiée aux lignes : {others}.\n\n"
+            result.findings.append(
+                Finding(
+                    detector="D8",
+                    title=f"`{rel}:{first_line}` — {claim['label']} sans falsifieur"
+                    + (f" ({len(occurrences)} occurrences)" if others else ""),
+                    detail=detail + claim["hint"],
+                    severity="info",
+                )
+            )
+
+    if scanned == 0:
+        result.skipped.append("D8: aucune source scannée")
+
+
 DETECTORS = (
     ("D1", "Drift harness", detect_harness_drift),
     ("D2", "Doc → code", detect_doc_paths),
@@ -606,6 +769,7 @@ DETECTORS = (
     ("D5", "Plafond de lignes", detect_doc_size),
     ("D6", "Cohérence des comptes", detect_count_coherence),
     ("D7", "Honnêteté métriques", detect_metric_honesty),
+    ("D8", "Propriétés falsifiables", detect_property_claims),
 )
 
 

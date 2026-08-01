@@ -77,6 +77,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — **benchmark données réelles Recruit (08/07, HOS-307)** : naïve vs Prophet vs LightGBM, MAPE+MdAPE J+1→J+7 · verdict AC4 arbitré 01/08 = **PASS formel + clause pivot déclenchée volontairement** (Décision #33) · l'ancien 15.09 % synthétique = circulaire, gate interne uniquement
 - `context/status-taxonomy.md` — **taxonomie de statut (HOS-318, Décision #33)** : Built / Shadow-mode / Synthetic PoC / Design / Research · doc de référence unique, applicable à toute surface · état des 10 briques · appliqué par le détecteur D7
 - `context/audit-surfaces-publiques-2026-08.md` — **audit des surfaces publiques (01/08, HOS-318 AC1)** : état par surface + correctifs prêts à coller pour le case study et le méta-repo
+- `context/dpia-anima-2026-08.md` — **DPIA Anima — analyse RGPD/CNIL (01/08, HOS-229)** : gate Décision #20 **non levé** · obligation art. 35 établie (6/9 critères WP248) · durées de conservation par couche (Working/Episodic/Semantic/Segment) · droits des personnes · profilage émotionnel + frontière AI Act (biométrique = ligne rouge) · 13 mesures bloquantes + 9 conditions de levée · §10 = 4 conclusions qui remettent en cause l'archi 4 couches, signalées non appliquées
 - `context/runbook-pre-pilot.md` — checklist pré-pilote
 - `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL
 - `context/linear-conventions.md` — protocole Epic/Story Linear
