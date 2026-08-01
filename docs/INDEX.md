@@ -77,6 +77,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — **benchmark données réelles Recruit (08/07, HOS-307)** : naïve vs Prophet vs LightGBM, MAPE+MdAPE J+1→J+7 · verdict AC4 arbitré 01/08 = **PASS formel + clause pivot déclenchée volontairement** (Décision #33) · l'ancien 15.09 % synthétique = circulaire, gate interne uniquement
 - `context/status-taxonomy.md` — **taxonomie de statut (HOS-318, Décision #33)** : Built / Shadow-mode / Synthetic PoC / Design / Research · doc de référence unique, applicable à toute surface · état des 10 briques · appliqué par le détecteur D7
 - `context/audit-surfaces-publiques-2026-08.md` — **audit des surfaces publiques (01/08, HOS-318 AC1)** : état par surface + correctifs prêts à coller pour le case study et le méta-repo
+- `context/perimetre-et-conformite-prospect.md` — **fiche prospect (01/08, HOS-313 AC4+AC5)** : périmètre honnête (built vs north-star, bus factor solo nommé comme risque) + one-pager conformité (rôles processor/controller + DPA, RGPD WhatsApp Q2-03 corrigé, posture sandbox/non-PII) — posture + feuille de route, pas un certificat
 - `context/runbook-pre-pilot.md` — checklist pré-pilote
 - `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL
 - `context/linear-conventions.md` — protocole Epic/Story Linear
