@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.pii import pseudonymise
+from app.core.pii import digest_identifier, pseudonymise
 from app.db.models import ConversationalQuery, RestaurantProfile, StaffingRecommendation
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,12 @@ class QueryParserService:
         """
         normalised_number = from_number.replace("whatsapp:", "")
 
+        # Story 7.5 / HOS-115 — `conversational_queries.from_number` holds a
+        # peppered digest, never the number. The dedup below is the only thing
+        # that ever read this column, and comparing digests works exactly as
+        # well as comparing numbers: idempotency never needed the cleartext.
+        stored_number = digest_identifier(normalised_number)
+
         # -----------------------------------------------------------------------
         # 1. Idempotency check — same message from same number within 60 s
         # -----------------------------------------------------------------------
@@ -68,7 +74,7 @@ class QueryParserService:
         dedup_result = await session.execute(
             select(ConversationalQuery)
             .where(
-                ConversationalQuery.from_number == normalised_number,
+                ConversationalQuery.from_number == stored_number,
                 ConversationalQuery.body == body,
                 ConversationalQuery.created_at >= cutoff,
             )
@@ -76,10 +82,11 @@ class QueryParserService:
         )
         existing = dedup_result.scalars().first()
         if existing is not None:
+            # The body is free text a manager typed — it can carry anything,
+            # including a named incident. It never goes to a log line.
             logger.info(
-                "query_parser: duplicate query suppressed from=%s body=%r (existing id=%s)",
-                from_number,
-                body,
+                "query_parser: duplicate query suppressed from=%s (existing id=%s)",
+                pseudonymise(from_number),
                 existing.id,
             )
             return {"status": "duplicate", "query_id": str(existing.id)}
@@ -144,7 +151,7 @@ class QueryParserService:
         query = ConversationalQuery(
             tenant_id=_prop_uuid,
             property_id=_prop_uuid,
-            from_number=normalised_number,
+            from_number=stored_number,
             body=body,
             recommendation_id=recommendation_id,
             status="pending",

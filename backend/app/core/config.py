@@ -162,3 +162,27 @@ OUTPUT_SANITY_MAX_HEADCOUNT_DELTA_MULT: float = float(
 # and loads synthetic Prophet training data from demo_data/prophet_training.json.
 # All demo_emit() calls are no-ops when false.
 DEMO_MODE: bool = _os.getenv("DEMO_MODE", "false").lower() == "true"
+
+# ─── RGPD — pseudonymisation & rétention (Story 7.5 / HOS-115) ─────────────────
+# Poivre serveur pour les digests d'identifiants stockés (numéro d'expéditeur,
+# guest_id PMS). Sans lui, un digest de numéro de téléphone est trivialement
+# rejouable : ~10^9 préimages réalistes, quelques secondes de GPU. Le poivre est
+# ce qui distingue « illisible pour qui vole la base » de « théâtre ».
+#
+# Il n'a délibérément PAS de valeur par défaut utilisable : un poivre par défaut
+# partagé entre tous les déploiements ne poivre rien. Vide → `digest_identifier`
+# refuse de produire un digest (voir app/core/pii.py), ce qui fait échouer bruyamment
+# plutôt que de stocker un hachage nu en croyant être protégé.
+PII_HASH_PEPPER: str = _os.getenv("PII_HASH_PEPPER", "")
+
+# Durée de conservation des messages entrants (`conversational_queries`).
+# 90 j = fenêtre de diagnostic/réclamation, alignée sur le payload PMS brut.
+# Ces lignes portent le texte libre d'un manager et le numéro d'un expéditeur
+# qui n'est pas nécessairement un client — c'est le point le plus exposé du
+# système (GDPR-DATA-INVENTORY §6.2).
+CONVERSATIONAL_QUERY_RETENTION_DAYS: int = int(
+    _os.getenv("CONVERSATIONAL_QUERY_RETENTION_DAYS", "90")
+)
+
+# Heure UTC du passage de purge quotidien.
+RETENTION_PURGE_HOUR: int = int(_os.getenv("RETENTION_PURGE_HOUR", "3"))

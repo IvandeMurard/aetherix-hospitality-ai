@@ -43,3 +43,13 @@
 | `LINEAR_API_KEY` | `lin_api_...` — workspace `Hospitalityagent` |
 | `LINEAR_TEAM_ID` | `2f6bb5e2-d735-4769-9377-11fe186aa0ad` |
 | `OBSIDIAN_VAULT_PATH` | `C:/Users/ivand/OneDrive/Documents/Agentic AI Hospitality` |
+
+## RGPD — pseudonymisation & rétention (Story 7.5 / HOS-115)
+
+| Variable | Rôle |
+|----------|------|
+| `PII_HASH_PEPPER` | Poivre des digests d'identifiants **stockés** (expéditeur WhatsApp, `guest_id` PMS). **Aucune valeur par défaut** : vide → l'app lève `PepperNotConfigured` au lieu de stocker un hachage nu. Générer avec `secrets.token_urlsafe(32)`, poser via `flyctl secrets set`. |
+| `CONVERSATIONAL_QUERY_RETENTION_DAYS` | Rétention des messages entrants (défaut `90`). Table la plus exposée du système — cf. [`GDPR-DATA-INVENTORY.md`](../GDPR-DATA-INVENTORY.md) §6.2. |
+| `RETENTION_PURGE_HOUR` | Heure UTC du passage de purge quotidien (défaut `3`). |
+
+> ⚠️ **Rotation du poivre = rupture des digests.** Changer `PII_HASH_PEPPER` rend illisibles tous les digests existants : la dédup 60 s repart de zéro (sans dommage) mais un `guest_hashed_id` d'avant rotation ne correspondra plus à celui d'après, ce qui casse tout comptage par convive dans la durée. À traiter comme une migration, pas comme une rotation de clé ordinaire.

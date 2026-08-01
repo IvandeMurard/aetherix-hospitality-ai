@@ -54,6 +54,7 @@ from app.workers.anomaly_scan import register_anomaly_scan_job
 from app.workers.dispatch_worker import register_dispatch_job
 from app.workers.error_rate_monitor import register_error_rate_monitor_job
 from app.workers.event_sync import start_event_scheduler
+from app.workers.retention_purge import register_retention_purge_job
 from app.workers.heartbeat import register_heartbeat_monitor_job
 from app.workers.kpi_aggregator import register_kpi_aggregator_job
 from app.workers.latency_slo_worker import register_latency_slo_job
@@ -146,6 +147,9 @@ async def lifespan(app: FastAPI):
     register_kpi_aggregator_job(_scheduler)
     # HOS-150 AC4 — keep agent_action_log monthly partitions ahead of `now()`.
     register_partition_rotation_job(_scheduler)
+    # HOS-115 / Story 7.5 AC5 — première purge de rétention du système
+    # (conversational_queries, 90 j). Voir docs/GDPR-DATA-INVENTORY.md §6.2.
+    register_retention_purge_job(_scheduler)
     # HOS-156 — injected into the shared scheduler (no separate scheduler instances).
     start_weather_scheduler(_scheduler)
     start_event_scheduler(_scheduler)

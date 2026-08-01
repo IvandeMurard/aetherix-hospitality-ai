@@ -1,10 +1,10 @@
 import abc
 import asyncio
-import hashlib
 from datetime import date
 from typing import Any, Dict, List
 
 from app.core.demo_events import demo_emit
+from app.core.pii import digest_identifier
 from app.db.models import PMSSyncLog
 from app.db.session import AsyncSessionLocal
 
@@ -78,12 +78,19 @@ class PIIStripper:
         reservation.pop("guest_email", None)
         reservation.pop("guest_phone", None)
         
-        # Hash guest_id if it exists to allow count-based analytics without identifying the person
+        # Hash guest_id if it exists to allow count-based analytics without identifying the person.
+        #
+        # Story 7.5 / HOS-115 — this used to be a bare sha256. A PMS guest_id is
+        # drawn from a small, enumerable space: anyone holding the property's id
+        # list could rebuild the mapping offline. Peppered HMAC moves that out of
+        # reach of a database dump alone. It is still pseudonymisation, not
+        # anonymisation (considérant 26) — nothing downstream may treat a
+        # `guest_hashed_id` as non-personal.
         if "guest_id" in reservation:
             guest_id = str(reservation["guest_id"])
-            reservation["guest_hashed_id"] = hashlib.sha256(guest_id.encode()).hexdigest()
+            reservation["guest_hashed_id"] = digest_identifier(guest_id)
             reservation.pop("guest_id")
-            
+
         return reservation
 
 class PMSSyncService:

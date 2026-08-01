@@ -65,11 +65,13 @@ d'un convive : il consomme des comptages.
 
 **Deux réserves à écrire noir sur blanc :**
 
-- Le hachage de `guest_id` est **non salé**. Un `guest_id` Apaleo a un espace de valeurs restreint ;
-  le digest est donc rejouable par quiconque dispose de la liste des identifiants. C'est de la
-  **pseudonymisation** (considérant 26), pas de l'anonymisation, et rien en aval ne doit le traiter
-  autrement.
-- Le stripper agit sur le dictionnaire de réservation. Il **ne protège pas** les champs libres
+- ✅ **Le hachage de `guest_id` est désormais poivré** (HMAC-SHA256, `PII_HASH_PEPPER`). Il était
+  auparavant un sha256 nu : un `guest_id` PMS a un espace de valeurs restreint, le digest était donc
+  rejouable hors ligne par quiconque disposait de la liste des identifiants. Cela reste de la
+  **pseudonymisation** (considérant 26), pas de l'anonymisation — rien en aval ne doit le traiter
+  autrement. Le poivre n'a **pas de valeur par défaut** : vide, l'application lève
+  `PepperNotConfigured` plutôt que de retomber silencieusement sur un hachage nu.
+- ⛔ Le stripper agit sur le dictionnaire de réservation. Il **ne protège pas** les champs libres
   (`raw_payload_summary`, `error_message`) qui peuvent recevoir un extrait de payload amont.
 
 ### 3.2 Pseudonymisation dans les logs — ✅ complétée le 01/08/2026
@@ -158,25 +160,33 @@ Ces deux planchers ne protègent pas les mêmes personnes et ne se substituent p
 Trois colonnes PII dans `restaurant_profiles`, sans chiffrement applicatif. Voir §3.3 pour pourquoi
 le simple hachage ne suffit pas et ce qu'il faudrait faire.
 
-### 6.2 `conversational_queries` stocke le numéro et le message en clair, sans durée — **le plus grave**
+### 6.2 `conversational_queries` — ✅ **corrigé le 01/08/2026**
 
-La [fiche prospect](context/perimetre-et-conformite-prospect.md) affirme, exactement : *« Le canal
-WhatsApp ne journalise plus le numéro de téléphone ni le corps des messages entrants »*. C'est
-**vrai et incomplet** : le correctif portait sur les **logs**. La table `conversational_queries`,
-elle, persiste `from_number` et `body` en clair, indéfiniment, **par conception** — c'est le
-mécanisme d'idempotence documenté dans le modèle.
+La [fiche prospect](context/perimetre-et-conformite-prospect.md) affirmait : *« Le canal WhatsApp ne
+journalise plus le numéro de téléphone ni le corps des messages entrants »*. C'était **vrai et
+incomplet** — le correctif Q2-03 portait sur les **logs**. La table, elle, persistait `from_number`
+et `body` en clair, indéfiniment, **par conception** (mécanisme d'idempotence).
 
-Trois raisons pour lesquelles c'est le point le plus exposé du système :
+C'était le point le plus exposé du système, pour trois raisons cumulées : contenu en texte libre non
+contraint (un manager peut y écrire une donnée de santé ou un incident nominatif), expéditeur pas
+nécessairement client (un mauvais numéro crée sa ligne, sans base légale), et aucune durée.
 
-1. **Le contenu est du texte libre non contraint.** Un manager peut y écrire n'importe quoi, y
-   compris une donnée de santé ou un incident nominatif concernant un employé ou un convive.
-2. **L'expéditeur n'est pas nécessairement un client.** Un mauvais numéro écrit au service et sa
-   ligne est créée. Aucune base légale ne couvre ce cas.
-3. **Aucune durée, aucune purge.** La donnée est là pour toujours.
+**Ce qui a été fait :**
 
-**Correctif minimal, non fait :** purge à 90 j, et remplacement de l'idempotence `(from_number,
-body)` par `(pseudonymise(from_number), hash(body))` — l'idempotence n'a jamais eu besoin des
-valeurs en clair.
+- `from_number` stocke désormais un **HMAC-SHA256 poivré** (`hmac256:…`). La seule chose qui lisait
+  cette colonne était la fenêtre de dédup de 60 s — comparer des digests fonctionne exactement
+  aussi bien : **l'idempotence n'a jamais eu besoin du clair.**
+- **Purge quotidienne à 90 j** — `app/workers/retention_purge.py`, enregistrée sur le scheduler
+  partagé. C'est le **premier job de rétention du système** : jusqu'ici les durées existaient dans
+  la documentation et nulle part ailleurs, ce qui est la définition d'une durée non respectée.
+- Migration `20260801210000_conversational_queries_retention.sql` : index de purge, suppression de
+  l'arriéré > 90 j, et écrasement des numéros en clair restants par un marqueur. Le poivre étant un
+  secret applicatif, la migration ne peut pas recalculer les digests des lignes existantes ; écraser
+  vaut mieux que laisser un numéro en clair vivre 90 jours de plus.
+
+**Ce qui reste en clair, et pourquoi :** `body`. Le service de réponse
+(`explainability_service.py`) en a besoin pour répondre à la question posée. Il est purgé à 90 j et
+ne doit jamais atteindre un log — c'est écrit dans le `COMMENT ON COLUMN`.
 
 ### 6.3 L'AC2 exige un test automatisé qui n'existe pas
 
@@ -230,21 +240,24 @@ tenir ce délai** : la cascade ci-dessus est manuelle.
 
 | # | Action | AC | Statut |
 |---|---|---|---|
-| 1 | Purge 90 j + idempotence hachée sur `conversational_queries` | AC5 | ⛔ **le plus urgent** (§6.2) |
-| 2 | Test automatisé « payload PII → zéro PII en base » | AC2 | ⛔ non fait |
-| 3 | Jobs de rétention (`pg_cron` ou APScheduler) sur les 8 durées du §4 | AC5 | ⛔ non fait |
-| 4 | Magasin chiffré pour le numéro/e-mail manager, lu au moment de l'envoi | AC3 | ⛔ à arbitrer (§3.3) |
-| 5 | DSAR exécutable et **testée** de bout en bout | AC6 | ⛔ non fait |
-| 6 | `DPO_EMAIL` provisionné + `.env.example` | Task 6 | ⛔ non fait |
-| 7 | Politique de sauvegarde bornée et documentée | — | ⛔ non fait |
-| 8 | DPA type (sous-traitance + volet Hive responsable) | — | ⛔ HOS-115 |
+| 1 | Purge 90 j + idempotence sur digest, `conversational_queries` | AC5 | ✅ **fait** (§6.2) |
+| 2 | Poivrage des digests d'identifiants (`guest_id`, expéditeur) | AC3 | ✅ **fait** (§3.1) |
+| 3 | Pseudonymisation des 4 fuites PII dans les logs | AC3 | ✅ **fait** (§3.2) |
+| 4 | Tests des contrôles PII (18 cas) | AC2 | ✅ **fait** — sauf le test bout-en-bout « payload → base », qui exige une base de test |
+| 5 | Jobs de rétention sur les **7 durées restantes** du §4 | AC5 | ⛔ non fait — le harnais existe désormais, chaque durée reste à câbler et à tester une par une |
+| 6 | Magasin chiffré pour le numéro/e-mail manager, lu au moment de l'envoi | AC3 | ⛔ **à arbitrer** (§3.3) |
+| 7 | DSAR exécutable et **testée** de bout en bout | AC6 | ⛔ non fait |
+| 8 | `DPO_EMAIL` provisionné | Task 6 | ⛔ non fait |
+| 9 | Politique de sauvegarde bornée et documentée | — | ⛔ non fait |
+| 10 | DPA type (sous-traitance + volet Hive responsable) | — | ⛔ HOS-115 |
 
-**Ce que cette story a livré :** l'inventaire lui-même (AC1), le modèle d'anonymisation Hive (AC4),
-la procédure DSAR sur le papier (AC6), l'audit du `PIIStripper` (AC2 partiel — audit oui, test non),
-et la fermeture des trois fuites PII dans les logs.
+**Ce que cette story a livré :** l'inventaire (AC1), le modèle Hive (AC4), la procédure DSAR sur le
+papier (AC6), les tests des contrôles PII (AC2), la fermeture des 4 fuites de logs, le poivrage des
+digests, et le **premier job de rétention du système**.
 
-**Ce qu'elle n'a pas livré :** tout ce qui exécute. Aucun job ne tourne, aucune DSAR n'a été testée.
-La différence entre ce document et la conformité, c'est le tableau ci-dessus.
+**Ce qu'elle n'a pas livré :** les 7 autres durées, le magasin chiffré, et une DSAR **exécutée**.
+La différence entre ce document et la conformité, c'est le tableau ci-dessus — et le point 7 est
+celui qui produit une preuve binaire, donc celui qui compte le plus.
 
 ---
 
