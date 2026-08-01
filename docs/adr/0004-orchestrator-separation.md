@@ -100,7 +100,7 @@ get_operational_predictions(target_date, service_type, context) → {prediction,
 
 The **orchestrator** sequences them with awareness: if `top_similarity < 0.7` → call with `k_memory=10` before forecast. If `confidence < 0.6` → fetch more memory patterns and retry. This is the agentic loop that doesn't exist yet.
 
-**Migration**: v0 tool remains in `/mcp/v0/` for backward compatibility until the first external consumer (Apaleo Agent Hub listing) is updated.
+**Migration**: ✅ **complete — `/mcp/v0/` retired 2026-08-01** (HOS-315). The v0 tool was kept for backward compatibility through its announced Sunset window; `/mcp/v1/` is now the only HTTP MCP surface.
 
 ### D6/D7 — `AetherixEngine` → `orchestrator/agent.py`
 

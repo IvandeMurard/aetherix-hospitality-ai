@@ -1,6 +1,9 @@
 # ADR 0001 — Aetherix MCP Server v0
 
-> **Status**: Accepted · **Date**: 2026-04-18 · **Author**: Architect (Opus)
+> **Status**: Accepted, **superseded by ADR-0004 (MCP v1)** · **Date**: 2026-04-18 · **Author**: Architect (Opus)
+> ⚠️ **The `/mcp/v0/` HTTP route was retired on 2026-08-01** (HOS-315), at the end of the Sunset
+> window this ADR announced. The live endpoint is `/mcp/v1/` (atomic tools, ADR-0004 · Décision #19).
+> This record is kept as the historical rationale for the v0 design; its endpoint examples no longer resolve.
 > **Context**: Phase 0 DoD (amended per CLAUDE.md Decision #14, Benioff/Levie "headless for agents" directive)
 > **Linear**: HOS-71 · **Blocks**: P1-2 (implementation), P1-5 (SEO agent)
 

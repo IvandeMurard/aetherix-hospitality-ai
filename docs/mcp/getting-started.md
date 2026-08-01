@@ -19,15 +19,15 @@ Endpoint: `POST /mcp/v1/`
 | `recall_memory` | `memory:read` | Semantic recall from the property's operational memory |
 | `submit_feedback_to_memory` | `feedback` | Record manager outcome for a past recommendation |
 
-### v0 — stable, partially deprecated
+### v0 — retired on 2026-08-01
 
-Endpoint: `POST /mcp/v0/`
+`POST /mcp/v0/` no longer exists. It was removed at the end of the Sunset window
+announced in its response headers (HOS-315). Migration is a one-line change:
 
-| Tool | Scope | Status |
-|------|-------|--------|
-| `get_operational_predictions` | `predict` | Stable |
-| `get_recommendations_with_memory_context` | `recommend` | **Deprecated** — use `recall_memory` on v1. Sunset: 2026-08-01. Response carries `Deprecation: true` header. |
-| `submit_feedback_to_memory` | `feedback` | Stable |
+- point your client at `/mcp/v1/` (identical JSON-RPC framing);
+- replace `get_recommendations_with_memory_context` with `recall_memory`
+  (scope `memory:read`), which returns the memory hits directly;
+- `get_operational_predictions` and `submit_feedback_to_memory` are unchanged.
 
 Multi-tenant isolation is **enforced server-side**: the `hotel_id` is bound to the bearer token. Tool schemas do not accept `hotel_id` — attempting to pass it is silently ignored.
 
@@ -36,8 +36,7 @@ Multi-tenant isolation is **enforced server-side**: the `hotel_id` is bound to t
 ## Endpoint
 
 ```
-POST /mcp/v1/          ← recommended
-POST /mcp/v0/          ← maintained for backward compat
+POST /mcp/v1/
 Content-Type: application/json
 Accept: application/json
 Authorization: Bearer atx_<env>_<secret>
@@ -86,7 +85,7 @@ Response shape:
 **1. Initialize**
 
 ```bash
-curl -s http://localhost:8000/mcp/v0/ \
+curl -s http://localhost:8000/mcp/v1/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}'
 ```
@@ -95,7 +94,7 @@ Response:
 ```json
 {"jsonrpc":"2.0","id":1,"result":{
   "protocolVersion":"2024-11-05",
-  "serverInfo":{"name":"aetherix","version":"0.0.0"},
+  "serverInfo":{"name":"aetherix","version":"1.0.0"},
   "capabilities":{"tools":{"listChanged":false}}
 }}
 ```
@@ -103,7 +102,7 @@ Response:
 **2. List tools**
 
 ```bash
-curl -s http://localhost:8000/mcp/v0/ \
+curl -s http://localhost:8000/mcp/v1/ \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer atx_dev_..." \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
@@ -112,7 +111,7 @@ curl -s http://localhost:8000/mcp/v0/ \
 **3. Call a tool**
 
 ```bash
-curl -s http://localhost:8000/mcp/v0/ \
+curl -s http://localhost:8000/mcp/v1/ \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer atx_dev_..." \
   -d '{
@@ -139,7 +138,7 @@ Edit `claude_desktop_config.json`:
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://your-host/mcp/v0/",
+        "https://your-host/mcp/v1/",
         "--header",
         "Authorization: Bearer ${AETHERIX_MCP_TOKEN}"
       ]
@@ -223,10 +222,10 @@ Errors are RFC 7807 Problem Details wrapped inside the MCP JSON-RPC error envelo
 
 ## Versioning
 
-- URL path carries the major version: `/mcp/v0/`, `/mcp/v1/`.
-- Response header `x-aetherix-mcp-version: 0|1` on every response.
-- v1 removes `get_recommendations_with_memory_context` and adds `recall_memory` (scope `memory:read`).
-- Tokens with `recommend` scope continue to work on v0 until sunset (2026-08-01).
+- URL path carries the major version. `/mcp/v1/` is the only live route; `/mcp/v0/` was retired 2026-08-01.
+- Response header `x-aetherix-mcp-version: 1` on every response.
+- v1 removed `get_recommendations_with_memory_context` and added `recall_memory` (scope `memory:read`).
+- The `recommend` scope no longer grants access to any advertised tool; use `memory:read`.
 - Migrate by replacing `recommend` scope → `memory:read` and calling `recall_memory` on `/mcp/v1/`.
 
 ---

@@ -154,7 +154,7 @@ def _mcp_response_payload(tool_result: dict[str, Any]) -> dict[str, Any]:
 
 def test_step3_predict_ok(smoke):
     handlers = {
-        ("POST", "/mcp/v0/"): _resp(
+        ("POST", "/mcp/v1/"): _resp(
             200,
             _mcp_response_payload({
                 "prediction": {"covers": 45, "confidence": 0.85},
@@ -170,7 +170,7 @@ def test_step3_predict_ok(smoke):
 
 def test_step3_predict_fails_when_covers_zero(smoke):
     handlers = {
-        ("POST", "/mcp/v0/"): _resp(
+        ("POST", "/mcp/v1/"): _resp(
             200,
             _mcp_response_payload({"prediction": {"covers": 0, "confidence": 0.1}}),
         ),
@@ -182,7 +182,7 @@ def test_step3_predict_fails_when_covers_zero(smoke):
 
 def test_step3_predict_fails_on_mcp_error(smoke):
     handlers = {
-        ("POST", "/mcp/v0/"): _resp(
+        ("POST", "/mcp/v1/"): _resp(
             200,
             {"jsonrpc": "2.0", "id": "test", "error": {"code": -1, "message": "boom"}},
         ),

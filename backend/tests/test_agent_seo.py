@@ -180,19 +180,21 @@ class TestAgentManifest:
     def test_tool_names_match_mcp_core(self):
         names = {t["name"] for t in _manifest["tools"]}
         assert "get_operational_predictions" in names
-        assert "get_recommendations_with_memory_context" in names
+        # v1 atomic tool — replaced get_recommendations_with_memory_context
+        # when /mcp/v0/ was retired (HOS-315).
+        assert "recall_memory" in names
         assert "submit_feedback_to_memory" in names
 
     @_skip_manifest
     def test_mcp_endpoint_path(self):
-        assert _manifest["mcp_endpoint"] == "/mcp/v0/"
+        assert _manifest["mcp_endpoint"] == "/mcp/v1/"
 
     @_skip_manifest
     def test_agent_callable_endpoints_present(self):
         paths = {e["path"] for e in _manifest.get("agent_callable_endpoints", [])}
         assert "/api/v1/predictions/predict" in paths
         assert "/api/v1/roi/simulate" in paths
-        assert "/mcp/v0/" in paths
+        assert "/mcp/v1/" in paths
 
     @_skip_manifest
     def test_agent_callable_flags(self):
@@ -204,7 +206,7 @@ class TestAgentManifest:
     def test_rate_limits_cover_three_tools(self):
         rl = _manifest["rate_limits"]
         assert "get_operational_predictions" in rl
-        assert "get_recommendations_with_memory_context" in rl
+        assert "recall_memory" in rl
         assert "submit_feedback_to_memory" in rl
 
     @_skip_manifest
