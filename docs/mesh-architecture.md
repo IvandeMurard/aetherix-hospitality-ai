@@ -64,10 +64,14 @@ Contrairement à Aetherix (mémoire opérationnelle largement long-terme — un 
 
 | Couche | Storage | TTL | Contenu | Décisions qu'elle alimente |
 |--------|---------|-----|---------|---------------------------|
-| **1. Working memory** | Redis | Durée du séjour | "Vol en retard de 3h ce soir · vient de se plaindre du bruit · arrivé fatigué" | Immédiates : compensation, ton du message, geste opérationnel |
-| **2. Episodic memory** | PostgreSQL (time-filtered) | Séjour + 30j | "Ce séjour : 2× restaurant, menu végétarien, SPA mardi, demande oreillers" | Contextuelles : recommandations, upsell pertinent, late check-out |
-| **3. Semantic memory** | pgvector (permanent) | ∞ | "VIP depuis 2023 · 12 séjours · sensible bruit · 19°C · anniversaire juin · famille de 4" | Profil : priorité intervention, niveau de geste commercial, reconnaissance |
-| **4. Segment** (double portée) | Aggregations anonymisées | ∞ | **Local :** "Guests similaires à cet hôtel : 73% late check-out, F&B > SPA" · **Hive prior (Phase 5) :** "Même profil, tous hôtels réseau" | Prédictions sans historique direct · premier séjour traité comme habitué · Hive prior = 80% avant séjours, 20% après accumulation guest |
+| **1. Working memory** | Redis | Check-out + 24 h, plafond dur 7 j | "Vol en retard de 3h ce soir · vient de se plaindre du bruit · arrivé fatigué" | Immédiates : compensation, ton du message, geste opérationnel |
+| **2. Episodic memory** | PostgreSQL (time-filtered) | Séjour + 30j (fenêtre de réclamation) | "Ce séjour : 2× restaurant, menu végétarien, SPA mardi, demande oreillers" | Contextuelles : recommandations, upsell pertinent, late check-out |
+| **3. Semantic memory** | pgvector (durable borné) | 36 mois glissants depuis le dernier séjour | "VIP depuis 2023 · 12 séjours · sensible bruit · 19°C · anniversaire juin · famille de 4" | Profil : priorité intervention, niveau de geste commercial, reconnaissance |
+| **4. Segment** (double portée) | Agrégats de cohortes, **k ≥ 20** | Alignée sur Semantic (36 mois) — la couche reste dans le régime données personnelles, aucun anonymat revendiqué | **Local :** "Guests similaires à cet hôtel : 73% late check-out, F&B > SPA" · **Hive prior (Phase 5) :** "Même profil, tous hôtels réseau" | Prédictions sans historique direct · premier séjour traité comme habitué · Hive prior = 80% avant séjours, 20% après accumulation guest |
+
+> **Durées amendées le 01/08/2026** par la DPIA ([`docs/context/dpia-anima-2026-08.md`](context/dpia-anima-2026-08.md) §6, Décision #20 amendée). `decay_rate` (ADR-0011 D2) **pondère** ; il n'efface pas — les deux sont requis, art. 5(1)(d) et 5(1)(e).
+>
+> **Couche 4, arbitrage HOS-323 (01/08/2026) :** plancher **k = 20** clients par cohorte · **garde de concentration** (un attribut homogène au-delà de ~90 % n'est pas servi — l'attaque par homogénéité vide k-anonymat de son sens sur des attributs) · **aucun anonymat revendiqué**, la couche reste dans le régime données personnelles tant qu'aucune analyse de ré-identification ni relecture juridique n'existe. Sous le seuil, on ne baisse jamais k : on **dégrade vers une cohorte plus grossière**. Détail → `open-decisions.md` §Resolved.
 
 **Sans cette distinction**, l'Orchestrateur doit soit tout charger (latence + bruit), soit décider sans le bon contexte (mauvaise décision). Avec, il interroge le scope strictement nécessaire.
 
@@ -121,8 +125,9 @@ Deux algorithmes existants servent de proof-of-viability pour Anima :
 - [ ] 1er pilote Apaleo prod actif avec données guest réelles (Phase 3 Track A)
 - [ ] Accord partenariat CRM (Duve, HiJiffy ou Canary) — accès historique conversationnel
 - [ ] PMS write activé sur Apaleo prod (capacité de pousser des actions, pas juste lire)
-- [ ] **Analyse RGPD/CNIL formelle** : le profil émotionnel inféré = donnée personnelle sensible. Consentement explicite, retention policy, droit à l'oubli implémentés *avant* tout build.
-- [ ] DPIA (Data Protection Impact Assessment) si décisions automatisées affectent significativement le guest
+- [x] **Analyse RGPD/CNIL formelle** — livrée 01/08/2026 : [`docs/context/dpia-anima-2026-08.md`](context/dpia-anima-2026-08.md) (HOS-229). **Verdict : gate NON levé**, 13 mesures bloquantes, 9 conditions de levée. Deux lignes rouges écrites : aucune entrée **biométrique** (voix/visage → AI Act Annexe III + art. 9), aucune inférence émotionnelle **sur le personnel** (AI Act art. 5(1)(f) = pratique interdite).
+- [ ] Consentement explicite (granulaire, retirable, découplé de la réservation), jobs de rétention, chemin de rectification, DSAR testée — **conçus, non construits** (DPIA §9.2)
+- [ ] DPIA formelle signée **par l'hôtel responsable de traitement** — le document ci-dessus en est le matériau (art. 28(3)(f)), pas le livrable opposable ; il n'existe aucun design-partner à ce jour
 
 #### Statut
 

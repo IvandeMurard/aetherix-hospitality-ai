@@ -157,7 +157,57 @@ Quand Phase 3 est validée et qu'on amorce Phase 4 :
 
 ---
 
+## Carnet d'idées — surface produit ouverte par le statut de responsable de traitement (Phase 5)
+
+> **Origine :** DPIA Anima du 01/08/2026 ([`dpia-anima-2026-08.md`](dpia-anima-2026-08.md) §10.4).
+> **Statut : Research** — aucune date, aucun scope, aucune DoD. Rien ici n'est du backlog.
+> **Gelé** par le plan 90 j (Epic 16, §« Ce qu'on ne fait PAS »). On l'enregistre pour ne pas le
+> reperdre, pas pour l'instruire.
+
+La DPIA a établi que le Hive prior fait sortir Aetherix de la sous-traitance : sur la couche agrégée,
+Aetherix détermine seul finalité, moyens et bénéficiaires — il est **responsable de traitement**.
+C'est une charge (registre art. 30 propre, base légale propre, DSAR en direct, notification de
+violation) et c'est **la forme juridique du moat d'ADR-0011 D5** : un pur sous-traitant n'accumule
+rien, tout repart avec l'hôtel. Ce qui devient possible seulement à ce titre :
+
+| Idée | Ce qu'elle exploite | Réserve |
+|---|---|---|
+| **Benchmark cross-propriétés vendable** — « votre capture rate F&B / no-show vs propriétés comparables » | Dataset agrégé propriété d'Aetherix, pas de l'hôtel | Conditionné au plancher de k-anonymat (décision ouverte) + opt-out hôtel |
+| **Cold-start packagé comme valeur d'onboarding** — « jour 1, vous avez déjà un prior » | Hive prior d'ADR-0011 D3, vendu comme bénéfice contractuel et non comme mécanique interne | Ne tient que si le prior bat réellement une heuristique — à prouver, cf. protocole de preuve |
+| **Portabilité asymétrique** — l'hôtel part avec ses données, les priors appris restent | La distinction données / policy apprise d'ADR-0011 D4 | Exige que la policy soit démontrablement non-personnelle (§10.2 DPIA, claim contestée) |
+| **Rapport sectoriel annuel** de données agrégées | Actif marketing gratuit une fois la couche existante | Même plancher k ; et publier des agrégats est un traitement, pas une communication |
+| **Agent de conformité (art. 30 / DSAR / registre)** — voir ci-dessous | La position d'Aetherix comme responsable *et* comme fournisseur d'outillage | La plus séduisante et la plus piégeuse |
+
+### Sur l'agent de conformité — la lecture honnête
+
+L'idée (un agent qui tient le registre art. 30, trace les traitements, exécute les DSAR, produit la
+preuve d'effacement) a une vraie logique : Aetherix doit de toute façon **construire** cette
+plomberie pour lui-même — les mesures M-5 (rectification), M-6 (opposition à la lecture) et M-7
+(DSAR testée de bout en bout) de la DPIA §9.2 sont des prérequis non négociables. Un outil qu'on
+construit par obligation et qu'on revend ensuite est une bonne économie d'échelle, et le chemin de
+rectification survivant au recompute nocturne est un problème technique réel et non résolu ailleurs.
+
+Trois raisons de ne pas s'y engager maintenant, à garder écrites :
+
+1. **C'est un changement de métier.** Vendre de la conformité, c'est du RegTech — cycle de vente,
+   attentes de garantie et responsabilité juridique différents de l'opérationnel F&B. Le wedge
+   (`positionnement-wedge.md`) devient illisible.
+2. **La crédibilité se prend à l'envers.** Vendre un agent de conformité quand on n'a soi-même ni
+   inventaire de données (`GDPR-DATA-INVENTORY.md` non livré), ni DPA, ni DSAR testée, ni
+   design-partner, est exactement le défaut que la Décision #33 existe pour empêcher.
+3. **Marché occupé.** OneTrust, Didomi, Dastra et consorts tiennent déjà le registre et les DSAR.
+   L'angle défendable ne serait pas « un registre de plus » mais l'angle étroit et réel :
+   *tracer et effacer une inférence dans une mémoire vectorielle et un store d'outcomes* — ce que
+   les outils RegTech généralistes ne savent pas faire parce qu'ils n'ont jamais vu un embedding.
+
+**Séquence à respecter si ça se fait un jour :** le construire pour Aetherix, le prouver sur le
+premier pilote réel, publier la mécanique, et *ensuite seulement* se demander si c'est un produit.
+Dans cet ordre, c'est un atout marketing gagné ; dans l'autre, c'est une promesse.
+
+---
+
 ## Notes de mise à jour
 
 - 2026-04-25 — Création initiale, extraction depuis note "Vision Avenir" personnelle.
 - 2026-06-04 — Ajout section *"Aetherix Voice — Tacit Knowledge Capture (Phase 5+ inspiration Lore)"* suite veille convergence thèse knowledge extraction + correction cible chef → GM/concierge.
+- 2026-08-01 — Ajout *"Carnet d'idées — surface produit ouverte par le statut de responsable de traitement"* (DPIA §10.4, HOS-229). ⚠️ **Alerte de trajectoire posée par la DPIA §5.4** : *Aetherix Voice* ci-dessus infère depuis la **voix**. Le jour où cette brique croise une inférence émotionnelle, le système devient un « système de reconnaissance des émotions » au sens de l'AI Act art. 3(39) — donnée **biométrique** (RGPD art. 9), **Annexe III haut risque**, obligation de transparence art. 50(3). Le coût de conformité change d'ordre de grandeur. Voix + émotion = nouvelle DPIA obligatoire, pas un incrément.

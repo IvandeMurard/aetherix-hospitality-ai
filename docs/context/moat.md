@@ -37,11 +37,20 @@ parce qu'on ne mène pas avec elle.**
 
 **Pourquoi ce n'est pas leur jeu.** Le F&B est une part mince du revenu d'un PMS (l'hébergement
 domine) ; un forecast est une *feature* d'un module, pas un produit avec une boucle d'apprentissage
-instrumentée. Un PMS est horizontal par construction : il ne descendra pas dans la profondeur
+instrumentée. Un PMS est horizontal par construction — **c'est l'hypothèse la plus porteuse de ce
+document, et elle est falsifiable** (voir encadré) : il ne descendra pas dans la profondeur
 opérationnelle F&B (staffing calibré au droit du travail français, capture rates spécifiques,
 recalibration hebdomadaire sur outcomes, guardrails typés anti-empoisonnement). Ce sont des
 acteurs de plateforme ; la profondeur verticale est précisément ce qu'ils délèguent à leur
 marketplace.
+
+> **Ce qui rendrait ce paragraphe faux** — c'est une hypothèse concurrentielle, pas un fait acquis,
+> et elle est la plus porteuse du document. Trois signaux la réfuteraient : (1) Apaleo Copilot
+> étend son scope au F&B opérationnel (staffing, capture rate) plutôt qu'au reporting — c'est
+> exactement la décision ouverte sous surveillance mensuelle, `open-decisions.md` §Apaleo Copilot ;
+> (2) un PMS ship une boucle outcome-capture instrumentée, pas seulement une prédiction ;
+> (3) un acteur de marketplace F&B lève et intègre verticalement vers le PMS. Le canari existe et
+> tourne : ce paragraphe se relit à chaque revue de watchlist, il ne se cite pas comme établi.
 
 **Notre réponse structurelle : être la couche d'intelligence, pas un PMS concurrent.** MCP-native
 signifie qu'on est *appelable* par leur écosystème (Décision #21, convention native Apaleo). « Glue,

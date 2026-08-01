@@ -79,6 +79,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - `context/status-taxonomy.md` — **taxonomie de statut (HOS-318, Décision #33)** : Built / Shadow-mode / Synthetic PoC / Design / Research · doc de référence unique, applicable à toute surface · état des 10 briques · appliqué par le détecteur D7
 - `context/audit-surfaces-publiques-2026-08.md` — **audit des surfaces publiques (01/08, HOS-318 AC1)** : état par surface + correctifs prêts à coller pour le case study et le méta-repo
 - `context/perimetre-et-conformite-prospect.md` — **fiche prospect (01/08, HOS-313 AC4+AC5)** : périmètre honnête (built vs north-star, bus factor solo nommé comme risque) + one-pager conformité (rôles processor/controller + DPA, RGPD WhatsApp Q2-03 corrigé, posture sandbox/non-PII) — posture + feuille de route, pas un certificat
+- `context/dpia-anima-2026-08.md` — **DPIA Anima — analyse RGPD/CNIL (01/08, HOS-229)** : gate Décision #20 **non levé** · obligation art. 35 établie (6/9 critères WP248) · durées de conservation par couche (Working/Episodic/Semantic/Segment) · droits des personnes · profilage émotionnel + frontière AI Act (biométrique = ligne rouge) · 13 mesures bloquantes + 9 conditions de levée · §10 = 4 conclusions qui remettent en cause l'archi 4 couches, signalées non appliquées
 - `context/runbook-pre-pilot.md` — checklist pré-pilote
 - `context/llm-provider-strategy-review-2026-06.md` — revue stratégie reasoning Sonnet/fallback/Haiku + HITL
 - `context/linear-conventions.md` — protocole Epic/Story Linear
