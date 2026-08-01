@@ -1,8 +1,8 @@
 # AGENTS.md — Aetherix
 
 > Source de vérité partagée. Chargé automatiquement à chaque session.
-> **Règle :** ce fichier = facts de session + INDEX uniquement. Détail décisions → `docs/context/decisions-architecturales.md` (24 décisions architecturales) + `docs/context/open-decisions.md` (décisions ouvertes + archive résolues). Cible ≤ 150 lignes.
-> Mettre à jour après chaque décision : ajouter une ligne d'INDEX ici + le détail complet dans le sous-fichier correspondant.
+> **Règle — NE PAS SURCHARGER CE FICHIER.** Facts + INDEX uniquement, **plafond dur 150 lignes** (166 au 30/07 après refactoring — plafond à rediscuter, → `docs/INDEX.md` §Dette AGENTS.md).
+> Une décision = **une ligne d'index ici**, le détail en **sous-section** du fichier dédié : `context/decisions-architecturales.md` · `context/open-decisions.md` · `docs/INDEX.md`. Ni narratif, ni justification, ni historique ici : si ça ne tient pas en une ligne, ça va en sous-section et on met le lien.
 
 ---
 
@@ -129,7 +129,7 @@ backend/orchestrator/     — proto-orchestrateur Phase 3 (AetherixEngine migré
 backend/app/middleware/   — agent_tracking.py (Agent SEO + request_id, P1-5/HOS-72)
 scripts/ci/               — gates CI (schema drift #16, eval-by-design #22, audit_id_types HOS-163)
 scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian, validate_apaleo_sandbox, measure_mape_j1, generate_demo_data)
-.github/workflows/        — CI + cron veille-hebdomadaire (lundi 8h30)
+.github/workflows/        — CI (cron veille-hebdomadaire retiré le 30/07, veille → Obsidian)
 ```
 
 > **📚 Documentation** : catalogue par sous-catégorie dans [`docs/INDEX.md`](docs/INDEX.md). À charger en priorité pour contexte inter-nœuds : `docs/mesh-architecture.md` (SOURCE DE VÉRITÉ CROSS-REPOS Aetherix + Tacet + Orchestrateur + Anima).
@@ -138,25 +138,7 @@ scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian,
 
 ## Variables d'environnement
 
-```
-ANTHROPIC_API_KEY     — Claude API
-LINEAR_API_KEY        — lin_api_... (workspace Hospitalityagent)
-LINEAR_TEAM_ID        — 2f6bb5e2-d735-4769-9377-11fe186aa0ad
-OBSIDIAN_VAULT_PATH   — C:/Users/ivand/OneDrive/Documents/Agentic AI Hospitality
-APALEO_CLIENT_ID      — OAuth2
-APALEO_CLIENT_SECRET  — OAuth2
-COMPOSIO_API_KEY      — Apaleo MCP via Composio (Inventory API uniquement)
-SUPABASE_URL          — PostgreSQL + pgvector
-SUPABASE_KEY          — Anon key
-DATABASE_URL          — asyncpg DSN
-MISTRAL_API_KEY       — Embeddings 1024d (mistral-embed)
-LLM_BACKEND           — "claude" (défaut) | "gemini" | "openai"
-LLM_MODEL             — "claude-sonnet-4-6" (défaut)
-EMBEDDING_BACKEND     — "mistral" (défaut) | "openai"
-EMBEDDING_MODEL       — "mistral-embed" (défaut)
-REDIS_URL             — Upstash (session state)
-LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si absent)
-```
+18 variables (LLM, Supabase, Apaleo, Redis, Logfire, outillage) → [`docs/ops/environment-variables.md`](docs/ops/environment-variables.md). Secrets en prod via `flyctl secrets set`, jamais committés.
 
 ---
 
@@ -164,7 +146,7 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 
 **Linear** — Workspace `Hospitalityagent`, team `2f6bb5e2-d735-4769-9377-11fe186aa0ad`. Conventions Epic/Story → `docs/context/linear-conventions.md`. Verify session : `list_teams` doit retourner "Hospitalityagent".
 
-**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille (10/07/2026) : dossier `Veille/` = source de vérité unique** (hebdo + watchlist + analyses concurrentielles) — plus dans le repo (`docs/veille/`, `docs/_archive/context/monitoring-watchlist.md`, `docs/competitive/*` archivés, cf. `docs/INDEX.md`).
+**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille + watchlist = `Veille/` uniquement** (migration achevée 30/07/2026, plus rien dans le repo). Détail → `docs/INDEX.md` §Convention local-only.
 
 **BMad modes** — Déclare en début de conversation. Veille · SM (Bob) · Dev (Amelia) · Architect (Winston) · PM · Analyst (Mary) · QA · Tech Writer. Files in `tools/bmad/_bmad/bmm/agents/`.
 
@@ -172,18 +154,7 @@ LOGFIRE_TOKEN         — Pydantic Logfire (HOS-311, optionnel — no-op si abse
 
 ## Dev Agent — Definition of Done
 
-1. Lire le spec de la Linear issue (MCP Linear)
-2. Auditer ce qui existe dans le codebase
-3. Implémenter la story (migration DB, ORM, schemas, service, worker, route)
-4. Tests — CI green
-5. Commit + Push sur la branche désignée (`claude/<story-suffix>`)
-6. Ouvrir une PR contre `main`
-7. Marquer la Linear issue → Done + poster l'URL PR en commentaire
-8. **Eval gate (Décision #22)** : si la story touche `app/services/{forecast,staffing,recommendation,memory,inbound_parser}*`, `app/providers/`, ou les prompts → mettre à jour `eval/golden_dataset.jsonl` avec ≥ 1 scenario + `make eval` green + `scripts/ci/check_eval_coverage.py` validé. Exception via label PR `eval-exempt` (refactor / doc / infra-only).
-
-**Gate de merge :** CI vert (schema drift #16 + eval-by-design #22) → merge manuel SM. **Gates supérieurs :** Fin d'Epic → revue d'architecture. Pré-pilote → QA sign-off propriété réelle.
-
-**Règle de contexte :** décisions / contraintes / blocages story-specific → commentaire sur Linear issue. Cross-cutting permanent → ligne d'index dans AGENTS.md §Décisions architecturales + détail dans `docs/context/decisions-architecturales.md`. Ne pas écrire contexte story-specific ici.
+8 étapes + eval gate (Décision #22) + gates merge/epic/pré-pilote + règle de contexte → [`docs/context/dev-agent-dod.md`](docs/context/dev-agent-dod.md).
 
 ---
 
