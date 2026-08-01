@@ -12,7 +12,7 @@
 Two triggers in the same week:
 
 1. **Qonto talk "AI @ Qonto: shipper et évaluer l'IA en production"** (Marianne Borzic Ducournau, Head of AI Products) — surfaced explicit "Evaluation by design" framework with two non-negotiable takeaways: *"Working vs Reliable"* and *"Eval as a Contract"*.
-2. **BMad-Method gap identified** — BMM's Dev Agent DoD (currently 7 steps in CLAUDE.md) treats *"CI green = done"*. For AI/ML products this is insufficient: a model can pass unit tests and still hallucinate, drift, or fail silently in production. Aetherix has solid post-deploy telemetry (`agent_action_log`, `memory_instrumentation_daily`) but **quasi-inexistent upstream eval**. The current MAPE 15.09% is a one-shot measurement, not a living regression gate.
+2. **BMad-Method gap identified** — BMM's Dev Agent DoD (currently 7 steps in CLAUDE.md) treats *"CI green = done"*. For AI/ML products this is insufficient: a model can pass unit tests and still hallucinate, drift, or fail silently in production. Aetherix has solid post-deploy telemetry (`agent_action_log`, `memory_instrumentation_daily`) but **quasi-inexistent upstream eval**. The current MAPE 15.09% is a one-shot measurement on synthetic (and, as established on 07/07/2026, circular) data — not a living regression gate.
 
 This document is the **product brief** for closing that gap. It defines:
 - Frameworks adopted (Qonto)
@@ -127,7 +127,7 @@ These thresholds are **the contract**. Updating them = explicit decision (PR + C
 1. Refactor `scripts/ops/measure_mape_j1.py` to score MAPE **per category** from `golden_dataset.jsonl`
 2. Output: `eval/reports/mape_YYYY-MM-DD.json` + markdown summary auto-generated
 3. New CI script: `scripts/ci/check_eval_coverage.py` — if PR touches `app/services/forecast*` or `app/providers/`, run eval suite, fail if any category regresses > 3pp from baseline
-4. Baseline: current MAPE 15.09% (run 2026-05-21) → freeze per category at first run
+4. Baseline: current MAPE 15.09% (run 2026-05-21, synthetic/circular — internal non-regression gate only) → freeze per category at first run
 
 **Deliverable:** refactored script + CI workflow + first stratified report
 

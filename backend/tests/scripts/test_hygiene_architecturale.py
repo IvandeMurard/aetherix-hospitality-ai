@@ -386,6 +386,90 @@ def test_d6_blind_when_entry_pattern_matches_nothing(fake_repo):
     assert "aveugle" in result.drift[0].detail
 
 
+# ─── D7 · Honnetete metriques ─────────────────────────────────────────────────
+
+
+def test_d7_flags_the_bare_synthetic_mape(fake_repo):
+    """The failure this detector exists for: the number, alone, as evidence."""
+    _write(fake_repo, "README.md", "**Forecast accuracy:** 15.09% MAPE on J+1 covers.\n")
+
+    result = hygiene.Result()
+    hygiene.detect_metric_honesty(result)
+
+    assert len(result.drift) == 1
+    assert "README.md:1" in result.drift[0].title
+
+
+def test_d7_accepts_a_qualified_occurrence(fake_repo):
+    _write(
+        fake_repo,
+        "README.md",
+        "MAPE 15.09% on a synthetic dataset — internal non-regression gate only.\n",
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_metric_honesty(result)
+
+    assert result.findings == []
+
+
+def test_d7_accepts_the_comma_decimal_form(fake_repo):
+    """French prose writes 15,09 — the same claim must not slip through."""
+    _write(fake_repo, "docs/pitch.md", "Notre MAPE J+1 de 15,09 % nous place au niveau du marché.\n")
+    _write(fake_repo, "docs/ok.md", "Le 15,09 % est circulaire : il ne prouve rien.\n")
+
+    result = hygiene.Result()
+    hygiene.detect_metric_honesty(result)
+
+    assert [f.title.split("`")[1] for f in result.drift] == ["docs/pitch.md:1"]
+
+
+def test_d7_qualifier_counts_across_the_window_not_the_line(fake_repo):
+    """A table row cannot hold its own caveat; the surrounding block may."""
+    _write(
+        fake_repo,
+        "docs/kit.md",
+        "> Chiffre synthétique, sans valeur probante.\n\n| MAPE J+1 | 15.09% |\n",
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_metric_honesty(result)
+
+    assert result.findings == []
+
+
+def test_d7_window_does_not_stretch_to_a_distant_caveat(fake_repo):
+    _write(
+        fake_repo,
+        "docs/kit.md",
+        "> Chiffre synthétique.\n\n\n\n| MAPE J+1 | 15.09% |\n",
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_metric_honesty(result)
+
+    assert len(result.drift) == 1
+
+
+def test_d7_skips_the_documented_exceptions(fake_repo, monkeypatch):
+    monkeypatch.setattr(hygiene, "METRIC_CLAIM_EXCEPTIONS", {"docs/adr/": "enregistrement daté"})
+    _write(fake_repo, "docs/adr/0007-eval.md", "Le MAPE 15.09% est une mesure ponctuelle.\n")
+
+    result = hygiene.Result()
+    hygiene.detect_metric_honesty(result)
+
+    assert result.findings == []
+
+
+def test_d7_reports_when_it_scanned_nothing(fake_repo):
+    """An empty scan is a blind run, not a clean one."""
+    result = hygiene.Result()
+    hygiene.detect_metric_honesty(result)
+
+    assert result.findings == []
+    assert any("D7" in s for s in result.skipped)
+
+
 # ─── D4 · Eval gaps ───────────────────────────────────────────────────────────
 
 

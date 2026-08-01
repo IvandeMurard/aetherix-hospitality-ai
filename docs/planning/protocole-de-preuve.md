@@ -71,6 +71,15 @@ fréquentation (2 couverts réels → 400 % d'APE), ce qui flatte le modèle le 
 plutôt que le plus juste sur le service typique. Le MAPE reste **rapporté** comme lecture secondaire
 de robustesse aux extrêmes, jamais seul.
 
+> **Amendement du 01/08/2026 (§7, HOS-318) — ajout d'une métrique reportée, la primaire est inchangée.**
+> **WAPE** (Σ|erreur| / Σ réel) est désormais **rapporté obligatoirement** aux côtés de MdAPE et MAPE.
+> Motif : c'est la seule des trois à mesurer l'erreur **en couverts** plutôt qu'en pourcentage par jour —
+> donc la seule convertible en heures de staff et en euros, ce que le maillon économique (§4.4) et
+> `labor_cost_variance` supposent. MdAPE **reste la métrique de décision primaire** et les seuils du §4.1
+> restent exprimés en Δ MdAPE : elle a été gelée le 29/07 en connaissance du mécanisme, et en changer une
+> seconde fois viderait le gel de sa valeur de preuve. Ajouter une métrique *reportée* ne peut pas
+> constituer une sélection post-hoc — le §5.3 impose déjà le reporting exhaustif.
+
 ---
 
 ## 3. Horizon de décision — déterminé, pas supposé
@@ -228,6 +237,7 @@ Toute modification du §2, §3 ou §4 s'inscrit ici avec sa date et son motif. U
 | Date | Amendement | Motif | Antérieur à la lecture des résultats ? |
 |---|---|---|---|
 | 2026-07-29 | Création — gel initial (§1 à §6) | HOS-316 AC1/AC2/AC4 | ✅ HOS-308, 309, 312 non démarrées |
+| 2026-08-01 | §2 — **WAPE** ajouté en métrique reportée obligatoire. Métrique primaire (Δ MdAPE) et seuils §4.1 **inchangés**. | HOS-318 : WAPE est la seule métrique convertible en couverts → heures de staff → €, ce que supposent §4.4 et `labor_cost_variance`. Ajout d'un *reporté*, pas substitution d'un primaire. | ✅ HOS-308 en Backlog, non démarrée — aucun résultat lu |
 | — | **H (horizon de décision) = à renseigner** | Sortie de HOS-309 AC4 | À remplir avant lecture de HOS-308 à H |
 
 ---

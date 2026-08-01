@@ -70,6 +70,7 @@
 | 30 | Audit différentiel pré-pilote 2026-Q2 (HOS-277) **CLOSED** : NO-GO levé → **GO conditionnel** (sandbox Apaleo + dataset non-PII). Q2-01 (fuite `.env.fly`) → repo PRIVATE + historique purgé (filter-repo) + rotation 11/11 clés ; **résidu `refs/pull/*` clos 22/07/2026** (HOS-304 : ticket GitHub Support, 32 PRs déréférencées, commit `7070837` non résolvable — 422 confirmé) ; Q2-02 AsyncSession (HOS-288) + Q2-03 PII WhatsApp (HOS-289) corrigés (PR #187). Doc = `docs/context/security-review-2026-Q2.md` (bannière CLOSED) | 04/07/2026 |
 | 31 | Hospitality Agentic Mesh Signal Contract (**ADR-0012**) : `DomainSignal` namespaced par bounded context nœud (`environmental.*` Tacet, `guest.*` Anima, `fnb.*` Aetherix, `operational.*`/`orchestrator.*` Orchestrateur) · `SignalComposite` = perception cross-domaine, jamais de champ actionable (frontière décision protégée, ADR-0004 D5) · `CollectivePattern` = alias `fb_patterns`/Hive prior Anima · calibration à 3 niveaux (cohorte Hive / apprentissage local / override manager) · pas de `decay_rate` sur Signal (réservé ADR-0011 D2) · gel terminologique post-acceptation · **exception explicite Décision #25/ADR-0010 Q2 : reste privé, ne migre jamais vers le méta-repo public malgré le critère cross-cutting** | 06/07/2026 |
 | 32 | Processus de calibration LLM-judge, pré-requis EVAL-6 (**ADR-0007 §14**) : rubrique binaire miroir `FAILURE_THRESHOLDS.md` · golden set dédié `eval/judge_calibration_set.jsonl` · juge Sonnet via `LLMProvider` (Décision #9) · Cohen's kappa ≥ 0.8 avant scoring autonome · recalibration sur triggers explicites | 30/07/2026 |
+| 33 | Gate honnêteté métriques (HOS-318) : taxonomie **Built / Shadow-mode / Synthetic PoC / Design / Research** obligatoire sur toute surface (`docs/context/status-taxonomy.md`, `Built` ≠ adopté, `Built (PoC)` interdit) · 15.09 % synthétique = circulaire, gate interne seul, usage non qualifié = drift D7 · verdict Recruit = **PASS formel MAPE + clause pivot déclenchée volontairement** (à J+1 Prophet est derrière la naïve en médiane) · amendement protocole §7 : WAPE reporté obligatoire, Δ MdAPE reste primaire | 01/08/2026 |
 
 ---
 
@@ -77,7 +78,7 @@
 
 | Phase | Statut | Highlights |
 |---|---|---|
-| Phase 0 (validation harness) | 🔨 In Progress | Backtest pipeline + MCP v0 livrés. MAPE J+1 synthétique **15.09%** — gate 22% PASS ✅. Réel = Phase 3 pilote. |
+| Phase 0 (validation harness) | 🔨 In Progress | Backtest pipeline + MCP v0 livrés. Benchmark réel Recruit : Prophet −6.15 pts MAPE vs naïve mais **jeu égal en médiane** (Décision #33). Le 15.09 % synthétique est circulaire — gate interne seul. |
 | Phase 1 | ✅ Done (19/04/2026) | MCP Server v0 + ADR 0003 observability + memory instrumentation. PR #73 merged. |
 | Phase 0 (deploy) | ✅ Done (15/05/2026) | Staging Fly.io live. Smoke E2E 5/5 PASS. RLS 14/14 + webhook HMAC. |
 | Phase 2 | ✅ Done (17/05/2026) | Agent "Receipts" P2-1 → P2-7 mergées. Daily + WhatsApp + email + inbound parser + weekly digest. |

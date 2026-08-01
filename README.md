@@ -51,9 +51,9 @@ After 90 days on a live property:
 | Labor cost variance | -3% to -8% |
 | Food waste per cover | Tracked and declining |
 | Planning time | From hours to one validated message |
-| Forecast accuracy (J+1) | 15.09% MAPE (synthetic backtest, 22% gate PASS) |
+| Forecast accuracy (J+1) | Target, not yet proven — see [measured result](#forecast-accuracy-measured-on-real-data) below |
 
-**The system learns your property.** On Day 1, Aetherix ingests your PMS and POS history and starts calibrating to your property's real patterns immediately. Where historical data is sparse (new property, new service, no POS yet), HiveMemory fills the gap with anonymized patterns from similar properties in the Mesh — without sharing raw data. By Day 90, the system knows yours specifically: which Saturdays spike, which corporate clients drive room service, which events the manager always over-staffs for.
+**The system learns your property.** On Day 1, Aetherix ingests your PMS and POS history and starts calibrating to your property's real patterns immediately. Where historical data is sparse (new property, new service, no POS yet), generic context patterns fill the gap — a *federated* HiveMemory prior across properties is **Research**, not something that runs today (see [status taxonomy](docs/context/status-taxonomy.md)). By Day 90, the system knows yours specifically: which Saturdays spike, which corporate clients drive room service, which events the manager always over-staffs for.
 
 ---
 
@@ -99,12 +99,15 @@ flowchart LR
     style HIVE fill:#14532d,stroke:#22c55e,color:#dcfce7
 ```
 
+Statuses follow the [status taxonomy](docs/context/status-taxonomy.md) — `Built` means the code runs, **not** that anyone uses it.
+
 | Node | Role | Status |
 |------|------|--------|
-| 🍽️ **Aetherix** | F&B execution: forecasting, staffing, memory, receipts | ✅ **Live (staging)** |
-| 🌦️ **Tacet** | Sensory: weather, noise, open data, structured risk scores | 🔨 Phase 3 |
-| 🧭 **Orchestrator** | Supervisory: MCP routing, business rules, agentic loop | 📐 Phase 3 stub, separate repo Phase 4 |
-| 💛 **Anima** | Guest Cognition Layer: emotional state, CRM, flight delays, 4-layer profile · outcome-capture instrumented Phase 4 · HiveMemory v2 / Learning Engine Phase 5 | 🧪 PoC shipped (Anthropic hackathon, Jun 2026) · production Phase 4 (DPIA-gated) |
+| 🍽️ **Aetherix** | F&B execution: forecasting, staffing, memory, receipts | ✅ **Built** — staging Fly.io, **0 real users** |
+| 🌦️ **Tacet** | Sensory: weather, noise, open data, structured risk scores | 🧪 **Synthetic PoC** — public repo, no CI |
+| 🧭 **Orchestrator** | Supervisory: MCP routing, business rules, agentic loop | 📐 **Design** — proto-stub Phase 3, engine specified not built |
+| 💛 **Anima** | Guest Cognition Layer: emotional state, CRM, flight delays, 4-layer profile | 🧪 **Synthetic PoC** — Anthropic hackathon Jun 2026, never in production (DPIA-gated) |
+| 🧠 **HiveMemory federated / Learning Engine** | Cross-property anonymized priors, threshold calibration | 🔬 **Research** — no substrate, Hive foundation frozen (Décision #23) |
 
 Full vision: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 
@@ -122,7 +125,13 @@ Full vision: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 | **MCP Server** | Atomic tools callable by any orchestration agent |
 | **Apaleo** | Native OAuth2 + MCP read (occupancy, reservations, history) |
 
-**Forecast accuracy:** **15.09% MAPE** on J+1 covers (synthetic backtest, under our 22% internal gate). Real-world measurement begins with the Phase 3 design partner.
+### Forecast accuracy, measured on real data
+
+On 829 real Japanese restaurants (Kaggle *Recruit*, 1,193 scored points, deterministic rerun), Prophet beats a naive same-weekday baseline by **6.15 points of mean MAPE** (49.71% vs 55.86%) — but **ties it on the median day** (MdAPE 27.0% vs 27.6%), and is marginally *worse* than naive at J+1 on the median (28.5% vs 27.9%). The mean-MAPE gap comes from robustness on very low-traffic days, not from sharper forecasts on a typical service. A gradient-boosted baseline wins on the median (25.6%). Both readings are published because the flattering one alone would not be true. Detail: [`docs/context/mape-benchmark.md`](docs/context/mape-benchmark.md).
+
+An earlier internal figure of **15.09% MAPE** circulated on synthetic data. It is **circular** — the generator builds covers from the same regressors Prophet consumes — and is retained only as an internal non-regression gate (Décision #14). It is not evidence of forecast skill.
+
+What decides whether the forecast is the product is pre-registered, not chosen after the fact: median-APE delta versus the naive baseline, at the decision horizon, on real hotel data ([`docs/planning/protocole-de-preuve.md`](docs/planning/protocole-de-preuve.md) §4.1). Shadow mode on real hotel data is in progress.
 
 ### MCP tools (callable by any agent)
 
