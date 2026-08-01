@@ -198,8 +198,31 @@ libre. Non fait.
 
 ## 7. Procédure d'exercice des droits (AC6)
 
-> **Statut : *Design*.** Jamais exécutée, jamais testée. Une DSAR non tenue dans les délais est un
-> manquement, pas un incident.
+> **Statut : exécutable et testée** depuis le 01/08/2026 — `backend/app/services/dsar.py`,
+> outil opérateur `scripts/ops/dsar.py`, 19 tests. C'est le seul élément de tout ce dossier de
+> conformité qui produise une **preuve binaire** : la cascade passe ou elle échoue.
+>
+> ```bash
+> python scripts/ops/dsar.py --phone "+33612345678" --erase           # dry-run (défaut)
+> python scripts/ops/dsar.py --phone "+33612345678" --erase --confirm # exécute
+> python scripts/ops/dsar.py --email manager@hotel.example --export   # art. 15
+> ```
+>
+> **Le dry-run est le comportement par défaut**, et `--confirm` est un second verrou : une
+> suppression de données personnelles est irréversible et se déclenche sur une demande écrite.
+> Un seul drapeau, et une faute de frappe dans un terminal suffit.
+>
+> **Trois tables ne sont pas adressables par personne** — `operational_memory`,
+> `agent_action_log`, `pms_sync_logs` sont clés par hôtel, jamais par individu. Aucun index ne
+> permet d'y retrouver « les lignes de cette personne ». Elles sont donc marquées `REVIEW` :
+> l'outil les signale pour arbitrage manuel et **ne supprime jamais automatiquement** — effacer sur
+> correspondance de sous-chaîne détruirait de l'opérationnel légitime au premier homonyme.
+> C'est une limite réelle de l'architecture, pas une prudence excessive.
+>
+> **Garde-fou anti-pourrissement** : `test_plan_covers_every_pii_table` compare le plan à la liste
+> `PII_TABLES` (miroir du §2.1 ci-dessus). Une table personnelle ajoutée à l'inventaire sans étape
+> DSAR correspondante fait échouer la suite. C'est ce qui empêche cette procédure de redevenir du
+> papier à mesure que le schéma grossit.
 
 ### Identification
 
@@ -246,18 +269,22 @@ tenir ce délai** : la cascade ci-dessus est manuelle.
 | 4 | Tests des contrôles PII (18 cas) | AC2 | ✅ **fait** — sauf le test bout-en-bout « payload → base », qui exige une base de test |
 | 5 | Jobs de rétention sur les **7 durées restantes** du §4 | AC5 | ⛔ non fait — le harnais existe désormais, chaque durée reste à câbler et à tester une par une |
 | 6 | Magasin chiffré pour le numéro/e-mail manager, lu au moment de l'envoi | AC3 | ⛔ **à arbitrer** (§3.3) |
-| 7 | DSAR exécutable et **testée** de bout en bout | AC6 | ⛔ non fait |
+| 7 | DSAR exécutable et **testée** de bout en bout | AC6 | ✅ **fait** (§7) — reste à câbler le balayage textuel des 3 tables `REVIEW`, aujourd'hui décrit et non automatisé |
 | 8 | `DPO_EMAIL` provisionné | Task 6 | ⛔ non fait |
 | 9 | Politique de sauvegarde bornée et documentée | — | ⛔ non fait |
 | 10 | DPA type (sous-traitance + volet Hive responsable) | — | ⛔ HOS-115 |
 
-**Ce que cette story a livré :** l'inventaire (AC1), le modèle Hive (AC4), la procédure DSAR sur le
-papier (AC6), les tests des contrôles PII (AC2), la fermeture des 4 fuites de logs, le poivrage des
-digests, et le **premier job de rétention du système**.
+**Ce que cette story a livré :** l'inventaire (AC1), le modèle Hive (AC4), la **DSAR exécutable et
+testée** (AC6), les tests des contrôles PII (AC2), la fermeture des 4 fuites de logs, le poivrage
+des digests, et le **premier job de rétention du système**.
 
-**Ce qu'elle n'a pas livré :** les 7 autres durées, le magasin chiffré, et une DSAR **exécutée**.
-La différence entre ce document et la conformité, c'est le tableau ci-dessus — et le point 7 est
-celui qui produit une preuve binaire, donc celui qui compte le plus.
+**Ce qu'elle n'a pas livré :** les 7 autres durées de conservation, le magasin chiffré pour le
+contact manager, le balayage textuel automatisé des 3 tables non indexées par personne, et la
+politique de sauvegarde. La différence entre ce document et la conformité, c'est le tableau
+ci-dessus — plus court qu'il ne l'était, et honnête sur ce qui reste.
+
+**Une DSAR n'a toujours jamais été reçue.** L'outil est testé, pas éprouvé : la première demande
+réelle reste le vrai examen, et elle viendra avec le premier design-partner.
 
 ---
 
