@@ -614,7 +614,8 @@ class ReceiptsService:
         ``actual_covers_at = now()``.
         AC2 — appends a ``ground_truth`` row to ``operational_memory`` with a
         ``"actual covers X vs predicted Y on DATE"`` reflection, tagged
-        ``["ground_truth", "covers_correction"]`` and linked via ``request_id``.
+        ``["ground_truth", "covers_correction"]``, linked via ``request_id``
+        and (HOS-317) via ``recommendation_id`` — the Decision Ledger edge.
 
         The caller owns the transaction (commit happens upstream so the
         recommendation update and the memory write land atomically). Returns the
@@ -675,6 +676,10 @@ class ReceiptsService:
             tags=tags,
             embedding_pending=True,
             request_id=request_id,
+            # HOS-317 (Decision Ledger) — the outcome leg was previously linked
+            # to its recommendation only by a shared request_id, which is absent
+            # on any path that doesn't originate from an inbound WhatsApp turn.
+            recommendation_id=recommendation.id,
         )
         self.db.add(memory)
         await self.db.flush()

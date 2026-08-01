@@ -501,6 +501,19 @@ class OperationalMemory(Base):
     # Empty string for rows pre-dating this column (migration 20260419000200).
     request_id = Column(String, nullable=False, default="")
 
+    # HOS-317 (Decision Ledger): the recommendation this row answers or measures.
+    # Before this column the link existed only as text inside `reflection`
+    # (`[rec=<uuid>] outcome=...`), so recommendation → override → outcome was
+    # not joinable in SQL. ON DELETE SET NULL, never CASCADE: the manager's
+    # answer is audit evidence and outlives the recommendation row.
+    # Mirror of migration 20260801100000 (schema drift gate — Décision #16).
+    recommendation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
 
