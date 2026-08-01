@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.pii import pseudonymise
 from app.db.models import ConversationalQuery, RestaurantProfile, StaffingRecommendation
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,8 @@ class QueryParserService:
 
         if profile is None:
             logger.warning(
-                "query_parser: no profile found for phone_number=%s", from_number
+                "query_parser: no profile found for phone_number=%s",
+                pseudonymise(from_number),
             )
             return {"status": "not_found"}
 

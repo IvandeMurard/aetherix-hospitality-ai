@@ -22,6 +22,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.pii import pseudonymise
 from app.db.models import RestaurantProfile, StaffingRecommendation
 from app.schemas.webhook import ActionType
 
@@ -87,7 +88,8 @@ class ActionLoggerService:
 
         if profile is None:
             logger.warning(
-                "action_logger: no profile found for phone_number=%s", from_number
+                "action_logger: no profile found for phone_number=%s",
+                pseudonymise(from_number),
             )
             return {"status": "not_found"}
 
