@@ -287,6 +287,24 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 ---
 
+### 33 — Gate honnêteté métriques : taxonomie de statut + lecture du benchmark Recruit (01/08/2026)
+
+**Trigger :** adversarial review externe (GPT, 20/07/2026), Critical C6 + Finding F13 + High Value H8 — confirmant l'audit interne du 07/07. Story 16.17 / HOS-318.
+
+**Décision — trois volets :**
+
+1. **Taxonomie de statut obligatoire.** Toute brique présentée, sur quelque surface que ce soit, porte une des cinq étiquettes **Built / Shadow-mode / Synthetic PoC / Design / Research**, définies une seule fois dans `docs/context/status-taxonomy.md`. `Built` signifie « le code tourne », **jamais** « quelqu'un s'en sert » — d'où une colonne *Preuve* obligatoire nommant la nature des données et le nombre d'utilisateurs réels. `Built (PoC)` est une formulation interdite : elle emprunte la crédibilité de *Built* à du *Synthetic PoC*. Le présent de l'indicatif est réservé à *Built* et *Shadow-mode*.
+
+2. **Le MAPE 15,09 % est circulaire** (`generate_demo_data.py` fabrique les couverts à partir des régresseurs que Prophet consomme). Le chiffre n'est pas supprimé — il reste le gate interne de non-régression de la Décision #14 — mais tout usage non qualifié est un drift, détecté par **D7** de l'agent d'hygiène.
+
+3. **Verdict Recruit (HOS-307 AC4) : PASS formel maintenu ET clause de pivot déclenchée volontairement.** Le PASS tient parce que la métrique (MAPE all-leads) était figée dans le script avant le run : la relire sur MdAPE après coup serait le biais que `protocole-de-preuve.md` interdit. Mais la règle des 5 pts est un proxy de valeur économique, et les −6,15 pts mesurent en réalité la robustesse aux jours à très faible fréquentation, pas un gain décisionnel — à J+1, sur la médiane, Prophet est **derrière** la naïve (28,54 % vs 27,94 %). Conséquence actée : le forecast cesse d'être présenté comme le différenciateur tant que §4.1 du protocole n'est pas passé sur données hôtelières réelles ; LightGBM global reste le moteur candidat Phase 4 ; Prophet est conservé pour l'explicabilité et la robustesse aux extrêmes.
+
+**Amendement au protocole de preuve (§7, HOS-316) :** **WAPE** (Σ|erreur| / Σ réel) devient une métrique **reportée obligatoire** aux côtés de MdAPE et MAPE. La métrique de décision primaire reste **Δ MdAPE**, gelée le 29/07 en connaissance de cause — on ne change pas deux fois de métrique primaire, cela viderait le gel de sa valeur de preuve. Motif de l'ajout : WAPE est la seule des trois à mesurer l'erreur **en couverts**, donc convertible en heures de staff et en euros ; ajouter une métrique reportée ne peut pas constituer du cherry-picking, le §5.3 imposant déjà le reporting exhaustif. Amendement admissible car HOS-308 n'était pas démarrée à la date d'écriture.
+
+**Documents canoniques :** `docs/context/status-taxonomy.md` (taxonomie) · `docs/context/audit-surfaces-publiques-2026-08.md` (état des surfaces + correctifs) · `docs/context/mape-benchmark.md` §Verdict AC4 (lecture du benchmark) · `docs/planning/protocole-de-preuve.md` §7 (amendement WAPE).
+
+---
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).

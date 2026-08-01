@@ -21,13 +21,24 @@ Vos couverts dîner varient de ±30% d'un soir à l'autre selon la météo, les 
 - **Apprentissage continu** : chaque retour ("on a fait 75, pas 60") améliore le modèle.
 - **Read-only sur votre PMS Apaleo** : aucune écriture, aucun risque opérationnel.
 
-#### La preuve
+#### La preuve — et ses limites, dites franchement
 
-| KPI | Valeur | Source |
-|-----|--------|--------|
-| MAPE prévisions J+1 (test holdout 30j) | **15.09%** | benchmark interne, run 2026-05-21 |
-| Gate validation interne | ≤ 22% ✅ PASS | définition produit |
-| Économies labour estimées (ICP) | **~€16K/an** | calcul ROI §2 ci-dessous |
+| KPI | Valeur | Nature | Source |
+|-----|--------|--------|--------|
+| Écart vs baseline naïve, MAPE moyen (829 restaurants réels) | **−6,15 pts** (49,71 % vs 55,86 %) | **données réelles** | benchmark Recruit, [`mape-benchmark.md`](../context/mape-benchmark.md) |
+| Écart vs baseline naïve, **jour médian** | **−0,56 pt** — jeu égal ; à J+1, Prophet est même légèrement derrière | **données réelles** | idem |
+| Économies labour estimées (ICP) | ~€16K/an | **modèle, non mesuré** | calcul ROI §2 ci-dessous |
+
+**Ce que ces chiffres veulent dire.** Sur un restaurant typique un jour typique, notre forecast fait aujourd'hui
+jeu égal avec « la moyenne des 4 derniers mêmes jours de semaine ». Son avantage se manifeste sur les jours
+atypiques — c'est réel, mais ce n'est pas encore un différenciateur prouvé. Le pilote sert précisément à
+mesurer l'écart sur **votre** établissement, où l'occupancy hôtelière (absente du dataset public) devrait jouer
+en notre faveur. Le seuil de réussite est fixé à l'avance et publié :
+[`protocole-de-preuve.md`](../planning/protocole-de-preuve.md) §4.1.
+
+> Un chiffre interne de **15,09 % de MAPE** a circulé début 2026. Il est **circulaire** — les données de test
+> étaient fabriquées à partir des mêmes variables que le modèle consomme. Nous ne le présentons plus comme une
+> preuve ; il ne subsiste que comme garde-fou interne de non-régression.
 
 #### Pourquoi Apaleo first
 
@@ -175,5 +186,7 @@ Dérouler la checklist §4 ci-dessous, cocher en direct.
 - [Source: CLAUDE.md Décision #21] — Anthropic playbook talking point
 - [Source: docs/competitive/apaleo-mcp-mapping.md] — 235 tools Apaleo, 0 F&B primitives
 - [Source: docs/context/demo-apaleo.md] — Hotel Kleber scenario, ICP details, Q&A
-- [Source: docs/context/mape-benchmark-holdout.json] — MAPE 15.09% PASS run 2026-05-21
+- [Source: docs/context/mape-benchmark.md] — benchmark Recruit sur données réelles (MAPE + MdAPE vs naïve)
+- [Source: docs/context/mape-benchmark-holdout.json] — MAPE 15.09% synthétique et circulaire, gate interne de non-régression uniquement (run 2026-05-21)
+- [Source: docs/context/status-taxonomy.md] — taxonomie Built / Shadow-mode / Synthetic PoC / Design / Research
 - [Source: CLAUDE.md §KPI framework Niveau 2] — labor_cost_variance −3% à −8%

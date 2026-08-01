@@ -32,19 +32,49 @@ jour de semaine et biaiserait le MAPE) · horizon 7 jours · 1 193 points scoré
 
 ### Verdict AC4 (règle : Prophet bat la naïve de ≥ 5 pts MAPE)
 
-**PASS formel** : Prophet −6.15 pp vs naïve en MAPE. **Mais la lecture honnête exige la nuance MdAPE** :
+> **Arbitrage tranché le 01/08/2026 (HOS-318) : PASS formel maintenu, ET clause de pivot déclenchée
+> volontairement.** Les deux, et le second n'est pas une conséquence du premier.
 
-1. L'avantage MAPE de Prophet vient surtout de sa **robustesse aux jours extrêmes** (le MAPE moyen
-   est dominé par les jours à très faible fréquentation où l'APE explose — 2 couverts réels → 400 %
-   d'erreur). Sur le restaurant *typique* (médiane), **Prophet ≈ naïve** (27.0 vs 27.6 %).
-2. **LightGBM est le meilleur modèle en médiane** (25.6 %, −2 pp vs naïve) — cohérent avec le
-   leaderboard Kaggle d'origine (les GBM dominaient). Piste de pivot documentée : LightGBM global
-   multi-propriétés comme moteur candidat Phase 4, Prophet conservé pour l'explicabilité
-   (décomposition tendance/saisonnalité lisible par le manager) et la robustesse aux extrêmes.
-3. **Reality-check de la cible produit < 15 %** : sur des restaurants de rue au jour le jour,
-   aucun des 3 modèles n'en approche (25-28 % MdAPE). La cible reste défendable pour le cas hôtelier
-   (base captive : l'occupancy est un régresseur fort que ce dataset n'a pas), mais elle doit être
-   **revalidée sur données hôtelières réelles** (shadow mode HOS-308) avant toute promesse client.
+**1. Le verdict formel reste PASS, et on ne le relit pas sur MdAPE.** Prophet fait −6.15 pp vs naïve en
+MAPE all-leads. La métrique était figée *avant* le run — `scripts/ops/benchmark_recruit.py` code AC4 sur
+MAPE all-leads, avec le commentaire explicite « AC4 stays on MAPE ». Changer de métrique après avoir
+constaté que l'autre donne un verdict opposé serait exactement le biais que
+[`protocole-de-preuve.md`](../planning/protocole-de-preuve.md) existe pour interdire. Le PASS tient.
+
+**2. Mais la règle a mesuré autre chose que ce qu'elle visait.** La barre des 5 pts est un proxy de valeur
+économique — « si Prophet ne bat pas la baseline de 5+ pts, pas de raison de payer »
+([`analyse-critique-2026-07.md`](analyse-critique-2026-07.md), maillon 2). Or les 6.15 pts capturent la
+robustesse de Prophet aux jours à très faible fréquentation, où l'APE explose sur un petit dénominateur
+(2 couverts réels → 400 % d'erreur). Un manager ne staffe pas ces jours-là. Le proxy a mesuré une
+propriété statistique, pas un gain décisionnel.
+
+**3. Le fait qui tranche, et qui doit être cité avec le PASS : à J+1, Prophet est en médiane *moins bon*
+que la naïve** — MdAPE 28.54 % contre 27.94 %. Sur le restaurant typique, un jour typique, à l'horizon
+qu'on met en avant, le modèle ne fait pas mieux que « la moyenne des 4 derniers mêmes jours de semaine ».
+Toutes leads confondues, Prophet et la naïve font jeu égal (27.01 vs 27.57 %).
+
+**4. Conséquence — clause de pivot déclenchée, par décision et non par la règle.** Le pivot n'est pas
+« on jette Prophet », c'est la note écrite qu'exige la DoD :
+- **LightGBM global multi-propriétés = moteur candidat Phase 4** — meilleur modèle en médiane (25.56 %,
+  −2 pp vs naïve), cohérent avec le leaderboard Kaggle d'origine.
+- **Prophet conservé** pour l'explicabilité (décomposition tendance/saisonnalité lisible par le manager)
+  et la robustesse aux extrêmes — deux propriétés que le Daily Receipt consomme directement.
+- **Le forecast cesse d'être présenté comme le différenciateur** tant que le §4.1 du protocole n'a pas
+  été passé sur données hôtelières réelles. C'est déjà la thèse de
+  [`positionnement-wedge.md`](positionnement-wedge.md) ; ce benchmark en fournit la preuve chiffrée.
+
+**5. Ce que ce dataset ne pouvait pas tester.** Recruit n'a pas d'occupancy — le régresseur qui porte toute
+la thèse « base captive » d'Aetherix. Prophet y est évalué privé de son avantage informationnel supposé.
+Le go/no-go réel se joue donc sur **HOS-308** (shadow mode, données hôtelières réelles), sous protocole
+pré-enregistré : métrique de décision = **Δ MdAPE vs naïve à l'horizon H**, seuils 5,0 / 2,0 pp (§4.1).
+
+**6. Reality-check de la cible produit < 15 %** : sur des restaurants de rue au jour le jour, aucun des
+3 modèles n'en approche (25-28 % MdAPE). La cible reste plausible pour le cas hôtelier, mais elle doit
+être revalidée sur données réelles avant toute promesse client.
+
+> **Statut de pré-enregistrement de ce benchmark : aucun.** HOS-307 a été mergé le 08/07/2026, la story
+> HOS-316 créée le 21/07. Il n'y a pas eu de protocole gelé pour ce run et ce document n'en fabrique pas
+> rétroactivement (cf. `protocole-de-preuve.md` §0).
 
 ### Reproduire
 

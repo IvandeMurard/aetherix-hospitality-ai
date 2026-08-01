@@ -5,7 +5,7 @@ Detects drift between what the repo *says* and what the repo *is*, then emits a
 Markdown report. It never edits code and never writes to the eval dataset: the
 workflow turns its output into a documentation-only PR that a human merges.
 
-Four detectors, all static and deterministic — no network, no secrets, no
+Seven detectors, all static and deterministic — no network, no secrets, no
 runtime access. That is deliberate: a hygiene agent that needs credentials is a
 new attack surface, and Epic 16 NFR2 freezes new runtime surface.
 
@@ -14,6 +14,10 @@ new attack surface, and Epic 16 NFR2 freezes new runtime surface.
   D3  env sync        — vars documented in CLAUDE.md exist in backend/.env.example
   D4  eval gaps       — typed guardrail reasons (NFR2 / ADR-0009) that no
                         golden-dataset scenario exercises
+  D5  doc size        — files that declare their own line ceiling stay under it
+  D6  count coherence — hardcoded counts match the source they summarise
+  D7  metric honesty  — the circular synthetic MAPE never appears unqualified
+                        (HOS-318, taxonomie docs/context/status-taxonomy.md)
 
 Usage:
   python scripts/ops/hygiene_architecturale.py
@@ -122,6 +126,29 @@ COUNT_CLAIMS = [
 # exercise them.
 GUARDRAIL_GLOB = "backend/app/**/*.py"
 GOLDEN_DATASET = "eval/golden_dataset.jsonl"
+
+# D7 — the synthetic MAPE is circular (generate_demo_data.py builds covers from
+# the regressors Prophet consumes). It stays in the repo as the Décision #14
+# non-regression gate; what is forbidden is citing it as evidence. Prose only:
+# this detector polices *claims*, not code comments naming the gate constant.
+METRIC_CLAIM_PATTERN = re.compile(r"15[.,]09")
+METRIC_CLAIM_QUALIFIERS = re.compile(
+    r"circulaire|circular|synth[ée]tique|synthetic|non-r[ée]gression|non-regression",
+    re.IGNORECASE,
+)
+# How many lines around the hit may carry the qualifier. A table row cannot hold
+# a caveat, so the surrounding block counts — but only just.
+METRIC_CLAIM_WINDOW = 2
+# Symmetric with PLANNED_PATHS and the D1 exceptions: an unqualified occurrence
+# is tolerable only where it is written down *why*.
+METRIC_CLAIM_EXCEPTIONS = {
+    "docs/context/mape-benchmark.md": "Foyer canonique du chiffre — le fichier porte "
+    "un bandeau de qualification en tête, qui couvre le bloc de résultats.",
+    "docs/adr/": "Un ADR est un enregistrement daté. On n'y réécrit pas l'histoire ; "
+    "la qualification vit dans les docs vivants qui le citent.",
+    "tools/bmad/": "Sorties BMad archivées — packs de story figés, pas une surface de claim.",
+    "docs/testing/evidence/": "Rapports d'exécution horodatés, y compris ceux de cet agent.",
+}
 
 # ─── Detector plumbing ────────────────────────────────────────────────────────
 
@@ -522,6 +549,55 @@ def detect_count_coherence(result: Result) -> None:
                 )
 
 
+# ─── D7 · Honnêteté métriques ─────────────────────────────────────────────────
+
+
+def detect_metric_honesty(result: Result) -> None:
+    """The circular synthetic MAPE must never be readable as evidence.
+
+    HOS-318: `generate_demo_data.py` builds covers from the very regressors
+    Prophet consumes, so 15.09% measures the generator, not forecast skill. The
+    figure is not deleted — it remains the Décision #14 non-regression gate —
+    but every occurrence must carry its own caveat within `METRIC_CLAIM_WINDOW`
+    lines, because a number screenshotted out of a table travels alone.
+    """
+    scanned = 0
+    for path in sorted(_ROOT.rglob("*.md")):
+        rel = path.relative_to(_ROOT).as_posix()
+        if rel.startswith(".git/") or any(rel.startswith(p) for p in METRIC_CLAIM_EXCEPTIONS):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            result.skipped.append(f"D7: `{rel}` illisible")
+            continue
+
+        scanned += 1
+        for i, line in enumerate(lines):
+            if not METRIC_CLAIM_PATTERN.search(line):
+                continue
+            lo = max(0, i - METRIC_CLAIM_WINDOW)
+            window = "\n".join(lines[lo : i + METRIC_CLAIM_WINDOW + 1])
+            if METRIC_CLAIM_QUALIFIERS.search(window):
+                continue
+            result.findings.append(
+                Finding(
+                    detector="D7",
+                    title=f"`{rel}:{i + 1}` cite le MAPE synthétique sans qualificatif",
+                    detail=f"Ligne : `{line.strip()[:160]}`\n\n"
+                    "Ce chiffre est **circulaire** (les couverts de test sont fabriqués à partir "
+                    "des régresseurs que Prophet consomme) : il ne prouve rien sur données réelles. "
+                    "Ajouter « synthétique et circulaire — gate interne de non-régression » dans la "
+                    "même phrase, ou citer le benchmark Recruit à la place "
+                    "(`docs/context/mape-benchmark.md`). Convention : "
+                    "`docs/context/status-taxonomy.md`.",
+                )
+            )
+
+    if scanned == 0:
+        result.skipped.append("D7: aucun fichier .md scanné")
+
+
 DETECTORS = (
     ("D1", "Drift harness", detect_harness_drift),
     ("D2", "Doc → code", detect_doc_paths),
@@ -529,6 +605,7 @@ DETECTORS = (
     ("D4", "Lacunes eval", detect_eval_gaps),
     ("D5", "Plafond de lignes", detect_doc_size),
     ("D6", "Cohérence des comptes", detect_count_coherence),
+    ("D7", "Honnêteté métriques", detect_metric_honesty),
 )
 
 
