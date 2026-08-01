@@ -316,6 +316,9 @@ async def tool_submit_feedback_to_memory(
         embedding=embedding_vec,
         embedding_pending=embedding_pending,
         request_id=request_id,
+        # HOS-317 — joinable link, alongside the `[rec=...]` text marker the
+        # dedup above still matches on (legacy rows have only the marker).
+        recommendation_id=rec_uuid,
     )
     db.add(mem)
     await db.flush()

@@ -72,6 +72,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - `context/moat.md` — **ce qui est défendable, testé contre la menace plateforme** (09/07) : 4 couches de moat + stress test "et si Apaleo/Mews shippent un forecast natif ?" + risque résiduel nommé
 - `context/data-conventions.md` — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
+- `context/decision-ledger.md` — **Decision Ledger (01/08, HOS-317)** : audit des 5 tables + l'unique arête manquante (`operational_memory.recommendation_id`, aucune table nouvelle) · schéma contexte→reco→réponse manager→outcome · requête bout-en-bout (service + vue `decision_ledger`) · §5 ce qui reste non fermé · vocabulaire *outcome-tracked* et non *self-improving*
 - `context/vision-future.md` — vision long terme (Phase 5, Mesh, Aetherix Voice)
 - `context/demo-apaleo.md` — Demo PRD Apaleo + résultats probe sandbox (HOS-190 AC1)
 - `context/mape-benchmark.md` (+ `mape-benchmark-holdout.json`) — **benchmark données réelles Recruit (08/07, HOS-307)** : naïve vs Prophet vs LightGBM, MAPE+MdAPE J+1→J+7 · verdict AC4 arbitré 01/08 = **PASS formel + clause pivot déclenchée volontairement** (Décision #33) · l'ancien 15.09 % synthétique = circulaire, gate interne uniquement

@@ -152,7 +152,7 @@ TOOLS_MANIFEST: list[dict[str, Any]] = [
     },
     {
         "name": "submit_feedback_to_memory",
-        "description": "Record manager outcome for a past recommendation (self-improving loop).",
+        "description": "Record manager outcome for a past recommendation (outcome-tracked operational history).",
         "inputSchema": {
             "type": "object",
             "required": ["recommendation_id", "outcome"],

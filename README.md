@@ -53,7 +53,7 @@ After 90 days on a live property:
 | Planning time | From hours to one validated message |
 | Forecast accuracy (J+1) | Target, not yet proven — see [measured result](#forecast-accuracy-measured-on-real-data) below |
 
-**The system learns your property.** On Day 1, Aetherix ingests your PMS and POS history and starts calibrating to your property's real patterns immediately. Where historical data is sparse (new property, new service, no POS yet), generic context patterns fill the gap — a *federated* HiveMemory prior across properties is **Research**, not something that runs today (see [status taxonomy](docs/context/status-taxonomy.md)). By Day 90, the system knows yours specifically: which Saturdays spike, which corporate clients drive room service, which events the manager always over-staffs for.
+**The system records your property.** On Day 1, Aetherix ingests your PMS and POS history and starts calibrating to your property's real patterns immediately. Where historical data is sparse (new property, new service, no POS yet), generic context patterns fill the gap — a *federated* HiveMemory prior across properties is **Research**, not something that runs today (see [status taxonomy](docs/context/status-taxonomy.md)). Every decision is written to a [Decision Ledger](docs/context/decision-ledger.md) — source context, recommendation, manager response, measured outcome — so the Day-90 claim (which Saturdays spike, which events the manager always over-staffs for) is something a pilot can *verify* rather than something you take on trust. **Built**, with 0 real users: no manager has produced a ledger row yet.
 
 ---
 
@@ -121,7 +121,7 @@ Full vision: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 | **Staffing reco** | Covers to optimal headcount, respecting labor rules |
 | **Proactive receipt** | Anticipatory WhatsApp push: actuals vs forecast, delta, confidence |
 | **Weekly digest** | Sunday KPI summary: acceptance rate, MAPE trend, cost variance |
-| **Feedback loop** | Accept / reject / modify triggers memory update; next forecast improves |
+| **Decision Ledger** | Every decision recorded end to end: source context → recommendation → manager response → measured outcome ([schema](docs/context/decision-ledger.md)). Outcome-tracked history — that the next forecast *improves* from it is a design target, not a measured result |
 | **MCP Server** | Atomic tools callable by any orchestration agent |
 | **Apaleo** | Native OAuth2 + MCP read (occupancy, reservations, history) |
 
