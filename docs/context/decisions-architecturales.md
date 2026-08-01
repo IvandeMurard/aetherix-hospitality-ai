@@ -80,7 +80,7 @@ Phase 3 scope = Pilot Validation **uniquement** (Track A) + Portfolio Reinforcem
 
 ### 19 — Orchestrateur séparé — Aetherix = F&B execution node (19/05/2026)
 
-Aetherix bounded context = F&B uniquement (forecast, staffing, memory, receipts). `AetherixEngine` délègue à `OrchestratorAgent` (services injectés). **Règle CI** : zéro import `app.*` dans `orchestrator/` (enforced par `tests/orchestrator/test_agent.py`). MCP v1 (`/mcp/v1/`) : `get_recommendations_with_memory_context` → 2 outils atomiques (`recall_memory` scope `memory:read` + `get_operational_predictions`). v0 maintenu jusqu'au 2026-08-01 (Sunset header). Anima / Guest Context Node = Phase 4. `backend/orchestrator/` = module Phase 3, repo séparé Phase 4. ADR → `docs/adr/0004-orchestrator-separation.md`.
+Aetherix bounded context = F&B uniquement (forecast, staffing, memory, receipts). `AetherixEngine` délègue à `OrchestratorAgent` (services injectés). **Règle CI** : zéro import `app.*` dans `orchestrator/` (enforced par `tests/orchestrator/test_agent.py`). MCP v1 (`/mcp/v1/`) : `get_recommendations_with_memory_context` → 2 outils atomiques (`recall_memory` scope `memory:read` + `get_operational_predictions`). v0 maintenu jusqu'au 2026-08-01 (Sunset header) — **route `/mcp/v0/` retirée le 01/08/2026 (HOS-315)** : manifeste agent (`wellknown.py`) et smoke E2E bascules sur v1, `TOOLS_MANIFEST` conservé (il construit `V1_TOOLS_MANIFEST`), ADR-0001 marqué superseded. Anima / Guest Context Node = Phase 4. `backend/orchestrator/` = module Phase 3, repo séparé Phase 4. ADR → `docs/adr/0004-orchestrator-separation.md`.
 
 ### 20 — Anima — architecture mémoire 4 couches + DPIA gate (19/05/2026)
 

@@ -90,7 +90,7 @@ Aetherix builds that synthesis automatically, learns from manager feedback, and 
 - **Daily Receipt** — WhatsApp push at 6am: yesterday's actuals vs forecast, delta, confidence
 - **Weekly digest** — Sunday KPI summary: acceptance rate, MAPE trend, cost variance
 - **Feedback loop** — managers reply "accepted / rejected / modified" → memory update → next forecast improves
-- **MCP Server v0** — 3 tools exposed at `/mcp/v0/`: `get_operational_predictions`, `get_recommendations_with_memory_context`, `submit_feedback_to_memory`
+- **MCP Server v1** — 3 atomic tools exposed at `/mcp/v1/`: `get_operational_predictions`, `recall_memory`, `submit_feedback_to_memory`
 - **Apaleo integration** — native OAuth2 + MCP read (occupancy, reservations, historical data)
 
 ### MCP Tools (callable by any agent)
@@ -126,7 +126,7 @@ graph TD
 
     subgraph FLY["🚀 Fly.io — Paris cdg"]
         subgraph BACK["⚙️ Aetherix — FastAPI + Python 3.12"]
-            MCP_IN["MCP Server v0\n/mcp/v0/"]
+            MCP_IN["MCP Server v1\n/mcp/v1/"]
             SCHED["APScheduler\ndaily triggers"]
             SVC["F&B Services\nforecast · staffing · receipts"]
         end
@@ -252,7 +252,7 @@ aetherix/
 |------|--------|
 | Forecasting harness (Prophet + regressors) | ✅ Built — backtest pipeline ready |
 | MAPE J+1 real-world measurement | 🔨 Pending — first run on design partner data |
-| MCP Server v0 | ✅ Shipped — `/mcp/v0/`, 3 tools |
+| MCP Server v1 | ✅ Shipped — `/mcp/v1/`, 3 atomic tools (v0 retired 2026-08-01) |
 | Staging deploy | ✅ Live — `aetherix-backend.fly.dev` |
 | Apaleo integration | ✅ OAuth2 + MCP read |
 | Daily Receipt + WhatsApp | ✅ End-to-end |

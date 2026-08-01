@@ -8,7 +8,7 @@ status 0 when every required step passes, 1 otherwise.
 Steps (each emits one JSON line on stdout):
   1. Boot validation        — /health, /health/workers, schema-drift script
   2. Apaleo MCP probe       — /api/v1/pms/mcp/probe (skippable)
-  3. Prophet predict        — /mcp/v0/ tools/call get_operational_predictions
+  3. Prophet predict        — /mcp/v1/ tools/call get_operational_predictions
   4. Memory feedback loop   — predict -> submit_feedback -> recommendations
   5. Auth surface           — endpoints reject anonymous traffic
   6. Anomaly dispatch       — synthetic anomaly -> dispatch worker (skippable)
@@ -105,7 +105,7 @@ def _mcp_call(
     """Invoke an MCP tool via JSON-RPC. Returns the parsed text result dict."""
     rpc_id = str(uuid.uuid4())
     resp = client.post(
-        f"{base_url}/mcp/v0/",
+        f"{base_url}/mcp/v1/",
         json={
             "jsonrpc": "2.0",
             "id": rpc_id,

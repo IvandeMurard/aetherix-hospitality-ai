@@ -20,22 +20,22 @@ _AGENT_MANIFEST = {
         "covers forecasting, staffing recommendations, and operational memory."
     ),
     "version": "0.1.0",
-    "mcp_endpoint": "/mcp/v0/",
+    "mcp_endpoint": "/mcp/v1/",
     "tools": [
         {
             "name": "get_operational_predictions",
             "description": "Forecast F&B covers and staffing for the authenticated property.",
-            "endpoint": "/mcp/v0/",
+            "endpoint": "/mcp/v1/",
             "method": "POST",
             "x-mcp-tool": True,
         },
         {
-            "name": "get_recommendations_with_memory_context",
+            "name": "recall_memory",
             "description": (
-                "Contextualized recommendation pulling from "
-                "operational_memory + fb_patterns."
+                "Semantic recall from the property's operational memory — "
+                "the k most relevant past observations for a free-text query."
             ),
-            "endpoint": "/mcp/v0/",
+            "endpoint": "/mcp/v1/",
             "method": "POST",
             "x-mcp-tool": True,
         },
@@ -45,7 +45,7 @@ _AGENT_MANIFEST = {
                 "Record manager outcome for a past recommendation "
                 "(self-improving loop)."
             ),
-            "endpoint": "/mcp/v0/",
+            "endpoint": "/mcp/v1/",
             "method": "POST",
             "x-mcp-tool": True,
         },
@@ -66,7 +66,7 @@ _AGENT_MANIFEST = {
             "description": "Public ROI simulator — stateless, no auth required.",
         },
         {
-            "path": "/mcp/v0/",
+            "path": "/mcp/v1/",
             "method": "POST",
             "x-agent-callable": True,
             "x-mcp-compatible": True,
@@ -79,7 +79,7 @@ _AGENT_MANIFEST = {
             "description": (
                 "Pass an Aetherix API token (atx_…) in "
                 "Authorization: Bearer <token>. "
-                "Required for /mcp/v0/ and /api/v1/predictions/predict."
+                "Required for /mcp/v1/ and /api/v1/predictions/predict."
             ),
         },
         {
@@ -92,7 +92,7 @@ _AGENT_MANIFEST = {
     ],
     "rate_limits": {
         "get_operational_predictions": "60 req/min per hotel",
-        "get_recommendations_with_memory_context": "30 req/min per hotel",
+        "recall_memory": "60 req/min per hotel",
         "submit_feedback_to_memory": "20 req/min per hotel",
         "default": "60 req/min",
     },
