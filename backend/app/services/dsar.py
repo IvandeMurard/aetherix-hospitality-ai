@@ -49,14 +49,12 @@ from typing import Any
 from sqlalchemy import delete, or_, select, update
 
 from app.core.pii import digest_identifier
-from app.db.models import (
-    AgentActionLog,
-    ConversationalQuery,
-    OperationalMemory,
-    PMSSyncLog,
-    RestaurantProfile,
-    User,
-)
+# `operational_memory`, `agent_action_log` et `pms_sync_logs` sont absentes de cet
+# import, et ce n'est pas un oubli : le service ne les requête jamais. Elles sont
+# clés par hôtel et non par personne, donc marquées REVIEW dans le plan — leur
+# traitement est un arbitrage humain, pas une requête. Le jour où le balayage
+# textuel sera automatisé, elles apparaîtront ici.
+from app.db.models import ConversationalQuery, RestaurantProfile, User
 
 logger = logging.getLogger(__name__)
 
