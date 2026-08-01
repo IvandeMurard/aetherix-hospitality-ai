@@ -1,7 +1,7 @@
 # AGENTS.md — Aetherix
 
 > Source de vérité partagée. Chargé automatiquement à chaque session.
-> **Règle — NE PAS SURCHARGER CE FICHIER.** Facts + INDEX uniquement, **plafond dur 150 lignes** (166 au 30/07 après refactoring — plafond à rediscuter, → `docs/INDEX.md` §Dette AGENTS.md).
+> **Règle — NE PAS SURCHARGER CE FICHIER.** Facts + INDEX uniquement, **plafond dur 170 lignes** (relevé de 150 le 31/07 : l'index de décisions a grandi, cf. `docs/INDEX.md` §Dette AGENTS.md). Contrôlé en CI — détecteur D5.
 > Une décision = **une ligne d'index ici**, le détail en **sous-section** du fichier dédié : `context/decisions-architecturales.md` · `context/open-decisions.md` · `docs/INDEX.md`. Ni narratif, ni justification, ni historique ici : si ça ne tient pas en une ligne, ça va en sous-section et on met le lien.
 
 ---

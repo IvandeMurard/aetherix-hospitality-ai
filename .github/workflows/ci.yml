@@ -181,7 +181,7 @@ jobs:
   # have been speculative.
   # ---------------------------------------------------------------------------
   harness-drift:
-    name: harness-drift
+    name: conventions-docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -191,17 +191,29 @@ jobs:
           python-version: "3.12"
 
       # Stdlib only — no install step needed.
-      - name: Check CLAUDE.md ↔ AGENTS.md
+      #
+      # Blocking subset: the detectors whose verdict is unambiguous and whose fix
+      # is mechanical. D2/D3/D4 stay report-only — they legitimately surface
+      # `info` findings (planned paths, curated env subset) that must not fail a PR.
+      - name: Conventions documentaires (D1 harness · D5 plafond · D6 comptes)
         run: |
-          if ! python scripts/ops/hygiene_architecturale.py --detectors D1; then
+          if ! python scripts/ops/hygiene_architecturale.py --detectors D1,D5,D6; then
             echo ""
-            echo "❌ Les deux fichiers de harness ont divergé."
-            echo "   Ils doivent porter un contenu identique — seul leur propre nom diffère."
+            echo "❌ Une convention documentaire est violée. Voir le détail au-dessus."
             echo ""
-            echo "   Resynchroniser :"
-            echo "     python -c \"from pathlib import Path; Path('AGENTS.md').write_text(Path('CLAUDE.md').read_text(encoding='utf-8').replace('CLAUDE.md','AGENTS.md'), encoding='utf-8')\""
+            echo "  D1 — CLAUDE.md et AGENTS.md ont divergé."
+            echo "     Ils portent un contenu identique ; seul leur propre nom diffère."
+            echo "     Resynchroniser :"
+            echo "       python -c \"from pathlib import Path; Path('AGENTS.md').write_text(Path('CLAUDE.md').read_text(encoding='utf-8').replace('CLAUDE.md','AGENTS.md'), encoding='utf-8')\""
+            echo "     Divergence légitime (instruction propre à un harness) → HARNESS_EXCEPTIONS, avec justification."
             echo ""
-            echo "   Si la divergence est légitime (instruction propre à un harness),"
-            echo "   l'inscrire dans HARNESS_EXCEPTIONS avec sa justification."
+            echo "  D5 — un fichier dépasse le plafond qu'il déclare lui-même."
+            echo "     Extraire une section vers un sous-fichier et ne garder qu'un pointeur,"
+            echo "     ou relever le plafond dans la ligne de règle si la croissance est assumée."
+            echo "     Le seuil est lu dans le fichier, jamais codé dans le script."
+            echo ""
+            echo "  D6 — un compte annoncé ne correspond plus à sa source."
+            echo "     Préférer retirer le nombre codé en dur plutôt que le corriger :"
+            echo "     un chiffre dupliqué dérive au premier ajout."
             exit 1
           fi

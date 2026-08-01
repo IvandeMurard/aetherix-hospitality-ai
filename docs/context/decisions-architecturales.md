@@ -1,6 +1,7 @@
 # Décisions architecturales — Aetherix
 
-> Source de vérité détaillée des 24 décisions architecturales. CLAUDE.md ne contient que l'index 1-ligne.
+> Source de vérité détaillée des décisions architecturales. CLAUDE.md ne contient que l'index 1-ligne.
+> *Le compte n'est volontairement pas écrit ici : un nombre codé en dur dérive au premier ajout. Il se lit en comptant les sections `### N — ` — c'est ce que fait le détecteur D6 de l'agent d'hygiène.*
 > **Convention update :** ne jamais remettre en question sans raison documentée. Ajouter une nouvelle décision = ligne d'index dans CLAUDE.md + section détail H3 ici.
 > **Cross-référence :** `docs/context/open-decisions.md` (décisions en débat avant arbitrage) · `docs/adr/` (ADR validés pour décisions techniques durables).
 

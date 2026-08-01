@@ -81,14 +81,42 @@ PLANNED_PATHS = {
     "backend/app/services/context_graph_queries/": "Graphe de contexte — Décision #24 / ADR-0008 DIFFÉRÉ 31/07/2026, reprise conditionnée ADR-0006 §10.4",
     "backend/app/providers/pos/": "POS ingestion — Décision #23 / ADR-0006, Phase 4",
     "backend/app/providers/pms/base.py": "PMS canonical schema — Décision #28 / ADR-0006 amendé, Phase 4",
-    "docs/competitive/apaleo-copilot-functional-audit.md": "Audit Copilot — watchlist Apaleo, story SM créée, livrable non écrit",
     "eval/judge_calibration_set.jsonl": "LLM-as-judge EVAL-6 — ADR-0007 §14, critère bloquant Phase 4",
 }
 
-# D3 — env var declarations.
+# D2 — paths that exist on disk but are deliberately out of the repo (élagage
+# 30/07/2026, cf. docs/INDEX.md §Convention local-only). Citing them is correct:
+# the reader has them locally, a fresh clone does not. Without this, CI reports
+# every such citation as broken — ~13 false positives on the first run, and a
+# detector that cries wolf gets switched off within a fortnight.
+LOCAL_ONLY_PREFIXES = ("docs/veille/", "docs/_archive/", "tools/bmad/_bmad/")
+
+# D3 — env var declarations. The doc side moved out of CLAUDE.md on 30/07 (it is
+# neither a session fact nor an index); pointing D3 at the old heading would let
+# it read an empty section and report "clean" for a detector that no longer sees
+# anything — the same false negative D1 guards against.
 ENV_EXAMPLE = "backend/.env.example"
-ENV_DOC = "CLAUDE.md"
-ENV_DOC_HEADING = "## Variables d'environnement"
+ENV_DOC = "docs/ops/environment-variables.md"
+ENV_DOC_HEADING = None  # None → scan the whole file
+
+# D5 — files that declare their own line ceiling. The limit is read *from the
+# file*, never hardcoded here: a threshold duplicated in the doc and in this
+# script is exactly the divergence D6 exists to catch.
+DOC_SIZE_LIMITS = ["CLAUDE.md", "AGENTS.md"]
+_SIZE_DECL = re.compile(r"plafond dur (\d+) lignes")
+
+# D6 — hardcoded counts that must match a countable source of truth. Three
+# different figures for the same set (24 / 29 / 31) were in circulation on
+# 31/07/2026, including one in the source file itself.
+COUNT_CLAIMS = [
+    {
+        "label": "décisions architecturales",
+        "claim": re.compile(r"(\d+)\s+décisions"),
+        "scanned": ["CLAUDE.md", "AGENTS.md", "docs/INDEX.md", "docs/context/decisions-architecturales.md"],
+        "source": "docs/context/decisions-architecturales.md",
+        "entry": re.compile(r"^### \d+ — ", re.MULTILINE),
+    },
+]
 
 # D4 — where typed guardrail reasons are declared, and the dataset that must
 # exercise them.
@@ -244,6 +272,10 @@ def detect_doc_paths(result: Result) -> None:
         for token in _BACKTICKED.findall(text):
             if not token.startswith(PATH_PREFIXES):
                 continue
+            # Deliberately out of the repo but present locally — see
+            # LOCAL_ONLY_PREFIXES. Not a broken reference.
+            if token.startswith(LOCAL_ONLY_PREFIXES):
+                continue
             # Globs are illustrative patterns (`docs/adr/000X-*.md`), not claims
             # that a specific file exists.
             if "*" in token:
@@ -285,7 +317,10 @@ def detect_doc_paths(result: Result) -> None:
 # ─── D3 · Env sync ────────────────────────────────────────────────────────────
 
 _ENV_ASSIGN = re.compile(r"^([A-Z][A-Z0-9_]*)=", re.MULTILINE)
-_ENV_DOCLINE = re.compile(r"^([A-Z][A-Z0-9_]*)\s+—", re.MULTILINE)
+# Two documentation shapes are accepted: the original `VAR — description` code
+# block, and the Markdown table (`| `VAR` | description |`) the extracted doc
+# uses. Supporting both keeps the detector working across the move.
+_ENV_DOCLINE = re.compile(r"^\|?\s*`?([A-Z][A-Z0-9_]{2,})`?\s*(?:\||—)", re.MULTILINE)
 
 
 def detect_env_sync(result: Result) -> None:
@@ -303,13 +338,29 @@ def detect_env_sync(result: Result) -> None:
 
     declared = set(_ENV_ASSIGN.findall(example))
 
-    # Restrict to the env section so unrelated ALL-CAPS prose is not parsed.
-    _, _, tail = doc.partition(ENV_DOC_HEADING)
-    if not tail:
-        result.skipped.append(f"D3: section « {ENV_DOC_HEADING} » absente de {ENV_DOC}")
-        return
-    section = tail.split("\n---", 1)[0]
+    if ENV_DOC_HEADING is None:
+        section = doc
+    else:
+        # Restrict to the env section so unrelated ALL-CAPS prose is not parsed.
+        _, _, tail = doc.partition(ENV_DOC_HEADING)
+        if not tail:
+            result.skipped.append(f"D3: section « {ENV_DOC_HEADING} » absente de {ENV_DOC}")
+            return
+        section = tail.split("\n---", 1)[0]
+
     documented = set(_ENV_DOCLINE.findall(section))
+    if not documented:
+        # The doc parsed to zero variables: either it moved again or the shape
+        # changed. Reporting "all undocumented" as info would read as clean.
+        result.findings.append(
+            Finding(
+                detector="D3",
+                title=f"Aucune variable lisible dans {ENV_DOC}",
+                detail="Le détecteur n'a extrait aucun nom de variable — le fichier a bougé ou son format a changé. "
+                "Ce résultat n'est pas « clean », il est aveugle. Vérifier `ENV_DOC` et `_ENV_DOCLINE`.",
+            )
+        )
+        return
 
     for name in sorted(documented - declared):
         result.findings.append(
@@ -377,11 +428,107 @@ def detect_eval_gaps(result: Result) -> None:
         )
 
 
+# ─── D5 · Plafond de lignes ───────────────────────────────────────────────────
+
+
+def detect_doc_size(result: Result) -> None:
+    """Files that declare a line ceiling must respect it.
+
+    The ceiling is parsed out of the file itself. That is the whole point: on
+    31/07/2026 `CLAUDE.md` declared "cible ≤ 150 lignes" and sat at 196 — 30%
+    over, unnoticed, and the session that found it began by adding to the file.
+    A rule nobody measures is not a rule.
+    """
+    for rel in DOC_SIZE_LIMITS:
+        text = _read(rel)
+        if text is None:
+            result.skipped.append(f"D5: {rel} introuvable")
+            continue
+
+        match = _SIZE_DECL.search(text)
+        if not match:
+            result.findings.append(
+                Finding(
+                    detector="D5",
+                    title=f"{rel} ne déclare plus son plafond",
+                    detail="Le détecteur lit le plafond dans le fichier (motif « plafond dur N lignes »). "
+                    "Sans déclaration, il ne peut rien vérifier — restaurer la ligne de règle, "
+                    "ou retirer le fichier de `DOC_SIZE_LIMITS`.",
+                )
+            )
+            continue
+
+        limit = int(match.group(1))
+        actual = len(text.splitlines())
+        if actual <= limit:
+            continue
+
+        result.findings.append(
+            Finding(
+                detector="D5",
+                title=f"{rel} dépasse son plafond : {actual} lignes pour {limit}",
+                detail=f"Écart : **+{actual - limit} lignes**. Ce fichier est chargé à chaque session — "
+                "tout ce qu'on y laisse est payé à chaque fois. "
+                "Soit extraire une section vers un sous-fichier et ne garder qu'un pointeur, "
+                "soit relever le plafond explicitement dans la ligne de règle si la croissance est assumée.",
+            )
+        )
+
+
+# ─── D6 · Cohérence des comptes ───────────────────────────────────────────────
+
+
+def detect_count_coherence(result: Result) -> None:
+    """Hardcoded counts must match the source they claim to summarise.
+
+    A number written in two files diverges on the next addition, silently. On
+    31/07/2026 three figures for the same set were live — 24 in `AGENTS.md` *and
+    in the source file itself*, 31 in `docs/INDEX.md`, 29 actually present.
+    """
+    for claim in COUNT_CLAIMS:
+        source = _read(claim["source"])
+        if source is None:
+            result.skipped.append(f"D6: {claim['source']} introuvable")
+            continue
+
+        actual = len(claim["entry"].findall(source))
+        if actual == 0:
+            result.findings.append(
+                Finding(
+                    detector="D6",
+                    title=f"Aucune entrée « {claim['label']} » comptée dans `{claim['source']}`",
+                    detail="Le motif d'entrée ne correspond plus à rien — le format du fichier a changé. "
+                    "Résultat aveugle, pas clean : vérifier `COUNT_CLAIMS[...]['entry']`.",
+                )
+            )
+            continue
+
+        for rel in claim["scanned"]:
+            text = _read(rel)
+            if text is None:
+                continue
+            for stated in {int(n) for n in claim["claim"].findall(text)}:
+                if stated == actual:
+                    continue
+                result.findings.append(
+                    Finding(
+                        detector="D6",
+                        title=f"`{rel}` annonce {stated} {claim['label']}, il y en a {actual}",
+                        detail=f"Source de vérité : `{claim['source']}` ({actual} entrées). "
+                        f"Écart de {abs(stated - actual)}. "
+                        "Corriger le nombre, ou mieux : retirer le compte codé en dur — "
+                        "un chiffre dupliqué dérive à chaque ajout.",
+                    )
+                )
+
+
 DETECTORS = (
     ("D1", "Drift harness", detect_harness_drift),
     ("D2", "Doc → code", detect_doc_paths),
     ("D3", "Sync env", detect_env_sync),
     ("D4", "Lacunes eval", detect_eval_gaps),
+    ("D5", "Plafond de lignes", detect_doc_size),
+    ("D6", "Cohérence des comptes", detect_count_coherence),
 )
 
 
