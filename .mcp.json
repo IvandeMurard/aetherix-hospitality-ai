@@ -3,6 +3,10 @@
     "apaleo": {
       "command": "python",
       "args": ["scripts/apaleo_mcp_proxy.py"]
+    },
+    "lovable": {
+      "type": "http",
+      "url": "https://ivandemurard.com/api/mcp"
     }
   }
 }
