@@ -25,6 +25,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 
 from app.core import config
+from app.core.pii import pseudonymise
 from app.core.exceptions import NotConfiguredError
 from app.db.models import RestaurantProfile
 from app.db.session import AsyncSessionLocal
@@ -78,7 +79,10 @@ async def _send_to_channels(
         try:
             await _sendgrid.send_email(hotel.notification_email, subject, narrative)
             logger.info(
-                "%s: email sent hotel_id=%s to=%s", log_ctx, hotel_id, hotel.notification_email
+                "%s: email sent hotel_id=%s to=%s",
+                log_ctx,
+                hotel_id,
+                pseudonymise(hotel.notification_email),
             )
         except NotConfiguredError:
             logger.debug(
