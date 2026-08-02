@@ -25,7 +25,7 @@ Vos couverts dîner varient de ±30% d'un soir à l'autre selon la météo, les 
 
 | KPI | Valeur | Nature | Source |
 |-----|--------|--------|--------|
-| Écart vs baseline naïve, MAPE moyen (829 restaurants réels) | **−6,15 pts** (49,71 % vs 55,86 %) | **données réelles** | benchmark Recruit, [`mape-benchmark.md`](../context/mape-benchmark.md) |
+| Écart vs baseline naïve, MAPE moyen (30 restaurants réels) | **−6,15 pts** (49,71 % vs 55,86 %) | **données réelles** | benchmark Recruit, [`mape-benchmark.md`](../context/mape-benchmark.md) |
 | Écart vs baseline naïve, **jour médian** | **−0,56 pt** — jeu égal ; à J+1, Prophet est même légèrement derrière | **données réelles** | idem |
 | Économies labour estimées (ICP) | ~€16K/an | **modèle, non mesuré** | calcul ROI §2 ci-dessous |
 

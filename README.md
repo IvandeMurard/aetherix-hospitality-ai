@@ -127,7 +127,7 @@ Full vision: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 
 ### Forecast accuracy, measured on real data
 
-On 829 real Japanese restaurants (Kaggle *Recruit*, 1,193 scored points, deterministic rerun), Prophet beats a naive same-weekday baseline by **6.15 points of mean MAPE** (49.71% vs 55.86%) — but **ties it on the median day** (MdAPE 27.0% vs 27.6%), and is marginally *worse* than naive at J+1 on the median (28.5% vs 27.9%). The mean-MAPE gap comes from robustness on very low-traffic days, not from sharper forecasts on a typical service. A gradient-boosted baseline wins on the median (25.6%). Both readings are published because the flattering one alone would not be true. Detail: [`docs/context/mape-benchmark.md`](docs/context/mape-benchmark.md).
+On 30 real Japanese restaurants drawn from the Kaggle *Recruit* dataset (829 in total; 1,193 scored points, deterministic rerun), Prophet beats a naive same-weekday baseline by **6.15 points of mean MAPE** (49.71% vs 55.86%) — but **ties it on the median day** (MdAPE 27.0% vs 27.6%), and is marginally *worse* than naive at J+1 on the median (28.5% vs 27.9%). The mean-MAPE gap comes from robustness on very low-traffic days, not from sharper forecasts on a typical service. A gradient-boosted baseline wins on the median (25.6%). Both readings are published because the flattering one alone would not be true. Detail: [`docs/context/mape-benchmark.md`](docs/context/mape-benchmark.md).
 
 An earlier internal figure of **15.09% MAPE** circulated on synthetic data. It is **circular** — the generator builds covers from the same regressors Prophet consumes — and is retained only as an internal non-regression gate (Décision #14). It is not evidence of forecast skill.
 

@@ -838,3 +838,122 @@ def test_d7_ignores_a_stale_worktree_copy(fake_repo, monkeypatch):
     hygiene.detect_metric_honesty(result)
 
     assert result.findings == []
+
+
+# ─── D6 · deuxième famille — chiffres issus d'un artefact ─────────────────────
+#
+# The 2026-08-02 bug: 829 (the dataset) published as the benchmark sample (30),
+# on five surfaces at once, while the JSON next to them said n_stores: 30.
+
+
+def _benchmark_repo(root: Path, doc: str, *, n_stores: int = 30, scored: int = 1193) -> None:
+    _write(
+        root,
+        hygiene.FIGURE_SOURCE,
+        json.dumps({"protocol": {"n_stores": n_stores, "scored_points": scored}}),
+    )
+    _write(root, "docs/claim.md", doc)
+
+
+def test_d6_flags_the_dataset_size_passed_off_as_the_sample(fake_repo):
+    _benchmark_repo(fake_repo, "On 829 real restaurants (Kaggle Recruit), Prophet wins.\n")
+
+    result = hygiene.Result()
+    hygiene._check_figure_claims(result)
+
+    assert len(result.drift) == 1
+    assert "829 restaurants du benchmark" in result.drift[0].title
+    assert "30" in result.drift[0].title
+
+
+def test_d6_accepts_the_dataset_size_when_named_as_such(fake_repo):
+    """State the role and the number is correct — same escape valve as D7/D8."""
+    _benchmark_repo(
+        fake_repo,
+        "Benchmark Recruit : 30 restaurants tirés d'un dataset de 829 restaurants.\n",
+    )
+
+    result = hygiene.Result()
+    hygiene._check_figure_claims(result)
+
+    assert result.findings == []
+
+
+def test_d6_ignores_restaurant_counts_outside_the_benchmark(fake_repo):
+    """Scope, not just matching: scale scenarios and pricing tiers are not claims."""
+    _benchmark_repo(fake_repo, "Scale scenarios modeled (1 -> 50 -> 500 restaurants).\n")
+
+    result = hygiene.Result()
+    hygiene._check_figure_claims(result)
+
+    assert result.findings == []
+
+
+def test_d6_flags_a_stale_scored_points_figure(fake_repo):
+    """The real recurring risk: the benchmark is rerun and the prose is not."""
+    _benchmark_repo(fake_repo, "Benchmark Recruit : 900 points scorés par modèle.\n")
+
+    result = hygiene.Result()
+    hygiene._check_figure_claims(result)
+
+    assert len(result.drift) == 1
+    assert "points scorés" in result.drift[0].title
+
+
+def test_d6_accepts_a_floor_rather_than_a_result(fake_repo):
+    """"≥ 300 points scorés" specifies a future run, not what HOS-307 produced."""
+    _benchmark_repo(fake_repo, "Protocole HOS-308, benchmark : ≥ 300 points scorés.\n")
+
+    result = hygiene.Result()
+    hygiene._check_figure_claims(result)
+
+    assert result.findings == []
+
+
+def test_d6_leaves_archived_and_local_only_trees_alone(fake_repo):
+    _write(
+        fake_repo,
+        hygiene.FIGURE_SOURCE,
+        json.dumps({"protocol": {"n_stores": 30, "scored_points": 1193}}),
+    )
+    _write(fake_repo, "docs/_archive/old.md", "Benchmark Recruit sur 829 restaurants.\n")
+
+    result = hygiene.Result()
+    hygiene._check_figure_claims(result)
+
+    assert result.findings == []
+
+
+def test_d6_missing_benchmark_source_is_a_skip_not_clean(fake_repo):
+    _write(fake_repo, "docs/claim.md", "Benchmark Recruit sur 829 restaurants.\n")
+
+    result = hygiene.Result()
+    hygiene._check_figure_claims(result)
+
+    assert result.findings == []
+    assert any(hygiene.FIGURE_SOURCE in s for s in result.skipped)
+
+
+def test_d6_still_checks_counts(fake_repo, monkeypatch):
+    """The first family must survive the second."""
+    monkeypatch.setattr(hygiene, "FIGURE_CLAIMS", ())
+    monkeypatch.setattr(
+        hygiene,
+        "COUNT_CLAIMS",
+        [{
+            "label": "décisions",
+            "claim": __import__("re").compile(r"(\d+)\s+décisions"),
+            "scanned": ["CLAUDE.md"],
+            "source": "src.md",
+            "entry": __import__("re").compile(r"^### \d+ — ", __import__("re").MULTILINE),
+        }],
+    )
+    _write(fake_repo, "src.md", "### 1 — a\n### 2 — b\n")
+    _write(fake_repo, "CLAUDE.md", "Le projet compte 7 décisions.\n")
+    _write(fake_repo, hygiene.FIGURE_SOURCE, json.dumps({"protocol": {}}))
+
+    result = hygiene.Result()
+    hygiene.detect_count_coherence(result)
+
+    assert len(result.drift) == 1
+    assert "annonce 7 décisions" in result.drift[0].title

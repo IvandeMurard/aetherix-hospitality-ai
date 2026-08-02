@@ -36,7 +36,8 @@ coller ci-dessous.
 
 **par :**
 
-> **Forecast, measured on real data.** On 829 real Japanese restaurants (Kaggle *Recruit*, 1,193 scored
+> **Forecast, measured on real data.** On 30 real Japanese restaurants drawn from the Kaggle *Recruit*
+> dataset (829 in total; 1,193 scored
 > points, deterministic rerun), Prophet beats a naive same-weekday baseline by 6.15 points of mean MAPE
 > (49.71% vs 55.86%) — but **ties it on the median day** (MdAPE 27.0% vs 27.6%), and is marginally *worse*
 > than naive at J+1 on the median (28.5% vs 27.9%). The mean-MAPE gap comes from robustness on very
