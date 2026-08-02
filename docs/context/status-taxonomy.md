@@ -42,7 +42,7 @@
 | Brique | Statut | Preuve — données, utilisateurs |
 |---|---|---|
 | **Daily Receipt** (P2-1→P2-7) | **Built** | Déployé staging Fly.io, smoke E2E 5/5. Données sandbox + synthétiques. **0 utilisateur réel.** |
-| **Forecast Prophet** | **Shadow-mode** | Benchmarké sur données réelles publiques (Recruit, 829 restaurants JP, 1 193 points — [`mape-benchmark.md`](mape-benchmark.md)). Aucune décision livrée à un manager sur cette base. Shadow-mode sur données hôtelières réelles = HOS-308, non démarré. |
+| **Forecast Prophet** | **Shadow-mode** | Benchmarké sur données réelles publiques (Recruit, 30 restaurants JP tirés d'un dataset de 829, 1 193 points — [`mape-benchmark.md`](mape-benchmark.md)). Aucune décision livrée à un manager sur cette base. Shadow-mode sur données hôtelières réelles = HOS-308, non démarré. |
 | **MCP Server v0** | **Built** | Live Fly.io, 3 tools atomiques, multi-tenant, token binding. 0 consommateur externe. |
 | **Mémoire opérationnelle** (pgvector) | **Built** | Instrumentée (ADR-0002/0003). Corpus synthétique — la mémoire n'a jamais mémorisé un vrai service. |
 | **Guardrails runtime** (Epic 12, G-1→G-5) | **Built** | 11 raisons typées, tests + eval layer `guardrail` (HOS-321). Éprouvés en CI, pas en incident réel. |

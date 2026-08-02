@@ -22,8 +22,8 @@ on en donne la lecture d'une phrase, celle qu'un prospect doit retenir :
   la mémoire opérationnelle et les guardrails runtime sont déployés sur staging Fly.io et exercés
   de bout en bout. *Built* dit que le code tourne sans intervention — **pas** qu'un manager s'en
   sert : à ce jour, personne. La mesure commence avec le design-partner.
-- **Forecast — Shadow-mode.** Benchmarké sur données réelles publiques (829 restaurants japonais,
-  Kaggle *Recruit*), Prophet **fait jeu égal avec la baseline naïve sur le jour médian**
+- **Forecast — Shadow-mode.** Benchmarké sur données réelles publiques (30 restaurants japonais
+  tirés du dataset Kaggle *Recruit*, qui en compte 829), Prophet **fait jeu égal avec la baseline naïve sur le jour médian**
   (MdAPE 27,0 % vs 27,6 %) et est marginalement *moins bon* à J+1 ([`mape-benchmark.md`](mape-benchmark.md)).
   Aucune décision n'est encore livrée à un manager sur cette base. Le forecast n'est donc **pas**
   vendu comme le différenciateur tant que HOS-308 (shadow mode hôtelier réel) n'a pas tranché.
