@@ -68,7 +68,7 @@ Publier « +6,15 pts vs baseline » sans mentionner le MdAPE serait **exactement
 
 ### Ancrages (anti-réinvention)
 
-- **Chiffres de référence** : `docs/context/mape-benchmark.md` §« Benchmark données réelles — Recruit (08/07/2026) ». Protocole déterministe, 2 runs bit-identiques (Décision #29), 829 restaurants réels, 1 193 points scorés. Script : `scripts/ops/benchmark_recruit.py` · Résultats : `eval/benchmarks/recruit_results.json`.
+- **Chiffres de référence** : `docs/context/mape-benchmark.md` §« Benchmark données réelles — Recruit (08/07/2026) ». Protocole déterministe, 2 runs bit-identiques (Décision #29), 30 restaurants (dataset de 829) réels, 1 193 points scorés. Script : `scripts/ops/benchmark_recruit.py` · Résultats : `eval/benchmarks/recruit_results.json`.
 - **Modèle de qualification déjà écrit** : l'encart d'avertissement en tête de `mape-benchmark.md` (08/07). Réutiliser sa formulation plutôt qu'en inventer une.
 - **Lecture stratégique déjà actée** : `docs/context/moat.md` (HOS-313 AC2) — cohérence à préserver, pas à recréer.
 - **Mécanisme d'application** : `HOS-320` a livré un agent d'hygiène qui détecte les drifts docs/code/eval en PR-only, zéro surface runtime. C'est le véhicule naturel de T5.

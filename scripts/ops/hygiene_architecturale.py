@@ -158,6 +158,60 @@ COUNT_CLAIMS = [
     },
 ]
 
+# D6 (second family) — figures quoted from a machine-readable artefact. Counting
+# entries works for "N décisions"; a benchmark result is not counted, it is read.
+# The rule is the same either way: a number written in prose must match the thing
+# it claims to summarise.
+#
+# Why: on 2026-08-02 the public README said the Recruit benchmark ran on 829
+# restaurants. 829 is the *dataset*; the protocol selects 30. The conflation had
+# reached four more surfaces, including the document that defines honest status
+# labels and two prospect-facing docs — while `recruit_results.json`, published
+# in the same public repo, said `n_stores: 30` throughout. The arithmetic gave it
+# away: 1,193 scored points over 829 restaurants is 1.4 forecasts each.
+#
+# Scanned like D7 (every living .md, minus SCAN_EXCLUDED_PREFIXES) rather than a
+# fixed list: the figure travels into new documents faster than a list is updated.
+FIGURE_SOURCE = "eval/benchmarks/recruit_results.json"
+
+# Two knobs, and the difference matters. `context` *scopes* the claim: without it
+# the detector reads every "N restaurants" in the repo — scale scenarios, pricing
+# tiers — and 17 false positives switch a detector off within a fortnight.
+# `qualifier` *excuses* a mismatch: "829 restaurants" is correct when named as the
+# dataset. Same escape valve as D7's caveats and D8's acknowledgements — state the
+# role, keep the number.
+FIGURE_CLAIMS = (
+    {
+        "label": "restaurants du benchmark",
+        "pattern": re.compile(r"(\d[\d   ]*)\s+(?:real\s+)?(?:Japanese\s+)?restaurants", re.IGNORECASE),
+        "path": ("protocol", "n_stores"),
+        "context": re.compile(r"recruit|benchmark|mape|mdape", re.IGNORECASE),
+        "qualifier": re.compile(
+            r"dataset|jeu de donn[ée]es|au total|in total|en compte", re.IGNORECASE
+        ),
+        "window": 1,
+        "hint": "Le dataset Recruit compte 829 restaurants ; le protocole en sélectionne "
+        "`n_stores`. Citer la taille du dataset comme celle de l'échantillon gonfle la "
+        "preuve d'un facteur 28. Nommer le rôle du nombre (« dataset de 829 ») ou écrire "
+        "la taille réelle de l'échantillon.",
+    },
+    {
+        "label": "points scorés",
+        "pattern": re.compile(r"(\d[\d   ,]*)\s+(?:scored\s+(?:points|forecasts)|points scor[ée]s)", re.IGNORECASE),
+        "path": ("protocol", "scored_points"),
+        "context": re.compile(r"recruit|benchmark|mape|mdape|scor", re.IGNORECASE),
+        # A floor is not a result: "≥ 300 points scorés" specifies what a future
+        # run must reach (HOS-308), and comparing it to what HOS-307 produced is
+        # a category error.
+        "qualifier": re.compile(r"≥|>=|au moins|at least|minimum", re.IGNORECASE),
+        "window": 0,
+        "hint": "Le nombre de points scorés est produit par le run, pas choisi. "
+        "S'il a changé, le benchmark a été rejoué : toutes les figures qui en dépendent "
+        "sont à reprendre ensemble.",
+    },
+)
+
+
 # D4 — where typed guardrail reasons are declared, and the dataset that must
 # exercise them.
 GUARDRAIL_GLOB = "backend/app/**/*.py"
@@ -733,6 +787,87 @@ def detect_count_coherence(result: Result) -> None:
                         "un chiffre dupliqué dérive à chaque ajout.",
                     )
                 )
+
+    _check_figure_claims(result)
+
+
+def _figure_value(data: object, path: tuple[str, ...]) -> int:
+    cur = data
+    for key in path:
+        cur = cur[key]  # type: ignore[index]
+    return int(cur)  # type: ignore[arg-type]
+
+
+def _check_figure_claims(result: Result) -> None:
+    """Second D6 family: prose figures against the artefact that produced them.
+
+    A count is derived by counting; a benchmark figure is derived by reading.
+    Both are the same promise — the number in the sentence is the number in the
+    thing. This half exists because 829 (the dataset) was published as the
+    sample size (30) on five surfaces at once, including the public README and
+    the document defining honest status labels, while the JSON next to it said
+    otherwise.
+
+    Every living `.md` is scanned rather than a declared list: the figure
+    reaches new documents faster than a list gets updated.
+    """
+    raw = _read(FIGURE_SOURCE)
+    if raw is None:
+        result.skipped.append(
+            f"D6: `{FIGURE_SOURCE}` introuvable — chiffres du benchmark non vérifiés."
+        )
+        return
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        result.skipped.append(f"D6: `{FIGURE_SOURCE}` illisible — chiffres non vérifiés.")
+        return
+
+    expected: list[tuple[dict, int]] = []
+    for claim in FIGURE_CLAIMS:
+        try:
+            expected.append((claim, _figure_value(data, claim["path"])))
+        except (KeyError, TypeError, ValueError):
+            result.skipped.append(
+                f"D6: `{'.'.join(claim['path'])}` absent de `{FIGURE_SOURCE}` — "
+                f"« {claim['label']} » non vérifié."
+            )
+
+    for path in sorted(_ROOT.rglob("*.md")):
+        rel = path.relative_to(_ROOT).as_posix()
+        if _scan_excluded(rel) or rel.startswith(LOCAL_ONLY_PREFIXES):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        for claim, value in expected:
+            for i, line in enumerate(lines):
+                for match in claim["pattern"].finditer(line):
+                    digits = re.sub(r"\D", "", match.group(1))
+                    if not digits or int(digits) == value:
+                        continue
+                    lo = max(0, i - claim["window"])
+                    hi = min(len(lines), i + claim["window"] + 1)
+                    window = "\n".join(lines[lo:hi])
+                    # `context` scopes the claim to its subject; `qualifier`
+                    # excuses a mismatch that is a different, legitimate reading.
+                    if not claim["context"].search(window):
+                        continue
+                    if claim["qualifier"].search(window):
+                        continue
+                    result.findings.append(
+                        Finding(
+                            detector="D6",
+                            title=f"`{rel}:{i + 1}` annonce {int(digits)} "
+                            f"{claim['label']}, la source en donne {value}",
+                            detail=f"Ligne : `{line.strip()[:160]}`\n\n"
+                            f"Source de vérité : `{FIGURE_SOURCE}` "
+                            f"(`{'.'.join(claim['path'])}` = {value}).\n\n"
+                            + claim["hint"],
+                        )
+                    )
 
 
 # ─── D7 · Honnêteté métriques ─────────────────────────────────────────────────
