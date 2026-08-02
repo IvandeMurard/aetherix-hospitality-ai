@@ -10,7 +10,10 @@
 # `eval/golden_dataset.jsonl` is what gates merges (Décision #29), so an agent
 # that could write to it would be able to unlock its own changes.
 #
-# No secrets are needed: all four detectors are static (no network, no runtime).
+# Secrets: none configured. D1-D8 are static (no network, no runtime). D9 alone
+# reads the forge — branch and PR state exists nowhere else — using the built-in
+# GITHUB_TOKEN, read-only, and it records a skip rather than reporting clean when
+# that token is absent. See HOS-324.
 #
 # Manual run:
 #   Actions → Hygiène architecturale → Run workflow
@@ -51,8 +54,13 @@ jobs:
           python-version: "3.12"
 
       # No dependencies to install — the detectors are stdlib only.
+      # GH_TOKEN is for D9 only: it reads branches and PRs across the watched
+      # repos (HOS-324). Read-only, and the detector degrades to a recorded skip
+      # without it rather than reporting a clean forge it never looked at.
       - name: Run hygiene detectors
         id: detect
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DATE=$(date -u +"%Y-%m-%d")
           REPORT="docs/testing/evidence/hygiene/report-${DATE}.md"

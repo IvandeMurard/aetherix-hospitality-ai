@@ -546,8 +546,13 @@ def test_detectors_flag_still_fails_on_selected_drift(fake_repo, monkeypatch):
 
 
 def test_unknown_detector_code_is_an_error_not_a_silent_pass(monkeypatch):
-    """A typo in the CI invocation must not look like a green run."""
-    monkeypatch.setattr(sys, "argv", ["hygiene", "--detectors", "D9"])
+    """A typo in the CI invocation must not look like a green run.
+
+    The placeholder is deliberately far from the real range: this test used to
+    say "D9", which stopped testing anything the day D9 shipped (HOS-324) and
+    failed instead. A sentinel that a future story can claim is not a sentinel.
+    """
+    monkeypatch.setattr(sys, "argv", ["hygiene", "--detectors", "D99"])
 
     assert hygiene.main() == 2
 
@@ -570,3 +575,148 @@ def test_report_lists_every_detector_and_counts_drift():
     for code, label, _ in hygiene.DETECTORS:
         assert f"## {code} · {label}" in report
     assert "chemin cassé" in report
+
+
+# ─── D9 · Branches et PRs orphelines ──────────────────────────────────────────
+#
+# `_gh` is monkeypatched in every case: the suite must never touch the network,
+# and a detector whose tests need credentials would only run on one machine.
+
+
+def _fake_forge(monkeypatch, branches, prs, repos=("owner/repo",), default="main"):
+    """Route the three `gh` calls D9 makes to canned payloads."""
+    monkeypatch.setattr(hygiene, "WATCHED_REPOS", list(repos))
+    monkeypatch.setattr(hygiene.shutil, "which", lambda _: "/usr/bin/gh")
+
+    def fake_gh(args):
+        if args[0] == "api" and args[1].endswith("/branches"):
+            return branches
+        if args[0] == "api":
+            return {"default_branch": default}
+        return prs
+
+    monkeypatch.setattr(hygiene, "_gh", fake_gh)
+
+
+def _pr(number, state, head, *, updated="2099-01-01T00:00:00Z", mergeable="MERGEABLE"):
+    return {
+        "number": number,
+        "state": state,
+        "headRefName": head,
+        "updatedAt": updated,
+        "mergeable": mergeable,
+        "title": f"PR {number}",
+        "isDraft": False,
+    }
+
+
+def test_d9_branch_without_any_pr_is_drift(monkeypatch):
+    """The Story 16.20 case: work pushed, never submitted, invisible."""
+    _fake_forge(monkeypatch, ["main", "chore/hos-hygiene-conventions-docs"], [])
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert len(result.drift) == 1
+    assert "poussée sans aucune PR" in _titles(result)
+
+
+def test_d9_default_branch_is_never_reported(monkeypatch):
+    _fake_forge(monkeypatch, ["main"], [])
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert result.findings == []
+
+
+def test_d9_excepted_branches_are_ignored(monkeypatch):
+    _fake_forge(monkeypatch, ["main", "dependabot/pip/urllib3-2.0.0"], [])
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert result.findings == []
+
+
+def test_d9_conflicting_open_pr_is_drift(monkeypatch):
+    """The meta-repo PR #1 case: superseded, conflicting, open on the public README."""
+    _fake_forge(
+        monkeypatch,
+        ["main", "feature/x"],
+        [_pr(1, "OPEN", "feature/x", mergeable="CONFLICTING")],
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert len(result.drift) == 1
+    assert "stagne" in _titles(result)
+    assert "en conflit" in result.drift[0].detail
+
+
+def test_d9_stale_open_pr_is_drift(monkeypatch):
+    _fake_forge(
+        monkeypatch,
+        ["main", "feature/x"],
+        [_pr(2, "OPEN", "feature/x", updated="2020-01-01T00:00:00Z")],
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert len(result.drift) == 1
+    assert "n'a pas bougé" in result.drift[0].detail
+
+
+def test_d9_healthy_open_pr_is_clean(monkeypatch):
+    _fake_forge(monkeypatch, ["main", "feature/x"], [_pr(3, "OPEN", "feature/x")])
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert result.findings == []
+
+
+def test_d9_branch_surviving_merged_pr_is_info_not_drift(monkeypatch):
+    """Cruft must not fail a report — a detector that shouts stops being read."""
+    _fake_forge(monkeypatch, ["main", "feature/done"], [_pr(4, "MERGED", "feature/done")])
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert result.drift == []
+    assert len(result.info) == 1
+    assert "survit à ses PRs" in _titles(result)
+
+
+def test_d9_without_gh_records_a_skip_never_clean(monkeypatch):
+    """AC5: a blind detector says so. Reporting clean here is the false negative."""
+    monkeypatch.setattr(hygiene.shutil, "which", lambda _: None)
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert result.findings == []
+    assert len(result.skipped) == 1
+    assert "gh" in result.skipped[0]
+
+
+def test_d9_unreachable_repo_records_a_skip(monkeypatch):
+    """An unauthenticated or rate-limited call must not read as "no orphans"."""
+    monkeypatch.setattr(hygiene, "WATCHED_REPOS", ["owner/repo"])
+    monkeypatch.setattr(hygiene.shutil, "which", lambda _: "/usr/bin/gh")
+    monkeypatch.setattr(hygiene, "_gh", lambda args: None)
+
+    result = hygiene.Result()
+    hygiene.detect_orphan_branches(result)
+
+    assert result.findings == []
+    assert any("inaccessible" in s for s in result.skipped)
+    assert any("aveugle" in s for s in result.skipped)
+
+
+def test_d9_watches_more_than_the_current_repo(monkeypatch):
+    """AC4: the costly incident was on the meta-repo, not here."""
+    assert len(hygiene.WATCHED_REPOS) >= 2
+    assert any("hospitality-agentic-mesh" in r for r in hygiene.WATCHED_REPOS)

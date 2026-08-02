@@ -5,9 +5,15 @@ Detects drift between what the repo *says* and what the repo *is*, then emits a
 Markdown report. It never edits code and never writes to the eval dataset: the
 workflow turns its output into a documentation-only PR that a human merges.
 
-Eight detectors, all static and deterministic — no network, no secrets, no
+Nine detectors. D1-D8 are static and deterministic — no network, no secrets, no
 runtime access. That is deliberate: a hygiene agent that needs credentials is a
 new attack surface, and Epic 16 NFR2 freezes new runtime surface.
+
+D9 is the documented exception (HOS-324). Branch and PR state exists only on the
+forge, so it shells out to `gh` with the token CI already provides. It reads and
+never writes, it is excluded from the blocking PR subset, and when `gh` is
+absent or unauthenticated it records a skip rather than reporting clean — a
+blind detector must say so.
 
   D1  harness drift   — CLAUDE.md vs AGENTS.md (same content, two harnesses)
   D2  doc → code      — backticked paths in docs resolve to files that exist
@@ -21,6 +27,9 @@ new attack surface, and Epic 16 NFR2 freezes new runtime surface.
   D8  falsifiability  — a *property* asserted as fact (permanent, anonymised,
                         "by construction") carries what would make it false
                         (HOS-229, docs/context/dpia-anima-2026-08.md §10)
+  D9  orphan work     — branches pushed with no PR, PRs left conflicting or
+                        stale, branches surviving their merged PR (HOS-324).
+                        Reads the forge; weekly report only, never blocking.
 
 Usage:
   python scripts/ops/hygiene_architecturale.py
@@ -39,6 +48,8 @@ import datetime
 import difflib
 import json
 import re
+import shutil
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -246,6 +257,47 @@ PROPERTY_CLAIMS = (
         "rendrait fausse, ou la marquer comme non prouvée.",
     },
 )
+
+# ─── D9 · Branches et PRs orphelines ──────────────────────────────────────────
+# The first detector that leaves the working tree. D1-D8 read files; branch and
+# PR state lives on the forge and nowhere else, so D9 shells out to `gh`.
+#
+# Why it exists: on 2026-08-01 two pieces of finished work were invisible for the
+# same structural reason — nothing watched the gap between "the branch exists"
+# and "it is merged and tracked". Story 16.20 sat pushed with no Linear issue and
+# no PR; HOS-318's meta-repo PR sat open, superseded and conflicting, on the
+# public front door while the story looked done. Both were found by hand.
+#
+# D9 is deliberately *not* in the blocking PR subset: an orphaned branch is not
+# the current author's fault, and blocking them on it teaches people to bypass
+# the gate. Its home is the weekly report.
+
+# Watched repos, declared rather than inferred. The costly incident was
+# cross-repo: watching only this one would have missed it entirely.
+#
+# The built-in GITHUB_TOKEN is scoped to this repository for writes but reads
+# public siblings fine, which is what the other two are. Add a *private* repo
+# here and D9 will record a skip for it rather than a false clean — the skip is
+# the honest outcome, not a bug to work around with a broader token.
+WATCHED_REPOS = [
+    "IvandeMurard/aetherix-hospitality-ai",
+    "IvandeMurard/hospitality-agentic-mesh",
+    "IvandeMurard/tacet-app",
+]
+
+# An open PR untouched this long is forgotten or blocked. Either way it belongs
+# in the report — PR #1 above rotted for fifteen hours; a fortnight is generous.
+STALE_PR_DAYS = 14
+
+# Branches that legitimately outlive their PR, as regex → justification.
+# Symmetric with HARNESS_EXCEPTIONS and PLANNED_PATHS: a tolerated exception is
+# written down and justified, or it is not tolerated.
+BRANCH_EXCEPTIONS: dict[str, str] = {
+    r"^(main|master|gh-pages)$": "branches permanentes",
+    r"^dependabot/": "branches éphémères créées et supprimées par Dependabot",
+}
+
+_GH_TIMEOUT = 30
 
 
 # ─── Detector plumbing ────────────────────────────────────────────────────────
@@ -761,6 +813,164 @@ def detect_property_claims(result: Result) -> None:
         result.skipped.append("D8: aucune source scannée")
 
 
+# ─── D9 · Branches et PRs orphelines ──────────────────────────────────────────
+
+
+def _gh(args: list[str]) -> object | None:
+    """Run a `gh` command expecting JSON on stdout. None when gh is unusable.
+
+    Every failure mode collapses to None on purpose: the caller turns that into
+    a recorded skip. What must never happen is a silent empty result read as
+    "no orphans" — that is the false negative D1's missing-harness finding was
+    written to prevent.
+    """
+    if shutil.which("gh") is None:
+        return None
+    try:
+        proc = subprocess.run(
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            timeout=_GH_TIMEOUT,
+            encoding="utf-8",
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def _branch_excepted(name: str) -> str | None:
+    for pattern, why in BRANCH_EXCEPTIONS.items():
+        if re.search(pattern, name):
+            return why
+    return None
+
+
+def _age_days(iso: str) -> int | None:
+    try:
+        when = datetime.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (now - when).days
+
+
+def detect_orphan_branches(result: Result) -> None:
+    """Work that exists on the forge but is not on its way anywhere.
+
+    Three shapes, learned from two incidents on the same day (2026-08-01):
+      - a branch ahead of the default with no PR at all → pushed, never
+        submitted (Story 16.20);
+      - an open PR that conflicts or has gone quiet → rotting, often superseded
+        (the meta-repo PR #1, open on the public README while its story read
+        "done");
+      - a branch whose PRs are all closed → cruft, one click to remove.
+
+    Only the first two count as drift. Cruft is reported as info: a detector
+    that fails a report over an undeleted branch stops being read.
+    """
+    if shutil.which("gh") is None:
+        result.skipped.append(
+            "D9: `gh` introuvable — l'état des branches et PRs vit sur la forge, "
+            "pas dans l'arbre de travail. Aucun verdict rendu (ce n'est pas « clean »)."
+        )
+        return
+
+    reached_any = False
+
+    for repo in WATCHED_REPOS:
+        info = _gh(["api", f"repos/{repo}", "--jq", '{default_branch: .default_branch}'])
+        branches = _gh(["api", f"repos/{repo}/branches", "--paginate", "--jq", "[.[].name]"])
+        prs = _gh([
+            "pr", "list", "--repo", repo, "--state", "all", "--limit", "300",
+            "--json", "number,state,headRefName,updatedAt,mergeable,title,isDraft",
+        ])
+
+        if info is None or branches is None or prs is None:
+            result.skipped.append(
+                f"D9: `{repo}` inaccessible (gh non authentifié, réseau, ou droits manquants) — "
+                "aucun verdict rendu pour ce repo."
+            )
+            continue
+
+        reached_any = True
+        default_branch = info.get("default_branch", "main")
+        prs_by_head: dict[str, list[dict]] = {}
+        for pr in prs:
+            prs_by_head.setdefault(pr["headRefName"], []).append(pr)
+
+        # --- Branches ---------------------------------------------------------
+        for branch in branches:
+            if branch == default_branch or _branch_excepted(branch):
+                continue
+
+            related = prs_by_head.get(branch, [])
+            if not related:
+                result.findings.append(
+                    Finding(
+                        detector="D9",
+                        title=f"`{repo}` — branche `{branch}` poussée sans aucune PR",
+                        detail="Du travail est sur la forge et n'est en route nulle part : "
+                        "ni PR, ni revue, ni trace dans Linear si la story a été oubliée. "
+                        "C'est le cas de la Story 16.20, restée invisible jusqu'à une analyse "
+                        "manuelle.\n\n"
+                        "Ouvrir la PR, ou supprimer la branche si le travail est abandonné. "
+                        f"Une branche légitimement durable se déclare dans `BRANCH_EXCEPTIONS` "
+                        "avec sa justification.",
+                    )
+                )
+                continue
+
+            if all(pr["state"] in ("MERGED", "CLOSED") for pr in related):
+                states = ", ".join(f"#{pr['number']} {pr['state'].lower()}" for pr in related)
+                result.findings.append(
+                    Finding(
+                        detector="D9",
+                        title=f"`{repo}` — branche `{branch}` survit à ses PRs ({states})",
+                        detail="Reliquat sans conséquence, mais il encombre la liste des branches "
+                        "et fait douter de ce qui est encore en cours. Supprimable en un clic "
+                        "(`gh pr merge --delete-branch` le fait à la fermeture).",
+                        severity="info",
+                    )
+                )
+
+        # --- PRs ouvertes -----------------------------------------------------
+        for pr in prs:
+            if pr["state"] != "OPEN":
+                continue
+
+            reasons = []
+            if pr.get("mergeable") == "CONFLICTING":
+                reasons.append("elle est **en conflit** avec la branche par défaut")
+            age = _age_days(pr.get("updatedAt", ""))
+            if age is not None and age > STALE_PR_DAYS:
+                reasons.append(f"elle n'a pas bougé depuis **{age} jours**")
+            if not reasons:
+                continue
+
+            draft = " (draft)" if pr.get("isDraft") else ""
+            result.findings.append(
+                Finding(
+                    detector="D9",
+                    title=f"`{repo}` — PR #{pr['number']}{draft} stagne : {pr['title'][:70]}",
+                    detail="Cette PR " + " et ".join(reasons) + ".\n\n"
+                    "Une PR qui pourrit est rarement neutre : celle du méta-repo, le 01/08, était "
+                    "supersédée par une autre et serait passée en régression si elle avait été "
+                    "mergée par réflexe. Rebaser, fermer, ou merger — mais trancher.",
+                )
+            )
+
+    if not reached_any:
+        result.skipped.append(
+            "D9: aucun repo surveillé n'a pu être interrogé — détecteur aveugle, pas clean."
+        )
+
+
 DETECTORS = (
     ("D1", "Drift harness", detect_harness_drift),
     ("D2", "Doc → code", detect_doc_paths),
@@ -770,6 +980,7 @@ DETECTORS = (
     ("D6", "Cohérence des comptes", detect_count_coherence),
     ("D7", "Honnêteté métriques", detect_metric_honesty),
     ("D8", "Propriétés falsifiables", detect_property_claims),
+    ("D9", "Branches et PRs orphelines", detect_orphan_branches),
 )
 
 
