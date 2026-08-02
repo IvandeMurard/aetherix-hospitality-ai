@@ -34,6 +34,12 @@ def _write(root: Path, rel: str, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _iso_days_ago(days: int) -> str:
+    import datetime as _dt
+    when = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)
+    return when.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _titles(result) -> str:
     return " ".join(f.title for f in result.findings)
 
@@ -720,3 +726,115 @@ def test_d9_watches_more_than_the_current_repo(monkeypatch):
     """AC4: the costly incident was on the meta-repo, not here."""
     assert len(hygiene.WATCHED_REPOS) >= 2
     assert any("hospitality-agentic-mesh" in r for r in hygiene.WATCHED_REPOS)
+
+
+# ─── D10 · Cron d'hygiène en vie ──────────────────────────────────────────────
+
+
+def _fake_runs(monkeypatch, payload):
+    monkeypatch.setattr(hygiene.shutil, "which", lambda _: "/usr/bin/gh")
+    monkeypatch.setattr(hygiene, "_gh", lambda args: payload)
+
+
+def test_d10_recent_run_is_clean(monkeypatch):
+    _fake_runs(monkeypatch, [{"created_at": _iso_days_ago(2), "html_url": "u"}])
+
+    result = hygiene.Result()
+    hygiene.detect_cron_liveness(result)
+
+    assert result.findings == []
+
+
+def test_d10_silent_cron_is_drift(monkeypatch):
+    """Silence from a reporting job is not evidence of a clean week."""
+    _fake_runs(monkeypatch, [{"created_at": _iso_days_ago(40), "html_url": "u"}])
+
+    result = hygiene.Result()
+    hygiene.detect_cron_liveness(result)
+
+    assert len(result.drift) == 1
+    assert "muet depuis 40 jours" in result.drift[0].title
+
+
+def test_d10_workflow_that_never_succeeded_is_drift(monkeypatch):
+    _fake_runs(monkeypatch, [])
+
+    result = hygiene.Result()
+    hygiene.detect_cron_liveness(result)
+
+    assert len(result.drift) == 1
+    assert "aucun run réussi" in result.drift[0].title
+
+
+def test_d10_unreadable_state_records_a_skip(monkeypatch):
+    """Same rule as D9: no verdict is not a clean verdict."""
+    monkeypatch.setattr(hygiene.shutil, "which", lambda _: "/usr/bin/gh")
+    monkeypatch.setattr(hygiene, "_gh", lambda args: None)
+
+    result = hygiene.Result()
+    hygiene.detect_cron_liveness(result)
+
+    assert result.findings == []
+    assert any("illisible" in s for s in result.skipped)
+
+
+# ─── --fix · resynchronisation du harnais ─────────────────────────────────────
+
+
+def test_fix_regenerates_the_derived_harness(fake_repo):
+    _write(fake_repo, "CLAUDE.md", "# CLAUDE.md\n\nVoir `CLAUDE.md` §X.\n")
+    _write(fake_repo, "AGENTS.md", "# AGENTS.md\n\nversion périmée\n")
+
+    assert hygiene.fix_harness() == 0
+
+    produced = (fake_repo / "AGENTS.md").read_text(encoding="utf-8")
+    assert produced == "# AGENTS.md\n\nVoir `AGENTS.md` §X.\n"
+
+
+def test_fix_is_idempotent(fake_repo):
+    body = "# CLAUDE.md\n\ncontenu\n"
+    _write(fake_repo, "CLAUDE.md", body)
+    _write(fake_repo, "AGENTS.md", body.replace("CLAUDE.md", "AGENTS.md"))
+
+    assert hygiene.fix_harness() == 0
+    once = (fake_repo / "AGENTS.md").read_text(encoding="utf-8")
+    assert hygiene.fix_harness() == 0
+    assert (fake_repo / "AGENTS.md").read_text(encoding="utf-8") == once
+
+
+def test_fix_output_satisfies_d1(fake_repo):
+    """The fix must actually close the gate it exists to close."""
+    _write(fake_repo, "CLAUDE.md", "# CLAUDE.md\n\nLLM — `claude-sonnet-4-6`\n")
+    _write(fake_repo, "AGENTS.md", "# AGENTS.md\n\nLLM — `Codex-sonnet-4-6`\n")
+
+    hygiene.fix_harness()
+
+    result = hygiene.Result()
+    hygiene.detect_harness_drift(result)
+    assert result.drift == []
+
+
+def test_fix_without_canonical_is_an_error(fake_repo):
+    assert hygiene.fix_harness() == 2
+
+
+# ─── Exclusion de scan ────────────────────────────────────────────────────────
+
+
+def test_scan_excludes_nested_worktrees_and_vendor_trees():
+    assert hygiene._scan_excluded(".claude/worktrees/x/docs/a.md")
+    assert hygiene._scan_excluded(".git/COMMIT_EDITMSG")
+    assert hygiene._scan_excluded("backend/.venv/lib/x.md")
+    assert hygiene._scan_excluded("ui/node_modules/pkg/readme.md")
+    assert not hygiene._scan_excluded("docs/context/moat.md")
+
+
+def test_d7_ignores_a_stale_worktree_copy(fake_repo, monkeypatch):
+    """A dead copy of the repo must not be able to fail a detector."""
+    monkeypatch.setattr(hygiene, "METRIC_CLAIM_EXCEPTIONS", {})
+    _write(fake_repo, ".claude/worktrees/old/docs/pitch.md", "MAPE 15.09% en production\n")
+
+    result = hygiene.Result()
+    hygiene.detect_metric_honesty(result)
+
+    assert result.findings == []

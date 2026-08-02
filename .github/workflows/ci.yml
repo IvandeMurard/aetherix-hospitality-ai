@@ -202,9 +202,8 @@ jobs:
             echo "❌ Une convention documentaire est violée. Voir le détail au-dessus."
             echo ""
             echo "  D1 — CLAUDE.md et AGENTS.md ont divergé."
-            echo "     Ils portent un contenu identique ; seul leur propre nom diffère."
-            echo "     Resynchroniser :"
-            echo "       python -c \"from pathlib import Path; Path('AGENTS.md').write_text(Path('CLAUDE.md').read_text(encoding='utf-8').replace('CLAUDE.md','AGENTS.md'), encoding='utf-8')\""
+            echo "     AGENTS.md est un dérivé de CLAUDE.md : le régénérer, pas l'éditer."
+            echo "       python scripts/ops/hygiene_architecturale.py --fix"
             echo "     Divergence légitime (instruction propre à un harness) → HARNESS_EXCEPTIONS, avec justification."
             echo ""
             echo "  D5 — un fichier dépasse le plafond qu'il déclare lui-même."
@@ -216,4 +215,31 @@ jobs:
             echo "     Préférer retirer le nombre codé en dur plutôt que le corriger :"
             echo "     un chiffre dupliqué dérive au premier ajout."
             exit 1
+          fi
+
+      # D10 — dead-man's switch du cron hebdomadaire (HOS-325).
+      #
+      # Il est porté ici, et pas par le workflow qu'il surveille : un chien de
+      # garde hébergé par le processus qu'il observe meurt avec lui. La CI de PR
+      # tourne dès que quelqu'un travaille, c'est le seul support fiable.
+      #
+      # Volontairement NON bloquant. Un cron mort n'est pas la faute de l'auteur
+      # de la PR courante, et faire échouer son merge pour ça apprend à
+      # contourner le gate — même raison que D2/D3/D4 restent report-only.
+      - name: Cron d'hygiène en vie (D10 — avertissement, jamais bloquant)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! python scripts/ops/hygiene_architecturale.py --detectors D10; then
+            echo "::warning title=Cron d'hygiène muet::Le workflow hebdomadaire n'a pas abouti depuis plus de 10 jours. Son silence ne prouve donc plus l'absence de drift — vérifier Actions → Hygiène architecturale."
+            {
+              echo "### ⚠️ Cron d'hygiène muet"
+              echo
+              echo "Le workflow hebdomadaire ne parle que lorsqu'il trouve du drift."
+              echo "Passé le seuil, l'hypothèse la plus probable n'est plus « aucun drift »"
+              echo "mais « plus personne ne regarde »."
+              echo
+              echo "GitHub désactive un cron après 60 jours sans activité du dépôt."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
