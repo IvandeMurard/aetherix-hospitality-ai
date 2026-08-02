@@ -18,7 +18,7 @@
 
 ---
 
-> **🕸️ Part of the [Hospitality Agentic Mesh](https://github.com/IvandeMurard/hospitality-agentic-mesh)** — a network of specialized AI agents for hotel operations. Aetherix is the F&B execution node; the environmental-risk node ([Tacet](https://github.com/IvandeMurard/tacet-app), public repo) and the overall architecture are documented in the [meta-repo](https://github.com/IvandeMurard/hospitality-agentic-mesh) and the [case study](https://ivandemurard.com/aetherix).
+> ** Part of the [Hospitality Agentic Mesh](https://github.com/IvandeMurard/hospitality-agentic-mesh)** — a network of specialized AI agents for hotel operations. Aetherix is the F&B execution node; the environmental-risk node ([Tacet](https://github.com/IvandeMurard/tacet-app), public repo) and the overall architecture are documented in the [meta-repo](https://github.com/IvandeMurard/hospitality-agentic-mesh) and the [case study](https://ivandemurard.com/aetherix).
 
 ## What Aetherix is
 
@@ -69,7 +69,7 @@ Breakfast    84 covers   ·  confidence 88%        (illustrative)
 Driver       local conference check-ins + clear weather
 Last week    forecast 79 · actual 81 · MAPE 2.5%
 
-Reply  ✅ accept   ✏️ modify   ❌ reject
+Reply   accept    modify    reject
 ```
 
 The manager replies in one tap. That reply (accepted, rejected, modified) is the signal Aetherix learns from. The receipt on day 90 is sharper than the one on day 7.
@@ -83,15 +83,15 @@ Aetherix is one node in a network of specialized, MCP-native agents. Each node o
 ```mermaid
 %%{init: {'theme':'dark','themeVariables':{'lineColor':'#6b7280','primaryColor':'#1e1b4b','primaryBorderColor':'#6366f1','primaryTextColor':'#e9d5ff'}}}%%
 flowchart LR
-    TACET["🌦️ Tacet\nSensory node"] -- "risk scores" --> ORCH
-    PMS["🏨 PMS · Apaleo\noccupancy · data"] -- "MCP" --> ORCH
-    ANIMA["💛 Anima\nguest context"] -- "MCP" --> ORCH
-    ORCH["🧭 Orchestrator\n(routes · decides)"] -- "MCP call" --> AETX
-    AETX["🍽️ Aetherix\nF&B execution\n(this repo)"] -- "WhatsApp" --> MGR(["👤 Hotel manager"])
-    AETX -- "embedded intel" --> TOOLS(["🔧 PMS · POS\nexisting tools"])
-    AETX -- "MCP tools" --> OAGENTS(["🤖 Other agents"])
+    TACET[" Tacet\nSensory node"] -- "risk scores" --> ORCH
+    PMS[" PMS · Apaleo\noccupancy · data"] -- "MCP" --> ORCH
+    ANIMA[" Anima\nguest context"] -- "MCP" --> ORCH
+    ORCH[" Orchestrator\n(routes · decides)"] -- "MCP call" --> AETX
+    AETX[" Aetherix\nF&B execution\n(this repo)"] -- "WhatsApp" --> MGR([" Hotel manager"])
+    AETX -- "embedded intel" --> TOOLS([" PMS · POS\nexisting tools"])
+    AETX -- "MCP tools" --> OAGENTS([" Other agents"])
     MGR -- "feedback loop" --> AETX
-    HIVE[("🧠 HiveMemory\ncross-hotel patterns")] -. "cold-start · calibration" .-> AETX
+    HIVE[(" HiveMemory\ncross-hotel patterns")] -. "cold-start · calibration" .-> AETX
 
     style AETX fill:#2d1b69,stroke:#a855f7,stroke-width:3px,color:#f3e8ff
     style ORCH fill:#1e1b4b,stroke:#6366f1,color:#c7d2fe
@@ -103,11 +103,11 @@ Statuses follow the [status taxonomy](docs/context/status-taxonomy.md) — `Buil
 
 | Node | Role | Status |
 |------|------|--------|
-| 🍽️ **Aetherix** | F&B execution: forecasting, staffing, memory, receipts | ✅ **Built** — staging Fly.io, **0 real users** |
-| 🌦️ **Tacet** | Sensory: weather, noise, open data, structured risk scores | 🧪 **Synthetic PoC** — public repo, no CI |
-| 🧭 **Orchestrator** | Supervisory: MCP routing, business rules, agentic loop | 📐 **Design** — proto-stub Phase 3, engine specified not built |
-| 💛 **Anima** | Guest Cognition Layer: emotional state, CRM, flight delays, 4-layer profile | 🧪 **Synthetic PoC** — Anthropic hackathon Jun 2026, never in production (DPIA-gated) |
-| 🧠 **HiveMemory federated / Learning Engine** | Cross-property anonymized priors, threshold calibration | 🔬 **Research** — no substrate, Hive foundation frozen (Décision #23) |
+| **Aetherix** | F&B execution: forecasting, staffing, memory, receipts | **Built** — staging Fly.io, **0 real users** |
+| **Tacet** | Sensory: weather, noise, open data, structured risk scores | **Synthetic PoC** — public repo, no CI |
+| **Orchestrator** | Supervisory: MCP routing, business rules, agentic loop | **Design** — proto-stub Phase 3, engine specified not built |
+| **Anima** | Guest Cognition Layer: emotional state, CRM, flight delays, 4-layer profile | **Synthetic PoC** — Anthropic hackathon Jun 2026, never in production (DPIA-gated) |
+| **HiveMemory federated / Learning Engine** | Cross-property anonymized priors, threshold calibration | **Research** — no substrate, Hive foundation frozen (Décision #23) |
 
 Full vision: [`docs/mesh-architecture.md`](docs/mesh-architecture.md)
 
@@ -158,17 +158,17 @@ submit_feedback_to_memory(recommendation_id, outcome, notes)
 ```mermaid
 %%{init: {'theme':'dark','themeVariables':{'lineColor':'#6b7280'}}}%%
 flowchart TD
-    ORCH["🧭 Orchestrator / external agent"] -- MCP --> MCPIN["MCP Server /mcp/v1/"]
-    PMS["🏨 Apaleo"] -- OAuth2/MCP --> SVC
-    EXT["🌍 Weather · Events · Open Data"] --> SVC
-    MCPIN --> SVC["⚙️ F&B services\nforecast · staffing · receipts"]
-    SCHED["⏰ APScheduler"] --> SVC
-    SVC --> PROPHET["📈 Prophet + regressors"]
-    SVC --> VEC[("🧠 pgvector\noperational_memory")]
-    PROPHET --> LLM["🤖 Claude Sonnet\n(multi-LLM provider)"]
+    ORCH[" Orchestrator / external agent"] -- MCP --> MCPIN["MCP Server /mcp/v1/"]
+    PMS[" Apaleo"] -- OAuth2/MCP --> SVC
+    EXT[" Weather · Events · Open Data"] --> SVC
+    MCPIN --> SVC[" F&B services\nforecast · staffing · receipts"]
+    SCHED[" APScheduler"] --> SVC
+    SVC --> PROPHET[" Prophet + regressors"]
+    SVC --> VEC[(" pgvector\noperational_memory")]
+    PROPHET --> LLM[" Claude Sonnet\n(multi-LLM provider)"]
     VEC --> LLM
     LLM --> SVC
-    SVC --> OUT["📲 WhatsApp · Email · PMS/POS embed"]
+    SVC --> OUT[" WhatsApp · Email · PMS/POS embed"]
     SVC -- "feedback loop" --> VEC
 ```
 </details>
@@ -216,25 +216,25 @@ flowchart TD
 
 | Gate | Result |
 |------|--------|
-| Forecasting harness (Prophet + regressors) | ✅ Built |
-| MCP Server | ✅ Shipped: `/mcp/`, atomic tools |
-| Staging deploy | ✅ Live: `aetherix-backend.fly.dev` |
-| Apaleo · Daily Receipt · WhatsApp | ✅ End-to-end |
-| RLS security | ✅ 14/14 tables |
-| Real-world MAPE · first design partner | 🔨 Phase 3 in progress |
+| Forecasting harness (Prophet + regressors) | Built |
+| MCP Server | Shipped: `/mcp/`, atomic tools |
+| Staging deploy | Live: `aetherix-backend.fly.dev` |
+| Apaleo · Daily Receipt · WhatsApp | End-to-end |
+| RLS security | 14/14 tables |
+| Real-world MAPE · first design partner | Phase 3 in progress |
 
 | Phase | Status | Highlights |
 |-------|--------|------------|
-| 0 — Validation harness | ✅ | Backtest pipeline · MCP Server · staging live |
-| 1 — Observability | ✅ | Action log · rate-limiter · memory instrumentation |
-| 2 — Receipts | ✅ | Daily Receipt · WhatsApp · inbound feedback · weekly digest |
-| 3 — Pilot | 🔨 | Design partner · Orchestrator separation · HiveMemory algorithm |
-| 4 — Scale | 📋 | Mews · POS ingestion · Federated HiveMemory · Context Graph · Anima |
+| 0 — Validation harness | | Backtest pipeline · MCP Server · staging live |
+| 1 — Observability | | Action log · rate-limiter · memory instrumentation |
+| 2 — Receipts | | Daily Receipt · WhatsApp · inbound feedback · weekly digest |
+| 3 — Pilot | | Design partner · Orchestrator separation · HiveMemory algorithm |
+| 4 — Scale | | Mews · POS ingestion · Federated HiveMemory · Context Graph · Anima |
 
 Architecture decisions (26 documented): [`docs/context/decisions-architecturales.md`](docs/context/decisions-architecturales.md) · Roadmap: [Linear](https://linear.app/hospitalityagent/team/HOS/all)
 
 ---
 
 <p align="center">
-  <em>Built with ❤️ for hotels, restaurants, and those who love them — by Ivan de Murard</em>
+  <em>Built with  for hotels, restaurants, and those who love them — by Ivan de Murard</em>
 </p>
