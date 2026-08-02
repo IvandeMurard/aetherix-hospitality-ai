@@ -5,15 +5,15 @@ Detects drift between what the repo *says* and what the repo *is*, then emits a
 Markdown report. It never edits code and never writes to the eval dataset: the
 workflow turns its output into a documentation-only PR that a human merges.
 
-Nine detectors. D1-D8 are static and deterministic — no network, no secrets, no
+Ten detectors. D1-D8 are static and deterministic — no network, no secrets, no
 runtime access. That is deliberate: a hygiene agent that needs credentials is a
 new attack surface, and Epic 16 NFR2 freezes new runtime surface.
 
-D9 is the documented exception (HOS-324). Branch and PR state exists only on the
-forge, so it shells out to `gh` with the token CI already provides. It reads and
-never writes, it is excluded from the blocking PR subset, and when `gh` is
-absent or unauthenticated it records a skip rather than reporting clean — a
-blind detector must say so.
+D9 and D10 are the documented exceptions (HOS-324, HOS-325). Branch, PR and
+workflow-run state exists only on the forge, so they shell out to `gh` with the
+token CI already provides. They read and never write, stay out of the blocking
+PR subset, and record a skip rather than reporting clean when `gh` is absent or
+unauthenticated — a blind detector must say so.
 
   D1  harness drift   — CLAUDE.md vs AGENTS.md (same content, two harnesses)
   D2  doc → code      — backticked paths in docs resolve to files that exist
@@ -30,6 +30,8 @@ blind detector must say so.
   D9  orphan work     — branches pushed with no PR, PRs left conflicting or
                         stale, branches surviving their merged PR (HOS-324).
                         Reads the forge; weekly report only, never blocking.
+  D10 cron liveness   — the weekly agent proves it still runs (HOS-325). Run
+                        from the PR CI, never from the cron it watches.
 
 Usage:
   python scripts/ops/hygiene_architecturale.py
@@ -108,6 +110,26 @@ PLANNED_PATHS = {
 # every such citation as broken — ~13 false positives on the first run, and a
 # detector that cries wolf gets switched off within a fortnight.
 LOCAL_ONLY_PREFIXES = ("docs/veille/", "docs/_archive/", "tools/bmad/_bmad/")
+
+# Paths no tree-walking detector may descend into. `.claude/worktrees/` holds up
+# to sixteen full copies of this repo: without this, D7 scans every doc sixteen
+# times and can fail on a stale copy that is no longer the repository at all.
+# The rest are the usual non-source trees.
+SCAN_EXCLUDED_PREFIXES = (
+    ".git/",
+    ".claude/",
+    ".venv/",
+    "node_modules/",
+    "__pycache__/",
+)
+
+
+def _scan_excluded(rel: str) -> bool:
+    """True when a repo-relative path belongs to a tree we never scan."""
+    return any(
+        rel.startswith(prefix) or f"/{prefix}" in rel
+        for prefix in SCAN_EXCLUDED_PREFIXES
+    )
 
 # D3 — env var declarations. The doc side moved out of CLAUDE.md on 30/07 (it is
 # neither a session fact nor an index); pointing D3 at the old heading would let
@@ -298,6 +320,20 @@ BRANCH_EXCEPTIONS: dict[str, str] = {
 }
 
 _GH_TIMEOUT = 30
+
+# ─── D10 · Cron d'hygiène en vie ──────────────────────────────────────────────
+# The dead-man's switch the tooling was missing while imposing one on the
+# product (Epic 12 G-1). The weekly workflow only speaks when it finds drift, so
+# a failed run — or a cron GitHub silently disabled after 60 days of repo
+# inactivity — is indistinguable from a clean week.
+#
+# It is deliberately *not* run by the workflow it watches: a detector hosted by
+# the thing it observes never notices its own death. Its carrier is the PR CI,
+# which runs whenever anyone works, as a warning rather than a failure.
+CRON_WORKFLOW = "hygiene-architecturale.yml"
+# Weekly cadence plus slack for a skipped Monday. Beyond this the silence is
+# no longer plausibly normal.
+CRON_MAX_AGE_DAYS = 10
 
 
 # ─── Detector plumbing ────────────────────────────────────────────────────────
@@ -714,7 +750,7 @@ def detect_metric_honesty(result: Result) -> None:
     scanned = 0
     for path in sorted(_ROOT.rglob("*.md")):
         rel = path.relative_to(_ROOT).as_posix()
-        if rel.startswith(".git/") or any(rel.startswith(p) for p in METRIC_CLAIM_EXCEPTIONS):
+        if _scan_excluded(rel) or any(rel.startswith(p) for p in METRIC_CLAIM_EXCEPTIONS):
             continue
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
@@ -971,6 +1007,71 @@ def detect_orphan_branches(result: Result) -> None:
         )
 
 
+# ─── D10 · Cron d'hygiène en vie ──────────────────────────────────────────────
+
+
+def detect_cron_liveness(result: Result) -> None:
+    """The weekly agent must prove it still runs, not merely stay silent.
+
+    Silence from a reporting job has two causes that look identical from the
+    outside: nothing to report, or nothing running. This detector separates
+    them by reading the last *successful* run of the workflow.
+
+    Run it from the PR CI, never from the weekly workflow itself — a watchdog
+    hosted by the process it watches dies with it.
+    """
+    repo = WATCHED_REPOS[0]
+    runs = _gh([
+        "api",
+        f"repos/{repo}/actions/workflows/{CRON_WORKFLOW}/runs"
+        "?status=success&per_page=1",
+        "--jq",
+        "[.workflow_runs[] | {created_at, html_url}]",
+    ])
+
+    if runs is None:
+        result.skipped.append(
+            f"D10: état du cron `{CRON_WORKFLOW}` illisible (gh absent, non authentifié, "
+            "ou workflow inconnu) — aucun verdict rendu, ce n'est pas « clean »."
+        )
+        return
+
+    if not runs:
+        result.findings.append(
+            Finding(
+                detector="D10",
+                title=f"`{CRON_WORKFLOW}` n'a aucun run réussi",
+                detail="Le workflow existe mais n'a jamais abouti. Tant que c'est le cas, "
+                "l'agent d'hygiène ne surveille rien : ses détecteurs ne s'exécutent que là.",
+            )
+        )
+        return
+
+    last = runs[0]
+    age = _age_days(last.get("created_at", ""))
+    if age is None:
+        result.skipped.append(f"D10: date du dernier run illisible pour `{CRON_WORKFLOW}`")
+        return
+
+    if age <= CRON_MAX_AGE_DAYS:
+        return
+
+    result.findings.append(
+        Finding(
+            detector="D10",
+            title=f"Cron d'hygiène muet depuis {age} jours (seuil : {CRON_MAX_AGE_DAYS})",
+            detail=f"Dernier run réussi : {last.get('created_at', '?')[:10]} — "
+            f"{last.get('html_url', '')}\n\n"
+            "Le workflow hebdomadaire ne parle que lorsqu'il trouve du drift ; son silence "
+            "ne prouve donc rien. Au-delà du seuil, l'hypothèse la plus probable n'est plus "
+            "« aucun drift » mais « plus personne ne regarde ».\n\n"
+            "Causes usuelles : GitHub désactive un cron après 60 jours sans activité du dépôt, "
+            "le workflow échoue en amont des détecteurs, ou le fichier a été renommé sans "
+            "mettre à jour `CRON_WORKFLOW`.",
+        )
+    )
+
+
 DETECTORS = (
     ("D1", "Drift harness", detect_harness_drift),
     ("D2", "Doc → code", detect_doc_paths),
@@ -981,6 +1082,7 @@ DETECTORS = (
     ("D7", "Honnêteté métriques", detect_metric_honesty),
     ("D8", "Propriétés falsifiables", detect_property_claims),
     ("D9", "Branches et PRs orphelines", detect_orphan_branches),
+    ("D10", "Cron d'hygiène en vie", detect_cron_liveness),
 )
 
 
@@ -1029,8 +1131,48 @@ def render_report(result: Result, today: str) -> str:
     return "\n".join(lines)
 
 
+def fix_harness() -> int:
+    """Regenerate the derived harness files from the canonical one.
+
+    `AGENTS.md` is not a document anyone maintains: it is `CLAUDE.md` with its
+    self-references renamed. A derived artefact kept in sync by hand drifts —
+    that is its definition, and it cost two cycles on 2026-08-01. D1 catches the
+    drift; this closes it without anyone retyping a one-liner.
+
+    Idempotent, and it only ever writes files already declared in HARNESS_FILES.
+    """
+    canonical, *derived = HARNESS_FILES
+    base = _read(canonical)
+    if base is None:
+        print(f"❌ {canonical} introuvable — rien à propager.", file=sys.stderr)
+        return 2
+
+    changed = []
+    for name in derived:
+        target = _ROOT / name
+        wanted = base.replace(canonical, name)
+        if target.is_file() and target.read_text(encoding="utf-8") == wanted:
+            continue
+        target.write_text(wanted, encoding="utf-8")
+        changed.append(name)
+
+    if not changed:
+        print("✅ Harnais déjà synchronisé — aucun fichier réécrit.")
+    else:
+        for name in changed:
+            print(f"✏️  {name} régénéré depuis {canonical}")
+        print("\nRelire le diff avant de committer : `git diff`.")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Agent d'hygiène architecturale (HOS-320)")
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Régénère les harnais dérivés (AGENTS.md) depuis le canonique (CLAUDE.md). "
+        "Seule correction automatique de l'agent : elle ne touche qu'un artefact dérivé.",
+    )
     parser.add_argument("--report", help="Chemin du rapport Markdown à écrire")
     parser.add_argument("--json", action="store_true", help="Émettre le résultat en JSON sur stdout")
     parser.add_argument(
@@ -1039,6 +1181,9 @@ def main() -> int:
         "Le contrôle PR bloquant n'exécute que D1 — voir .github/workflows/ci.yml.",
     )
     args = parser.parse_args()
+
+    if args.fix:
+        return fix_harness()
 
     selected = None
     if args.detectors:
