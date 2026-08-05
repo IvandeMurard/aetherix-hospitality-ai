@@ -314,6 +314,22 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 ---
 
+### 34 — Apaleo A2A : wait-and-see, Aetherix reste MCP standalone (30/07/2026)
+
+**Trigger :** audit fonctionnel Trace Agent (HOS-285) + spike A2A (HOS-278), tous deux flaggés par la veille du 20-22/06 (W2 RE-FIRED) qui avait correctement identifié l'annonce A2A mais surestimé sa maturité en la traitant comme actionnable « avant le pilote M4 ». Audit livré 30/07/2026, détail complet `docs/context/apaleo-a2a-spike-decision.md` et `docs/competitive/apaleo-trace-agent-analysis.md`.
+
+**Constat de l'audit (4 sources publiques)** : Trace Agent (partenariat THE FLAG) ne couvre ni F&B, ni couverts, ni staffing, ni prévision — tâches réelles = amenities/room setup/dietary requirements/celebrations, créées dans Sweeply. Agent **réactif** (transforme une intention déjà écrite), pas prédictif — différence de classe de problème avec Aetherix, pas de maturité. Sur le protocole lui-même : au 30/07/2026, `apaleo.dev` ne documente que deux chemins d'intégration tiers (Claude Plugin, MCP Server OAuth2 ~230 tools) — **aucune spec A2A, aucun modèle d'auth, aucun endpoint**. Toute mention A2A est au futur (*"third-party apps and agents will also be able to connect"*) — **la cible n'existait pas** au moment du spike.
+
+**Décision :** Aetherix reste MCP standalone. Pas de branchement A2A tant que le protocole n'est pas une interface réelle. **Pourquoi attendre ne coûte rien** : Décision #19 (Aetherix = F&B execution node appelé par un orchestrateur externe) rend Aetherix structurellement déjà prêt pour un branchement A2A futur — aucune dette d'architecture à provisionner en attendant. Le risque d'un branchement précoce est lui bien réel et asymétrique : se brancher en A2A ferait disparaître le Daily Receipt derrière l'UI Copilot et commoditiserait la couche exécution — soit précisément le wedge produit.
+
+**Reformulation du vecteur de menace (conséquence de l'audit, pas un sujet séparé)** : Apaleo ne construit pas les agents F&B, il fournit les rails — Agent Hub (marketplace vendor-neutral, monétisée) + Agent Factory (co-construction co-financée avec hôteliers/partenaires). Trace Agent a été bâti avec un tiers (Sweeply) en prototype 1 mois → production 2,5 mois. Le risque pertinent n'est donc plus *"Apaleo absorbe le F&B"* (hors de son modèle, Scénario C affaibli) mais *"un tiers publie un agent F&B sur Agent Hub en un trimestre"* — catégorie F&B vacante au 30/07 (agents cités : Email Booking, Corporate Sales, Digital Twin, CRM & Guest Experience). Nouveau trigger d'escalade ajouté au monitoring W2, indépendant du scope propre du Copilot.
+
+**Conditions de bascule (rouvrir le spike A2A si l'une se déclenche)** : **B1** spec A2A publique sur `apaleo.dev` (protocole + auth + endpoint) · **B2** un tiers publie un agent F&B/covers/staffing via Agent Hub ou A2A (partagé avec le trigger W2 ci-dessus) · **B3** un design partner exige la livraison via Copilot · **B4** Apaleo conditionne le référencement Agent Hub à une connexion A2A. Sans trigger : **re-vérification trimestrielle, 30/10/2026.**
+
+**Statut watchlist W2 (canari Apaleo Copilot scope F&B) :** dé-escaladé — cadence bi-hebdo → mensuelle (7 semaines sans nouveau signal F&B). Reste **ouvert** (`docs/context/open-decisions.md`), ce n'est pas le canari lui-même qui est tranché, seul le volet protocole A2A l'est. Détail complet et vivant : vault Obsidian `Veille/Veille_Watchlist_W2_Apaleo.md` (source de vérité pour tout futur update de ce canari, cf. Décision consolidation veille 10/07 — pas dans ce repo).
+
+---
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).
