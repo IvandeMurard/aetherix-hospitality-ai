@@ -69,6 +69,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - `context/open-decisions.md` — décisions ouvertes + archive des résolues
 - `context/analyse-critique-2026-07.md` — **audit critique complet Aetherix+Tacet (07/07/2026)** : chaîne de valeur 5 maillons, circularité MAPE synthétique, différenciation, wedge/moat, risques crédibilité
 - `context/positionnement-wedge.md` — **le wedge acté (09/07)** : "mémoire opérationnelle, le forecast est un organe" — référence pour tout support externe (case study, méta-repo, article, LinkedIn) + discipline de langage
+- `context/anima-context-thesis.md` — **thèse Anima (03/08)** : contexte humain pertinent avant action, frontière Anima (compréhension) / Aetherix (exécution) ; **Research**, sans nouveau scope ni promesse produit
 - `context/moat.md` — **ce qui est défendable, testé contre la menace plateforme** (09/07) : 4 couches de moat + stress test "et si Apaleo/Mews shippent un forecast natif ?" + risque résiduel nommé
 - `context/data-conventions.md` — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
