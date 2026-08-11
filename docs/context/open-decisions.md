@@ -217,6 +217,25 @@ Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni co
 
 **Dépendances :** implémentation d'ADR-0012 elle-même gated par le tranchage de "Interaction model event-driven Phase 4-5" (ci-dessus) — ce point ne peut être calibré qu'une fois les deux construits.
 
+### Périmètre de la métacognition — trace vérifiable vs auto-explication du modèle (11/08/2026)
+
+**Statut :** Open — **rien à construire avant les premières données de calibration.** Ouverte pour que la question ne se reperde pas, pas pour être instruite maintenant (gel Epic 16 : ni nouvel ADR, ni extension Mesh).
+
+**Trigger :** premières courbes de calibration issues du pilote — c'est-à-dire ≥ 4 semaines de décisions réelles avec trace d'émission (HOS-326) et outcomes mesurés (HOS-317). Pas avant : aujourd'hui il n'y a rien à corréler.
+
+**La question :** jusqu'où le système doit-il « comprendre pourquoi il a recommandé ça » — et par quel mécanisme. Le mot recouvre quatre objets de coût et de statut de preuve très différents, qu'il faut refuser de traiter ensemble :
+
+1. **Trace d'émission** — quelles entrées, quelle règle, quel seuil, quelle confiance, quelle version de politique. Déterministe, vérifiable, bornée. C'est HOS-326. **Pas une décision ouverte, du travail planifié.**
+2. **Auto-surveillance à l'exécution** — refuser ou dégrader quand la compétence manque. **Déjà construit** : `abstention.py` (raisons typées), `forecast_guardrail.py` (2 paliers de confiance, jamais de blanc), `output_sanity.py`, `feedback_guard.py` — Epic 12 / ADR-0009 / Décision #27. Métacognition au sens utile : un signal explicite de compétence branché sur une conséquence, pas une machine qui « s'interroge ».
+3. **Amélioration dans la durée** — recalibrer des paramètres est de l'ingénierie ; *apprendre à mieux décider* bute sur un mur qui n'est pas budgétaire : sous politique déterministe il n'existe aucun contre-factuel. Il faut soit varier délibérément les décisions (expérimenter sur de vrais services), soit se limiter à des comparaisons avant/après grossières. La première voie heurte frontalement la **Décision #6** (aucune action automatique) — c'est un arbitrage produit et éthique, pas une feature.
+4. **Auto-explication du modèle** — ⚠️ **le piège, et il vise ce projet en particulier.** Demander à un LLM d'expliquer son raisonnement ne restitue pas son raisonnement : ça produit un récit plausible *sur* ce raisonnement, généré par le même mécanisme, sans accès privilégié au calcul réel. `explainability_service.py` appelle Claude pour produire l'explication envoyée au manager ; si cette explication devient une **entrée** de la boucle d'apprentissage, on entraîne le système sur ses propres confabulations. `eval/FAILURE_THRESHOLDS.md` classe déjà « explication factuellement fausse » comme mode d'échec, avec juge calibré obligatoire (Décision #32, ADR-0007 §14) — l'instinct est posé, il reste à le tenir comme règle.
+
+**Ce qui reste à trancher :** (a) la règle « l'explication du modèle est une sortie à vérifier, jamais une entrée de confiance » devient-elle une contrainte formelle du Learning Engine (candidate à ADR au dégel) ou reste-t-elle une convention d'eval ; (b) s'autorise-t-on à varier délibérément les décisions pour rendre l'apprentissage possible, et sous quel régime de consentement du partenaire pilote.
+
+**Le test qui rend le tout falsifiable :** une prétention métacognitive ne vaut que si **la confiance annoncée prédit l'erreur réelle**. Mesurable dès que le pilote produit des données — courbe de calibration, et le cas qui intéresse est celui que [HOS-284](https://linear.app/hospitalityagent/issue/HOS-284) nomme déjà : *confidently wrong*. Si la confiance ne prédit pas l'erreur, la couche 1 du moat (`moat.md`) est à revoir — ce serait un résultat, pas un échec.
+
+**Voisins :** [HOS-326](https://linear.app/hospitalityagent/issue/HOS-326) (trace d'émission) · §Rattachement Bras C ci-dessus · §Politique d'exploration éthique · §Méthode off-policy evaluation · Décision #6 · Décision #32 · Décision #33.
+
 ---
 
 ## Resolved (archive)
