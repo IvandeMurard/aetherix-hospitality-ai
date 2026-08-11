@@ -19,6 +19,12 @@ Ce qui est défendable se situe autour de la prédiction, en quatre couches qui 
 2. **La position dans la boucle act-and-measure** (Décision #26-D5). Seul acteur qui *agit*
    (recommande) + *capture* (l'outcome réel) + *attribue* (l'écart, nommé) + *recalibre*. Qui n'a
    pas les quatre n'apprend pas — il prédit dans le vide.
+   > **État au 11/08/2026** — `Built`, 0 utilisateur réel (taxonomie `status-taxonomy.md`). Le
+   > Decision Ledger (HOS-317, Done 01/08) relie contexte → reco → réponse manager → outcome mesuré
+   > → abstention typée. Manque le leg **trace d'émission** (`policy_id` + entrées de sélection +
+   > confiance/tier), seul leg non reconstructible après coup : HOS-326, S3, précondition dure du
+   > go-live (`docs/planning/phase-3-sprint-plan.md` §Amendement 11/08). Le corpus lui-même ne
+   > commence qu'au premier override d'un manager réel, c'est-à-dire à HOS-176.
 3. **L'agnosticisme PMS** (schéma canonique, Décision #28). La mémoire vit *au-dessus* d'Apaleo ET
    de Mews, pas dedans. Un groupe multi-PMS a une seule mémoire ; un PMS natif ne verra jamais que
    ses propres propriétés.
