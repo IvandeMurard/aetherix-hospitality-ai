@@ -778,6 +778,79 @@ def test_d10_unreadable_state_records_a_skip(monkeypatch):
     assert any("illisible" in s for s in result.skipped)
 
 
+# ─── D11 · CI de main au rouge ────────────────────────────────────────────────
+
+
+def test_d11_green_main_is_clean(monkeypatch):
+    _fake_runs(
+        monkeypatch,
+        [{"created_at": _iso_days_ago(9), "conclusion": "success", "html_url": "u"}],
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_red_main(result)
+
+    assert result.findings == []
+
+
+def test_d11_fresh_red_is_not_yet_drift(monkeypatch):
+    """A red caught and fixed the same day is normal operation, not drift."""
+    _fake_runs(
+        monkeypatch,
+        [{"created_at": _iso_days_ago(1), "conclusion": "failure", "html_url": "u"}],
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_red_main(result)
+
+    assert result.findings == []
+
+
+def test_d11_installed_red_is_drift(monkeypatch):
+    """The 2026-08-05 incident: red for six days, four PRs merged on top."""
+    _fake_runs(
+        monkeypatch,
+        [{"created_at": _iso_days_ago(6), "conclusion": "failure", "html_url": "u"}],
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_red_main(result)
+
+    assert len(result.drift) == 1
+    assert "rouge depuis 6 jours" in result.drift[0].title
+
+
+def test_d11_non_failure_conclusions_still_count(monkeypatch):
+    """`cancelled` and `timed_out` leave main just as unverified as `failure`."""
+    _fake_runs(
+        monkeypatch,
+        [{"created_at": _iso_days_ago(5), "conclusion": "timed_out", "html_url": "u"}],
+    )
+
+    result = hygiene.Result()
+    hygiene.detect_red_main(result)
+
+    assert len(result.drift) == 1
+
+
+def test_d11_unreadable_state_records_a_skip(monkeypatch):
+    """Same rule as D9/D10: no verdict is not a clean verdict."""
+    monkeypatch.setattr(hygiene.shutil, "which", lambda _: "/usr/bin/gh")
+    monkeypatch.setattr(hygiene, "_gh", lambda args: None)
+
+    result = hygiene.Result()
+    hygiene.detect_red_main(result)
+
+    assert result.findings == []
+    assert any("illisible" in s for s in result.skipped)
+
+
+def test_d11_stays_out_of_the_blocking_subset():
+    """Enforcement gap is not the current author's fault — same posture as D10."""
+    blocking = {"D1", "D5", "D6"}
+    assert "D11" not in blocking
+
+
 # ─── --fix · resynchronisation du harnais ─────────────────────────────────────
 
 

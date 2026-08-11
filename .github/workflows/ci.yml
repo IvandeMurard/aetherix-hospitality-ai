@@ -243,3 +243,35 @@ jobs:
               echo "GitHub désactive un cron après 60 jours sans activité du dépôt."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # D11 — main au rouge (11/08/2026).
+      #
+      # Écrit après que le scénario s'est produit : le 05/08, D1 a échoué sur la
+      # PR qui introduisait le drift (#239), la PR a été mergée rouge, et quatre
+      # PRs se sont empilées sur le même rouge pendant six jours. La détection
+      # avait fonctionné du premier coup — c'est la sanction qui manquait.
+      #
+      # Ce dépôt est privé sur un plan gratuit : `branches/main/protection` et
+      # `rulesets` répondent 403. « Bloquant » ne peut donc signifier que
+      # *rouge visible*, jamais *merge refusé*. Nommer un rouge installé est le
+      # seul garde-fou restant.
+      #
+      # NON bloquant, même raison que D10 : le rouge de main n'est pas la faute
+      # de l'auteur de la PR courante.
+      - name: CI de main au rouge (D11 — avertissement, jamais bloquant)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ! python scripts/ops/hygiene_architecturale.py --detectors D11; then
+            echo "::warning title=CI de main au rouge::Le dernier run de CI sur main a échoué il y a plus de 2 jours. Aucune protection de branche n'est disponible sur ce dépôt : un rouge installé masque le suivant."
+            {
+              echo "### ⚠️ CI de main au rouge"
+              echo
+              echo "Aucune protection de branche n'est disponible (dépôt privé, plan gratuit)."
+              echo "Un check rouge n'empêche jamais un merge — il ne reste que la lecture humaine,"
+              echo "et un rouge installé cesse d'être lu."
+              echo
+              echo "Réparer le rouge, ou le documenter s'il est légitime."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

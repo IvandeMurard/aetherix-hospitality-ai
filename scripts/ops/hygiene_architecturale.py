@@ -5,11 +5,11 @@ Detects drift between what the repo *says* and what the repo *is*, then emits a
 Markdown report. It never edits code and never writes to the eval dataset: the
 workflow turns its output into a documentation-only PR that a human merges.
 
-Ten detectors. D1-D8 are static and deterministic — no network, no secrets, no
-runtime access. That is deliberate: a hygiene agent that needs credentials is a
-new attack surface, and Epic 16 NFR2 freezes new runtime surface.
+Eleven detectors. D1-D8 are static and deterministic — no network, no secrets,
+no runtime access. That is deliberate: a hygiene agent that needs credentials is
+a new attack surface, and Epic 16 NFR2 freezes new runtime surface.
 
-D9 and D10 are the documented exceptions (HOS-324, HOS-325). Branch, PR and
+D9, D10 and D11 are the documented exceptions (HOS-324, HOS-325). Branch, PR and
 workflow-run state exists only on the forge, so they shell out to `gh` with the
 token CI already provides. They read and never write, stay out of the blocking
 PR subset, and record a skip rather than reporting clean when `gh` is absent or
@@ -32,6 +32,10 @@ unauthenticated — a blind detector must say so.
                         Reads the forge; weekly report only, never blocking.
   D10 cron liveness   — the weekly agent proves it still runs (HOS-325). Run
                         from the PR CI, never from the cron it watches.
+  D11 red main        — main's CI must not stay red. Branch protection is
+                        unavailable here (private repo, free plan → 403), so a
+                        failing check never refuses a merge; naming a lasting
+                        red is the only guard left. PR CI, never blocking.
 
 Usage:
   python scripts/ops/hygiene_architecturale.py
@@ -388,6 +392,26 @@ CRON_WORKFLOW = "hygiene-architecturale.yml"
 # Weekly cadence plus slack for a skipped Monday. Beyond this the silence is
 # no longer plausibly normal.
 CRON_MAX_AGE_DAYS = 10
+
+# ─── D11 · CI de main au rouge ────────────────────────────────────────────────
+# Written on 2026-08-11 after the failure mode it watches actually happened: the
+# blocking D1 check failed on the very PR that introduced the drift (#239,
+# 2026-08-05), the PR was merged red anyway, and main stayed red for six days
+# while four more PRs merged on top of the same red.
+#
+# The gap is not detection — D1 worked on the first try. It is enforcement: this
+# repository is private on a free plan, so `branches/main/protection` and
+# `rulesets` both return 403. A "blocking" check here can only mean *visibly
+# red*, never *merge refused*. A permanent red then stops being a signal and
+# becomes background noise that hides the next one.
+#
+# Same carrier and same posture as D10 — the PR CI, non-blocking. Failing the
+# current author's merge for a red someone else left is exactly what teaches
+# people to route around the gate.
+CI_WORKFLOW = "ci.yml"
+# One working day of slack: a red caught and fixed the same day is normal
+# operation, not drift. Beyond that, nobody is watching.
+CI_RED_MAX_AGE_DAYS = 2
 
 
 # ─── Detector plumbing ────────────────────────────────────────────────────────
@@ -1207,6 +1231,72 @@ def detect_cron_liveness(result: Result) -> None:
     )
 
 
+# ─── D11 · CI de main au rouge ────────────────────────────────────────────────
+
+
+def detect_red_main(result: Result) -> None:
+    """`main` must not stay red. Detection worked; enforcement is what is missing.
+
+    Branch protection is unavailable on this repository (private, free plan —
+    the API answers 403), so a failing check never refuses a merge. The only
+    remaining guard is that a red `main` gets *named* instead of accumulating.
+
+    Reads the last completed run of the CI workflow on `main`. A single red is
+    ordinary and says nothing; a red older than the threshold means the failure
+    has stopped being read.
+    """
+    repo = WATCHED_REPOS[0]
+    runs = _gh([
+        "api",
+        f"repos/{repo}/actions/workflows/{CI_WORKFLOW}/runs"
+        "?branch=main&status=completed&per_page=1",
+        "--jq",
+        "[.workflow_runs[] | {created_at, conclusion, html_url}]",
+    ])
+
+    if runs is None:
+        result.skipped.append(
+            f"D11: état de `{CI_WORKFLOW}` sur main illisible (gh absent, non authentifié, "
+            "ou workflow inconnu) — aucun verdict rendu, ce n'est pas « clean »."
+        )
+        return
+
+    if not runs:
+        result.skipped.append(f"D11: aucun run terminé de `{CI_WORKFLOW}` sur main")
+        return
+
+    last = runs[0]
+    conclusion = last.get("conclusion")
+    if conclusion == "success":
+        return
+
+    age = _age_days(last.get("created_at", ""))
+    if age is None:
+        result.skipped.append(f"D11: date du dernier run illisible pour `{CI_WORKFLOW}`")
+        return
+
+    if age <= CI_RED_MAX_AGE_DAYS:
+        return
+
+    result.findings.append(
+        Finding(
+            detector="D11",
+            title=f"CI de main au rouge depuis {age} jours (seuil : {CI_RED_MAX_AGE_DAYS})",
+            detail=f"Dernier run terminé : {last.get('created_at', '?')[:10]} — "
+            f"conclusion `{conclusion}` — {last.get('html_url', '')}\n\n"
+            "Ce dépôt étant privé sur un plan gratuit, aucune protection de branche n'est "
+            "disponible (`branches/main/protection` et `rulesets` répondent 403) : un check "
+            "rouge n'empêche jamais un merge. Il ne reste que la lecture humaine — et un rouge "
+            "installé cesse d'être lu.\n\n"
+            "Précédent : le 05/08/2026, D1 a échoué sur la PR qui introduisait le drift ; elle a "
+            "été mergée rouge et quatre PRs se sont empilées sur le même rouge pendant six jours. "
+            "La détection n'était pas en cause.\n\n"
+            "Réparer le rouge, ou — s'il est légitime — le documenter explicitement plutôt que "
+            "de le laisser courir.",
+        )
+    )
+
+
 DETECTORS = (
     ("D1", "Drift harness", detect_harness_drift),
     ("D2", "Doc → code", detect_doc_paths),
@@ -1218,6 +1308,7 @@ DETECTORS = (
     ("D8", "Propriétés falsifiables", detect_property_claims),
     ("D9", "Branches et PRs orphelines", detect_orphan_branches),
     ("D10", "Cron d'hygiène en vie", detect_cron_liveness),
+    ("D11", "CI de main au rouge", detect_red_main),
 )
 
 
