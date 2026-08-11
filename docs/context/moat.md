@@ -29,8 +29,20 @@ différenciateur).
    **C'est le sommet du moat, pas la mémoire.** Enregistrer qui override quoi, quand, et qui avait
    raison, c'est observer les décisions des meilleurs praticiens du métier — le mécanisme que
    Mandal & Sinha classent au niveau le plus élevé de leur hiérarchie, celui qui compose avec
-   l'usage. Spécifié en D4/HOS-246 (triple `context-features, action, propensity, outcome`),
-   **pas encore instrumenté** : c'est la couche à protéger et à livrer en priorité.
+   l'usage. **C'est la couche à protéger et à livrer en priorité.**
+   > **État au 11/08/2026 — précision sur « pas encore instrumenté ».** Quatre legs sur cinq le
+   > sont : le Decision Ledger (HOS-317, Done 01/08) relie contexte source → reco émise → réponse
+   > manager (dashboard *et* WhatsApp) → outcome mesuré → abstention / trip typé. Statut `Built`,
+   > **0 utilisateur réel** (`status-taxonomy.md`) — la brique existe, le corpus non.
+   > Manque le cinquième leg, la **trace d'émission** (`policy_id` + entrées de sélection +
+   > confiance/tier) : le seul qui ne se reconstitue pas après coup. C'est [HOS-326](https://linear.app/hospitalityagent/issue/HOS-326),
+   > S3, **précondition dure du go-live** (`docs/planning/phase-3-sprint-plan.md` §Amendement 11/08).
+   > Le corpus, lui, ne commence qu'au premier override d'un manager réel — c'est-à-dire à HOS-176.
+   >
+   > *Le triple `(context-features, action, propensity, outcome)` de D4 est spécifié en **HOS-247**,
+   > pas HOS-246 (cet identifiant désigne l'épique ADR-0010 multi-repo — drift corrigé le 11/08).
+   > HOS-247 est scopée Anima / guest-side et reste Phase 4 derrière le gate DPIA ; c'est HOS-326
+   > qui livre le leg côté F&B.*
 2. **La conformité câblée dans le produit.** Guardrails runtime avec raison typée (NFR2,
    Décision #27), eval-gate bloquant en CI (Décision #29), audit différentiel clos (Décision #30),
    DPIA et ses 13 mesures (Décision #20), gate honnêteté métriques et sa taxonomie (Décision #33),

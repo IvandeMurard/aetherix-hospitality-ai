@@ -128,7 +128,7 @@ Le log de `propensity` est non-négociable : l'évaluation off-policy nécessite
 **Phase 4 (décisions immédiatement actives) :**
 - Anima nommée "Guest Cognition Layer" dans toute documentation et tout code
 - `ProfileSnapshot` enrichi : champs `confidence`, `evidence_count`, `last_confirmed`, `decay_rate` sur toute claim Semantic
-- **Story 3.5 (HOS-246)** : outcome-capture instrumentation — triple de-identified (`context-features`, `action`, `propensity`, `outcome`), store séparé d'Anima, propensity loggée dès le premier déploiement
+- **Story 3.5 (HOS-247)** : outcome-capture instrumentation — triple de-identified (`context-features`, `action`, `propensity`, `outcome`), store séparé d'Anima, propensity loggée dès le premier déploiement
 - Segment layer documentée avec double portée Local / Hive prior (sous-portée Hive = Phase 5)
 - `scope="all"` reste anti-pattern loggé (inchangé depuis PoC)
 

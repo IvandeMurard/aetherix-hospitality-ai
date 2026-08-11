@@ -234,7 +234,7 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Vision validée (3 niveaux) :** "Comprend comme un humain" (Anima) · "Mesure comme une machine" (outcome capture) · "Apprend comme un réseau" (HiveMemory v2 / Learning Engine Phase 5).
 
-**Story 3.5 (HOS-246) :** outcome-capture instrumentation — actionnable Phase 4.
+**Story 3.5 (HOS-247) :** outcome-capture instrumentation — actionnable Phase 4, **scope Anima / décisions Orchestrateur** (projet Linear « Anima — Guest Context Node », parent HOS-230), donc derrière le gate DPIA de la Décision #20. Le pendant F&B (trace de politique à l'émission sur les recommandations Aetherix, personal-data-free) est porté séparément — voir `docs/planning/phase-3-sprint-plan.md` §Amendement 11/08. *(⚠️ Ce point a longtemps été référencé « HOS-246 » — cet identifiant désigne en réalité la migration multi-repo ADR-0010. Corrigé le 11/08/2026.)*
 
 **Décisions ouvertes déplacées open-decisions.md :** politique exploration éthique · reward multi-objectif · méthode off-policy evaluation · floor k-anonymat Segment.
 

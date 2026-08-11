@@ -104,7 +104,7 @@
 | 🟡 Open | Reward multi-objectif (CSAT vs marge vs fidélisation) | Design Learning Engine Phase 5 |
 | 🟡 Open | Méthode off-policy evaluation (IPW / DR / DR-Learner) | Volume données post-pilote Phase 4 |
 | 🟡 Open | Seuils de calibration SignalComposite (ADR-0012) | Données pilote Phase 3 réelles |
-| 🟡 Open | Rattachement Bras C (outcome-eval) au framework eval-by-design (ADR-0007 §13) | Phase 4, après instrumentation outcome-capture (HOS-246) |
+| 🟡 Open | Rattachement Bras C (outcome-eval) au framework eval-by-design (ADR-0007 §13) | Trigger amendé 11/08 : après HOS-326 (trace de politique à l'émission, S3), plus HOS-247 (Anima, DPIA-gated) |
 
 Resolved decisions archive (Graphe de contexte Apache AGE 06/06, POS integration scope 06/06, Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.
 

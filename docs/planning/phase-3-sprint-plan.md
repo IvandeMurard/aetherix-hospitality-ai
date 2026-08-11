@@ -27,7 +27,7 @@ Capacité : **dev solo, 8-10 pts / sprint-semaine**. Fenêtre jusqu'au J+90 d'Ep
 | Périmètre | Reste à faire |
 |-----------|--------------:|
 | Epic 16 — Proof & Visibility | **~13 pts** *(révisé 30/07 : HOS-321 livré −5, HOS-278 livré −3, HOS-313 aux ⅔ −2)* |
-| Epic 10 — Pilot Validation | ~42 pts *(HOS-285 et HOS-278 livrés)* |
+| Epic 10 — Pilot Validation | ~45 pts *(HOS-285 et HOS-278 livrés ; +3 pts trace d'émission ajoutés le 11/08, absorbés par la marge S3)* |
 | Epic 11 — Evaluation by Design | ~19 pts |
 | **Total** | **~74 pts** |
 
@@ -50,6 +50,41 @@ Epic 16 se clôt à **S2 (16/08)**, soit ~7 semaines avant sa deadline — ce qu
 
 - **HOS-278** (spike A2A, 3 pts) — sa propre description porte « décision time-sensitive avant le pilote M4 (juillet 2026) » : l'échéance est **déjà dépassée**. Surtout, il **conditionne HOS-180** (Agent Hub listing, 5 pts) : si le spike conclut « Aetherix devient la couche F&B de Copilot via A2A », le listing tel que spécifié est du travail perdu. **Faire HOS-180 avant HOS-278 est une erreur de séquencement** — d'où S1 pour l'un, S7 pour l'autre.
 - **HOS-285** (audit Trace Agent, 2 pts) — alimente le canari concurrentiel W2 et la décision ouverte « Apaleo Copilot scope F&B ». Placé en amorce S0 car c'est le moins cher des deux.
+
+---
+
+## Amendement 11/08/2026 — la trace de politique doit précéder le go-live
+
+**Le principe.** La couche moat n°1 (`docs/context/moat.md`) n'est pas du code, c'est un corpus de décisions observées. Il commence au premier override d'un vrai manager sur une vraie recommandation, c'est-à-dire à **HOS-176**. Ce qui n'est pas écrit à l'instant de l'émission ne se reconstitue pas *a posteriori* : on peut recalculer une erreur de prévision, jamais la raison pour laquelle cette recommandation-là a été choisie ce jour-là. Chaque jour de pilote qui tourne sans trace d'émission est un jour de corpus définitivement perdu.
+
+**Ce qui est déjà là, et qui réduit fortement le chantier.** [HOS-317](https://linear.app/hospitalityagent/issue/HOS-317) (Decision Ledger, **Done le 01/08**) a fermé quatre des cinq legs : contexte source → recommandation émise → réponse manager *(dashboard **et** WhatsApp)* → outcome mesuré, plus l'abstention/trip typé du tour. Voir `docs/context/decision-ledger.md`. Le cinquième leg est nommément listé comme **non fermé** dans son §5 : *« Confiance à l'émission — colonne volontairement non ajoutée »*. C'est exactement la `propensity` d'ADR-0011 D4.
+
+**Ce qui ne peut pas être le véhicule.** [HOS-247](https://linear.app/hospitalityagent/issue/HOS-247) (Story 3.5, outcome-capture) est **scopée Anima** : projet Linear « Anima — Guest Context Node », parent HOS-230, décisions Orchestrateur, `outcome` = CSAT / NPS / complaint / repeat-booking, table `learning_triples`. Elle est derrière le **gate DPIA non levé** (Décision #20, 13 mesures bloquantes au 01/08), derrière le gel Mesh d'Epic 16, et de facto gated par le modèle d'interaction event-driven (ADR-0012 §2bis). Ses signaux d'outcome n'existent pas dans un pilote F&B. **La remonter avant HOS-176 tirerait tout ce paquet sur le chemin critique du pilote** — pour un corpus qu'elle ne produirait pas.
+
+**L'arbitrage retenu.** Découper le seul leg non reconstructible en une story **Aetherix, F&B, personal-data-free**, branchée sur le Decision Ledger existant — pas un second pipeline de logging (contrainte ADR-0012 §2bis, appliquée à ce qui existe réellement côté Aetherix).
+
+| | |
+|---|---|
+| **Story** | Trace de politique à l'émission — `policy_id` + `selection_inputs` + confiance/tier sur la recommandation dispatchée |
+| **Épique** | 10 (Pilot Validation) · `phase:3` · Aetherix — F&B Execution Node |
+| **Points** | 3 |
+| **Sprint** | **S3 (17→23/08)** — voir §Arbitrage de capacité ci-dessous |
+| **Précondition go-live** | Mergée avant l'ouverture de S9. Aucune recommandation ne part vers un manager réel sans trace d'émission. |
+
+**Périmètre (à raffiner en session SM/Dev) :**
+
+- Persister sur `staffing_recommendations` : `policy_id` (version de la règle de décision qui a émis), `emission_confidence` + `emission_tier` (le verdict `forecast_guardrail.evaluate()` existe déjà à l'émission — Epic 12 G-4 — mais n'atterrit aujourd'hui que sur `agent_action_log`), `selection_inputs` JSONB (`deviation_pct`, baseline, seuil appliqué, `roi_net` au moment de l'émission). Une migration + miroir ORM (Décision #16).
+- Exposer ces champs dans `DecisionLedgerService.get_decision()` et la vue `decision_ledger` — ce qui clôt la ligne « Confiance à l'émission » de `decision-ledger.md` §5.
+- **Honnêteté sémantique (Décision #33)** : sous une politique déterministe la propensity vaut 1.0 et n'a aucune valeur pour de l'IPW. Ce qui est loggé est la **version de politique + ses entrées de sélection** — ce qui rend l'off-policy evaluation possible *le jour où* une politique stochastique ou multi-bras apparaît, et rend l'écart attribuable dès maintenant. Ne pas revendiquer « propensity loggée pour IPW » tant que la politique est déterministe.
+- Aucune donnée personnelle, aucun champ guest. Store = tables Aetherix existantes, **pas** `learning_triples`.
+
+**Ce que la story ne fait pas** : « action effectivement appliquée » (exige POS — Phase 4, Décision #23) et le pendant guest-side (HOS-247, reste Phase 4).
+
+**Coût sur le chemin critique — l'objection posée franchement.** Le chemin vers HOS-176 est déjà chargé (HOS-319 abouti au 25/09 + R1 + HOS-308). Ces 3 points ne s'y ajoutent pas : ils vont dans **S3**, seul sprint avec de la marge réelle depuis que HOS-321 est tombé en avance (S3 ne porte plus que HOS-314, ~5 pts libres). S4 est déjà au plafond (8 pts + SEC-3), S9 n'a aucun repli. Le coût net sur le chemin critique est donc **nul si S3 tient**, et la story reste hors de la fenêtre conditionnelle : elle a de la valeur même si HOS-319 n'aboutit pas — elle ferme un manque documenté du Decision Ledger et débloque [HOS-275](https://linear.app/hospitalityagent/issue/HOS-275) (Bras C).
+
+**Effet de bord positif** : une livraison, deux points fermés. Le trigger de la décision ouverte « Rattachement Bras C » est réécrit sur cette story (`open-decisions.md` §Bras C, amendé le 11/08) — il était auparavant adossé à HOS-247, donc inatteignable.
+
+**Correction d'identifiant (drift D2)** : les docs référençaient « HOS-246 » pour l'outcome-capture. HOS-246 est en réalité l'épique *ADR-0010 multi-repo migration*. Corrigé le 11/08 dans ADR-0011, ADR-0012 §2bis, `decisions-architecturales.md` §26, `open-decisions.md` §Bras C, `CLAUDE.md`.
 
 ---
 
@@ -93,6 +128,7 @@ Epic 16 se clôt à **S2 (16/08)**, soit ~7 semaines avant sa deadline — ce qu
 | Item | Épique | Pts | État |
 |------|--------|----:|------|
 | **HOS-314** contenu & distribution — article eval-gate, LinkedIn, registries MCP | 16 | 3 | ⬜ À faire |
+| **HOS-326** trace de politique à l'émission — `policy_id` + `selection_inputs` + confiance/tier | 10 | 3 | ⬜ **À créer dans Linear** — voir §Amendement 11/08 |
 | ~~**HOS-321** layer eval `guardrail`~~ | 16 | ~~5~~ | ✅ **Livré le 30/07** (commit `aeb68a3`) — couvre **13** raisons typées d'Epic 12, pas 11 comme estimé initialement |
 
 > **Point de bascule — avancé.** Avec HOS-321 livré, S3 ne porte plus que HOS-314. **Epic 16 peut se clôturer dès S2**, soit ~7 semaines avant sa deadline du 05/10. Phase 3 reprend donc la capacité à partir de **S3**, une semaine plus tôt que prévu au re-baseline.
@@ -151,7 +187,7 @@ Epic 16 se clôt à **S2 (16/08)**, soit ~7 semaines avant sa deadline — ce qu
 
 | Item | Épique | Pts | Condition |
 |------|--------|----:|-----------|
-| **HOS-176** real-pilot deploy Apaleo prod | 10 | 5 | **HOS-319 abouti au 25/09** + R1 levé + HOS-308 fait |
+| **HOS-176** real-pilot deploy Apaleo prod | 10 | 5 | **HOS-319 abouti au 25/09** + R1 levé + HOS-308 fait + **HOS-326 mergée** (trace d'émission — §Amendement 11/08) |
 | **HOS-284** instrumentation fiabilité — accept/reject + « confidently wrong » | 11 | 3 | — |
 
 > **Repli si HOS-319 n'aboutit pas au 25/09** : basculer S9 sur **HOS-286** (2) et **HOS-287** (3), et acter le pilote en Phase 3+.
@@ -176,6 +212,11 @@ Epic 16 se clôt à **S2 (16/08)**, soit ~7 semaines avant sa deadline — ce qu
                                         │
   R1 : HOS-113 / HOS-114 ───────────────┤  ⚠ statut à confirmer (S0)
        (SEC-3 / SEC-4)                  │
+                                        │
+  HOS-317 ✅ Decision Ledger             │
+     └─► HOS-326 (S3) ────────────────┤  trace d'émission — précondition DURE
+            trace de politique          │  du go-live (R9), non reconstructible
+            └─► HOS-275 (Bras C, P4)    │  après coup
                                         ▼
                                   ┌───────────┐
                                   │  HOS-176  │  S9 — CONDITIONNEL
@@ -262,6 +303,7 @@ Ce que le décalage préserve en revanche : le recrutement partenaire cesse d'ê
 | **R5** | **S6 déborde (10 pts, plafond capacité)** | Sacrifier **HOS-181** (Hive Memory, indépendante) avant HOS-193 — 193 clôt la chaîne cold-start dont 195 et 192 sont déjà investis. |
 | **R6** | **Epic 16 déborde au-delà de S3** | Décaler la reprise Phase 3 d'autant. Les critères de sortie J+90 priment : c'est l'arbitrage acté le 30/07. |
 | **R7** | **Migration `hotel_cohort_features` (HOS-195) entre en conflit avec une migration Epic 11** | Séquencer par timestamp, audit ORM mirror (Décision #16) avant merge. Tables distinctes attendues — vérifier avant. |
+| **R9** | **HOS-326 (trace d'émission) n'est pas mergée à l'ouverture de S9** | **Ne pas lancer le pilote sans elle et ne pas la coder en urgence dans S9** (aucun repli dans ce sprint). Deux issues seulement : la remonter dans un sprint antérieur dès que S3 déborde, ou décaler le go-live. Un pilote qui tourne sans trace d'émission produit un corpus amputé de son leg le moins reconstructible — c'est le seul risque de ce plan dont le coût est **irréversible** (les autres coûtent du temps, celui-ci coûte de la donnée qui n'existera jamais). |
 | **R8** | **Le go-live S9 dérape de quelques jours** | Il n'existe plus de sprint de repli : tout dérapage sort HOS-176 de la fenêtre J+90. Décider **avant** d'ouvrir S9 si on lance le déploiement ou si on l'acte en Phase 3+ — pas en cours de sprint. |
 
 ---
@@ -282,7 +324,7 @@ Chaque vendredi 18:00 — relire ce doc :
 
 ## Statuts Linear à transitionner (proposition — non appliquée)
 
-Aucune transition n'a été faite. À valider par Ivan avant exécution :
+À valider par Ivan avant exécution — **sauf les trois lignes marquées ✅ appliqué le 11/08** (création HOS-326 + cadrage HOS-247 + re-pointage HOS-275), exécutées sur go explicite d'Ivan :
 
 | Issue | Actuel | Proposé | Sprint |
 |-------|--------|---------|--------|
@@ -299,3 +341,6 @@ Aucune transition n'a été faite. À valider par Ivan avant exécution :
 | HOS-319 | In Progress | **poser `dueDate` = 2026-09-25** + estimer ou marquer non-pointable (PM/externe) | — |
 | HOS-207 | Backlog | **Todo** | S7 |
 | HOS-114 | Backlog | **délier de HOS-176** si R1 le confirme | — |
+| **HOS-326** | ✅ **créée le 11/08** — Epic 10 (HOS-174), projet Aetherix, `phase:3`/`Backend`/`Story`, 3 pts, Urgent, `blocks` HOS-176, `relatedTo` HOS-317 · HOS-177 · HOS-275 · HOS-247 | **Todo** *(appliqué)* | S3 |
+| HOS-247 | Backlog | ✅ **cadrage appliqué le 11/08** — scope Anima / guest-side, gated DPIA (Décision #20), réutilise le substrat livré par HOS-326. **Reste Phase 4.** | — |
+| HOS-275 | Backlog | ✅ **appliqué le 11/08** — trigger re-pointé sur HOS-326, estimée 3 pts, clause d'honnêteté propensity ajoutée | Phase 4 |

@@ -71,6 +71,7 @@
 | 31 | Hospitality Agentic Mesh Signal Contract (**ADR-0012**) : `DomainSignal` namespaced par bounded context nœud (`environmental.*` Tacet, `guest.*` Anima, `fnb.*` Aetherix, `operational.*`/`orchestrator.*` Orchestrateur) · `SignalComposite` = perception cross-domaine, jamais de champ actionable (frontière décision protégée, ADR-0004 D5) · `CollectivePattern` = alias `fb_patterns`/Hive prior Anima · calibration à 3 niveaux (cohorte Hive / apprentissage local / override manager) · pas de `decay_rate` sur Signal (réservé ADR-0011 D2) · gel terminologique post-acceptation · **exception explicite Décision #25/ADR-0010 Q2 : reste privé, ne migre jamais vers le méta-repo public malgré le critère cross-cutting** | 06/07/2026 |
 | 32 | Processus de calibration LLM-judge, pré-requis EVAL-6 (**ADR-0007 §14**) : rubrique binaire miroir `FAILURE_THRESHOLDS.md` · golden set dédié `eval/judge_calibration_set.jsonl` · juge Sonnet via `LLMProvider` (Décision #9) · Cohen's kappa ≥ 0.8 avant scoring autonome · recalibration sur triggers explicites | 30/07/2026 |
 | 33 | Gate honnêteté métriques (HOS-318) : taxonomie **Built / Shadow-mode / Synthetic PoC / Design / Research** obligatoire sur toute surface (`docs/context/status-taxonomy.md`, `Built` ≠ adopté, `Built (PoC)` interdit) · 15.09 % synthétique = circulaire, gate interne seul, usage non qualifié = drift D7 · verdict Recruit = **PASS formel MAPE + clause pivot déclenchée volontairement** (à J+1 Prophet est derrière la naïve en médiane) · amendement protocole §7 : WAPE reporté obligatoire, Δ MdAPE reste primaire | 01/08/2026 |
+| 34 | Apaleo A2A **tranché : wait-and-see, Aetherix reste MCP standalone** (audit Trace Agent HOS-285 + spike A2A HOS-278) — A2A = cap annoncé, pas d'interface (aucune spec/auth/endpoint sur `apaleo.dev` au 30/07) · Décision #19 rend Aetherix déjà prêt sans dette à provisionner · risque branchement précoce = Daily Receipt disparaît derrière l'UI Copilot, commoditise l'exécution · vecteur de menace reformulé : Apaleo fournit les rails (Agent Hub/Agent Factory), pas les agents — risque = un tiers publie un agent F&B en 1 trimestre · 4 conditions de bascule B1-B4, re-vérification trimestrielle 30/10/2026 · canari W2 dé-escaladé (mensuel) mais reste ouvert | 30/07/2026 |
 
 ---
 
@@ -103,6 +104,7 @@
 | 🟡 Open | Reward multi-objectif (CSAT vs marge vs fidélisation) | Design Learning Engine Phase 5 |
 | 🟡 Open | Méthode off-policy evaluation (IPW / DR / DR-Learner) | Volume données post-pilote Phase 4 |
 | 🟡 Open | Seuils de calibration SignalComposite (ADR-0012) | Données pilote Phase 3 réelles |
+| 🟡 Open | Rattachement Bras C (outcome-eval) au framework eval-by-design (ADR-0007 §13) | Trigger amendé 11/08 : après HOS-326 (trace de politique à l'émission, S3), plus HOS-247 (Anima, DPIA-gated) |
 
 Resolved decisions archive (Graphe de contexte Apache AGE 06/06, POS integration scope 06/06, Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.
 
