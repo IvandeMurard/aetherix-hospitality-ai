@@ -2,7 +2,7 @@
 
 > Source de vérité partagée. Chargé automatiquement à chaque session.
 > **Règle — NE PAS SURCHARGER CE FICHIER.** Facts + INDEX uniquement, **plafond dur 170 lignes** (relevé de 150 le 31/07 : l'index de décisions a grandi, cf. `docs/INDEX.md` §Dette CLAUDE.md). Contrôlé en CI — détecteur D5.
-> Une décision = **une ligne d'index ici**, le détail en **sous-section** du fichier dédié : `context/decisions-architecturales.md` · `context/open-decisions.md` · `docs/INDEX.md`. Ni narratif, ni justification, ni historique ici : si ça ne tient pas en une ligne, ça va en sous-section et on met le lien.
+> Une décision **architecturale tranchée** = une ligne d'index ici, détail en sous-section de `context/decisions-architecturales.md`. Une décision **ouverte** ne s'indexe plus ici depuis le 11/08 (pointeur seul) : elle vit entièrement dans `context/open-decisions.md`. Ni narratif, ni justification, ni historique ici : si ça ne tient pas en une ligne, ça va en sous-section et on met le lien.
 
 ---
 
@@ -89,25 +89,10 @@
 
 ---
 
-## Décisions ouvertes — INDEX
+## Décisions ouvertes — POINTEUR
 
-> Détail complet + archive résolues : [`docs/context/open-decisions.md`](docs/context/open-decisions.md)
-> Convention : ligne d'index = 1-ligne summary. Le détail (rationale, alternatives, échéance, dépendances) vit dans le sous-fichier.
-
-| Statut | Décision | Trigger / échéance |
-|---|---|---|
-| 🟡 Open | Pricing model (HOS-179 P3-5) | Post-90j data pilote |
-| 🟡 Open | Apaleo Copilot scope F&B (canari) | Monitoring mensuel via watchlist |
-| 🟡 Open | Food waste tracking | À trancher Phase 4 vs Phase 5 |
-| 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0013 futur (réservé — corrigé, ADR-0009 déjà pris par runtime guardrails) |
-| 🟡 Open | Politique exploration éthique (Anima / Learning Engine) | Design Learning Engine Phase 5 |
-| 🟡 Open | Reward multi-objectif (CSAT vs marge vs fidélisation) | Design Learning Engine Phase 5 |
-| 🟡 Open | Méthode off-policy evaluation (IPW / DR / DR-Learner) | Volume données post-pilote Phase 4 |
-| 🟡 Open | Seuils de calibration SignalComposite (ADR-0012) | Données pilote Phase 3 réelles |
-| 🟡 Open | Périmètre de la métacognition — trace vérifiable vs auto-explication du modèle | Premières courbes de calibration du pilote (≥ 4 sem. réelles) |
-| 🟡 Open | Rattachement Bras C (outcome-eval) au framework eval-by-design (ADR-0007 §13) | Trigger amendé 11/08 : après HOS-326 (trace de politique à l'émission, S3), plus HOS-247 (Anima, DPIA-gated) |
-
-Resolved decisions archive (Graphe de contexte Apache AGE 06/06, POS integration scope 06/06, Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.
+> **Source de vérité unique : [`docs/context/open-decisions.md`](docs/context/open-decisions.md)** — §Actives + §Resolved (archive).
+> L'index tabulaire vivait ici jusqu'au 11/08 ; il a été retiré au profit d'un pointeur (CLAUDE.md à 169/170 lignes, détecteur D5). Une décision ouverte ne se déclare plus dans ce fichier — elle s'ajoute en sous-section du fichier dédié, point. Les décisions **architecturales** (tranchées) gardent leur index ci-dessus : elles sont stables, les ouvertes ne le sont pas.
 
 ---
 

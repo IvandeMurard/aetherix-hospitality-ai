@@ -1,7 +1,7 @@
 # Décisions ouvertes & archive
 
 > **Périmètre :** décisions cross-cutting en débat (§Actives) + archive des décisions tranchées (§Resolved).
-> **Convention CLAUDE.md :** 1 ligne d'index dans `CLAUDE.md` §Décisions ouvertes (statut + 1-ligne summary). Détail complet (rationale, alternatives, échéance, dépendances) ici.
+> **Convention — amendée le 11/08/2026 :** ce fichier est la **source de vérité unique** des décisions ouvertes. `CLAUDE.md` ne porte plus qu'un pointeur : l'index tabulaire y a été retiré (fichier à 169/170 lignes, détecteur D5 — un index qui grossit dans un fichier plafonné finit par évincer autre chose). Ouvrir une décision = ajouter une sous-section ici, rien à répliquer ailleurs. Les décisions **architecturales tranchées** gardent leur index dans `CLAUDE.md` : elles sont stables, les ouvertes ne le sont pas.
 > **Archive policy :** garder indéfiniment. Historique = asset (sales, investors, onboarding équipe).
 
 ---
