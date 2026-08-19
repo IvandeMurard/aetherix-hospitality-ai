@@ -106,7 +106,7 @@ Epic 16 se clôt à **S2 (16/08)**, soit ~7 semaines avant sa deadline — ce qu
 |------|--------|----:|------|
 | ~~**HOS-278** spike A2A~~ | 10 | ~~3~~ | ✅ **Livré en avance le 30/07** → `docs/context/apaleo-a2a-spike-decision.md`. **Risque R4 levé.** |
 | **HOS-318** gate honnêteté métriques — taxonomie Built/Shadow/Synthetic | 16 | ~2 | ⬜ À faire — **non estimée dans Linear**, à pointer |
-| **HOS-312** unit economics — coût/propriété/mois | 16 | 1 | ⬜ À faire |
+| **HOS-312** unit economics — coût/propriété/mois | 16 | 1 | ✅ **Livré le 31/07** → `docs/Cost_Model.md` v2.0 (`56205c1`, PR #224). Statut Linear corrigé Done. |
 | **HOS-313** docs stratégiques — **AC1/AC2/AC3 déjà livrés le 09/07** | 16 | ~1 | ⬜ Reste **AC4** (one-pager conformité) + **AC5** (périmètre honnête méta-repo) |
 
 > HOS-312 débloque **HOS-179** (pricing doc, S8).
@@ -330,7 +330,7 @@ Chaque vendredi 18:00 — relire ce doc :
 |-------|--------|---------|--------|
 | HOS-285 | Backlog | **Todo** | S0 |
 | HOS-278 | Backlog | **Todo** | S1 |
-| HOS-312 | Backlog | **Todo** | S1 |
+| HOS-312 | Backlog | **Done** — livré le 31/07 (`56205c1`), statut Linear corrigé | — |
 | HOS-308 | Backlog | **Todo** | S2 |
 | HOS-309 | Backlog | **Todo** | S2 |
 | HOS-314 | Backlog | **Todo** | S3 |
