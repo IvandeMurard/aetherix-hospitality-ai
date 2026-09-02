@@ -814,3 +814,30 @@ La phrase « ADR-0005 (cold-start meta-learner) repose sur `hotel_cohort_feature
 - `docs/context/analyse-critique-2026-07.md` — gel Hive
 - `docs/adr/0008-context-graph.md` §Q4 — v3, hérite du même blocage
 - HOS-320 (détection D2) · HOS-300 NFR2 (gel nouveaux ADRs — un amendement qui *restreint* le périmètre n'est pas concerné)
+
+---
+
+## 11. Amendment 2026-09-01 — Mews POS natif : absent de la table vendors §D1, catégorie distincte
+
+> **Trigger** : mews.com/en/press/mews-pos-live-in-north-america (partagé par Ivan) — Mews POS (natif à l'OS Mews depuis 2024, 20+ pays) arrive en Amérique du Nord. Détail veille : vault Obsidian `Veille/Veille_Watchlist_Concurrents.md` §W4, `Veille_Competitors_Market.md` §SEP 1, 2026.
+> **Ne restreint ni n'étend le périmètre décidé** (D1-D6 inchangés) — documente une catégorie de vendor absente du scan initial, cohérent avec la clause HOS-300 NFR2 sur les amendements qui ne créent pas de nouveau travail.
+
+### 11.1 Constat
+
+La table vendors §D1 (06/06/2026) évalue exclusivement des **POS tiers** (Lightspeed, Oracle Micros, Toast, Square, Tiller, etc.) et note, comme critère de scoring, si *ces vendors tiers* s'intègrent avec Apaleo et/ou Mews. **Mews POS lui-même n'apparaît jamais dans la table** — parce qu'il n'est pas un vendor tiers à évaluer, c'est une fonctionnalité **native de l'OS Mews**, hors du cadre "PMS + POS séparés" que la table présuppose implicitement.
+
+### 11.2 Pourquoi ça change la question, pas la réponse
+
+Pour une propriété Apaleo (le PMS principal, Décision #11), la question reste inchangée : Apaleo n'a pas de POS natif, un adapter `POSProvider` vers un vendor tiers (Lightspeed T1) reste la bonne architecture.
+
+Pour une propriété **Mews** qui utilise **Mews POS natif** (pas un POS tiers), la question change de nature : la donnée F&B item-level vivrait dans l'écosystème/API Mews lui-même, pas chez un vendor `POSProvider` séparé. Dans ce cas précis, l'intégration POS ne serait pas un adapter `POSProvider` supplémentaire — elle serait portée par le futur **adapter Mews** (HOS-186, PMS Connector universel, toujours backlog Phase 4, gated par la fin de Phase 3 Track A) qui couvrirait PMS **et** POS d'un même mouvement pour ce cas précis. Une propriété Mews sur un POS tiers (Lightspeed via Mews Marketplace, déjà noté §D1) resterait sur le chemin `POSProvider` standard — les deux cas coexistent, ce n'est pas un remplacement.
+
+### 11.3 Décision
+
+Aucune action Phase 3/4 immédiate — le pilote reste Apaleo-first (Décision #11), aucun design partner Mews n'est en cours d'évaluation. **Documenté maintenant pour coût nul** (même logique que Décision #28) : quand HOS-186 sera scopé, ou qu'un design partner Mews avec POS natif actif sera évalué, vérifier en premier si la donnée F&B transite par l'écosystème Mews avant de présumer qu'un `POSProvider` tiers est nécessaire.
+
+### 11.4 Références
+
+- `docs/context/decisions-architecturales.md` Décision #23/#28
+- HOS-186 (PMS Connector universel, backlog Phase 4)
+- Vault Obsidian `Veille/Veille_Watchlist_Concurrents.md` §W4, `Veille_Competitors_Market.md` §SEP 1, 2026
