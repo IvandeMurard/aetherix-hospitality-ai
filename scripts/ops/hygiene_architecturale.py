@@ -221,7 +221,24 @@ GOLDEN_DATASET = "eval/golden_dataset.jsonl"
 # the regressors Prophet consumes). It stays in the repo as the Décision #14
 # non-regression gate; what is forbidden is citing it as evidence. Prose only:
 # this detector polices *claims*, not code comments naming the gate constant.
-METRIC_CLAIM_PATTERN = re.compile(r"15[.,]09")
+# Rounded forms are the ones that actually travel: a slide says "MAPE 15%", never
+# "15.09%". Same for the 7.84 Phase 0 backtest, which reached backend/README.md as
+# "MAPE 7.8% J+1 on backtest" and sat there unqualified — the literal-string
+# detector could not see either. Both are MAPE-adjacent by construction, so an
+# unrelated "15%" in a pricing tier or a scale scenario cannot trip this.
+METRIC_CLAIM_PATTERN = re.compile(
+    r"15[.,]09"
+    r"|MAPE\D{0,20}\b(?:15|7[.,]8\d?)\s*%"
+    r"|\b(?:15|7[.,]8\d?)\s*%\D{0,20}MAPE",
+    re.IGNORECASE,
+)
+# A target is not a claim. "cible < 15%" states where we want to land; "MAPE 15%"
+# states where we are. Only the second is evidence, and only the second lies.
+# Applies to the rounded forms alone — an explicit 15.09 is always the circular
+# figure, whatever sentence carries it.
+METRIC_CLAIM_TARGET = re.compile(
+    r"cible|target|objectif|seuil|threshold|gate|[<≤]\s*\d|±", re.IGNORECASE
+)
 METRIC_CLAIM_QUALIFIERS = re.compile(
     r"circulaire|circular|synth[ée]tique|synthetic|non-r[ée]gression|non-regression",
     re.IGNORECASE,
@@ -895,8 +912,13 @@ def detect_metric_honesty(result: Result) -> None:
 
         scanned += 1
         for i, line in enumerate(lines):
-            if not METRIC_CLAIM_PATTERN.search(line):
+            hit = METRIC_CLAIM_PATTERN.search(line)
+            if not hit:
                 continue
+            # Rounded hit on a line that reads as a target, not a measurement.
+            if "15.09" not in hit.group() and "15,09" not in hit.group():
+                if METRIC_CLAIM_TARGET.search(line):
+                    continue
             lo = max(0, i - METRIC_CLAIM_WINDOW)
             window = "\n".join(lines[lo : i + METRIC_CLAIM_WINDOW + 1])
             if METRIC_CLAIM_QUALIFIERS.search(window):
