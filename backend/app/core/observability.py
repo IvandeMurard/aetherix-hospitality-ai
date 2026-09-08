@@ -10,11 +10,18 @@ Design invariants:
 
 What it provides:
 - ``configure_observability(app)`` — FastAPI request traces + Anthropic client
-  instrumentation (tokens in/out per LLM call → cost per recommendation, AC4).
+  instrumentation (tokens in/out per LLM call → cost per recommendation, AC4),
+  system metrics, and a stdlib-``logging`` bridge.
 - ``span(name, **attrs)`` — manual spans for the forecast pipeline and
   WhatsApp sends (AC2).
 - ``guardrail_trip(...)`` — one structured event per typed guardrail trip
   (AC3), mirroring the ``agent_action_log`` rows (invariant NFR2, ADR-0009).
+
+Project: ``ivanm/starter-project`` on the EU instance (``logfire-eu.pydantic.dev``) —
+hardcoded via ``AdvancedOptions.base_url`` rather than left to the client
+default, which points at the global endpoint. ``LOGFIRE_TOKEN`` still has to
+be a write token minted for *that* project (``logfire auth`` +
+``logfire projects use --org ivanm starter-project``) or nothing arrives.
 """
 from __future__ import annotations
 
@@ -47,10 +54,18 @@ def configure_observability(app=None) -> bool:
             send_to_logfire="if-token-present",
             environment=os.getenv("AETHERIX_ENV", "staging" if os.getenv("FLY_APP_NAME") else "dev"),
             console=False,
+            # Project lives on the EU instance (ivanm/starter-project) — the
+            # default client points at the global endpoint, which would
+            # silently send nothing to the right place.
+            advanced=logfire.AdvancedOptions(base_url="https://logfire-eu.pydantic.dev"),
         )
         # AC4 — patches the anthropic client: every completion carries
         # model, input/output tokens and latency.
         logfire.instrument_anthropic()
+        logfire.instrument_system_metrics()
+        # Bridges stdlib `logging` (used throughout this module and the rest
+        # of the app) into Logfire without touching any existing handler.
+        logging.getLogger().addHandler(logfire.LogfireLoggingHandler())
         if app is not None:
             logfire.instrument_fastapi(app, capture_headers=False)
         _enabled = True
