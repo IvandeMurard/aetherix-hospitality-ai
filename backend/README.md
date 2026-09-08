@@ -85,7 +85,7 @@ Aetherix builds that synthesis automatically, learns from manager feedback, and 
 
 ### Delivered (May 2026)
 
-- **Daily F&B forecast** — Prophet time-series + occupancy regressors (weather, events, occupancy). MAPE 7.8% J+1 on backtest.
+- **Daily F&B forecast** — Prophet time-series + occupancy regressors (weather, events, occupancy). Accuracy is benchmarked on **real** data (Kaggle *Recruit*): Prophet beats a naive same-weekday baseline by 6.15 points of mean MAPE, but ties it on the median day. The earlier *7.8% J+1* figure came from the synthetic generator and is **circular** — it built covers from the regressors Prophet consumes — so it is retained only as an internal non-regression gate, never as evidence of skill. Detail: [`docs/context/mape-benchmark.md`](../docs/context/mape-benchmark.md).
 - **Staffing recommendations** — covers → optimal headcount, respecting labor regulations
 - **Daily Receipt** — WhatsApp push at 6am: yesterday's actuals vs forecast, delta, confidence
 - **Weekly digest** — Sunday KPI summary: acceptance rate, MAPE trend, cost variance
