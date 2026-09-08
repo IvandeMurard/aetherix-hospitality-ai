@@ -128,7 +128,8 @@ Epic 16 se clôt à **S2 (16/08)**, soit ~7 semaines avant sa deadline — ce qu
 | Item | Épique | Pts | État |
 |------|--------|----:|------|
 | **HOS-314** contenu & distribution — article eval-gate, LinkedIn, registries MCP | 16 | 3 | ⬜ À faire |
-| **HOS-326** trace de politique à l'émission — `policy_id` + `selection_inputs` + confiance/tier | 10 | 3 | ⬜ **À créer dans Linear** — voir §Amendement 11/08 |
+| **HOS-326** trace de politique à l'émission — `policy_id` + `selection_inputs` + confiance/tier | 10 | 3 | ✅ Créée 11/08 — voir §Amendement 11/08 |
+| **HOS-327** page vision publique du méta-repo — falsifiable, étiquetée | 16 | 2 | ✅ Créée 11/08 — contenant distinct de HOS-314 |
 | ~~**HOS-321** layer eval `guardrail`~~ | 16 | ~~5~~ | ✅ **Livré le 30/07** (commit `aeb68a3`) — couvre **13** raisons typées d'Epic 12, pas 11 comme estimé initialement |
 
 > **Point de bascule — avancé.** Avec HOS-321 livré, S3 ne porte plus que HOS-314. **Epic 16 peut se clôturer dès S2**, soit ~7 semaines avant sa deadline du 05/10. Phase 3 reprend donc la capacité à partir de **S3**, une semaine plus tôt que prévu au re-baseline.

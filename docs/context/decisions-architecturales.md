@@ -216,6 +216,8 @@ Séparation **vitrine publique** (vision Mesh) / **execution nodes privés**. M�
 
 **Amendement 07/07/2026 (exécution partielle — déclencheur pré-candidatures) :** un troisième trigger s'ajoute aux deux de Q6 (pilote+NDA / pré-fundraise) : la **recherche d'emploi** (audit critique `analyse-critique-2026-07.md` — le case study public pointait vers un repo privé, 404). Exécuté ce jour : méta-repo public [`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) (README vision + inventaire honnête construit-vs-vision + MIT, **historique frais** — règle le risque résidu Q2-01 pour le contenu public) + cross-link `tacet-app`. **Non exécuté** (reste Étape 2) : scission stub public archivé / `aetherix` privé, migration `mesh-architecture.md` + ADRs cross-cutting, reusable workflows. Contenu méta-repo volontairement minimal tant que le ticket GitHub Support Q2-01 (HOS-304) n'est pas clos. Story : HOS-305 (Epic 16, HOS-300).
 
+**Clôture AC4 — 11/08/2026 :** le lien du case study est corrigé. Vérifié en lisant la source publiée de `ivandemurard.com/aetherix` : deux liens vers le méta-repo, **zéro occurrence de `aetherix-hospitality-ai`**. L'avertissement porté par `CLAUDE.md` depuis le 21/07 est retiré. Étape 2 (scission des repos, HOS-246) reste non exécutée — inchangé.
+
 ### 26 — Anima : Guest Cognition Layer + confidence-weighted claims + Segment dual-scope + HiveMemory v2 (Learning Engine tier Mesh) (17/06/2026)
 
 **Trigger :** post-hackathon Anima PoC (juin 2026) + revue architecture multi-parties (sessions 13/06–17/06) — trois évolutions par rapport à Décision #20.

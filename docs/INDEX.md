@@ -25,7 +25,7 @@
 | Section | Lignes | Diagnostic révisé |
 |---------|-------:|-------------------|
 | `## Décisions architecturales — INDEX` | 41 | **C'est la raison d'être du fichier.** Compressible en `#N — titre court` sans le résumé, mais on perd la lisibilité en session. |
-| `## Décisions ouvertes — INDEX` | 20 | Idem. |
+| `## Décisions ouvertes — INDEX` | 20 | ~~Idem.~~ **Diagnostic révisé le 11/08 — sorti du fichier**, voir §Refactoring du 11/08. |
 | `## Fichiers clés` | 17 | **Diagnostic initial erroné** — j'avais écrit « recoupe ce catalogue ». Faux : c'est une carte du **code** (`backend/app/*`, `scripts/*`), ce catalogue liste la **documentation**. À conserver. |
 
 > ⚖️ **Plafond relevé à 170 le 31/07/2026 (arbitrage Ivan).** Il restait 16 lignes à trouver et le seul gisement était constitué des deux index de décisions — soit le contenu principal du fichier. Un plafond qui oblige à supprimer ce pour quoi le fichier existe est mal calibré : l'index a grandi depuis que 150 a été posé. Le plafond est désormais **contrôlé en CI par le détecteur D5**, qui le lit dans la ligne de règle de `CLAUDE.md` — il n'est donc pas dupliqué dans le script.
@@ -33,6 +33,14 @@
 > ⚠️ **Drift de comptage — résolu le 31/07.** Trois chiffres différents circulaient pour le même ensemble : deux docs et le fichier source lui-même annonçaient des totaux qui ne correspondaient ni entre eux, ni au décompte réel. Le détecteur **D6** les a tous les trois trouvés dès son premier run — y compris celui que la note précédente de cette section avait elle-même introduit. **Correctif appliqué : les comptes codés en dur ont été retirés, pas corrigés.** Un nombre dupliqué dérive au premier ajout ; le décompte se lit désormais en comptant les sections de la source.
 
 **Traité le 31/07** : plafond relevé à 170, refactoring appliqué, et les deux règles (plafond + comptes) sont désormais contrôlées en CI — elles ne peuvent plus dériver en silence.
+
+### Refactoring du 11/08 — index des décisions ouvertes sorti
+
+Le fichier est remonté à **169/170** en ouvrant une décision de plus. Le diagnostic de juillet — « c'est la raison d'être du fichier, ça ne bougera pas » — tenait pour les décisions **architecturales**, pas pour les **ouvertes** : une décision tranchée est stable et mérite sa ligne permanente ; une décision ouverte bouge, se reformule, s'archive, et son index doit être maintenu à deux endroits à chaque mouvement. C'est un coût récurrent pour une information périssable.
+
+`## Décisions ouvertes — INDEX` (20 lignes) est donc devenu `## Décisions ouvertes — POINTEUR` (4 lignes). **Résultat : 169 → 154 lignes**, soit 16 de marge sous le plafond. Source de vérité unique : [`context/open-decisions.md`](context/open-decisions.md).
+
+Ce qui reste indexé dans `CLAUDE.md` : les décisions architecturales seules. Le prochain gisement, si le besoin revient, est la compression de cet index en `#N — titre court` — au prix de la lisibilité en session, donc à ne faire que contraint.
 
 ---
 

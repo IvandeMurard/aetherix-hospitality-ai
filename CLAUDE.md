@@ -2,7 +2,7 @@
 
 > Source de vérité partagée. Chargé automatiquement à chaque session.
 > **Règle — NE PAS SURCHARGER CE FICHIER.** Facts + INDEX uniquement, **plafond dur 170 lignes** (relevé de 150 le 31/07 : l'index de décisions a grandi, cf. `docs/INDEX.md` §Dette CLAUDE.md). Contrôlé en CI — détecteur D5.
-> Une décision = **une ligne d'index ici**, le détail en **sous-section** du fichier dédié : `context/decisions-architecturales.md` · `context/open-decisions.md` · `docs/INDEX.md`. Ni narratif, ni justification, ni historique ici : si ça ne tient pas en une ligne, ça va en sous-section et on met le lien.
+> Une décision **architecturale tranchée** = une ligne d'index ici, détail en sous-section de `context/decisions-architecturales.md`. Une décision **ouverte** ne s'indexe plus ici depuis le 11/08 (pointeur seul) : elle vit entièrement dans `context/open-decisions.md`. Ni narratif, ni justification, ni historique ici : si ça ne tient pas en une ligne, ça va en sous-section et on met le lien.
 
 ---
 
@@ -62,7 +62,7 @@
 | 22 | Eval-by-design = offline gate CI + runtime eval + outcome eval (Qonto + BMad ; portée élargie 3 bras, amendé 19/06 ADR-0007 §13) | 04/06/2026 |
 | 23 | POS integration scope + adapter pattern (Phase 4) — **§D4 cohort v2 différé 31/07/2026** (ADR-0006 §10) : `hotel_cohort_features` v1 n'existe pas et son socle Hive est gelé ; la FK dans la migration P4-POS-2 bloquait tout le backlog POS. Ingestion POS reste livrable : 5 stories / 19 pts | 06/06/2026 |
 | 24 | Graphe de contexte Postgres recursive CTE — Path C retenu cash-driven, AGE bloqué Supabase. 🛑 **DIFFÉRÉ Phase 4 en entier (PM sign-off 31/07/2026, ADR-0008 §17.6)** : moitié du graphe adossée à `hotel_cohort_features` inexistante + socle Hive gelé ; `Cohort` = frontière d'anonymisation donc query types cross-propriétés non dégradables ; ce qui reste double pgvector. Conception Path C intacte, arbitrage de calendrier. Reprise = précondition ADR-0006 §10.4. Effet transitif : ADR-0011 différé | 06/06/2026 |
-| 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — **exécuté 07/07/2026** (déclencheur pré-candidatures) : méta-repo public [`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) livré et vérifié (public, README propre, 0 fuite ADR-0012/Signal Contract), Aetherix reste privé, cross-link tacet-app. ADR-0012 jamais migré (Décision #31). **⚠️ Vérifié 21/07/2026 : lien case study ivandemurard.com/aetherix pointe encore vers le repo privé `aetherix-hospitality-ai` → 404 confirmé pour visiteur externe, pas encore reciblé vers le méta-repo (HOS-305 AC4 non clos)** | 16/06/2026 |
+| 25 | Multi-repo strategy + governance (méta-repo public + execution nodes privés) — **exécuté 07/07/2026** (déclencheur pré-candidatures) : méta-repo public [`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) livré et vérifié (public, README propre, 0 fuite ADR-0012/Signal Contract), Aetherix reste privé, cross-link tacet-app. ADR-0012 jamais migré (Décision #31). **HOS-305 AC4 clos — vérifié 11/08/2026 : `ivandemurard.com/aetherix` pointe vers le méta-repo, zéro occurrence du repo privé** | 16/06/2026 |
 | 26 | Anima = Guest Cognition Layer · confidence-weighted claims (schema, pas couche) · Segment double portée (local + Hive prior) · Learning Engine tier Mesh séparé · outcome-capture instrumentation Phase 4 | 17/06/2026 |
 | 27 | Phase de mise en conformité (Epic 12 — runtime guardrails post-audit) **clôturée** : G-1→G-5 livrés (heartbeat/dead-man's switch, alerting error-rate/timeout, bornes feedback→training, circuit-breaker forecast tiered-confidence, bornes sanity outputs) + 6 findings QA-S4 ; G-6 prompt-injection **différé Phase 4**. Invariant : tout trip guardrail loggé avec raison typée (NFR2). Pattern = **ADR-0009** ; frontière runtime (Bras B) vs offline-eval (Bras A) = ADR-0007 §13 ; audit clôturé `docs/context/security-review-2026-05-01.md` | 20/06/2026 |
 | 28 | PMS canonical schema — jurisprudence Provider (#9/#10) étendue aux adapters PMS, amendement **ADR-0006** | 23/06/2026 |
@@ -89,24 +89,10 @@
 
 ---
 
-## Décisions ouvertes — INDEX
+## Décisions ouvertes — POINTEUR
 
-> Détail complet + archive résolues : [`docs/context/open-decisions.md`](docs/context/open-decisions.md)
-> Convention : ligne d'index = 1-ligne summary. Le détail (rationale, alternatives, échéance, dépendances) vit dans le sous-fichier.
-
-| Statut | Décision | Trigger / échéance |
-|---|---|---|
-| 🟡 Open | Pricing model (HOS-179 P3-5) | Post-90j data pilote |
-| 🟡 Open | Apaleo Copilot scope F&B (canari) | Monitoring mensuel via watchlist |
-| 🟡 Open | Food waste tracking | À trancher Phase 4 vs Phase 5 |
-| 🟡 Open | Interaction model event-driven (Phase 4-5) | Brief ADR-0013 futur (réservé — corrigé, ADR-0009 déjà pris par runtime guardrails) |
-| 🟡 Open | Politique exploration éthique (Anima / Learning Engine) | Design Learning Engine Phase 5 |
-| 🟡 Open | Reward multi-objectif (CSAT vs marge vs fidélisation) | Design Learning Engine Phase 5 |
-| 🟡 Open | Méthode off-policy evaluation (IPW / DR / DR-Learner) | Volume données post-pilote Phase 4 |
-| 🟡 Open | Seuils de calibration SignalComposite (ADR-0012) | Données pilote Phase 3 réelles |
-| 🟡 Open | Rattachement Bras C (outcome-eval) au framework eval-by-design (ADR-0007 §13) | Trigger amendé 11/08 : après HOS-326 (trace de politique à l'émission, S3), plus HOS-247 (Anima, DPIA-gated) |
-
-Resolved decisions archive (Graphe de contexte Apache AGE 06/06, POS integration scope 06/06, Federated Hive timing, Hive Memory scope, PMS priorité, MCP server, etc.) → voir `docs/context/open-decisions.md` §Resolved.
+> **Source de vérité unique : [`docs/context/open-decisions.md`](docs/context/open-decisions.md)** — §Actives + §Resolved (archive).
+> L'index tabulaire vivait ici jusqu'au 11/08 ; il a été retiré au profit d'un pointeur (CLAUDE.md à 169/170 lignes, détecteur D5). Une décision ouverte ne se déclare plus dans ce fichier — elle s'ajoute en sous-section du fichier dédié, point. Les décisions **architecturales** (tranchées) gardent leur index ci-dessus : elles sont stables, les ouvertes ne le sont pas.
 
 ---
 
