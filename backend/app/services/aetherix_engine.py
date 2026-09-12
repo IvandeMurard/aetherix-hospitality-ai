@@ -7,6 +7,7 @@ from sqlalchemy.future import select
 
 from app.db.models import RecommendationCache, RestaurantProfile
 from app.db.session import AsyncSessionLocal
+from app.providers.factory import get_embedding_provider
 from app.services.agent_constitution import AgentConstitutionService
 from app.services.memory_service import MemoryService
 from app.services.prediction_engine import PredictionEngine
@@ -44,6 +45,9 @@ class AetherixEngine:
         reasoner = ReasoningService()
         staffer = StaffingService()
         memory = MemoryService()
+        # Same factory MemoryService and the MCP surface use, so recall scores
+        # are comparable across all three rather than merely similar.
+        self._embedding = get_embedding_provider()
         constitution_svc = AgentConstitutionService()
 
         # Exposed so POST /api/v1/predictions/train can (re)train the live singleton
@@ -61,7 +65,27 @@ class AetherixEngine:
             memory=memory,
             profile_loader=self._load_profile,
             constitution_builder=constitution_svc.build_system_prompt,
+            memory_recall=self._recall_memory,
         )
+
+    async def _recall_memory(self, tenant_id: str, query: str, k: int) -> list:
+        """Structured recall adapter for the orchestrator's agentic loop (HOS-189).
+
+        The orchestrator needs per-hit similarity to decide whether to widen its
+        recall, and ``MemoryService.get_relevant_context`` returns flat text. This
+        binds the same path ``mcp_server.tool_recall_memory`` uses — embed, then
+        ``MemoryRecallService.recall`` — so both surfaces score memory identically.
+
+        Lives here rather than in ``orchestrator/`` because it needs a session and
+        an embedding provider, and ADR-0004 forbids ``app.*`` imports over there.
+        Returns ``list[MemoryHit]``; the orchestrator reads only ``.similarity``
+        and ``.reflection`` and never imports the type.
+        """
+        from app.services.memory_recall_service import MemoryRecallService
+
+        query_vec = await self._embedding.embed(query)
+        async with AsyncSessionLocal() as db:
+            return await MemoryRecallService(db).recall(tenant_id, query_vec, k=k)
 
     async def _load_profile(self, tenant_id: str) -> Optional[RestaurantProfile]:
         async with AsyncSessionLocal() as db:

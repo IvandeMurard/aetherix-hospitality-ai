@@ -162,16 +162,61 @@ No Aetherix code changes required when Tacet is added. This is the composability
 
 ## 5. Implementation backlog
 
-| Item | Effort | Priority |
-|------|--------|----------|
-| Create `backend/orchestrator/__init__.py` + `agent.py` stub | XS | P0 |
-| Add `recall_memory` tool to `mcp_server.py` (v1 path) | S | P0 |
-| Move orchestration logic from `AetherixEngine.get_forecast()` to `orchestrator/agent.py` | M | P1 |
-| Deprecate `get_recommendations_with_memory_context` (keep v0 endpoint, add deprecation header) | XS | P1 |
-| Wire MCP client in `orchestrator/agent.py` → calls Aetherix `/mcp/v1/` | M | P1 |
-| Add linter rule: no `from app.` imports in `orchestrator/` | XS | P1 |
-| Update `docs/mcp/getting-started.md` with new tool schemas | S | P2 |
-| Technical article skeleton (mesh architecture) | M | P2 (Track B) |
+Status is claimed against code, not against a ticket state. Each Done row names
+the file a reader can open to check it.
+
+| Item | Effort | Priority | Status |
+|------|--------|----------|--------|
+| Create `backend/orchestrator/__init__.py` + `agent.py` stub | XS | P0 | **Done** — HOS-184 |
+| Add `recall_memory` tool to `mcp_server.py` (v1 path) | S | P0 | **Done** — `app/mcp_server.py` |
+| Move orchestration logic from `AetherixEngine.get_forecast()` to `orchestrator/agent.py` | M | P1 | **Done** — `orchestrator/agent.py::OrchestratorAgent.get_forecast`; the engine delegates |
+| Deprecate `get_recommendations_with_memory_context` (keep v0 endpoint, add deprecation header) | XS | P1 | **Superseded** — the header was never shipped; HOS-315 retired `/mcp/v0/` outright on 2026-08-01, so there is no response left to decorate. See §5.1 |
+| Wire MCP client in `orchestrator/agent.py` → calls Aetherix `/mcp/v1/` | M | P1 | **Not started** — Phase 4. Services are still constructor-injected, which is D2, not D3 |
+| Add linter rule: no `from app.` imports in `orchestrator/` | XS | P1 | **Done** — `tests/orchestrator/test_agent.py::test_no_app_imports_in_orchestrator` (AST-based) |
+| Update `docs/mcp/getting-started.md` with new tool schemas | S | P2 | **Done** — `docs/mcp/getting-started.md` |
+| Agentic loop in `orchestrator/agent.py` (D7) | S | P1 | **Done** — `orchestrator/rules.py` + `agent.py::_recall_with_retry`. See §5.2 |
+| Technical article skeleton (mesh architecture) | M | P2 (Track B) | **Not started** |
+
+### 5.1 Why the deprecation header is recorded as superseded, not done
+
+HOS-189 asked for `Deprecation: true` + `Sunset` headers on
+`get_recommendations_with_memory_context`, and a `deprecated_tool_call` metric,
+so that consumers had warning before the tool was removed in Phase 4.
+
+Neither shipped. A closing comment on the ticket asserted they had, and
+`getting-started.md` described the Sunset window as *"announced in its response
+headers"* — two documents agreeing with each other about a header that did not
+exist in the code. Recorded here because that is the failure the status
+vocabulary exists to catch: evidence that turns out to be another document.
+
+Shipping the header now would announce a removal that already happened. The tool
+is gone from the v1 manifest and survives only on the stdio dispatch surface,
+which has no HTTP response. The warning obligation was overtaken by HOS-315
+completing the removal; it was not met.
+
+### 5.2 The loop signal: recall similarity, not forecast confidence
+
+D7 puts the agentic loop in `orchestrator/agent.py`. HOS-189 offered two
+candidate signals for it, and only one belongs to the orchestrator.
+
+`confidence < 0.6` is already owned downstream by
+`app/services/forecast_guardrail.py` (Epic 12 G-4 / HOS-251), which tiers a
+low-confidence forecast and degrades rather than blanks it. An orchestrator
+retry on the same threshold would put two components in charge of one number,
+which is the coupling D1 and D2 exist to prevent — and the first time the two
+disagreed, neither would be wrong on its own terms.
+
+`top_similarity < 0.7` on memory recall has no such owner. Nothing downstream
+reacts to a thin memory hit, so reacting to it is the orchestrator's job, and
+widening k is a lever only the orchestrator holds.
+
+**What would make this the wrong choice:** if widening k from 5 to 10 turns out
+not to raise top similarity in practice — that is, if thin recall means the
+corpus is thin rather than the window too narrow — then the retry spends a node
+call for nothing and the right response is to skip reasoning-on-memory
+altogether rather than to look harder. The trace emitted on every run
+(`memory_recall.attempts`, `.top_similarity`, `.outcome`) is what will answer
+that, and it should be read before this rule is trusted at scale.
 
 ---
 

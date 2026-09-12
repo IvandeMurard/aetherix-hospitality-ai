@@ -1,7 +1,7 @@
 # Aetherix MCP Server — Getting Started
 
 > **Audience**: third-party agents, enterprise agent hubs, partner integrations.
-> **v0**: 3 tools — stable, `get_recommendations_with_memory_context` deprecated.
+> **v0**: retired 2026-08-01 (HOS-315). See the migration note below.
 > **v1**: 3 atomic tools — `recall_memory` replaces `get_recommendations_with_memory_context`.
 > **Spec**: [ADR 0001](../adr/0001-aetherix-mcp-server-v0.md) · [ADR 0004](../adr/0004-orchestrator-separation.md)
 
@@ -21,8 +21,11 @@ Endpoint: `POST /mcp/v1/`
 
 ### v0 — retired on 2026-08-01
 
-`POST /mcp/v0/` no longer exists. It was removed at the end of the Sunset window
-announced in its response headers (HOS-315). Migration is a one-line change:
+`POST /mcp/v0/` no longer exists. It was removed on 2026-08-01 (HOS-315). The
+`Deprecation` / `Sunset` response headers planned for the window were never
+shipped, so the announcement was documentation-only — noted here rather than
+quietly corrected, because a client that was watching for those headers never
+saw one. Migration is a one-line change:
 
 - point your client at `/mcp/v1/` (identical JSON-RPC framing);
 - replace `get_recommendations_with_memory_context` with `recall_memory`
