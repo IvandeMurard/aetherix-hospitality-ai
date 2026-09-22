@@ -43,6 +43,23 @@ Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni co
 
 **Conditions de bascule (rouvrir si l'une se déclenche)** : **B1** spec A2A publique sur `apaleo.dev` · **B2** un tiers publie un agent F&B via Agent Hub/A2A *(partagé avec le trigger ci-dessus)* · **B3** un design partner exige la livraison via Copilot · **B4** Apaleo conditionne le référencement Agent Hub à une connexion A2A. Sinon, re-vérification **trimestrielle** — premier point au **30/10/2026**.
 
+### Marché de lancement cible pour le premier pilote Anima — EU vs non-EU
+
+**Statut :** Open — posé 22/09/2026, suite question d'Ivan sur l'opportunité d'un lancement hors UE pour accélérer le déblocage du gate DPIA (Décision #20).
+
+**Trigger :** conseil externe reçu par Ivan recommandant de ne pas lancer en Europe (source et raisonnement non documentés à ce stade). Question testée : construire Anima en faisant abstraction des restrictions RGPD, en assumant un lancement hors UE, est-ce possible et pertinent ?
+
+**Ce qui est établi** (analyse [`docs/context/dpia-anima-2026-08.md`](dpia-anima-2026-08.md)) :
+
+- **Art. 3(1) RGPD** s'applique dès que le **responsable de traitement** (l'hôtel design-partner — c'est lui, pas Aetherix, cf. DPIA §2) est établi dans l'UE, indépendamment de la localisation des serveurs Anima ou d'Aetherix. « Hors UE » doit donc être un pivot d'**ICP** (design-partners *et* guests majoritairement non-UE), pas un choix d'hébergement — ce qui contredit l'ICP actuel documenté (`docs/pilot/onboarding-kit.md` : hôtel indépendant EU sous Apaleo).
+- **Ce qu'un lancement non-UE retirerait réellement** : l'AI Act (règlement UE 2024/1689), qui ne s'applique qu'aux systèmes mis sur le marché / utilisés en UE — notamment la ligne rouge biométrie/voix (DPIA §5.4), pertinente pour la vision Phase 5 « Aetherix Voice ».
+- **Ce que ça ne retirerait pas** : les États-Unis ne sont pas une zone sans règles — CCPA/CPRA (Californie) encadre le profilage automatisé, l'Illinois (BIPA) est *plus* strict que le RGPD sur le biométrique. Et une partie des mesures bloquantes du DPIA (§9.2) répond à un risque produit indépendant de toute juridiction — notamment M-1/M-5 face à **R4** (« inférence erronée durable », le risque le plus probable du dossier, DPIA §8) : un profil qui retient une inférence fausse sans mécanisme de contestation reste un problème de confiance, RGPD ou pas — `decay_rate` (apprentissage continu) ne s'y substitue pas, cf. DPIA §5.5/§6 et W1 (§11bis).
+- **Le gate DPIA ne bloque aujourd'hui aucun travail actif** : Anima est déjà gelée par le plan 90j (Epic 16) indépendamment du gate ; le bloqueur racine documenté est **W5 — zéro design-partner identifié** (DPIA §11bis), pas la juridiction de lancement.
+
+**Ce qui reste à trancher** : si/quand Epic 16 lève le gel sur Anima, cibler délibérément un premier design-partner non-UE (piste distincte de l'ICP Aetherix core, qui reste EU/Apaleo) pour alléger la charge de conformité du premier build réel — vs. garder un ICP unique EU pour la cohérence commerciale du Mesh.
+
+**Dépend de** : levée du gel Epic 16 sur Anima (condition amont — DPIA §11, C1-C9) ; clarification de la source et du raisonnement du conseil reçu par Ivan, pour évaluer s'il visait spécifiquement le profil de risque d'Anima (profilage haute-sensibilité, 6/9 critères WP248) ou un conseil générique « l'UE freine les startups IA », non calibré sur ce cas précis.
+
 ### Rattachement Bras C (outcome-eval) au framework eval-by-design
 
 **Statut :** Open — identifié ADR-0007 §13.2 (19/06/2026). Issue Linear dédiée : **[HOS-275](https://linear.app/hospitalityagent/issue/HOS-275)** (Backlog, `phase:4`, non estimée) — *corrigé le 11/08/2026 : ce paragraphe affirmait « pas d'issue Linear dédiée à ce jour », l'issue existe depuis le 19/06/2026*. Reformulé et remis en avant 05/08/2026 en discutant l'articulation Learning Engine / eval-by-design.
