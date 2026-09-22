@@ -55,7 +55,7 @@ d'être posé franchement, pas enfoui :
 ### Intégration au méta-repo (dépend de la Décision #25 / Story 16.5)
 
 La déclaration publique vit dans le README du méta-repo public
-[`hospitality-agentic-mesh`](https://github.com/IvandeMurard/hospitality-agentic-mesh) (tableau
+[`Hospitality-Multi-agent-Architecture`](https://github.com/IvandeMurard/Hospitality-Multi-agent-Architecture) (tableau
 *What's built vs. what's vision*). Trois corrections pour l'aligner sur la taxonomie à cinq
 étiquettes sont déjà spécifiées, prêtes à coller, dans
 [`audit-surfaces-publiques-2026-08.md`](audit-surfaces-publiques-2026-08.md) §PR méta-repo
@@ -65,7 +65,7 @@ sur la ligne Aetherix ; principes #4/#5 au conditionnel).
 **Cette story ajoute une 4ᵉ correction à cette PR** : remplacer le cadrage « solo = motivation » par
 la ligne bus-factor ci-dessus (risque de continuité nommé + atténuations + ce qui reste ouvert).
 La PR est ouverte dans le dépôt méta (repo public distinct, hors de ce commit) :
-[hospitality-agentic-mesh#2](https://github.com/IvandeMurard/hospitality-agentic-mesh/pull/2) — voir §Suites.
+[Hospitality-Multi-agent-Architecture#2](https://github.com/IvandeMurard/Hospitality-Multi-agent-Architecture/pull/2) — voir §Suites.
 
 ---
 
@@ -129,8 +129,8 @@ dédié est à provisionner (Story 7.5, Task 6) avant tout traitement de donnée
 
 ## Suites (hors de ce commit)
 
-- **PR méta-repo** `hospitality-agentic-mesh` : les 3 corrections d'`audit-surfaces` + la 4ᵉ (ligne
-  bus-factor) sont dans [hospitality-agentic-mesh#2](https://github.com/IvandeMurard/hospitality-agentic-mesh/pull/2),
+- **PR méta-repo** `Hospitality-Multi-agent-Architecture` : les 3 corrections d'`audit-surfaces` + la 4ᵉ (ligne
+  bus-factor) sont dans [Hospitality-Multi-agent-Architecture#2](https://github.com/IvandeMurard/Hospitality-Multi-agent-Architecture/pull/2),
   **ouverte, en attente de merge** (dépôt public distinct).
 - **DPA type + `docs/GDPR-DATA-INVENTORY.md`** : à produire (Story 7.5 / HOS-115) avant le passage
   aux données réelles. Ce document en est le cahier des charges honnête, pas le livrable.
