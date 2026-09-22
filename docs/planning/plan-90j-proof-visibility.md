@@ -101,3 +101,15 @@ Nouveaux ADRs · extension Mesh (Anima, Learning Engine, ontologies) · features
 3. 1 article technique publié + série LinkedIn entamée.
 4. Boucle outcome-capture démontrée end-to-end (sandbox) avec observabilité.
 5. Réponse écrite aux 5 maillons de la chaîne de valeur (interviews incluses).
+
+---
+
+## Amendement 22/09/2026 — gel développement levé, objectif reformulé portfolio (Décision #35)
+
+Le gel de développement posé par la section « Ce qu'on ne fait PAS pendant 90 jours » ci-dessus est **levé** — pas le reste du plan (hygiène, méta-repo, preuve empirique restent pertinents), et pas le gate DPIA (Décision #20, inchangé). Détail complet et rationale : Décision #35, `docs/context/decisions-architecturales.md`.
+
+**Pourquoi** : l'objectif du projet a été précisé — recherche d'emploi / renforcement de profil, pas vente ni levée (originellement conçu comme projet entrepreneurial, réévalué face à l'urgence de la recherche). Le raisonnement du gel (éviter l'« architecture sans preuve » face à un acheteur en diligence) visait une audience commerciale ; il ne s'applique pas de la même façon à un jury de recrutement, où la profondeur technique — honnêtement étiquetée (Décision #33) — est elle-même la valeur recherchée.
+
+**Ce qui reprend** : Orchestrateur avancé, meta-learner (ADR-0005), Anima — sur données synthétiques/mock uniquement (Décision #11), jamais présenté comme « Built » ou prêt pour une donnée réelle.
+
+**Ce qui ne bouge pas** : le gate DPIA (Décision #20) sur toute donnée guest réelle — 13 mesures bloquantes, relecture juridique, DPA à deux étages — reste une condition absolue, sans exception, indépendamment de cet arbitrage. Les deux audits (interne + externe GPT) qui ont motivé le gel d'origine restent des constats valides pour un contexte commercial — à réappliquer si un vrai design-partner apparaît un jour.
