@@ -105,13 +105,13 @@ Epic 16 se clôt à **S2 (16/08)**, soit ~7 semaines avant sa deadline — ce qu
 | Item | Épique | Pts | État |
 |------|--------|----:|------|
 | ~~**HOS-278** spike A2A~~ | 10 | ~~3~~ | ✅ **Livré en avance le 30/07** → `docs/context/apaleo-a2a-spike-decision.md`. **Risque R4 levé.** |
-| **HOS-318** gate honnêteté métriques — taxonomie Built/Shadow/Synthetic | 16 | ~2 | ⬜ À faire — **non estimée dans Linear**, à pointer |
+| **HOS-318** gate honnêteté métriques — taxonomie Built/Shadow/Synthetic | 16 | ~2 | ✅ **Livré le 01/08** → `docs/context/status-taxonomy.md`, **Décision #33**. Détecteur D7 branché. Statut Linear à corriger. |
 | **HOS-312** unit economics — coût/propriété/mois | 16 | 1 | ✅ **Livré le 31/07** → `docs/Cost_Model.md` v2.0 (`56205c1`, PR #224). Statut Linear corrigé Done. |
 | **HOS-313** docs stratégiques — **AC1/AC2/AC3 déjà livrés le 09/07** | 16 | ~1 | ⬜ Reste **AC4** (one-pager conformité) + **AC5** (périmètre honnête méta-repo) |
 
 > HOS-312 débloque **HOS-179** (pricing doc, S8).
 > **~5 pts de capacité libérés en S1** (HOS-278 fait en avance, HOS-313 aux ⅔ fait). Candidats à remonter : la vérification V1 de S0, ou **HOS-177** depuis S4.
-> ⚠️ **HOS-318 porte un arbitrage non trivial** : le benchmark Recruit donne Prophet à **+6,15 pts de MAPE** mais **+0,56 pt de MdAPE** sur la baseline naïve. La DoD d'Epic 16 exige ≥ 5 pts « sinon pivot modèle documenté » — la clause se déclenche ou non selon la métrique lue. À trancher **avant** toute publication (HOS-314, S3).
+> ✅ **L'arbitrage HOS-318 est tranché** (Décision #33, 01/08) : le benchmark Recruit donne Prophet à **+6,15 pts de MAPE** mais **+0,56 pt de MdAPE** sur la baseline naïve. Verdict retenu = **PASS formel sur le MAPE, et clause pivot déclenchée volontairement** — à J+1 Prophet est derrière la naïve en médiane. Amendement protocole §7 : le WAPE devient un report obligatoire, le Δ MdAPE reste la métrique primaire.
 
 ### S2 — lun 10/08 → dim 16/08 · « Preuve terrain » (~9 pts)
 
@@ -337,7 +337,7 @@ Chaque vendredi 18:00 — relire ce doc :
 | HOS-321 | Backlog | **Done** — livré le 30/07 (`aeb68a3`), statut Linear à corriger | — |
 | HOS-177 | Backlog | **Todo** | S4 |
 | HOS-214 · HOS-219 | Backlog | **Todo** | S4 |
-| HOS-317 · HOS-318 | Todo | **estimer** (non pointées) | S1-S2 |
+| HOS-317 · HOS-318 | Todo | **Done** — livrées le 01/08 (`docs/context/decision-ledger.md` · `docs/context/status-taxonomy.md`), statut Linear à corriger. L'estimation n'a plus d'objet. | — |
 | HOS-319 | In Progress | **poser `dueDate` = 2026-09-25** + estimer ou marquer non-pointable (PM/externe) | — |
 | HOS-207 | Backlog | **Todo** | S7 |
 | HOS-114 | Backlog | **délier de HOS-176** si R1 le confirme | — |
