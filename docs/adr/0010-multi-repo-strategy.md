@@ -8,6 +8,21 @@
 
 ---
 
+**Amendement 22/09/2026 — le méta-repo est renommé `Hospitality-Multi-agent-Architecture`.**
+`hospitality-agentic-mesh` → [`Hospitality-Multi-agent-Architecture`](https://github.com/IvandeMurard/Hospitality-Multi-agent-Architecture).
+Le corps de cet ADR garde l'ancien nom : il enregistre ce qui a été décidé le 16/06, et
+le réécrire ferait dire au dossier une chose qui n'a pas été dite. Ce qui a été mis à jour
+ici, ce sont les deux seules lignes **copiables** — le `uses:` du workflow réutilisable et
+l'`url` de submodule — parce qu'elles sont des instructions, pas un compte rendu.
+
+Ce que ce renommage apprend, et qui vaut plus que le renommage : **GitHub redirige, donc
+rien n'a cassé, donc rien ne l'a signalé.** Le détecteur D9 (HOS-324) a continué de rendre
+un verdict vert sur `IvandeMurard/hospitality-agentic-mesh` pendant que ce dépôt n'existait
+plus sous ce nom. Un nom mort qui répond encore est une panne silencieuse : c'est la forme
+de drift que l'agent d'hygiène ne voit pas, puisqu'il vérifie ce que le repo dit contre ce
+qu'il est, jamais contre comment il s'appelle. Découvert sur un avertissement de `git push`,
+pas sur un détecteur.
+
 ## Contexte
 
 Suite session PM 06-15, décision de séparer la **vitrine publique** (vision, architecture agentique, roadmap macro) de l'**execution node F&B** (Aetherix backend). Cohérent avec les décisions de séparation déjà actées par nœud :
@@ -123,7 +138,7 @@ github.com/IvandeMurard/
 ```yaml
 jobs:
   eval-gate:
-    uses: IvandeMurard/hospitality-agentic-mesh/.github/workflows/reusable-eval-gate.yml@main
+    uses: IvandeMurard/Hospitality-Multi-agent-Architecture/.github/workflows/reusable-eval-gate.yml@main
     secrets: inherit
 ```
 > **Avantage de la License MIT/public du méta-repo (#4) :** les reusable workflows d'un repo **public** sont appelables par n'importe quel repo (y compris privé) **sans grant d'accès**. Un méta-repo privé aurait exigé Settings → Actions → access grant par repo appelant. Le choix public lève cette friction.
@@ -219,7 +234,7 @@ Contact : LinkedIn · ivandemurard@gmail.com
 ```ini
 [submodule "tools/bmad"]
     path = tools/bmad
-    url = https://github.com/IvandeMurard/hospitality-agentic-mesh.git
+    url = https://github.com/IvandeMurard/Hospitality-Multi-agent-Architecture.git
     branch = main
 ```
 

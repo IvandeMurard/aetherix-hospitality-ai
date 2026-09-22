@@ -725,7 +725,7 @@ def test_d9_unreachable_repo_records_a_skip(monkeypatch):
 def test_d9_watches_more_than_the_current_repo(monkeypatch):
     """AC4: the costly incident was on the meta-repo, not here."""
     assert len(hygiene.WATCHED_REPOS) >= 2
-    assert any("hospitality-agentic-mesh" in r for r in hygiene.WATCHED_REPOS)
+    assert any("Hospitality-Multi-agent-Architecture" in r for r in hygiene.WATCHED_REPOS)
 
 
 # ─── D10 · Cron d'hygiène en vie ──────────────────────────────────────────────

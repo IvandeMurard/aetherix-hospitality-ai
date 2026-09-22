@@ -18,7 +18,7 @@
 
 ---
 
-> ** Part of the [Hospitality Agentic Mesh](https://github.com/IvandeMurard/hospitality-agentic-mesh)** — a network of specialized AI agents for hotel operations. Aetherix is the F&B execution node; the environmental-risk node ([Tacet](https://github.com/IvandeMurard/tacet-app), public repo) and the overall architecture are documented in the [meta-repo](https://github.com/IvandeMurard/hospitality-agentic-mesh) and the [case study](https://ivandemurard.com/aetherix).
+> ** Part of the [Hospitality Agentic Mesh](https://github.com/IvandeMurard/Hospitality-Multi-agent-Architecture)** — a network of specialized AI agents for hotel operations. Aetherix is the F&B execution node; the environmental-risk node ([Tacet](https://github.com/IvandeMurard/tacet-app), public repo) and the overall architecture are documented in the [meta-repo](https://github.com/IvandeMurard/Hospitality-Multi-agent-Architecture) and the [case study](https://ivandemurard.com/aetherix).
 
 ## What Aetherix is
 

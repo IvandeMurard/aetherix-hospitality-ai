@@ -378,7 +378,12 @@ PROPERTY_CLAIMS = (
 # the honest outcome, not a bug to work around with a broader token.
 WATCHED_REPOS = [
     "IvandeMurard/aetherix-hospitality-ai",
-    "IvandeMurard/hospitality-agentic-mesh",
+    # Renommé depuis `hospitality-agentic-mesh` le 22/09/2026. GitHub
+    # redirige, donc l'ancien nom continuait de répondre — et c'est
+    # exactement pourquoi personne ne l'aurait vu : D9 aurait rendu un
+    # verdict vert sous un nom mort. Aucun détecteur ne surveille les
+    # renommages ; celui-ci s'est vu à un avertissement de push.
+    "IvandeMurard/Hospitality-Multi-agent-Architecture",
     "IvandeMurard/tacet-app",
 ]
 
