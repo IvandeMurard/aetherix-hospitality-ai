@@ -122,6 +122,8 @@ Lors du discovery call (§3 Q1 + Q7), récupérer les vraies valeurs et recalcul
 
 ### 2-17 min — Qualifying questions (8 obligatoires)
 
+> **📌 TODO Phase 4 (non actionné — pilote reste Apaleo-only, Décision #11)** : ce script présume Apaleo (Q5, §4). À l'ouverture Phase 4 (Mews, multi-POS), ajouter en tête une question qualifiante "Quel PMS et quel POS utilisez-vous — natif ou tiers ?" et mapper la réponse contre la table vendors §D1 (`docs/adr/0006-pos-integration.md`, tiers T1/T2/T3) pour savoir immédiatement si l'adapter existe déjà ou doit être scopé avant de promettre une date de go-live. Réflexe déjà appliqué côté ingénierie dans ADR-0006 §11 (Mews POS natif) — "vérifier en premier si la donnée transite par l'écosystème PMS avant de présumer qu'un adapter tiers est nécessaire" ; même logique côté sales, pas de nouvel outil à construire.
+
 1. **"Combien de couverts par service en moyenne au dîner ?"**
    → calibration modèle, sizing ROI.
 2. **"Comment planifiez-vous vos effectifs F&B aujourd'hui — tableur, feeling, autre ?"**
@@ -162,7 +164,7 @@ Dérouler la checklist §4 ci-dessous, cocher en direct.
 
 ## §4 — Technical Prereq Checklist
 
-À cocher pendant le call (32-42 min).
+À cocher pendant le call (32-42 min). *Checklist Apaleo-only — TODO Phase 4 : gagner un item "PMS/POS confirmés = adapter existant (T1/T2) ou à scoper (T3/inconnu)" dès qu'un design partner hors Apaleo entre en pipeline (cf. note §3).*
 
 - [ ] **Apaleo account** avec API access activé (vérifier le tier — l'OAuth2 client doit être créable dans le Developer Portal du prospect).
 - [ ] **Numéro WhatsApp Business** configuré et joignable (le prospect doit savoir qui contrôle ce numéro côté hôtel).
