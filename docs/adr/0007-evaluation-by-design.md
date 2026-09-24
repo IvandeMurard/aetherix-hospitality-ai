@@ -980,6 +980,13 @@ Recalibrer si l'un de ces événements survient (le calendrier fixe seul — Air
 
 **Pourquoi :** des modèles de la même famille partagent en partie leurs angles morts — une erreur que le générateur ne voit pas en écrivant, un juge de la même famille a plus de chances de ne pas la voir en notant (biais corrélé, et préférence pour ses propres formulations). Changer de famille décorrèle ces erreurs ; l'escalade vers Opus prévue en D14.c ne le faisait pas.
 
+**Pourquoi une troisième famille partout, et pas seulement « juge ≠ famille de la sortie notée » (confirmé PM 24/09/2026) :**
+- **Comparaison entre fournisseurs (Décision #35 D3).** Le juge note Claude **et** Gemini sur les mêmes cas : un juge de l'une des deux familles fausse l'écart mesuré en faveur de la sienne. Une troisième famille est ici nécessaire, pas une précaution.
+- **Une seule échelle.** Un juge Gemini en production et un juge tiers pour les comparaisons, ce seraient deux juges à calibrer (deux kappa) et des scores non comparables entre eux. Un juge unique d'une troisième famille coûte une calibration.
+- La bascule vers Gemini en production est rare ; elle n'est **pas** l'argument principal.
+
+**Alternative écartée :** juge ≠ famille du générateur de la sortie notée (juge Gemini pour les sorties Claude de production, troisième famille réservée aux comparaisons). Défendable et moins coûteuse à court terme, mais elle impose deux juges et deux échelles.
+
 **Ce qui ne change pas :**
 - **L'ancrage reste humain.** Le juge d'une autre famille n'est admis qu'après kappa ≥ 0.8 sur 2 runs consécutifs (D14.d). Changer de famille réduit un biais ; seule la calibration prouve que le juge est bon.
 - **Il reste appelé via `LLMProvider`** (Décision #9) — ce qui demande un adapter LLM pour la famille retenue (aujourd'hui seul un adapter *embedding* Mistral existe).
