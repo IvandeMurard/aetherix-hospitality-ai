@@ -98,6 +98,8 @@ def _render_parser_md(result: dict, diff: dict) -> str:
     for t in INTENTS:
         lines.append(f"| {t} | " + " | ".join(str(cm[t][p]) for p in INTENTS) + " |")
 
+    if result.get("target"):
+        lines += _render_parser_target_md(result)
     lines.append("")
     if not diff.get("has_baseline"):
         lines.append("> No baseline yet — this run establishes it.")
@@ -106,6 +108,34 @@ def _render_parser_md(result: dict, diff: dict) -> str:
     else:
         lines.append("> ✅ No accuracy regression > 2pp vs baseline.")
     return "\n".join(lines) + "\n"
+
+
+def _render_parser_target_md(result: dict) -> list[str]:
+    """Real-LLM run (HOS-337): who decided each case, and the LLM-only accuracy."""
+    lines = [
+        "",
+        "## Target",
+        "",
+        f"- **Target**: `{result['target']}`  ·  dataset version `{result['dataset_version']}`",
+        f"- **Accuracy on LLM-decided cases**: {_pct(result['accuracy_llm_decided'])}"
+        f"  ·  n={result['llm_decided_n']}  (the only part comparable across providers)",
+        f"- **LLM failure rate**: {_pct(result['llm_failure_rate'])} of the calls that reached the LLM",
+        "",
+        "## Who decided each case",
+        "",
+        "| Source | n | accuracy |",
+        "|---|---|---|",
+    ]
+    for src, n in result["decided_by"].items():
+        lines.append(f"| {src} | {n} | {_pct(result['accuracy_by_source'][src])} |")
+    lines += [
+        "",
+        "> `regex` cases never reach the LLM, and `llm_free_form_heuristic` cases are",
+        "> settled by the deterministic heuristic: both score the same on every provider.",
+        "> `llm_failed` = API error or unparseable output. The heuristic then answers, so a",
+        "> failure does NOT lower accuracy — read the failure rate above instead.",
+    ]
+    return lines
 
 
 def _render_forecast_md(result: dict, diff: dict) -> str:
