@@ -364,6 +364,27 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 ---
 
+### 36 — Gel Epic 16 levé pour le développement architecture — objectif reformulé portfolio (22/09/2026)
+
+**Numérotation :** rédigée le 22/09/2026 (PR #260), numérotée #36 à l'intégration parce que la Décision #35 (portabilité de modèle, 24/09/2026) a été mergée avant. Conséquence : la « dérogation au gel Epic 16 » écrite dans la #35 devient sans objet, le gel de développement étant levé ici.
+
+**Contexte.** Epic 16 (arbitrage 07/07/2026, `docs/planning/plan-90j-proof-visibility.md`) gelait toute extension du Mesh (Anima, Context Graph, HiveMemory/meta-learner ADR-0005) pendant 90 jours, sur la base de deux audits indépendants — interne (`docs/context/analyse-critique-2026-07.md`) et revue adverse externe GPT (20/07/2026) — concluant que l'architecture était en avance sur la preuve produit, avec un risque de crédibilité face à un acheteur/investisseur qui creuserait au-delà de la démo.
+
+**Ce qui change.** Ivan précise (22/09/2026) que l'objectif réel du projet est la recherche d'emploi — renforcer son profil — pas une vente ni une levée. Le projet a été originellement conçu et poursuivi comme un projet entrepreneurial ; la pression de la recherche d'emploi fait maintenant réévaluer certains coûts pris pour ce cadrage-là. Le raisonnement du gel visait un acheteur/investisseur en diligence ; il ne s'applique pas de la même façon à un jury de recrutement, pour qui la profondeur technique démontrée — y compris sur des briques non déployées commercialement — est un signal positif, à condition que le statut réel reste honnêtement étiqueté (Décision #33).
+
+**Décision.** Le gel Epic 16 sur le développement (code, conception, Orchestrateur avancé, meta-learner ADR-0005, Anima) est **levé**. La construction reprend sur données synthétiques/mock (cohérent Décision #11), avec obligation d'étiquetage honnête — Design / Synthetic PoC, jamais « Built » — Décision #33 inchangée et renforcée comme garde-fou explicite de cette reprise.
+
+**Ce qui n'est PAS levé — le gate DPIA reste intégralement en vigueur.** La Décision #20 (gate Anima) ne bouge pas d'un mot : les 13 mesures bloquantes, la relecture juridique, le DPA à deux étages et l'interdiction de traiter des données guest réelles (`docs/context/dpia-anima-2026-08.md`) restent des conditions absolues avant toute mise en production. Ce qui reprend ici est un exercice de conception sur données synthétiques — hors du champ d'application matériel du RGPD (art. 3, aucune personne physique réelle concernée) — pas un système traitant de vraies données.
+
+**Précision RGPD pour supports externes (portfolio, entretiens)** — formulation à reprendre telle quelle :
+> « Ce projet a fait l'objet d'une analyse de conformité RGPD/CNIL complète avant toute extension (`docs/context/dpia-anima-2026-08.md`) : 6 des 9 critères EDPB déclenchant l'obligation de DPIA sont réunis, 13 mesures bloquantes identifiées et documentées avant toute mise en production réelle. Dans un contexte d'entreprise, avec un design-partner et des données guest réelles, cette analyse serait intégralement appliquée — relecture juridique, DPA à deux étages, mesures techniques — comme condition de mise en production, pas comme option. Le développement présenté ici est un exercice de conception sur données synthétiques, pas un système traitant des données personnelles réelles : il documente la pensée de conformité plutôt que de la contourner. »
+
+**Ce qui reste vrai et n'est pas remis en cause.** Les deux audits (interne + externe) restent des constats valides **pour un contexte commercial**. S'il y a un jour un vrai design-partner, le raisonnement du gel (ne pas construire au-delà de la preuve avant un acheteur) redevient pertinent et devra être réappliqué à ce moment-là. Ce n'est pas une invalidation des audits, c'est un changement d'audience.
+
+**Références** : `docs/planning/plan-90j-proof-visibility.md` §Amendement 22/09/2026 · `docs/context/dpia-anima-2026-08.md` (inchangé) · Décision #20 (gate, inchangée) · Décision #33 (taxonomie statut, garde-fou) · décision ouverte « Marché de lancement Anima EU vs non-EU » (`docs/context/open-decisions.md`, question distincte et toujours ouverte).
+
+---
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).
