@@ -143,6 +143,31 @@ milestone. Exit 0 = valid. Wired into CI (`eval-dataset` job).
 
 ---
 
+## Parser on real LLMs — provider matrix (HOS-337, Décision #35 D3)
+
+The PR gate scores the parser with the deterministic `FakeIntentClassifier`: it
+evaluates no LLM. The real-model run is separate, manual, and never blocks a merge.
+
+```bash
+EVAL_PARSER_BACKEND=real EVAL_PARSER_TARGET=claude:claude-haiku-4-5-20251001 \
+ANTHROPIC_API_KEY=... uv run --project backend python -m scripts.eval.run_all --layers parser \
+  --json-out out/claude.json --md-out out/claude.md
+python -m scripts.eval.compare_parser_targets out/claude.json out/gemini.json
+```
+
+Or run the **Eval — parser provider matrix** workflow (`workflow_dispatch`, needs
+the `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` secrets).
+
+- **Target = exact model id, never a tier**, and the provider is called directly,
+  never through the fallback: a failover mid-run would mix two models in one score.
+- **Baselines** live in `eval/baselines/parser/<target>__<dataset version>.json`.
+  The dataset version is a content hash of the scored cases (stand-in until HOS-339).
+- **How to read it.** `parse_inbound` decides with regex first (passes 1-2), and a
+  `free_form` answer is settled by the heuristic. Only the `llm` cases carry the
+  model's own answer — compare **accuracy on LLM-decided cases** and the **LLM
+  failure rate**. A failed call is rescued by the heuristic, so it never lowers
+  end-to-end accuracy: that number alone would hide a provider that cannot answer.
+
 ## Roadmap (ADR-0007 §8)
 
 | Story | Adds |

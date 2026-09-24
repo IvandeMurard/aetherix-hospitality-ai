@@ -7,6 +7,7 @@ truth (ADR §6.c). A regression is a per-category MAPE increase beyond
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent.parent
@@ -24,15 +25,31 @@ def baseline_path(layer: str) -> Path:
 
 
 def load_baseline(layer: str) -> dict | None:
-    path = baseline_path(layer)
+    return load_baseline_at(baseline_path(layer))
+
+
+def load_baseline_at(path: Path) -> dict | None:
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def parser_target_baseline_path(target: str, dataset_version: str) -> Path:
+    """Baseline of a real-LLM parser run (HOS-337, Décision #35 D3).
+
+    Keyed by (target, dataset version): a Gemini run is never compared to a
+    Claude baseline, and no run is compared to a baseline scored on other cases.
+    """
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", target)
+    return BASELINES_DIR / "parser" / f"{safe}__{dataset_version}.json"
+
+
 def save_baseline(layer: str, result: dict) -> Path:
-    BASELINES_DIR.mkdir(parents=True, exist_ok=True)
-    path = baseline_path(layer)
+    return save_baseline_at(baseline_path(layer), result)
+
+
+def save_baseline_at(path: Path, result: dict) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return path
 

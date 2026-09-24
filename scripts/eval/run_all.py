@@ -60,11 +60,20 @@ def main() -> int:
 
         result = runner(dataset=args.dataset, seed=args.seed)
 
+        # A real-LLM parser run has its own baseline per (target, dataset
+        # version) — never the fake-classifier one the PR gate uses (HOS-337).
+        if layer == "parser" and result.get("target"):
+            bpath = baselines.parser_target_baseline_path(
+                result["target"], result["dataset_version"]
+            )
+        else:
+            bpath = baselines.baseline_path(layer)
+
         if args.update_baseline:
-            path = baselines.save_baseline(layer, result)
+            path = baselines.save_baseline_at(bpath, result)
             print(f"[eval] {layer}: baseline frozen -> {path}")
 
-        baseline = baselines.load_baseline(layer)
+        baseline = baselines.load_baseline_at(bpath)
         diff = _DIFFS[layer](result, baseline)
         paths = reporter.write_reports(result, diff, args.json_out, args.md_out)
 
@@ -88,6 +97,13 @@ def main() -> int:
                 f"accuracy {(result['accuracy'] or 0) * 100:.1f}% · n={result['n']} · "
                 f"regressed={diff['regressed']}"
             )
+            if result.get("target"):
+                llm_acc = result.get("accuracy_llm_decided")
+                summary += (
+                    f" · target={result['target']} · LLM-decided "
+                    f"{result['llm_decided_n']}/{result['n']}"
+                    f" (acc {'n/a' if llm_acc is None else f'{llm_acc * 100:.1f}%'})"
+                )
         print(f"[eval] {layer}: {summary} -> {paths['md']}")
 
         regressed = bool(diff.get("regressions")) or diff.get("regressed", False)

@@ -1,0 +1,88 @@
+name: Eval — parser provider matrix
+
+# HOS-337 · Décision #35 D3. Runs the parser eval layer against real LLMs, one
+# pinned provider/model per job, then writes a side-by-side comparison to the
+# run summary. Manual only: it costs API calls and needs keys, so it never runs
+# on PRs and never blocks a merge (the PR gate keeps the deterministic fake).
+#
+# Secrets: ANTHROPIC_API_KEY and GEMINI_API_KEY. A missing key fails that job
+# loudly rather than skipping — a matrix with a silent hole compares nothing.
+
+on:
+  workflow_dispatch:
+    inputs:
+      claude_model:
+        description: "Exact Claude model id (not a tier)"
+        required: false
+        default: "claude-haiku-4-5-20251001"
+      gemini_model:
+        description: "Exact Gemini model id (not a tier)"
+        required: false
+        default: "gemini-2.0-flash"
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    name: parser · ${{ matrix.provider }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [claude, gemini]
+    env:
+      EVAL_PARSER_BACKEND: real
+      EVAL_PARSER_TARGET: ${{ matrix.provider == 'claude' && format('claude:{0}', inputs.claude_model) || format('gemini:{0}', inputs.gemini_model) }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/pyproject.toml"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Run parser eval on the pinned target
+        run: |
+          uv run --project backend python -m scripts.eval.run_all \
+            --layers parser \
+            --json-out out/${{ matrix.provider }}.json \
+            --md-out out/${{ matrix.provider }}.md
+          cat out/${{ matrix.provider }}.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parser-${{ matrix.provider }}
+          path: out/
+
+  compare:
+    name: compare
+    needs: run
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: parser-*
+          path: out
+          merge-multiple: true
+
+      - name: Side-by-side table
+        run: python -m scripts.eval.compare_parser_targets out/*.json >> "$GITHUB_STEP_SUMMARY"
