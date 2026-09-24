@@ -1333,3 +1333,234 @@ Migration `20260924120000_manager_decision_capture.sql`:
 `manager_prompts` (HITL state) and `inbound_reply_events` (RLS, service role only;
 `reason_text` in the DSAR plan as REVIEW). The `decision_ledger` SQL view is not
 changed; `DecisionLedgerService` exposes `decision_source`/`decision_confidence`.
+
+---
+
+## 17. Addendum — 2026-09-24 · Recap on demand, decision provenance, no fabricated report
+
+> Trace: CLAUDE.md Décision #39. PO requests (Ivan, 24/09/2026) after §16.
+> Autonomy of host agents is **not** decided here: it is ADR-0013 (status
+> **proposed**). Code: commits `8b90394`, `44edf50`.
+
+### 17.1 Weekly report: no mock, no invented money
+
+**Found.** `reporting_service.generate_weekly_metrics` fell back to
+`_get_mock_weekly_data` (7 hard-coded days, 945 covers) whenever no
+ground-truth row existed, and `format_audit_email` then printed "Accuracy",
+"MAPE", "Estimated Savings: £…" (heuristic: £15/cover on days > 150 covers,
+£120 per day < 100 covers), "Value Delivered: Nx monthly cost" (from a
+"$50 mock SaaS cost") and "Aetherix is optimizing your labor costs
+effectively". Nothing said the numbers were invented.
+
+**Now.** No mock on any tenant path; the mock and the savings heuristic are
+deleted (tests pin their absence). No recommendation in the week →
+`status: no_measured_data`, text "pas encore de donnée mesurée", no metric. The
+report *is* the recap template (§17.2) for the week. `financial_impact` is
+always `null` with a stated reason: no measured labour-cost or revenue input
+exists. A savings or ROI figure comes back only from measured inputs, with its
+formula and assumptions printed next to it. Currency: `config.CURRENCY`
+(default EUR) through `app/core/money.py`; the £ symbols in the recommendation
+text, the explanation prompt, the sanity-guard reasons and the PMS ops note are
+gone too. The internal Obsidian note and the Linear alert remain, fed by
+measured numbers only (alert only with ≥ 3 measured recommendations).
+
+**Could a tenant have received a mock-based report?** Checked in the code: the
+text was produced only by `GET /api/v1/reports/weekly`. No scheduler, email or
+WhatsApp path called `format_audit_email`, and the frontend never called the
+route. But the route was **public** (no auth, `tenant_id` in the query string),
+so anyone who called it for a tenant without ground truth got the mock figures,
+and each call also wrote the mock audit into the Obsidian vault
+(`AI Reports/…/Weekly Audit`, internal). Production logs (Fly.io) were not
+accessible from the coding session: whether it was ever called is **not
+verified**. With 0 real user and no ground-truth rows, any call would have
+returned mock data. To check: Fly logs for `GET /api/v1/reports/weekly` and the
+vault folder for "Weekly Audit" notes.
+
+### 17.2 Recap on demand (deterministic, no prose)
+
+`services/decision_recap.py`, one definition for four surfaces: WhatsApp
+command, MCP tool `get_decision_recap` (scope `receipts:read`),
+`GET /reports/weekly`, and the acceptance KPI (§17.6).
+
+- **Commands** (whole reply, before keywords): `recap` (this week), `recap
+  jour|semaine|mois`, `recap day|week|month`, `summary`. Periods are local
+  (`RECEIPT_TIMEZONE`): today, Monday → today, 1st → today.
+- **Content, one block:** period · recommendations received · accepted ·
+  rejected · corrected · no reply · awaiting confirmation · mean forecast error
+  (mean |predicted − actual| / actual, **only** on recommendations with actual
+  covers, printed with the number of days it covers; none → "aucun couvert réel
+  saisi") · decision source split (button / keyword / model / confirmed / fixed
+  later / host tool / agent / unattributed). No data → "Aucune recommandation
+  sur la période." FR/EN.
+- **"Received"** = dispatched in the period, or — for a headless tenant whose
+  recommendations never go through WhatsApp — decided by a host in the period.
+- **Correction line** "Décision mal enregistrée ? Répondez « corriger mardi »."
+  `corriger <jour|hier|jj/mm> [validation|refus|correction]` (EN `fix …`): finds
+  the single decided recommendation of that day; without a decision word it
+  says what is recorded; with one it asks "Mardi 22/09 : je remplace une
+  validation par un refus, c'est bien ça ?" — same Oui / Non path, nothing
+  changes until yes; recorded with `decision_source = manager_revision`, the
+  previous decision kept in the event trail (`revised_from_<x>`). Several
+  recommendations that day → nothing changes, typed `why`. Revisions are the
+  human audit of the capture: counted (`revisions`), never as decisions
+  written. "corriger" alone remains the modify keyword.
+- **Why it replaces the weekly audit report:** one template avoids two
+  definitions of the same week. The report route now returns this template.
+
+**Not changed, flagged for the PO:** the Phase 2 **weekly digest**
+(`receipts_dispatcher`, Sundays, Décision #15 scope) still pushes an
+LLM-composed narrative to every active hotel, without opt-in and outside the
+24 h window. Its numbers are measured, but it is prose and it ignores the
+interruption budget. Proposed: replace it with the opt-in recap push (§17.3).
+Open decision, `open-decisions.md`.
+
+### 17.3 WhatsApp 24 h window — what can be sent when
+
+| Message | Initiated by | Inside 24 h of the manager's last message | Outside |
+|---|---|---|---|
+| Recap on demand, confirmation "c'est bien ça ?", reason request, revision question, "recorded" acks | reply to the manager | free-form ✅ (always inside: it answers a message received seconds ago) | n/a |
+| Weekly recap push (opt-in `weekly_recap_opt_in`) | business | free-form ✅ if last inbound < 23 h 30 (30 min margin) | **approved** template `TWILIO_CONTENT_SID_RECAP_*` (body `{{1}}`) ✅; else **not sent**, typed log `outside_window`; the recap stays available on demand |
+| Staffing recommendation, Daily Receipt, Phase 2 weekly digest | business | free-form ✅ | ❌ refused by WhatsApp without an approved template — pre-existing gap (§16.4 point 5), unchanged here |
+
+"Deferral" means: nothing is queued for later; the next `recap` is the
+delivery. The last inbound time is read from `inbound_reply_events` (every
+reply writes one). Not proven: template approval and rendering (ops step).
+
+### 17.4 Decision provenance and the reason contract for agent callers
+
+Aetherix can run headless: the party deciding may be a host platform's agent
+calling MCP `submit_feedback_to_memory`, which recorded neither who decided
+nor why, wrote only to feedback memory (never on the recommendation), and
+accepted **any** recommendation UUID (no tenant check).
+
+- **`decided_by`** on `staffing_recommendations`: `human_whatsapp` |
+  `human_via_host` | `host_agent_autonomous` | `timeout` (reserved: never
+  written; an unanswered recommendation is "no reply", not a decision, Décision
+  #6). Complements `decision_source` (how it was captured: `host_relay`,
+  `host_agent` added). Backfill: rows with a §16 `decision_source` →
+  `human_whatsapp`; older decided rows stay `NULL` = **unattributed**, excluded
+  from human rates and shown as such.
+- **MCP contract** (typed 400 otherwise): `decided_by` ∈ {`human_via_host`,
+  `host_agent_autonomous`}; `reason_code` from a closed enum (positive:
+  `agrees_with_drivers`, `matches_own_plan`; negative: `forecast_too_high`,
+  `forecast_too_low`, `event_not_in_forecast`, `event_cancelled`,
+  `staffing_constraint`, `budget`, `policy`, `data_issue`, `already_handled`;
+  `none_given`; `other` → `reason_detail` required); `reason_detail` sanitised
+  (control characters stripped), ≤ 280; `evidence` ≤ 5 × {source ∈ pms, pos,
+  weather, events, rota, manager_message, host_notes, other; detail ≤ 200};
+  `reason_source` ∈ {`human`, `agent_inferred`}.
+- **The burden stays on the agent.** A human who gave no reason is recorded as
+  `none_given` + `reason_source=human` — allowed only for `human_via_host`. A
+  reason the agent infers must say `agent_inferred`; an autonomous agent's
+  reason cannot claim `human` (typed 400).
+- **Order of checks:** schema → the recommendation belongs to the token's hotel
+  (404 otherwise) → decision policy (§17.5, 403 `autonomy_not_permitted`) →
+  still undecided (`ready_to_push` or `dispatched`, else 409) → write decision,
+  who, why, caller (`decided_by_caller` = token label), policy version → feedback
+  memory (reflection now carries `decided_by=`). `ignored` writes no decision.
+- **"Required" is not "informative."** Required fields get filled with filler.
+  `decision_provenance.informativeness` computes per caller the share of
+  `other`, of empty details, of near-duplicate details and of `agent_inferred`
+  reasons: a runtime signal (arm B) to look at, not a gate that rejects calls.
+  Not yet exposed on a route or alert (follow-up).
+- **Breaking change** for MCP callers: calls without the new fields now fail.
+  No external consumer exists (status taxonomy: MCP server, 0 consumer).
+- **Gap found:** no MCP tool lists pending staffing recommendations, so a host
+  agent has no way to obtain a `recommendation_id` today. Follow-up.
+
+### 17.5 The decision-policy seam; learning from agent-generated data
+
+`services/decision_policy.py` is the single seam where a decision path is
+authorised; both write paths (WhatsApp `InboundDecisionService`, MCP) call
+`authorize_decision`. Only policy: **human validation everywhere**
+(`default-human-validation-v1`, approved by Décision #6). Humans pass; a host
+agent deciding alone is refused and nothing is written. The version is stored
+on every decision (`decision_policy_version`) so metrics can later be split
+before/after a policy change. Autonomy as configuration is designed in
+**ADR-0013 (proposed)**, not enabled.
+
+**Rule for learning from agent-generated data (3d):**
+1. Human-decided and agent-decided records stay separable (`decided_by`,
+   `decision_source`, `reason_source`) in every table and export.
+2. Agent-decided records and `agent_inferred` reasons are **never ground
+   truth** for arm C, for acceptance metrics, or for training anything that
+   predicts what a manager would decide.
+3. The outcome loop (actual covers; POS/PMS when available) is the independent
+   arbiter of whether a decision was good. While actual covers are typed by the
+   manager (§16.6) it is not independent of the human loop — that caveat
+   stands.
+4. **Self-confirmation risk:** a system that learns from decisions taken by
+   itself, or by another agent that learned from it, converges on its own
+   priors and reads agreement as validation. Hence rule 2, and ADR-0013's
+   periodic human sampling of autonomous decisions.
+
+### 17.6 One acceptance definition
+
+**Confirmed undercount.** `recommendation_acceptance_rate` was read from
+`kpi_daily`, fed by the materialized view `recommendation_acceptance_daily`,
+which joined `operational_memory` feedback rows to `agent_action_log`
+recommendation/prediction tool calls **on `request_id`**. A feedback row
+carries the `request_id` of the call that wrote it (WhatsApp background task
+or `submit_feedback_to_memory`), never the recommendation tool's, so decisions
+were essentially never counted. `modified`/`ignored` were also folded into one
+"neutral" bucket.
+
+**Now** (`decision_recap.acceptance_rate`): accepted ÷ (accepted + rejected +
+modified), over `staffing_recommendations` keyed by dispatch time (creation if
+never dispatched), **human deciders only**. Reported alongside, split by
+`decided_by`: override rate (rejected + modified ÷ decided), median response
+time from dispatch to decision — a **latency, not a measure of human effort**
+("human minutes per accepted output" does not exist in the code and is not
+claimed) — and agent-decided counts, never in the rates. Used by the KPI route
+(live, pooled over the window), the daily aggregator (kpi_daily + trust_low
+alert) and the recap. The view is left in place, unread. The aggregator's
+Postgres SQL is tested with a mocked connection only.
+
+### 17.7 Tenant isolation defects (confirmed and fixed)
+
+Rule now in `app/api/tenant_scope.py`, tests in
+`tests/security/test_route_tenant_scope.py`:
+
+| Route | Before | Now |
+|---|---|---|
+| `GET /kpi/{hotel_id}/recommendation_acceptance` | any `receipts:read` token, any hotel | token bound to `hotel_id` (403) |
+| `GET /kpi/{hotel_id}/decision_capture` | checked, but via `getattr(…, default=hotel_id)` | same helper |
+| `GET /receipts/{hotel_id}/{date}` | not enforced ("single-hotel sandbox") | token bound (403) |
+| `GET /reports/weekly?tenant_id=` | **no auth at all** | bearer + `receipts:read` + bound |
+| `GET /baselines/{tenant_id}`, `POST …/recalculate` | any dashboard user | owner or superuser |
+| `POST /events/sync`, `POST /weather/sync` (explicit tenant) | any dashboard user | owner or superuser |
+| `POST /notifications/test`, `/dispatch` | **public** (send to any number; push every tenant) | superuser only |
+| `POST /anomalies/roi`; `POST /anomalies/format` (no property / other property) | any dashboard user, every tenant or any property | superuser for all-tenant runs; own property otherwise |
+| MCP `submit_feedback_to_memory` | any recommendation UUID | recommendation of the token's hotel (404) |
+
+Checked and already correct: `predictions/predict` (body hotel vs token),
+`dashboard/*`, `anomalies/scan` and `GET /anomalies`, `pms/*` (resolve the
+caller's own property), MCP tools (hotel from token). Not verified here: RLS at
+the database (the service role bypasses it by design). Seen, not fixed
+(pre-existing, out of scope): `anomalies._resolve_property_for_user` casts
+`tenant_id` to a UUID although it is a slug since HOS-165, so `/anomalies/scan`
+and `GET /anomalies` would 500 for a slug tenant.
+
+### 17.8 "Non merci, on garde tel quel" (PO clarification)
+
+A decline ("non merci", "no thanks", "tel quel", "on garde tel quel", "keep as
+is") answering a recommendation that **proposes a change**
+(`recommended_headcount` ≠ 0, the usual case) is recorded as `rejected`,
+source `keyword`. Recommendation proposing no change → confirmation, reading
+"keep as is" = accepted. Cannot be told (`recommended_headcount` unset) →
+confirmation, reading rejected. "pas besoin", "bof" and mixed-token forms stay
+ambiguous (not covered by the clarification). Eval context = one pending
+recommendation proposing a change; golden case
+`parser-heldout-rejected-keep-as-is-fr-001` path `keyword_ambiguous` →
+`keyword` (label unchanged; edited in place — Décision #35 D5's "retire and
+add" rule is Design, not yet applied to the dataset).
+
+### 17.9 What is and is not measured
+
+| Signal | Status 24/09/2026 |
+|---|---|
+| Recap, commands, revision, provenance, policy seam, tenant checks | Built, tested (SQLite, mocked Twilio). **0 real user.** |
+| Weekly recap push | Built behind opt-in; template approval pending; delivery not proven |
+| Parser model quality | **Not measured** (no API key; unchanged from §16.7) |
+| Acceptance rate | Definition fixed; **no real decision exists** to compute it on |
+| Informativeness of agent reasons | Computed by a pure function; no caller exists |

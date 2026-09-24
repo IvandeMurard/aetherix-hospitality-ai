@@ -419,6 +419,23 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **State on 24/09/2026.** Built and tested with mocked Twilio and a scripted model. **Real-model quality: not measured** (no API key; `eval-parser-real.yml` has not run; no 3-run canary). Template approval pending. **0 real user.**
 
+
+### 39 — Recap on demand, decision provenance, no fabricated report (24/09/2026)
+
+**Trigger:** PO requests after Décision #38 (Ivan): the weekly audit report sent invented figures; the manager needs a cheap audit of what was captured; Aetherix sold headless means a host agent may decide, and nothing recorded who or why. Full detail: ADR-0007 §17. Autonomy itself: ADR-0013, **proposed**.
+
+**Decision.**
+- **No fabricated number on a client path.** The weekly report's mock fallback, savings heuristic, "$50 mock SaaS cost" ROI and marketing sentence are deleted. No data → "no measured data yet". Savings/ROI only from measured inputs with formula and assumptions printed. Currency from `CURRENCY` (default EUR), no hard-coded £/$.
+- **One deterministic recap** (no LLM): WhatsApp `recap [jour|semaine|mois]` (FR/EN), MCP `get_decision_recap`, and the weekly report are the same template; mean forecast error only where actual covers exist, with the day count. `corriger mardi [décision]` goes through the same Oui/Non confirmation (`decision_source = manager_revision`). Weekly push only on opt-in, and only with an approved template or inside the 24 h window; otherwise not sent.
+- **Provenance.** `decided_by` on every decision; MCP callers must send a structured reason (closed `reason_code`, bounded sanitised detail, optional evidence, `reason_source`); a guessed reason is `agent_inferred`, never the human's; `none_given` lets a relayed human decline to give one. "Required" ≠ "informative": per-caller share of `other` / empty / near-duplicate details is a runtime signal.
+- **Policy seam.** `decision_policy.authorize_decision` is the only place a decision path is authorised; default = human validation everywhere; `host_agent_autonomous` is refused (Décision #6 unchanged). The policy version is stored with each decision.
+- **One acceptance definition:** accepted ÷ decided, human deciders only, on `staffing_recommendations`. The former KPI (materialized view joined on request_id) essentially never counted a decision.
+- **Agent-generated data:** human- and agent-decided records stay separable; agent decisions and inferred reasons are never ground truth; the outcome loop is the arbiter (not independent while the manager types actual covers); self-confirmation risk named.
+- **"Non merci, on garde tel quel"** = `rejected` when the recommendation proposes a change; confirmation otherwise.
+- **Tenant isolation defects** found and fixed (KPI, receipts, weekly report, baselines, events/weather sync, notifications, anomaly triggers, MCP feedback) — ADR-0007 §17.7.
+
+**State on 24/09/2026.** Built and tested (SQLite, mocked Twilio). **0 real user.** Parser model quality **not measured**. Recap template approval pending. Whether a mock report was ever served in production is **not verified** (Fly logs not accessible from the session; the route was public). Open for the PO: ADR-0013; replacing the Phase 2 LLM weekly digest with the opt-in recap.
+
 ---
 
 ## Notes de maintenance

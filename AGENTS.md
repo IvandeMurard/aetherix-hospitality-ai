@@ -76,6 +76,7 @@
 | 36 | Gel Epic 16 **levé pour le développement** (Orchestrateur avancé, meta-learner ADR-0005, Anima) — objectif projet reformulé portfolio/recherche d'emploi, pas vente. Construction reprend sur données synthétiques/mock (Décision #11), étiquetage honnête obligatoire (Décision #33). **Gate DPIA (Décision #20) intégralement inchangé** — 13 mesures bloquantes, aucune donnée guest réelle sans elles. Les 2 audits (interne + GPT) restent valides pour un contexte commercial, à réappliquer si design-partner réel | 22/09/2026 |
 | 37 | Parser eval (EVAL-4) corrected (**ADR-0007 §15**): grades the **production path** (`parse_action` → `parse_inbound` → `outcome_for_feedback`), model included, no heuristic fallback · fake backend = **plumbing check**, never a baseline or a quality signal (old fake `parser_baseline.json` 1.0 deleted, it was circular) · real run opt-in `eval-parser-real.yml`, no key → exit 2 NOT MEASURED · +30 held-out cases · **model quality not yet measured**; production-path ceiling 36.2% = product defect (free text never records accepted/rejected) → resolved by #38 | 24/09/2026 |
 | 38 | Manager decision capture (**ADR-0007 §16**): decision = arm C ground truth, deterministic first (buttons → keyword FR/EN → bare-ack rule: 1 pending + 12 h window) · model `decision`+`confidence` schema-validated, < 0.85 → confirmation "Oui / Non", nothing written until yes, timeout = unconfirmed · reason optional, typed route, never changes the decision · outcome never relabels a decision · `decision_source` stored · buttons behind flag, **WhatsApp template approval pending** · **real-model quality not measured** | 24/09/2026 |
+| 39 | Recap + decision provenance (**ADR-0007 §17**): deterministic recap (WhatsApp `recap`, MCP `get_decision_recap`, weekly report = same template; no mock, no savings/ROI without measured inputs, EUR from config) · `corriger mardi` → same confirmation path · `decided_by` (human_whatsapp / human_via_host / host_agent_autonomous) + MCP reason contract (typed 400, `agent_inferred` never stored as human) · single policy seam, default human validation, autonomy = **ADR-0013 proposed** (not enabled) · acceptance = human decisions on `staffing_recommendations` (old KPI undercounted) · tenant-isolation defects fixed (§17.7) · **0 real user, model quality not measured** | 24/09/2026 |
 
 ---
 
@@ -130,7 +131,7 @@ scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian,
 
 ## Variables d'environnement
 
-28 variables (LLM, Supabase, Apaleo, Redis, Logfire, WhatsApp buttons, outillage) → [`docs/ops/environment-variables.md`](docs/ops/environment-variables.md). Secrets en prod via `flyctl secrets set`, jamais committés.
+Variables (LLM, Supabase, Apaleo, Redis, Logfire, WhatsApp buttons + recap template, devise, outillage) → [`docs/ops/environment-variables.md`](docs/ops/environment-variables.md). Secrets en prod via `flyctl secrets set`, jamais committés.
 
 ---
 

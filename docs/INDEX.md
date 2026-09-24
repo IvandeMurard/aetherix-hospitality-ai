@@ -67,10 +67,11 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 ## 🏛️ Architecture
 - `ARCHITECTURE.md` — pointeur architecture (v0.3.0, 07/07/2026) : où trouver quoi + résumé 10 lignes. La vérité vit dans CLAUDE.md / mesh-architecture.md / ADRs
 - `mesh-architecture.md` — **SOURCE DE VÉRITÉ CROSS-REPOS** (Mesh : Aetherix + Tacet + Orchestrateur + Anima)
-- `adr/` — Architecture Decision Records (11) :
+- `adr/` — Architecture Decision Records :
   - `0001-aetherix-mcp-server-v0` · `0002-memory-instrumentation` · `0003-agent-observability-and-metering` · `0004-orchestrator-separation`
   - `0006-pos-integration` · `0007-evaluation-by-design` · `0008-context-graph` · `0009-runtime-guardrails`
   - `0010-multi-repo-strategy` · `0011-learning-engine-hive-v2` · `0012-mesh-signal-contract` (**privé à jamais**, Décision #31)
+  - `0013-decision-autonomy-policy` (**Proposed** 24/09/2026 — autonomie des agents hôtes, amenderait Décision #6 ; rien d'activé)
 
 ## 🧭 Context (détail par domaine)
 - `context/decisions-architecturales.md` — détail des décisions architecturales (index 1-ligne dans CLAUDE.md ; compte non figé, cf. détecteur D6)

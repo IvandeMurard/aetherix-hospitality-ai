@@ -8,6 +8,18 @@
 
 ## Actives
 
+### Host-agent autonomy as a client option — ADR-0013 (proposed 24/09/2026)
+
+**Status:** Open — for Ivan. Nothing enabled. **Question:** amend Décision #6 so that a client may let its host agent accept or reject some recommendations alone? **Proposal:** [`docs/adr/0013-decision-autonomy-policy.md`](../adr/0013-decision-autonomy-policy.md) — permission ladder by reversibility and cost (staffing headcount: never; bounded prep / food-waste actions: candidate), policy as versioned configuration per tenant × task class evaluated at the single seam `decision_policy.authorize_decision` (already built, default human validation), eligibility gated by per-scope arm-A thresholds + arm-C override rate, two-sided approval, kill switch, caps, human sampling, autonomous decisions excluded from human-trust metrics. **Open sub-questions:** ladder; two-sided approval; N / thresholds / sample rate (fix before data, HOS-316); whether any autonomous task class is worth building before a design partner asks.
+
+### Phase 2 weekly digest vs the opt-in recap push (24/09/2026)
+
+**Status:** Open — for Ivan. **Found** (ADR-0007 §17.2): the Phase 2 weekly digest (`receipts_dispatcher`, Sundays, Décision #15 scope) pushes an **LLM-composed** narrative to every active hotel, **without opt-in**, as a free-form WhatsApp message that WhatsApp refuses outside the 24 h window. Its numbers are measured, but it is prose and ignores the interruption budget. **Proposal:** retire it in favour of the deterministic recap push (opt-in, template or in-session, §17.3). Not changed without a decision because Décision #15 locked the Phase 2 scope.
+
+### "Pas besoin" / "no need" mapping (24/09/2026)
+
+**Status:** Open — for Ivan. The clarification of 24/09 covers "non merci / on garde tel quel" (rejected when the recommendation proposes a change, ADR-0007 §17.8). "Pas besoin" / "no need" answering "add 2 servers" reads the same way ("we don't need the extra staff"), but it was not part of the clarification, so it still goes to confirmation. Extend the rule to it?
+
 ### Pricing model (HOS-179 P3-5)
 
 **Statut :** Open
