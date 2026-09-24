@@ -177,7 +177,7 @@ class TestExecution:
 
         reviewed = {item["table"] for item in report.manual_review}
         assert reviewed == {"operational_memory", "agent_action_log", "pms_sync_logs",
-                            "inbound_reply_events"}
+                            "inbound_reply_events", "staffing_recommendations"}
 
     @pytest.mark.asyncio
     async def test_report_always_carries_the_caveats(self):

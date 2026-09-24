@@ -8,6 +8,7 @@ Before this change, an authenticated caller could read or act on any tenant:
   * GET|POST /baselines/{tenant_id}[...]          — any dashboard user
   * POST /events/sync, /weather/sync (tenant_id)  — any dashboard user
   * POST /notifications/test, /dispatch           — no auth at all
+  * POST /anomalies/roi, /anomalies/format        — any dashboard user, all tenants
 Each case below pins the refusal and the allowed path.
 """
 from __future__ import annotations
@@ -189,3 +190,40 @@ def test_notification_routes_are_ops_only(path, body):
     assert resp.status_code == 403
     run.assert_not_called()
 
+
+
+@pytest.mark.parametrize("path,body", [
+    ("/api/v1/anomalies/roi", None),     # runs across every tenant
+    ("/api/v1/anomalies/format", None),  # all tenants when no property is given
+])
+def test_all_tenant_anomaly_triggers_are_ops_only(path, body):
+    from app.core.security import get_current_user
+
+    app = _app("app.api.routes.anomalies")
+    app.dependency_overrides[get_current_user] = lambda: _user(superuser=False)
+    with TestClient(app) as client:
+        assert client.post(path).status_code == 403
+
+
+def test_format_for_another_property_is_refused():
+    import uuid
+
+    from app.core.security import get_current_user
+
+    own = uuid.uuid4()
+    db = _db_returning()
+
+    async def _execute(stmt, params=None):
+        res = MagicMock()
+        res.fetchone.return_value = (1,) if params and params.get("pid") == str(own) else None
+        return res
+
+    db.execute = AsyncMock(side_effect=_execute)
+    app = _app("app.api.routes.anomalies", db=db)
+    app.dependency_overrides[get_current_user] = lambda: _user(superuser=False)
+    with patch("app.api.routes.anomalies._run_format_background_for_property", new_callable=AsyncMock):
+        with TestClient(app) as client:
+            other = client.post("/api/v1/anomalies/format", json={"propertyId": str(uuid.uuid4())})
+            mine = client.post("/api/v1/anomalies/format", json={"propertyId": str(own)})
+    assert other.status_code == 403
+    assert mine.status_code == 202

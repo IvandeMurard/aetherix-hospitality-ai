@@ -608,7 +608,8 @@ def _build_test_app(mock_session: AsyncSession) -> FastAPI:
         yield mock_session
 
     async def override_get_current_user():
-        return {"id": str(uuid.uuid4()), "email": "test@example.com"}
+        # Ops user: the all-tenant run is superuser-only (ADR-0007 §17.7).
+        return {"id": str(uuid.uuid4()), "email": "test@example.com", "is_superuser": True}
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user

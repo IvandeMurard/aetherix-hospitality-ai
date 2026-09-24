@@ -223,6 +223,23 @@ def build_erasure_plan(subject: Subject) -> list[Step]:
     steps.append(
         Step(
             order=order,
+            table="staffing_recommendations",
+            action=Action.REVIEW,
+            target="balayage textuel sur reason_detail | reason_evidence",
+            rationale=(
+                "ADR-0007 §17.4 : la raison d'une décision relayée par un agent hôte est "
+                "du texte libre borné (280 car.) qui peut nommer une personne (« X est "
+                "malade »). Table clé par hôtel, pas par personne — même traitement "
+                "qu'inbound_reply_events. La décision, decided_by et reason_code "
+                "n'identifient personne et restent la vérité terrain du bras C."
+            ),
+        )
+    )
+
+    order += 1
+    steps.append(
+        Step(
+            order=order,
             table="agent_action_log",
             action=Action.REVIEW,
             target="balayage textuel sur payload | abstention_context",
@@ -410,5 +427,7 @@ PII_TABLES: frozenset[str] = frozenset(
         "pms_sync_logs",
         # Décision #38 — reason_text (raison facultative, texte libre du manager).
         "inbound_reply_events",
+        # ADR-0007 §17.4 — reason_detail / reason_evidence (agent hôte, texte libre).
+        "staffing_recommendations",
     }
 )

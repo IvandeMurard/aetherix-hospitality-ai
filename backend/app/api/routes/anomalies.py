@@ -23,6 +23,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.tenant_scope import TENANT_FORBIDDEN, require_superuser
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.schemas.anomalies import (
@@ -187,8 +188,10 @@ async def trigger_roi_calculation(
     The service iterates all anomalies with status='detected', computes ROI
     metrics, and updates status to 'roi_positive' where net_roi > 0.
 
-    AC 10: Manual trigger endpoint.
+    AC 10: Manual trigger endpoint. The pass runs across every tenant, so it
+    is superuser-only (ADR-0007 §17.7; any dashboard user could trigger it).
     """
+    await require_superuser(current_user)
     background_tasks.add_task(_run_roi_background)
 
     return ROICalculationResponse(
@@ -232,6 +235,18 @@ async def trigger_format(
     UNIQUE(anomaly_id) constraint handles this at the DB level (AC #8).
     """
     property_id: Optional[uuid.UUID] = body.property_id if body else None
+
+    # ADR-0007 §17.7: a property must be the caller's; the all-tenant run is
+    # superuser-only (both were open to any dashboard user).
+    if property_id is None:
+        await require_superuser(current_user)
+    elif not current_user.get("is_superuser"):
+        owned = (await db.execute(
+            text("SELECT 1 FROM restaurant_profiles WHERE id = :pid AND owner_id = :uid LIMIT 1"),
+            {"pid": str(property_id), "uid": str(current_user.get("id"))},
+        )).fetchone()
+        if owned is None:
+            raise HTTPException(status_code=403, detail=TENANT_FORBIDDEN)
 
     if property_id:
         background_tasks.add_task(
