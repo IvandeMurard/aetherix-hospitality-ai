@@ -290,6 +290,8 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Pourquoi maintenant plutôt qu'au moment de construire EVAL-6** : coût de correction nul aujourd'hui (EVAL-6 n'est pas encore construit, Phase 4) — documenter le processus avant plutôt que de découvrir le gap une fois le juge déjà déployé sans calibration.
 
+**Amendement 24/09/2026 (Décision #35) — juge d'une autre famille :** le juge n'appartient à la famille d'aucun générateur dont il note les sorties (primaire Claude **et** fallback Gemini exclus aujourd'hui → troisième famille, choisie par la calibration ; Mistral candidat le moins coûteux). Le kappa ≥ 0.8 reste la condition d'admission. Remplace le choix Sonnet et l'escalade Opus. Détail : ADR-0007 §14.5.
+
 **Détail complet :** `docs/adr/0007-evaluation-by-design.md` §14. Amende `docs/planning/evaluation-by-design.md` (EVAL-6 acceptance criteria) et `eval/FAILURE_THRESHOLDS.md` (ligne LLM reasoning).
 
 **Amendement 06/07/2026 — reste privé, exception au méta-repo public :** décision Ivan — contrairement à `mesh-architecture.md`, ce document ne migre jamais vers le méta-repo public (Décision #25/ADR-0010 Q2), malgré son caractère cross-cutting (≥2 nœuds). C'est l'IP différenciante du produit, pas de la gouvernance/infra. Amendement correspondant : ADR-0010 §Q2. Si une mention publique apparaît un jour, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
@@ -351,7 +353,7 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Garde-fous :**
 - **Qualifier automatiquement, oui ; promouvoir automatiquement, non.** Un modèle qui passe le gate devient *admissible* ; le passer en primaire reste une décision humaine (Décision #6, niveau (c) de `llm-provider-strategy-review-2026-06.md` §6).
-- **Juge (Décision #32) :** le choix de Sonnet reste valide tant que le kappa ≥ 0.8 contre labels humains tient — c'est cet ancrage qui compte, pas la récence du modèle. Version du juge épinglée (D3) ; un swap du générateur est déjà un trigger de recalibration. Tant que générateur et juge sont tous deux Sonnet, le biais d'auto-préférence est un risque à mesurer, pas à supposer absent.
+- **Juge (Décision #32, amendée ici) :** le juge appartient à une famille de modèles différente de celle de tout générateur qu'il note — primaire et fallback compris, donc une troisième famille aujourd'hui (ADR-0007 §14.5). L'ancrage reste le kappa ≥ 0.8 contre labels humains, pas la récence ni la famille du modèle. Version du juge épinglée (D3).
 - **Latence :** le gate matriciel tourne hors ligne (coût CI, zéro latence utilisateur). Aucun juge runtime sur un chemin MCP synchrone (budget < 500 ms, Décision #3) : asynchrone ou échantillonné, et sur les sorties à fort impact seulement.
 
 **Rapport au gel Epic 16 (HOS-300) :** dérogation explicite, sign-off PM 24/09/2026, pas de nouvel ADR — le détail vit ici. Motif : D1 est un correctif de résilience ; D2 à D5 renforcent la **preuve** (le gate), pas le Mesh — ils servent l'objet même de l'Epic 16. Ce qui était gelé le reste (Anima, Learning Engine, Hive, Context Graph).
