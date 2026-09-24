@@ -323,7 +323,9 @@ Chaque vendredi 18:00 — relire ce doc :
 
 ---
 
-## Statuts Linear à transitionner (proposition — non appliquée)
+## Statuts Linear à transitionner (proposition — ~~non appliquée~~ **vérifiée le 22/09**)
+
+> **Vérification du 22/09/2026 — le sens de la dérive était inversé.** Ce tableau supposait Linear en retard sur le repo. Les quatre stories concernées (HOS-312, 317, 318, 321) étaient **déjà `Done` dans Linear**, et leurs AC sont atteints, vérifiés un par un. C'est *ce document* qui était en retard — et il l'affirmait avec assez d'aplomb pour qu'on le croie. Un tableau de réconciliation qui n'est jamais relu contre la source devient lui-même la dérive qu'il prétend corriger.
 
 À valider par Ivan avant exécution — **sauf les trois lignes marquées ✅ appliqué le 11/08** (création HOS-326 + cadrage HOS-247 + re-pointage HOS-275), exécutées sur go explicite d'Ivan :
 
@@ -331,14 +333,14 @@ Chaque vendredi 18:00 — relire ce doc :
 |-------|--------|---------|--------|
 | HOS-285 | Backlog | **Todo** | S0 |
 | HOS-278 | Backlog | **Todo** | S1 |
-| HOS-312 | Backlog | **Done** — livré le 31/07 (`56205c1`), statut Linear corrigé | — |
+| HOS-312 | ~~Backlog~~ **Done** | ✅ **Rien à faire** — Linear est Done depuis le 19/08. AC1-AC4 vérifiés le 22/09, commentaire de déblocage bien posté sur HOS-179. | — |
 | HOS-308 | Backlog | **Todo** | S2 |
 | HOS-309 | Backlog | **Todo** | S2 |
 | HOS-314 | Backlog | **Todo** | S3 |
-| HOS-321 | Backlog | **Done** — livré le 30/07 (`aeb68a3`), statut Linear à corriger | — |
+| HOS-321 | ~~Backlog~~ **Done** | ✅ **Rien à faire** — Linear est Done depuis le 31/07. AC1-AC6 vérifiés le 22/09 : layer `guardrail` dans `LAYERS`, runner `eval_guardrail.py`, **13 raisons typées couvertes + 11 cas négatifs**, baseline figée, D4 clean. | — |
 | HOS-177 | Backlog | **Todo** | S4 |
 | HOS-214 · HOS-219 | Backlog | **Todo** | S4 |
-| HOS-317 · HOS-318 | Todo | **Done** — livrées le 01/08 (`docs/context/decision-ledger.md` · `docs/context/status-taxonomy.md`), statut Linear à corriger. L'estimation n'a plus d'objet. | — |
+| HOS-317 · HOS-318 | ~~Todo~~ **Done** | ✅ **Rien à faire** — Linear est Done (HOS-317 le 01/08, HOS-318 le 08/09). AC vérifiés le 22/09. ⚠️ Reliquat réel : **HOS-317 n'a toujours aucune estimation** (HOS-318 en porte 2). | — |
 | HOS-319 | In Progress | **poser `dueDate` = 2026-09-25** + estimer ou marquer non-pointable (PM/externe) | — |
 | HOS-207 | Backlog | **Todo** | S7 |
 | HOS-114 | Backlog | **délier de HOS-176** si R1 le confirme | — |

@@ -104,8 +104,9 @@ class TestClaudeProviderComplete:
         assert "system" not in call_kwargs  # not passed when None
 
     @pytest.mark.asyncio
-    async def test_complete_model_override_supersedes_default(self):
-        """HOS-283: model= overrides the provider default for this call only."""
+    async def test_complete_fast_tier_routes_to_fast_model(self):
+        """HOS-283 + Décision #35: tier="fast" routes this call to the fast model;
+        a call without tier reverts to the reasoning default."""
         mock_response = _make_mock_response("ok")
 
         with patch("app.providers.claude_provider.AsyncAnthropic") as MockAnthropic:
@@ -113,10 +114,14 @@ class TestClaudeProviderComplete:
             mock_client.messages.create = AsyncMock(return_value=mock_response)
             MockAnthropic.return_value = mock_client
 
-            provider = ClaudeProvider(api_key="sk-test", model="claude-sonnet-4-6")
+            provider = ClaudeProvider(
+                api_key="sk-test",
+                model="claude-sonnet-4-6",
+                fast_model="claude-haiku-4-5-20251001",
+            )
             await provider.complete(
                 messages=[{"role": "user", "content": "ping"}],
-                model="claude-haiku-4-5-20251001",
+                tier="fast",
             )
             # a subsequent call without override reverts to the default
             await provider.complete(messages=[{"role": "user", "content": "ping"}])

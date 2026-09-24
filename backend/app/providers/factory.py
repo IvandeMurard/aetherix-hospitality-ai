@@ -4,8 +4,13 @@ Environment variables
 ---------------------
 ANTHROPIC_API_KEY  : Claude API key (primary LLM)
 GEMINI_API_KEY     : Gemini API key (automatic fallback — no config needed)
-LLM_MODEL          : Claude model override (default: "claude-sonnet-4-6")
-LLM_FALLBACK_MODEL : Gemini model override (default: "gemini-2.0-flash")
+LLM_MODEL               : Claude "reasoning" tier (default: "claude-sonnet-4-6")
+LLM_FAST_MODEL          : Claude "fast" tier (default: "claude-haiku-4-5-20251001")
+LLM_FALLBACK_MODEL      : Gemini "reasoning" tier (default: "gemini-2.0-flash")
+LLM_FALLBACK_FAST_MODEL : Gemini "fast" tier (default: "gemini-2.0-flash")
+
+Callers never name a model: they pass ``tier="fast"|"reasoning"`` and each
+provider maps it (Décision #35). Swapping a model is an env change here.
 
 MISTRAL_API_KEY    : Mistral API key (embeddings)
 EMBEDDING_MODEL    : Mistral model override (default: "mistral-embed")
@@ -40,10 +45,12 @@ def get_llm_provider() -> LLMProvider:
         primary=ClaudeProvider(
             api_key=os.getenv("ANTHROPIC_API_KEY", ""),
             model=os.getenv("LLM_MODEL", "claude-sonnet-4-6"),
+            fast_model=os.getenv("LLM_FAST_MODEL", "claude-haiku-4-5-20251001"),
         ),
         fallback=GeminiProvider(
             api_key=os.getenv("GEMINI_API_KEY", ""),
             model=os.getenv("LLM_FALLBACK_MODEL", "gemini-2.0-flash"),
+            fast_model=os.getenv("LLM_FALLBACK_FAST_MODEL", "gemini-2.0-flash"),
         ),
     )
 

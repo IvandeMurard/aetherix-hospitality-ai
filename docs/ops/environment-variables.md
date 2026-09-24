@@ -9,12 +9,15 @@
 |----------|------|
 | `ANTHROPIC_API_KEY` | Claude API |
 | `LLM_BACKEND` | `"claude"` (défaut) · `"gemini"` · `"openai"` |
-| `LLM_MODEL` | `"claude-sonnet-4-6"` (défaut) |
+| `LLM_MODEL` | Tier `reasoning` du primaire — `"claude-sonnet-4-6"` (défaut) |
+| `LLM_FAST_MODEL` | Tier `fast` du primaire — `"claude-haiku-4-5-20251001"` (défaut) |
+| `LLM_FALLBACK_MODEL` | Tier `reasoning` du fallback — `"gemini-2.0-flash"` (défaut) |
+| `LLM_FALLBACK_FAST_MODEL` | Tier `fast` du fallback — `"gemini-2.0-flash"` (défaut) |
 | `MISTRAL_API_KEY` | Embeddings 1024d |
 | `EMBEDDING_BACKEND` | `"mistral"` (défaut) · `"openai"` |
 | `EMBEDDING_MODEL` | `"mistral-embed"` (défaut) |
 
-> Routing par tâche (HOS-283) : le classifieur inbound tourne sur Haiku 4.5, pas sur le modèle par défaut — cf. `backend/app/services/receipts.py`. Impact coût dans `docs/Cost_Model.md` §2.
+> Routing par tâche (HOS-283, Décision #35) : les services demandent un **tier** (`reasoning` | `fast`), jamais un identifiant de modèle ; chaque provider le traduit. Le classifieur inbound demande `fast` (Haiku 4.5 sur Claude, Flash sur le fallback Gemini) — cf. `backend/app/services/receipts.py`. Changer de modèle = changer une variable ici. Impact coût dans `docs/Cost_Model.md` §2.
 
 ## Données & infrastructure
 

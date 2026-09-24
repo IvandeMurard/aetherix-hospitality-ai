@@ -104,9 +104,9 @@ Nouveaux ADRs · extension Mesh (Anima, Learning Engine, ontologies) · features
 
 ---
 
-## Amendement 22/09/2026 — gel développement levé, objectif reformulé portfolio (Décision #35)
+## Amendement 22/09/2026 — gel développement levé, objectif reformulé portfolio (Décision #36)
 
-Le gel de développement posé par la section « Ce qu'on ne fait PAS pendant 90 jours » ci-dessus est **levé** — pas le reste du plan (hygiène, méta-repo, preuve empirique restent pertinents), et pas le gate DPIA (Décision #20, inchangé). Détail complet et rationale : Décision #35, `docs/context/decisions-architecturales.md`.
+Le gel de développement posé par la section « Ce qu'on ne fait PAS pendant 90 jours » ci-dessus est **levé** — pas le reste du plan (hygiène, méta-repo, preuve empirique restent pertinents), et pas le gate DPIA (Décision #20, inchangé). Détail complet et rationale : Décision #36, `docs/context/decisions-architecturales.md`.
 
 **Pourquoi** : l'objectif du projet a été précisé — recherche d'emploi / renforcement de profil, pas vente ni levée (originellement conçu comme projet entrepreneurial, réévalué face à l'urgence de la recherche). Le raisonnement du gel (éviter l'« architecture sans preuve » face à un acheteur en diligence) visait une audience commerciale ; il ne s'applique pas de la même façon à un jury de recrutement, où la profondeur technique — honnêtement étiquetée (Décision #33) — est elle-même la valeur recherchée.
 

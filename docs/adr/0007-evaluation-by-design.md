@@ -932,7 +932,7 @@ Pour un cas FAIL synthétique (injection délibérée, cf. Airbnb "synthetic acc
 
 **Volume minimum avant premier run de calibration : 50 exemples** (borne basse Airbnb), incluant les 3 catégories d'échec (a/b/c) + des cas PASS variés (jour normal, event réel, weather réel). Avant le premier pilote réel (pas encore de vraies recommandations en prod), ces 50 exemples sont **construits manuellement par Ivan** — bonnes explications tirées de `golden_dataset.jsonl` existant + corruption délibérée pour générer les cas FAIL. Post-pilote (Phase 4), enrichir avec de vrais cas ambigus rencontrés en prod (alimente aussi EVAL-7).
 
-**D14.c — Modèle juge : Claude Sonnet via `LLMProvider` (Décision #9), pas un nouvel outil/SDK.**
+**D14.c — Modèle juge : Claude Sonnet via `LLMProvider` (Décision #9), pas un nouvel outil/SDK.** ⚠️ *Choix du modèle remplacé le 24/09/2026 par §14.5 (juge d'une autre famille que le générateur) ; le reste de D14.c tient.*
 
 Cohérent Décision #1 (Sonnet = reasoning principal) et rejet déjà acté deepeval/Braintrust pour Phase 3 (§ADR-0007 corps). Le juge appelle `LLMProvider.complete()` avec un prompt dédié (rubrique D14.a + `input_context` + `explanation_text`, **jamais** le prompt original qui a généré l'explication — le juge ne doit voir que le résultat à évaluer, pas le raisonnement de génération, pour éviter un biais d'auto-cohérence).
 
@@ -973,3 +973,27 @@ Recalibrer si l'un de ces événements survient (le calendrier fixe seul — Air
 | Juge = même call que le générateur (self-eval inline) | Biais d'auto-cohérence maximal — le juge doit être un call séparé, sans accès au prompt de génération |
 | Calendrier de recalibration fixe seul (ex. "tous les trimestres") | Insuffisant — un changement de prompt/provider entre deux recalibrations planifiées invaliderait silencieusement le juge |
 | Nouvel outil dédié (deepeval/Braintrust) pour cette seule calibration | Déjà tranché Phase 3 : re-évaluer seulement si volume EVAL-6/7 > 1000 runs/mois (§ADR-0007 corps, section Stories Phase 4) |
+
+### 14.5 Amendement — 2026-09-24 · Juge d'une autre famille que le générateur (Décision #35)
+
+**Remplace D14.c sur le choix du modèle juge.** La tension notée en D14.c (Sonnet juge une sortie de Sonnet) est tranchée par décision PM du 24/09/2026, dans l'esprit d'une revue adversariale : **le juge appartient à une famille de modèles différente de celle de tout générateur dont il note les sorties**. Le fallback Gemini étant un générateur possible (failover), la règle exclut aujourd'hui Claude **et** Gemini : le juge vient d'une troisième famille.
+
+**Pourquoi :** des modèles de la même famille partagent en partie leurs angles morts — une erreur que le générateur ne voit pas en écrivant, un juge de la même famille a plus de chances de ne pas la voir en notant (biais corrélé, et préférence pour ses propres formulations). Changer de famille décorrèle ces erreurs ; l'escalade vers Opus prévue en D14.c ne le faisait pas.
+
+**Pourquoi une troisième famille partout, et pas seulement « juge ≠ famille de la sortie notée » (confirmé PM 24/09/2026) :**
+- **Comparaison entre fournisseurs (Décision #35 D3).** Le juge note Claude **et** Gemini sur les mêmes cas : un juge de l'une des deux familles fausse l'écart mesuré en faveur de la sienne. Une troisième famille est ici nécessaire, pas une précaution.
+- **Une seule échelle.** Un juge Gemini en production et un juge tiers pour les comparaisons, ce seraient deux juges à calibrer (deux kappa) et des scores non comparables entre eux. Un juge unique d'une troisième famille coûte une calibration.
+- La bascule vers Gemini en production est rare ; elle n'est **pas** l'argument principal.
+
+**Alternative écartée :** juge ≠ famille du générateur de la sortie notée (juge Gemini pour les sorties Claude de production, troisième famille réservée aux comparaisons). Défendable et moins coûteuse à court terme, mais elle impose deux juges et deux échelles.
+
+**Ce qui ne change pas :**
+- **L'ancrage reste humain.** Le juge d'une autre famille n'est admis qu'après kappa ≥ 0.8 sur 2 runs consécutifs (D14.d). Changer de famille réduit un biais ; seule la calibration prouve que le juge est bon.
+- **Il reste appelé via `LLMProvider`** (Décision #9) — ce qui demande un adapter LLM pour la famille retenue (aujourd'hui seul un adapter *embedding* Mistral existe).
+- **Version épinglée** par identifiant exact (Décision #35 D3) : un juge ne se désigne pas par tier.
+
+**Choix de la famille : laissé à la calibration, pas fixé ici.** Mistral est le candidat le moins coûteux à intégrer (fournisseur et clé déjà présents dans le stack) ; OpenAI est l'alternative. Si aucun candidat d'une troisième famille n'atteint kappa ≥ 0.8, on revient à ce PM **avant** d'autoriser un juge de même famille — la règle ne se contourne pas en silence.
+
+**Limite assumée :** un juge qui applique une rubrique fixe n'est pas une revue adversariale complète — il vérifie, il ne *cherche* pas activement les défaillances. Une passe de type red-team (générer des cas conçus pour faire échouer le générateur) est un chantier distinct, non couvert ici.
+
+**Trigger de recalibration ajouté :** tout changement de la famille d'un générateur (primaire ou fallback) qui la ferait coïncider avec celle du juge.

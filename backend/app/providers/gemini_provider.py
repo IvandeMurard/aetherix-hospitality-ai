@@ -25,7 +25,7 @@ import os
 import time
 
 from app.context import request_id_var
-from app.providers.base import LLMProvider  # noqa: F401 — satisfies Protocol
+from app.providers.base import LLMProvider, ModelTier, resolve_tier_model  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +48,20 @@ class GeminiProvider:
 
     Args:
         api_key: Gemini API key. Falls back to ``GEMINI_API_KEY`` env var.
-        model:   Gemini model ID. Defaults to ``gemini-2.0-flash``.
+        model:      Gemini model ID for the ``"reasoning"`` tier. Defaults to
+                    ``gemini-2.0-flash``.
+        fast_model: Gemini model ID for the ``"fast"`` tier. Empty → ``model``.
     """
 
     def __init__(
         self,
         api_key: str = "",
         model: str = "gemini-2.0-flash",
+        fast_model: str = "",
     ) -> None:
         self._api_key = api_key or os.getenv("GEMINI_API_KEY", "")
         self._model = model
+        self._fast_model = fast_model or model
         self._client = None
         if self._api_key:
             from google import genai
@@ -74,7 +78,7 @@ class GeminiProvider:
         max_tokens: int = 500,
         temperature: float = 0.3,
         system: str | None = None,
-        model: str | None = None,
+        tier: ModelTier = "reasoning",
     ) -> str:
         """Call Gemini and return the plain-text completion.
 
@@ -84,8 +88,8 @@ class GeminiProvider:
             temperature: Sampling temperature.
             system:      Optional system instruction; maps to Gemini's
                          ``system_instruction`` config field.
-            model:       Optional per-call model override (task-based routing,
-                         HOS-283).  Falls back to the provider default when None.
+            tier:        Capability tier (Décision #35): ``"reasoning"`` →
+                         the default model, ``"fast"`` → ``fast_model``.
 
         Returns:
             The model's text response.
@@ -119,7 +123,9 @@ class GeminiProvider:
         config = types.GenerateContentConfig(**config_kwargs)
         contents = _to_gemini_contents(messages)
 
-        effective_model = model or self._model
+        effective_model = resolve_tier_model(
+            tier, reasoning=self._model, fast=self._fast_model
+        )
         t0 = time.monotonic()
         response = await self._client.aio.models.generate_content(
             model=effective_model,
