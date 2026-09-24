@@ -275,6 +275,10 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Gel terminologique post-acceptation :** tout changement de vocabulaire futur passe par amendement d'ADR explicite, pas un renommage silencieux.
 
+**Amendement 06/07/2026 — reste privé, exception au méta-repo public :** décision Ivan — contrairement à `mesh-architecture.md`, ce document ne migre jamais vers le méta-repo public (Décision #25/ADR-0010 Q2), malgré son caractère cross-cutting (≥2 nœuds). C'est l'IP différenciante du produit, pas de la gouvernance/infra. Amendement correspondant : ADR-0010 §Q2. Si une mention publique apparaît un jour, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
+
+**Document canonique :** `docs/adr/0012-mesh-signal-contract.md`.
+
 ---
 
 ### 32 — Processus de calibration LLM-judge, pré-requis EVAL-6 (ADR-0007 §14) (30/07/2026)
@@ -291,10 +295,6 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 **Pourquoi maintenant plutôt qu'au moment de construire EVAL-6** : coût de correction nul aujourd'hui (EVAL-6 n'est pas encore construit, Phase 4) — documenter le processus avant plutôt que de découvrir le gap une fois le juge déjà déployé sans calibration.
 
 **Détail complet :** `docs/adr/0007-evaluation-by-design.md` §14. Amende `docs/planning/evaluation-by-design.md` (EVAL-6 acceptance criteria) et `eval/FAILURE_THRESHOLDS.md` (ligne LLM reasoning).
-
-**Amendement 06/07/2026 — reste privé, exception au méta-repo public :** décision Ivan — contrairement à `mesh-architecture.md`, ce document ne migre jamais vers le méta-repo public (Décision #25/ADR-0010 Q2), malgré son caractère cross-cutting (≥2 nœuds). C'est l'IP différenciante du produit, pas de la gouvernance/infra. Amendement correspondant : ADR-0010 §Q2. Si une mention publique apparaît un jour, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
-
-**Document canonique :** `docs/adr/0012-mesh-signal-contract.md`.
 
 ---
 
