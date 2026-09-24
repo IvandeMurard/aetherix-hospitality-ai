@@ -56,3 +56,11 @@
 | `RETENTION_PURGE_HOUR` | Heure UTC du passage de purge quotidien (défaut `3`). |
 
 > ⚠️ **Rotation du poivre = rupture des digests.** Changer `PII_HASH_PEPPER` rend illisibles tous les digests existants : la dédup 60 s repart de zéro (sans dommage) mais un `guest_hashed_id` d'avant rotation ne correspondra plus à celui d'après, ce qui casse tout comptage par convive dans la durée. À traiter comme une migration, pas comme une rotation de clé ordinaire.
+
+## WhatsApp — boutons de décision (Décision #38, ADR-0007 §16.4)
+
+| Variable | Rôle |
+|---|---|
+| `WHATSAPP_DECISION_BUTTONS` | `"false"` (défaut). `"true"` attache les quick replies Accepter / Refuser / Corriger à la recommandation et Oui / Non aux confirmations. Sans SID, ou si l'envoi Content échoue, le texte part seul (fallback). Les payloads entrants sont traités quel que soit le flag. |
+| `TWILIO_CONTENT_SID_DECISION_FR` / `_EN` | SID `HX…` du template `twilio/quick-reply` de décision. Message **business-initiated** → template **approuvé par WhatsApp** (catégorie Utility) requis. Étape ops en attente. |
+| `TWILIO_CONTENT_SID_CONFIRM_FR` / `_EN` | SID du template de confirmation Oui / Non. Envoyé en réponse, dans la fenêtre de 24 h → template enregistré suffit (pas de soumission), 3 boutons max. |

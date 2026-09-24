@@ -162,3 +162,52 @@ async def get_recommendation_acceptance(
         trend=trend,
         daily=daily,
     )
+
+
+# ---------------------------------------------------------------------------
+# Décision #38 — manager decision capture metrics
+# ---------------------------------------------------------------------------
+
+class DecisionCaptureResponse(BaseModel):
+    days: int
+    replies: int
+    decision_seeking_replies: int
+    decisions_written: int
+    capture_rate: Optional[float]
+    by_source: dict[str, int]
+    source_share: dict[str, float]
+    confirmations_requested: int
+    confirmations_confirmed: int
+    confirmations_declined: int
+    confirmations_expired: int
+    confirmation_rate: Optional[float]
+    confirmation_timeout_rate: Optional[float]
+    not_recorded_by_why: dict[str, int]
+    reasons_captured: int
+    reasons_routed: int
+
+
+@router.get("/{hotel_id}/decision_capture", response_model=DecisionCaptureResponse)
+async def get_decision_capture(
+    hotel_id: str,
+    days: int = Query(default=7, ge=1, le=90),
+    token=Depends(_kpi_auth),
+    db: AsyncSession = Depends(get_db),
+) -> DecisionCaptureResponse:
+    """Capture rate, decisions by source, confirmation and timeout rates over the
+    last `days` days (ADR-0007 §16.8). Source: `inbound_reply_events`.
+
+    Arm C should read `by_source` before trusting a decision count: a
+    `bare_ack_rule` acceptance is weaker evidence than a `button` one.
+    """
+    from datetime import datetime, timezone
+
+    from app.services.inbound_decision import InboundDecisionService
+
+    if getattr(token, "hotel_id", hotel_id) != hotel_id:
+        raise HTTPException(status_code=403, detail="Token not scoped to this hotel")
+    until = datetime.now(tz=timezone.utc)
+    metrics = await InboundDecisionService(db).capture_metrics(
+        hotel_id, until - timedelta(days=days), until
+    )
+    return DecisionCaptureResponse(days=days, **metrics.as_dict())

@@ -107,6 +107,7 @@ versioning.
 | `breakfast_dinner_mix_shift` | 3 | — |
 | `ood_edge` | 5 | 3 (incl. abstention cases) |
 | `parser_intent` | 15 | 12 |
+| `parser_confirmation` | — (Décision #38) | — |
 | `pos_anomaly` | 0 (forward-compat ADR-0006) | 0 |
 
 **EVAL-0 ships the AC0.1 "unblocking minimum"** (6 categories ≥ 40 scenarios) —
@@ -121,9 +122,14 @@ a Sprint N+2 milestone (blocks EVAL-3 / EVAL-5 only).
   is the actual `y` for that date — not invented. (The model predicts aggregate
   covers `y`; the `covers_dinner`/`covers_breakfast` split shown in the ADR
   example is a Phase-4 refinement once per-service data exists.)
-- **parser_intent** scenarios are labelled with the **manager's intent**
-  (accepted / rejected / modified), not with what `parse_inbound` returns — the
-  two taxonomies differ (ADR-0007 §15). The original 17 cases are the `dev` split
+- **parser_intent** scenarios are labelled with the **manager's decision**
+  (`expected.decision`: accepted / rejected / modified; `expected.intent` kept as
+  an alias) and with `expected.path`, the step that should decide it (`keyword`,
+  `keyword_ambiguous`, `bare_ack`, `correction_pattern`, `model` — ADR-0007 §16).
+  Only `model` cases grade the model; the others are a deterministic code check
+  that fails if routing drifts. **parser_confirmation** cases (10, heldout) are
+  two-reading replies: any decision written without asking the manager is a
+  breach. The original 17 parser_intent cases are the `dev` split
   (the fake heuristic was written against them); the 30 `"split": "heldout"` cases
   are adversarial and were never used to tune anything. The PR gate runs the
   **fake backend — a plumbing check, not a quality measure**. Model quality comes

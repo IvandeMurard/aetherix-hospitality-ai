@@ -49,7 +49,7 @@ class _ScriptedLLM:
     async def complete(self, messages, max_tokens=500, temperature=0.3, system=None, tier="reasoning"):
         self.calls += 1
         reply = messages[0]["content"].removeprefix("Manager reply: ")
-        answer = self.script.get(reply, '{"intent": "free_form", "confidence": 0.9}')
+        answer = self.script.get(reply, '{"decision": "modified", "confidence": 0.9}')
         if isinstance(answer, Exception):
             raise answer
         return answer
@@ -164,51 +164,127 @@ def test_fake_report_has_no_accuracy_headline(monkeypatch):
 
 def test_production_path_routing_and_typed_errors():
     llm = _ScriptedLLM({
-        "noted, see you later": '{"intent": "acknowledge", "confidence": 0.9}',
-        "we will see": '{"intent": "free_form", "confidence": 0.9}',
+        "noted, see you later": '{"decision": "none", "confidence": 0.9}',
+        "sounds good, will do": '{"decision": "accepted", "confidence": 0.95}',
+        "hmm not sure": '{"decision": "rejected", "confidence": 0.5}',
+        "we will see": '{"decision": "modified", "confidence": 0.9}',
         "boom": RuntimeError("api down"),
         "garbage": "not json at all",
         "invented": '{"intent": "rejected", "confidence": 0.99}',
     })
     scenarios = [
         _sc("kw-a", "accepted", "Accept"),
-        _sc("kw-r", "rejected", " reject "),
+        _sc("kw-oui", "accepted", "oui"),
+        _sc("kw-r", "rejected", " refusé "),
+        _sc("amb", "rejected", "non merci"),
         _sc("ack", "accepted", "👍"),
         _sc("cov", "modified", "covers: 80"),
-        _sc("llm-ack", "accepted", "noted, see you later"),
-        _sc("llm-ff", "modified", "we will see"),
+        _sc("llm-none", "accepted", "noted, see you later"),
+        _sc("llm-auto", "accepted", "sounds good, will do"),
+        _sc("llm-low", "rejected", "hmm not sure"),
+        _sc("llm-mod", "modified", "we will see"),
         _sc("err", "modified", "boom"),
         _sc("bad", "modified", "garbage"),
         _sc("unmap", "rejected", "invented"),
     ]
     preds = eval_parser._run_production(scenarios, llm)
-    got = {sc["id"]: (p.label, p.stage) for sc, p in zip(scenarios, preds)}
+    got = {sc["id"]: (p.label, p.stage, p.action) for sc, p in zip(scenarios, preds)}
 
-    assert got["kw-a"] == ("accepted", "action_keyword")
-    assert got["kw-r"] == ("rejected", "action_keyword")
-    assert got["ack"] == ("not_recorded", "ack_regex")
-    assert got["cov"] == ("modified", "covers_regex")
-    assert got["llm-ack"] == ("not_recorded", "llm")
-    assert got["llm-ff"] == ("modified", "llm")
-    # Failures of the model are typed errors — production would record
-    # "modified" here, the eval refuses to count that fallback as an answer.
-    assert got["err"] == ("error", "llm_error")
-    assert got["bad"] == ("error", "llm_error")
-    assert got["unmap"] == ("error", "llm_unmappable")
-    assert llm.calls == 5  # keywords and regexes never reach the model
+    assert got["kw-a"] == ("accepted", "keyword", "record")
+    assert got["kw-oui"] == ("accepted", "keyword", "record")
+    assert got["kw-r"] == ("rejected", "keyword", "record")
+    # Ambiguous keyword → confirmation, never a write.
+    assert got["amb"] == ("rejected", "keyword_ambiguous", "confirm")
+    # Bare ack, one pending recommendation inside the window (EVAL_CONTEXT) → rule (b).
+    assert got["ack"] == ("accepted", "bare_ack", "record")
+    assert got["cov"] == ("modified", "covers_regex", "record")
+    assert got["llm-none"] == ("not_recorded", "llm", "none")
+    assert got["llm-auto"] == ("accepted", "llm", "record")
+    # Low confidence → the decision is proposed for confirmation, not written.
+    assert got["llm-low"] == ("rejected", "llm", "confirm")
+    assert got["llm-mod"] == ("modified", "llm", "record")
+    # Model failures are typed errors — never a decision.
+    assert got["err"] == ("error", "llm_error", "error")
+    assert got["bad"] == ("error", "llm_unmappable", "error")
+    assert got["unmap"] == ("error", "llm_unmappable", "error")
+    assert llm.calls == 7  # keywords and regexes never reach the model
+
+
+def test_auto_write_precision_and_confirmation_rate():
+    scenarios = [_sc("a", "accepted", "x1"), _sc("b", "rejected", "x2"),
+                 _sc("c", "rejected", "x3"), _sc("d", "modified", "x4")]
+    preds = {
+        "x1": Prediction("accepted", "llm", action="record"),
+        "x2": Prediction("accepted", "llm", action="record"),   # wrong auto-write
+        "x3": Prediction("rejected", "llm", action="confirm"),  # right, confirmed
+        "x4": Prediction("modified", "llm", action="record"),
+    }
+    r = compute_parser_metrics(scenarios, lambda m, lang="fr": preds[m])
+    assert r["accuracy"] == 0.75
+    assert r["auto_write"]["n_written"] == 3
+    assert r["auto_write"]["per_decision_precision"]["accepted"] == 0.5
+    assert r["auto_write"]["per_decision_precision"]["rejected"] is None
+    assert r["confirmation_rate"] == 0.25
+    assert any("accepted: auto-write precision 0.5" in b for b in threshold_breaches(r))
+
+
+def test_confirmation_trigger_write_is_a_breach():
+    trig = eval_parser.confirmation_trigger(
+        [{"id": "t1"}, {"id": "t2"}, {"id": "t3"}],
+        [Prediction("rejected", "llm", action="confirm"),
+         Prediction("not_recorded", "llm", action="none"),
+         Prediction("accepted", "llm", action="record")],
+    )
+    assert trig["auto_written"] == 1 and trig["confirmed_or_none"] == 2
+    breaches = threshold_breaches({"accuracy": 1.0, "per_intent": {}, "confirmation_trigger": trig})
+    assert breaches == ["confirmation trigger: 1 low-confidence case(s) written without confirmation"]
 
 
 def test_production_path_ceiling_is_model_independent():
     scenarios = [
-        _sc("a", "accepted", "ça marche"),   # reaches model → best case not_recorded/modified
+        _sc("a", "accepted", "ça marche"),   # reaches model → reachable
         _sc("b", "rejected", "reject"),      # keyword → rejected ✓
         _sc("c", "modified", "covers: 80"),  # regex → modified ✓
-        _sc("d", "modified", "plutôt 40"),   # reaches model → modified reachable ✓
+        _sc("d", "accepted", "non"),         # keyword → rejected ✗ (label disagrees)
     ]
     c = production_path_ceiling(scenarios)
     assert c["max_accuracy"] == 0.75
-    assert c["reaches_model"] == 2
-    assert c["max_recall"]["accepted"] == 0.0
+    assert c["reaches_model"] == 1
+    assert c["max_recall"]["accepted"] == 0.5
+
+
+def test_dataset_deterministic_block_agrees_with_labels():
+    """Every golden reply decided before the model lands on its label, and on
+    the path the dataset annotates. A code check, not a quality figure."""
+    from scripts.eval.loader import load_scenarios
+
+    scenarios = [s for s in load_scenarios(layer="parser") if s["category"] == "parser_intent"]
+    block = eval_parser.deterministic_block(scenarios)
+    assert block["n"] >= 10
+    assert block["disagreements"] == []
+    stage_to_path = {"keyword": "keyword", "keyword_ambiguous": "keyword_ambiguous",
+                     "bare_ack": "bare_ack", "covers_regex": "correction_pattern"}
+    for case in block["cases"]:
+        assert stage_to_path[case["stage"]] == case["expected_path"], case["id"]
+    graded = eval_parser.model_graded_ids(scenarios)
+    for s in scenarios:
+        assert (s["id"] in graded) == (s["expected"]["path"] == "model"), s["id"]
+
+
+def test_dataset_has_confirmation_trigger_cases():
+    from scripts.eval.loader import load_scenarios
+
+    trig = [s for s in load_scenarios(layer="parser") if s["category"] == "parser_confirmation"]
+    assert len(trig) >= 10
+    assert all(s["expected"]["requires_confirmation"] is True for s in trig)
+    # They must reach the model: a keyword would decide them without it.
+    from app.schemas.webhook import ActionType
+    from app.services.action_logger import parse_action
+    from app.services.manager_decision import is_bare_ack
+
+    for s in trig:
+        msg = s["input"]["message"]
+        assert parse_action(msg) == ActionType.unknown and not is_bare_ack(msg), s["id"]
 
 
 def test_real_backend_without_key_is_not_measured(monkeypatch):
@@ -239,19 +315,39 @@ def _patch_provider(monkeypatch, llm):
 
 
 def test_real_backend_uses_primary_and_reports_canary(monkeypatch):
-    llm = _ScriptedLLM({})
+    llm = _ScriptedLLM({})  # every model reply → modified @ 0.9
     _patch_provider(monkeypatch, llm)
     r = run(runs=3)
     assert r["backend"] == "real" and r["quality_signal"] is True
+    assert r["measures"] == "free_text_path_model_included"
     assert r["model"]["provider"] == "scripted/test"
     assert r["model"]["temperatures"] == [0.0]  # the production temperature
     assert r["canary"]["runs"] == 3
     assert r["canary"]["identical_predictions"] is True
     assert r["canary"]["variance_pp"] == 0.0
-    # Free text can never record accepted/rejected on this path (ADR-0007 §15).
-    assert r["accuracy"] <= r["production_path_ceiling"]["max_accuracy"]
-    assert r["thresholds"]["breaches"]
+    # Only free-text cases are model-graded; deterministic ones are reported apart.
+    assert r["n"] == r["production_path_ceiling"]["reaches_model"]
+    assert all(c["stage"] == "llm" for c in r["cases"])
+    assert r["deterministic"]["disagreements"] == []
+    # A model that answers "modified" to everything auto-writes the trigger cases.
+    assert r["confirmation_trigger"]["auto_written"] == r["n_confirmation_trigger_cases"]
+    assert any(b.startswith("confirmation trigger") for b in r["thresholds"]["breaches"])
     assert baselines.parser_baseline_freeze_refusal(r) is None
+
+
+def test_real_backend_low_confidence_model_passes_trigger(monkeypatch):
+    class _Unsure(_ScriptedLLM):
+        async def complete(self, *a, **k):
+            self.calls += 1
+            return '{"decision": "rejected", "confidence": 0.4}'
+
+    _patch_provider(monkeypatch, _Unsure({}))
+    r = run(runs=1)
+    assert r["confirmation_trigger"]["auto_written"] == 0
+    assert r["auto_write"]["n_written"] == 0
+    assert r["confirmation_rate"] == 1.0
+    md = reporter.render_markdown(r, baselines.diff_parser(r, None))
+    assert "Confirmation trigger" in md and "Deterministic path" in md
 
 
 def test_real_baseline_refused_on_single_run_or_disagreeing_runs():

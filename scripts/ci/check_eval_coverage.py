@@ -54,6 +54,10 @@ EVAL_TRIGGER_PATHS = [
     # route that turns a parsed reply into a recorded outcome.
     "backend/app/services/action_logger.py",
     "backend/app/api/routes/twilio_inbound.py",
+    # Décision #38 (ADR-0007 §16): the decision rules (keywords, thresholds,
+    # rule (b)) and the service that applies them decide what arm C records.
+    "backend/app/services/manager_decision.py",
+    "backend/app/services/inbound_decision.py",
     "backend/app/services/agent_constitution.py",
     "backend/app/services/data_transformer.py",
     "backend/app/services/demand_modifiers.py",
@@ -83,6 +87,8 @@ LAYER_BY_PATH = {
     "backend/app/services/receipts.py": ("receipt", "parser"),
     "backend/app/services/action_logger.py": "parser",
     "backend/app/api/routes/twilio_inbound.py": "parser",
+    "backend/app/services/manager_decision.py": "parser",
+    "backend/app/services/inbound_decision.py": "parser",
 }
 
 # A change under these triggers a FULL run — an LLM/embedding/prompt swap impacts

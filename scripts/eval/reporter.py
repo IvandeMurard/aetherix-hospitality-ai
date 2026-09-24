@@ -85,14 +85,24 @@ def _render_parser_md(result: dict, diff: dict) -> str:
 
     real = bool(result.get("quality_signal"))
     ceiling = result.get("production_path_ceiling") or {}
+    det = result.get("deterministic") or {}
     if real:
         model = result.get("model") or {}
         canary = result.get("canary") or {}
+        aw = result.get("auto_write") or {}
+        trig = result.get("confirmation_trigger") or {}
         lines = [
-            "# Eval report — parser (production path, real model)",
+            "# Eval report — parser (free-text path, real model)",
             "",
-            f"- **Accuracy**: {_pct(result['accuracy'])}  ·  n={result['n']}  ·  "
+            f"- **Decision accuracy** (replies that reach the model; written or proposed "
+            f"for confirmation): {_pct(result['accuracy'])}  ·  n={result['n']}  ·  "
             f"typed errors={result['n_errors']}",
+            f"- **Auto-written** (no confirmation): {aw.get('n_written')} · precision "
+            f"{_pct(aw.get('precision'))} · per decision "
+            + " · ".join(f"{d} {_pct(p)}" for d, p in (aw.get('per_decision_precision') or {}).items())
+            + f"  ·  **confirmation rate** {_pct(result.get('confirmation_rate'))}",
+            f"- **Confirmation trigger** ({trig.get('n')} two-reading replies): "
+            f"{trig.get('auto_written')} written without confirmation (must be 0)",
             f"- **Model**: {model.get('provider')} · fast model `{model.get('fast_model')}` · "
             f"tiers {model.get('tiers')} · temperature {model.get('temperatures')} · "
             f"{model.get('llm_calls')} API calls",
@@ -121,6 +131,10 @@ def _render_parser_md(result: dict, diff: dict) -> str:
         ]
 
     lines += [
+        f"- **Deterministic path** (no model — code check, not quality): "
+        f"{det.get('agree')}/{det.get('n')} replies decided before the model land on "
+        f"their label · by step {det.get('by_stage')} · "
+        f"{det.get('confirmations')} sent to confirmation",
         f"- **Production-path ceiling** (model-independent, computed on the production "
         f"code with no API call): max accuracy {_pct(ceiling.get('max_accuracy'))} · "
         f"{ceiling.get('decided_before_model')}/{ceiling.get('n')} replies decided before "

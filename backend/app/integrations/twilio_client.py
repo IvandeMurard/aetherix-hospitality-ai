@@ -11,6 +11,7 @@ Architecture constraints:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Optional
 
@@ -60,7 +61,9 @@ class TwilioClient:
         if not self._account_sid or not self._auth_token:
             raise NotConfiguredError("Twilio")
 
-    async def _post_message(self, to: str, from_: str, body: str) -> str:
+    async def _post_message(
+        self, to: str, from_: str, body: str, extra: Optional[dict[str, str]] = None
+    ) -> str:
         """Send a Twilio Messages.json POST and return the message SID.
 
         Retries up to ``_TWILIO_MAX_RETRIES`` times on 5xx or transport errors
@@ -72,7 +75,11 @@ class TwilioClient:
         self._assert_configured()
 
         url = _MESSAGES_URL_TEMPLATE.format(account_sid=self._account_sid)
-        payload = {"To": to, "From": from_, "Body": body}
+        payload = {"To": to, "From": from_}
+        if body:
+            payload["Body"] = body
+        if extra:
+            payload.update(extra)
 
         last_exc: Exception | None = None
         for attempt in range(1, _TWILIO_MAX_RETRIES + 1):
@@ -179,3 +186,32 @@ class TwilioClient:
 
         whatsapp_from = self._whatsapp_from or self._from_number
         return await self._post_message(to=to, from_=whatsapp_from, body=body)
+
+    async def send_whatsapp_content(
+        self, to: str, content_sid: str, variables: dict[str, str]
+    ) -> str:
+        """Send a WhatsApp message from a Twilio Content template (ContentSid).
+
+        Used for quick-reply buttons (``twilio/quick-reply``, ADR-0007 §16.4).
+        A business-initiated message needs a template approved by WhatsApp; a
+        reply inside the 24 h customer-service window can use an unapproved
+        (saved, not submitted) template, max 3 buttons. Twilio rejects the
+        request (4xx) otherwise — callers fall back to plain text.
+
+        Args:
+            to: Destination WhatsApp number (``whatsapp:`` prefix optional).
+            content_sid: ``HX…`` SID of the Content template.
+            variables: Template variables, e.g. ``{"1": "Add 2 servers"}``.
+        """
+        if not to.startswith("whatsapp:"):
+            to = f"whatsapp:{to}"
+        whatsapp_from = self._whatsapp_from or self._from_number
+        return await self._post_message(
+            to=to,
+            from_=whatsapp_from,
+            body="",
+            extra={
+                "ContentSid": content_sid,
+                "ContentVariables": json.dumps(variables, ensure_ascii=False),
+            },
+        )

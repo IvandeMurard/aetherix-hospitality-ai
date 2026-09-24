@@ -360,7 +360,9 @@ class TestBgParseQueryIsolatedSession:
 
         app.dependency_overrides[get_db] = _noop_db
 
-        with patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock) as mock_bg:
+        with patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock) as mock_bg, \
+             patch("app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+                   new_callable=AsyncMock, return_value=None):
             with TestClient(app) as client:
                 resp = client.post(
                     "/webhooks/twilio/inbound",

@@ -253,21 +253,17 @@ Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni co
 
 **Voisins :** [HOS-326](https://linear.app/hospitalityagent/issue/HOS-326) (trace d'émission) · §Rattachement Bras C ci-dessus · §Politique d'exploration éthique · §Méthode off-policy evaluation · Décision #6 · Décision #32 · Décision #33.
 
-### Inbound reply → recorded outcome: free text cannot record accepted/rejected (24/09/2026)
-
-**Status:** Open — product defect found by the EVAL-4 correction (ADR-0007 §15.2, Décision #37).
-
-**Fact.** In `api/routes/twilio_inbound.py`, only the exact bodies `accept` / `reject` record `accepted` / `rejected`. Every other reply goes through `parse_inbound`: `acknowledge` records nothing, every other intent records `modified`, including when the model fails. "non merci on garde tel quel" is stored as `modified`; "ok merci" leaves the recommendation `dispatched`. Measured without a model on the 47 labelled cases: the path cannot exceed **36.2%** accuracy, with 0% max recall on `accepted` and `rejected`. `recommendation_acceptance_rate` therefore cannot count a free-text acceptance or refusal.
-
-**Proposed fix.** Add an explicit decision field to the classifier's output schema (`accepted | rejected | modified | none`), validated by schema (Décision #35 D2), mapped in `receipts.outcome_for_feedback` (the single definition shared with the eval). A `rejected`/`accepted` below the confidence threshold asks the manager to confirm instead of being written (Décision #6, HITL). Whether `acknowledge` of a Receipt (vs of a staffing recommendation) should count as `accepted` needs a product call: the reply's target is ambiguous today.
-
-**To decide:** (a) accept the schema change; (b) semantics of a bare acknowledgement; (c) whether to keep the exact-keyword path as a fast path.
-
-**Gate for closing:** the opt-in real parser eval (`eval-parser-real.yml`) passes the FAILURE_THRESHOLDS.md contract on dev + heldout.
-
 ---
 
 ## Resolved (archive)
+
+### [x] Inbound reply → recorded outcome: free text cannot record accepted/rejected — RESOLVED 24/09/2026 → ADR-0007 §16 (Décision #38)
+
+**Opened** 24/09/2026 by the EVAL-4 correction (ADR-0007 §15.2, Décision #37): only the exact bodies `accept` / `reject` recorded a decision; free text recorded `modified` or nothing (ceiling 36.2%).
+
+**Decided by Ivan (PO), same day.** The decision is arm C's ground truth, deterministic wherever possible; the comment is optional and never changes a decision. (a) Schema change accepted: `decision` + `confidence` (+ corrected value, reason) validated by schema, mapped in `receipts.resolve_feedback` / `outcome_for_feedback`. (b) A bare acknowledgement records `accepted` only with exactly one pending recommendation inside the response window (12 h), source `bare_ack_rule`; otherwise the manager is asked. (c) Exact-keyword fast path kept and widened to FR/EN forms; ambiguous forms go to confirmation. Plus: WhatsApp quick-reply buttons behind a flag (template approval pending), mandatory confirmation below 0.85, optional typed reason after reject/correction, outcome never relabels a decision.
+
+**What is still open:** the gate for closing the original item — the real parser eval passing FAILURE_THRESHOLDS.md — has **not** run (no API key). The WhatsApp template approval is an ops step. See ADR-0007 §16.4 and §16.7.
 
 ### [x] Floor k-anonymat couche Segment — RÉSOLU 01/08/2026 (HOS-323, arbitrage Ivan)
 

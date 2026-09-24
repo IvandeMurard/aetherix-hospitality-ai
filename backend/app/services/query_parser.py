@@ -118,7 +118,7 @@ class QueryParserService:
             .where(
                 StaffingRecommendation.property_id == uuid.UUID(str(profile.id)),
                 StaffingRecommendation.status.in_(
-                    ["dispatched", "accepted", "rejected"]
+                    ["dispatched", "accepted", "rejected", "modified"]
                 ),
             )
             .order_by(

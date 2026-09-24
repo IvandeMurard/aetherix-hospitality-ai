@@ -29,8 +29,8 @@ Trois raisons, dans l'ordre d'importance :
   les snapshots Supabase jusqu'à expiration de leur fenêtre, qui n'est ni
   bornée ni documentée. Une réponse DSAR doit le dire, plutôt qu'affirmer un
   effacement immédiat.
-- **Trois tables ne sont pas adressables par personne** : `operational_memory`,
-  `agent_action_log` et `pms_sync_logs` portent des champs libres qui *peuvent*
+- **Quatre tables ne sont pas adressables par personne** : `operational_memory`,
+  `agent_action_log`, `pms_sync_logs` et `inbound_reply_events` portent des champs libres qui *peuvent*
   contenir une donnée personnelle, mais sont clés par hôtel, jamais par
   individu. Il n'existe donc aucun index permettant de retrouver « les lignes
   de cette personne ». C'est traité par un **balayage textuel best-effort** qui
@@ -136,7 +136,8 @@ BACKUP_CAVEAT = (
     "fenêtre de rétention. La suppression n'est complète qu'à ce terme."
 )
 FREE_TEXT_CAVEAT = (
-    "Trois tables (operational_memory, agent_action_log, pms_sync_logs) portent des "
+    "Quatre tables (operational_memory, agent_action_log, pms_sync_logs, "
+    "inbound_reply_events) portent des "
     "champs libres qui ne sont pas indexés par personne. Elles ont été balayées par "
     "recherche textuelle ; les correspondances sont listées pour arbitrage manuel, "
     "jamais supprimées automatiquement."
@@ -198,6 +199,22 @@ def build_erasure_plan(subject: Subject) -> list[Step]:
                 "sous-chaîne détruirait de l'opérationnel légitime au premier homonyme. "
                 "⚠️ Une suppression retenue doit effacer la ligne ET son embedding : un "
                 "vecteur dérivé d'une donnée personnelle reste une donnée personnelle."
+            ),
+        )
+    )
+
+    order += 1
+    steps.append(
+        Step(
+            order=order,
+            table="inbound_reply_events",
+            action=Action.REVIEW,
+            target="balayage textuel sur reason_text",
+            rationale=(
+                "Décision #38 : la raison facultative d'un refus ou d'une correction est "
+                "du texte libre du manager. Table clé par hôtel, pas par personne — même "
+                "traitement qu'operational_memory. Le reste de la ligne (décision, source, "
+                "confiance) n'identifie personne et reste la vérité terrain du bras C."
             ),
         )
     )
@@ -391,5 +408,7 @@ PII_TABLES: frozenset[str] = frozenset(
         "operational_memory",
         "agent_action_log",
         "pms_sync_logs",
+        # Décision #38 — reason_text (raison facultative, texte libre du manager).
+        "inbound_reply_events",
     }
 )

@@ -331,7 +331,7 @@ class StaffingRecommendation(Base):
     roi_net = Column(Numeric(10, 2))
     roi_labor_cost = Column(Numeric(10, 2))
 
-    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected
+    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected | modified
 
     # Story 4.2 (HOS-25): dispatch tracking
     dispatched_at = Column(DateTime(timezone=True), nullable=True)
@@ -339,7 +339,7 @@ class StaffingRecommendation(Base):
 
     # Story 4.3 (HOS-26): manager action logging
     actioned_at = Column(DateTime(timezone=True), nullable=True)
-    action = Column(String(10), nullable=True)  # accepted | rejected
+    action = Column(String(10), nullable=True)  # accepted | rejected | modified
 
     # Story 10.10 (HOS-200): close the prediction → outcome loop.
     # predicted_covers is copied from demand_anomalies.expected_demand at
@@ -351,8 +351,94 @@ class StaffingRecommendation(Base):
     actual_covers_source = Column(String, nullable=True)  # manager_feedback | pos_data (Phase 4)
     actual_covers_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Décision #38 / ADR-0007 §16: how the manager's decision was captured
+    # (manager_decision.DecisionSource) and with what confidence. Arm C uses it
+    # to keep an explicit accept apart from an inferred one.
+    # Mirror of migration 20260924120000 (schema drift gate — Décision #16).
+    decision_source = Column(String, nullable=True)
+    decision_confidence = Column(Numeric(4, 3), nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class ManagerPrompt(Base):
+    """Pending HITL prompt sent to a manager (Décision #38, ADR-0007 §16).
+
+    ``decision_confirmation`` — "Je note un refus, c'est bien ça ?": nothing is
+    written to the recommendation until the manager answers yes. ``expired``
+    means unconfirmed, never a decision. ``reason_request`` — the optional
+    "Une raison ? (facultatif)" after a reject or a correction.
+    Mirror of migration 20260924120000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "manager_prompts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    tenant_id = Column(String, nullable=False)
+    property_id = Column(UUID(as_uuid=True), nullable=False)
+    recommendation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    kind = Column(String, nullable=False)                # decision_confirmation | reason_request
+    proposed_decision = Column(String, nullable=True)    # accepted | rejected | modified
+    origin = Column(String, nullable=True)               # model | keyword_ambiguous | bare_ack | <decision source>
+    confidence = Column(Numeric(4, 3), nullable=True)
+    corrected_value = Column(Numeric(10, 2), nullable=True)
+    status = Column(String, nullable=False, default="pending")
+    # pending | confirmed | declined | expired | answered | superseded
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    request_id = Column(String, nullable=False, default="")
+
+    __table_args__ = (
+        Index("idx_manager_prompts_property_status", "property_id", "status", "expires_at"),
+    )
+
+
+class InboundReplyEvent(Base):
+    """One row per inbound manager reply (+ one per expired prompt).
+
+    Typed result of the reply (``manager_decision.REPLY_RESULTS``), the decision
+    and its source when one was written, a typed ``why`` when nothing was, and
+    the optional reason with its typed route. Feeds the capture metrics
+    (``manager_decision.compute_capture_metrics``).
+    Mirror of migration 20260924120000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "inbound_reply_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    tenant_id = Column(String, nullable=False)
+    property_id = Column(UUID(as_uuid=True), nullable=True)
+    recommendation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    prompt_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("manager_prompts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    request_id = Column(String, nullable=False, default="")
+    channel = Column(String, nullable=False)             # button | text | system
+    result = Column(String, nullable=False)
+    decision = Column(String, nullable=True)
+    decision_source = Column(String, nullable=True)
+    confidence = Column(Numeric(4, 3), nullable=True)
+    why = Column(String, nullable=True)
+    reason_text = Column(Text, nullable=True)
+    reason_route = Column(String, nullable=True)
+    reason_route_confidence = Column(Numeric(4, 3), nullable=True)
+
+    __table_args__ = (
+        Index("idx_inbound_reply_events_tenant_created", "tenant_id", "created_at"),
+    )
 
 
 class ConversationalQuery(Base):

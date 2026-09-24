@@ -75,6 +75,9 @@ REQUIRED_TABLES: dict[str, str] = {
     # HOS-292 / Q2-05 — added in migration 20260521 (after the 20260515 pre-pilot
     # RLS batch), so it was previously invisible to this audit.
     "kpi_daily": "tenant_id",
+    # Décision #38 — manager decision capture (migration 20260924120000).
+    "manager_prompts": "tenant_id",
+    "inbound_reply_events": "tenant_id",
 }
 
 # Tables that may exist but are not in scope for this audit (no tenant column,

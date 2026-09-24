@@ -1,33 +1,42 @@
-"""Inbound-parser eval — EVAL-4 (HOS-208), ADR-0007 §5.c, amended §15.
+"""Inbound-parser eval — EVAL-4 (HOS-208), ADR-0007 §5.c, amended §15 and §16.
 
-Grades how a manager's WhatsApp reply becomes a recorded feedback outcome
-(``accepted | rejected | modified``) and reports accuracy, per-intent
-precision/recall and a confusion matrix, split by dataset split (``dev`` = the
-original cases, ``heldout`` = adversarial cases never used to tune anything).
+Grades how a manager's WhatsApp reply becomes a recorded **decision**
+(``accepted | rejected | modified``), a **confirmation request** (nothing
+written until the manager confirms, Décision #6), or nothing.
+
+Since §16 (Décision #38) most short replies are decided **before** the model,
+deterministically: exact FR/EN keywords, ambiguous keyword forms (→ confirmation),
+bare acknowledgements (rule (b)), covers corrections. Those are code, unit-tested
+form by form; the eval reports them as a **deterministic block** (a regression
+check of the routing, not a quality figure). The **model is graded on the
+free-text path only**: replies that reach it.
 
 Backends (env ``EVAL_PARSER_BACKEND``):
 
 * ``fake`` (CI default) — **pipeline/plumbing check only.** A keyword heuristic
   (`FakeIntentClassifier`) whose rules were written against the ``dev`` cases.
-  Its agreement with the labels measures nothing about the production parser or
-  the model; the result carries ``quality_signal: false`` and no baseline is
-  compared. It proves the eval pipeline runs end to end.
+  ``quality_signal: false``, no baseline compared. The deterministic block and the
+  ceiling are still computed on the production code (no model involved).
 * ``real`` (opt-in: ``.github/workflows/eval-parser-real.yml``) — grades the
-  **production path**, model included, with no fallback inside it:
-  ``action_logger.parse_action`` (exact ``accept``/``reject``) →
-  ``ReceiptsService.parse_inbound`` (ack regex → covers regex → model) →
-  ``receipts.outcome_for_feedback`` — the same three calls, in the same order,
-  as ``api/routes/twilio_inbound.py``. The model is the primary provider only
-  (no silent Gemini failover). A model error or an answer outside the taxonomy
-  is a typed ``error`` prediction and counts as a miss — never a guess.
-  Without ``ANTHROPIC_API_KEY`` the run raises `ParserEvalNotMeasured` and the
-  runner exits 2 (ERROR): *not measured*, never PASS.
+  **production path**, model included, no fallback:
+  ``action_logger.parse_action`` → ``ReceiptsService.parse_inbound`` →
+  ``receipts.resolve_feedback``, the same calls as ``api/routes/twilio_inbound.py``.
+  Primary provider only. A model error or a schema failure is a typed ``error``.
+  Without ``ANTHROPIC_API_KEY`` the run raises `ParserEvalNotMeasured` → exit 2.
 
-Both backends also report the **production-path ceiling**: the best accuracy the
-production path can reach whatever the model answers, computed by running the
-production code with a stub model (no API call). A reply that reaches the model
-can only end up ``modified`` or ``not_recorded``, so the ceiling is a property of
-the code, not of the model.
+Model-graded metrics (real backend, cases that reach the model):
+
+* ``accuracy`` — the decision the path lands on (written, or proposed for
+  confirmation) equals the label. ``none`` / error = miss.
+* ``auto_write`` — decisions written **without** confirmation (confidence ≥
+  ``DECISION_CONFIDENCE_THRESHOLD``) and their precision: the harmful error.
+* ``confirmation_rate`` — share sent to confirmation (manager interruption cost).
+* ``confirmation_trigger`` — ``parser_confirmation`` cases (genuinely two-reading
+  replies): any auto-write is a breach; a confirmation or no decision passes.
+
+Evaluation context: every case is graded as a reply to exactly one pending
+recommendation, inside the response window (``EVAL_CONTEXT``). Rule (b) then
+records ``accepted`` for a bare acknowledgement; its other branches are unit-tested.
 
 `compute_parser_metrics` is pure and unit-tested deterministically.
 """
@@ -37,6 +46,7 @@ import asyncio
 import os
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -48,19 +58,25 @@ _BACKEND = Path(__file__).resolve().parent.parent.parent / "backend"
 if str(_BACKEND) not in sys.path:
     sys.path.insert(0, str(_BACKEND))
 
-# Predictions can fall outside the 3 ground-truth intents:
-#   not_recorded — production writes no outcome (acknowledge path)
-#   error        — model call failed or answered outside the taxonomy (real only)
+# Predictions can fall outside the 3 decisions:
+#   not_recorded — the path writes no decision and asks nothing
+#   error        — model call failed or its answer failed the schema (real only)
 PREDICTED_LABELS: tuple[str, ...] = (*INTENTS, "not_recorded", "error")
 
-# FAILURE_THRESHOLDS.md — "Inbound parser": accuracy < 90% or per-intent
-# precision < 0.85 is unacceptable. Applied to the real backend only.
+# FAILURE_THRESHOLDS.md — "Inbound parser". Applied to the real backend only.
 ACCURACY_MIN = 0.90
 PRECISION_MIN = 0.85
 
-# Outcomes a reply can still reach once it is handed to the model: the route
-# records nothing for `acknowledge` and "modified" for every other intent.
-_MODEL_REACHABLE = frozenset({"modified", "not_recorded"})
+_MODEL_STAGES = ("llm", "llm_error", "llm_unmappable")
+
+_NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
+
+
+def _eval_context():
+    from app.services.manager_decision import PendingContext
+
+    # One pending recommendation, dispatched an hour ago (inside the window).
+    return PendingContext(pending_count=1, latest_dispatched_at=_NOW - timedelta(hours=1), now=_NOW)
 
 
 class ParserEvalNotMeasured(RuntimeError):
@@ -69,9 +85,10 @@ class ParserEvalNotMeasured(RuntimeError):
 
 @dataclass(frozen=True)
 class Prediction:
-    label: str                 # one of PREDICTED_LABELS
-    stage: str                 # which step decided (action_keyword, ack_regex, …)
+    label: str                 # decision landed on (written or proposed), or not_recorded / error
+    stage: str                 # which step decided (keyword, bare_ack, covers_regex, llm, …)
     error: str | None = None   # typed reason when label == "error"
+    action: str = "record"     # record | confirm | none | error
 
 
 PredictFn = Callable[[str, str], Prediction]
@@ -81,37 +98,54 @@ def _split(scenario: dict) -> str:
     return scenario.get("split", "dev")
 
 
+def expected_decision(scenario: dict) -> str | None:
+    exp = scenario.get("expected", {})
+    return exp.get("decision", exp.get("intent"))
+
+
+def _is_labelled(scenario: dict) -> bool:
+    return scenario.get("category") == "parser_intent" and expected_decision(scenario) in INTENTS
+
+
 def compute_parser_metrics(
     scenarios: list[dict], predict: Callable[[str, str], Prediction | str]
 ) -> dict:
-    """Pure metrics: accuracy, per-intent precision/recall/support, confusion
-    matrix (rows = expected intent, cols = PREDICTED_LABELS), per-split accuracy
-    and per-case detail.
+    """Pure metrics: accuracy, per-decision precision/recall/support, confusion
+    matrix (rows = expected decision, cols = PREDICTED_LABELS), per-split accuracy,
+    auto-write precision and confirmation rate, and per-case detail.
 
     `predict` may return a bare label (legacy classifiers) or a `Prediction`.
-    An unknown label is recorded as ``error`` — never coerced to an intent.
+    An unknown label is recorded as ``error`` — never coerced to a decision.
     """
     confusion: dict[str, dict[str, int]] = {t: {p: 0 for p in PREDICTED_LABELS} for t in INTENTS}
     split_totals: dict[str, list[int]] = {}
     stages: dict[str, int] = {}
     cases: list[dict] = []
     correct = total = 0
+    written: dict[str, list[int]] = {t: [0, 0] for t in INTENTS}  # decision → [correct, n]
+    confirmations = 0
 
     for sc in scenarios:
-        expected = sc.get("expected", {}).get("intent")
-        if expected not in INTENTS:
-            continue  # skip non-classification scenarios (e.g. abstention/ood)
+        expected = expected_decision(sc)
+        if expected not in INTENTS or sc.get("category", "parser_intent") != "parser_intent":
+            continue  # skip non-classification scenarios (abstention/ood, confirmation set)
         message = sc.get("input", {}).get("message", "")
         language = sc.get("input", {}).get("language", "fr")
         raw = predict(message, language)
         pred = raw if isinstance(raw, Prediction) else Prediction(label=raw, stage="classifier")
         if pred.label not in PREDICTED_LABELS:
-            pred = Prediction(label="error", stage=pred.stage, error=f"unknown_label:{pred.label}")
+            pred = Prediction(label="error", stage=pred.stage, error=f"unknown_label:{pred.label}",
+                              action="error")
 
         confusion[expected][pred.label] += 1
         hit = pred.label == expected
         total += 1
         correct += hit
+        if pred.action == "record" and pred.label in INTENTS:
+            written[pred.label][0] += hit
+            written[pred.label][1] += 1
+        if pred.action == "confirm":
+            confirmations += 1
         split = _split(sc)
         split_totals.setdefault(split, [0, 0])
         split_totals[split][0] += hit
@@ -122,6 +156,7 @@ def compute_parser_metrics(
             "split": split,
             "expected": expected,
             "predicted": pred.label,
+            "action": pred.action,
             "stage": pred.stage,
             "error": pred.error,
             "ok": hit,
@@ -138,6 +173,7 @@ def compute_parser_metrics(
             "support": sum(confusion[intent].values()),
         }
 
+    n_written = sum(n for _, n in written.values())
     return {
         "layer": "parser",
         "accuracy": round(correct / total, 4) if total else None,
@@ -148,6 +184,15 @@ def compute_parser_metrics(
         },
         "per_intent": per_intent,
         "confusion_matrix": confusion,
+        "auto_write": {
+            "n_written": n_written,
+            "precision": (round(sum(c for c, _ in written.values()) / n_written, 4)
+                          if n_written else None),
+            "per_decision_precision": {
+                d: (round(c / n, 4) if n else None) for d, (c, n) in written.items()
+            },
+        },
+        "confirmation_rate": round(confirmations / total, 4) if total else None,
         "n_errors": sum(1 for c in cases if c["predicted"] == "error"),
         "decided_by": dict(sorted(stages.items())),
         "cases": cases,
@@ -157,8 +202,12 @@ def compute_parser_metrics(
 def threshold_breaches(result: dict) -> list[str]:
     """FAILURE_THRESHOLDS.md contract, applied to a real-backend result.
 
-    An intent the path never predicts has no precision: that is a breach (the
-    contract cannot be shown to hold), not a pass.
+    * decision accuracy on the model-graded cases >= ACCURACY_MIN;
+    * per-decision precision >= PRECISION_MIN — a decision the path never lands
+      on has no precision: breach (the contract cannot be shown to hold);
+    * per-decision precision of AUTO-WRITTEN decisions >= PRECISION_MIN (a
+      decision never auto-written is safe: everything was confirmed);
+    * confirmation trigger: zero auto-writes on ``parser_confirmation`` cases.
     """
     breaches: list[str] = []
     acc = result.get("accuracy")
@@ -170,6 +219,15 @@ def threshold_breaches(result: dict) -> list[str]:
             breaches.append(f"{intent}: never predicted (precision undefined)")
         elif p < PRECISION_MIN:
             breaches.append(f"{intent}: precision {p} < {PRECISION_MIN}")
+    for d, p in ((result.get("auto_write") or {}).get("per_decision_precision") or {}).items():
+        if p is not None and p < PRECISION_MIN:
+            breaches.append(f"{d}: auto-write precision {p} < {PRECISION_MIN}")
+    trig = result.get("confirmation_trigger") or {}
+    if trig.get("auto_written"):
+        breaches.append(
+            f"confirmation trigger: {trig['auto_written']} low-confidence case(s) written "
+            "without confirmation"
+        )
     return breaches
 
 
@@ -211,36 +269,36 @@ class _StubLLM:
 
 
 async def _production_prediction(service, message: str) -> Prediction:
-    """The route's decision sequence (`api/routes/twilio_inbound.py`), unchanged."""
+    """The route's decision sequence (`api/routes/twilio_inbound.py`), in order:
+    exact keyword → bare ack / covers regex / model → `resolve_feedback`."""
     from app.schemas.webhook import ActionType
     from app.services.action_logger import parse_action
-    from app.services.receipts import outcome_for_feedback
+    from app.services.manager_decision import match_keyword, resolve_keyword
+    from app.services.receipts import resolve_feedback
 
+    ctx = _eval_context()
     action = parse_action(message)
-    if action == ActionType.accept:
-        return Prediction("accepted", "action_keyword")
-    if action == ActionType.reject:
-        return Prediction("rejected", "action_keyword")
+    if action != ActionType.unknown:
+        res = resolve_keyword(match_keyword(message), ctx)
+        stage = "keyword_ambiguous" if action == ActionType.ambiguous else "keyword"
+        return Prediction(res.decision or "not_recorded", stage, action=res.action)
 
     feedback = await service.parse_inbound(message)
     if feedback.source in ("llm_error", "llm_unmappable"):
-        # Production would record "modified" here; the eval refuses to count a
-        # fallback as the model's answer.
-        return Prediction("error", feedback.source, error=feedback.source)
-    outcome = outcome_for_feedback(feedback)
-    return Prediction(outcome or "not_recorded", feedback.source)
+        return Prediction("error", feedback.source, error=feedback.source, action="error")
+    res = resolve_feedback(feedback, ctx)
+    stage = {"ack_regex": "bare_ack"}.get(feedback.source, feedback.source)
+    if res.action == "none":
+        return Prediction("not_recorded", stage, action="none")
+    return Prediction(res.decision, stage, action=res.action)
 
 
 def _run_production(scenarios: list[dict], llm) -> list[Prediction]:
-    """Run the production path over every classification scenario in one loop."""
+    """Run the production path over the given scenarios' messages, in order."""
     from app.services.receipts import ReceiptsService
 
     service = ReceiptsService(db=None, llm=llm)  # parse_inbound never touches db
-    messages = [
-        s.get("input", {}).get("message", "")
-        for s in scenarios
-        if s.get("expected", {}).get("intent") in INTENTS
-    ]
+    messages = [s.get("input", {}).get("message", "") for s in scenarios]
 
     async def _all() -> list[Prediction]:
         return [await _production_prediction(service, m) for m in messages]
@@ -253,34 +311,67 @@ def _replay(predictions: list[Prediction]) -> PredictFn:
     return lambda message, language="fr": next(it)
 
 
-def production_path_ceiling(scenarios: list[dict]) -> dict:
-    """Best accuracy reachable by the production path, whatever the model says.
-
-    Runs the production code with `_StubLLM`. A reply decided before the model
-    (keyword / regex) has one possible outcome; a reply that reaches the model
-    can only become ``modified`` or ``not_recorded``. No API call is made.
-    """
+def _quiet_stub_run(scenarios: list[dict]) -> list[Prediction]:
     import logging
 
-    stub = _StubLLM()
     # The stub raising is expected; keep parse_inbound's exception log quiet.
     receipts_logger = logging.getLogger("app.services.receipts")
     previous = receipts_logger.level
     receipts_logger.setLevel(logging.CRITICAL)
     try:
-        preds = _run_production(scenarios, stub)
+        return _run_production(scenarios, _StubLLM())
     finally:
         receipts_logger.setLevel(previous)
 
-    reachable_hits = 0
-    reaches_model = 0
+
+def deterministic_block(scenarios: list[dict]) -> dict:
+    """Cases decided before the model (keyword, ambiguous keyword, bare ack,
+    covers regex), run on the production code with no API call. A code check:
+    each disagreement is a routing regression or a label to revisit."""
+    labelled = [s for s in scenarios if _is_labelled(s)]
+    preds = _quiet_stub_run(labelled)
+    rows = []
+    for sc, p in zip(labelled, preds):
+        if p.stage in _MODEL_STAGES:
+            continue
+        rows.append({"id": sc.get("id"), "expected": expected_decision(sc), "predicted": p.label,
+                     "action": p.action, "stage": p.stage,
+                     "expected_path": sc.get("expected", {}).get("path"),
+                     "ok": p.label == expected_decision(sc)})
+    by_stage: dict[str, int] = {}
+    for r in rows:
+        by_stage[r["stage"]] = by_stage.get(r["stage"], 0) + 1
+    return {
+        "n": len(rows),
+        "agree": sum(r["ok"] for r in rows),
+        "by_stage": dict(sorted(by_stage.items())),
+        "confirmations": sum(r["action"] == "confirm" for r in rows),
+        "disagreements": [r for r in rows if not r["ok"]],
+        "cases": rows,
+    }
+
+
+def model_graded_ids(scenarios: list[dict]) -> set[str]:
+    labelled = [s for s in scenarios if _is_labelled(s)]
+    preds = _quiet_stub_run(labelled)
+    return {sc.get("id") for sc, p in zip(labelled, preds) if p.stage in _MODEL_STAGES}
+
+
+def production_path_ceiling(scenarios: list[dict]) -> dict:
+    """Best accuracy reachable by the production path, whatever the model says.
+
+    Since §16 the model can land on any decision, so a reply that reaches it is
+    reachable; a reply decided before it has one possible outcome. No API call.
+    """
+    labelled = [s for s in scenarios if _is_labelled(s)]
+    preds = _quiet_stub_run(labelled)
+    reachable_hits = reaches_model = 0
     per_intent_reachable = {i: 0 for i in INTENTS}
-    labelled = [s for s in scenarios if s.get("expected", {}).get("intent") in INTENTS]
     for sc, pred in zip(labelled, preds):
-        expected = sc["expected"]["intent"]
-        if pred.stage.startswith("llm"):
+        expected = expected_decision(sc)
+        if pred.stage in _MODEL_STAGES:
             reaches_model += 1
-            ok = expected in _MODEL_REACHABLE
+            ok = True
         else:
             ok = pred.label == expected
         reachable_hits += ok
@@ -293,13 +384,28 @@ def production_path_ceiling(scenarios: list[dict]) -> dict:
         "decided_before_model": n - reaches_model,
         "max_recall": {
             i: (round(per_intent_reachable[i] / c, 4) if (c := sum(
-                1 for s in labelled if s["expected"]["intent"] == i)) else None)
+                1 for s in labelled if expected_decision(s) == i)) else None)
             for i in INTENTS
         },
     }
 
 
-def _real_backend(scenarios: list[dict]) -> tuple[list[Prediction], dict]:
+def confirmation_trigger(scenarios: list[dict], preds: list[Prediction]) -> dict:
+    """``parser_confirmation`` cases: a write without confirmation is a failure;
+    a confirmation or no decision passes."""
+    rows = []
+    for sc, p in zip(scenarios, preds):
+        rows.append({"id": sc.get("id"), "action": p.action, "predicted": p.label,
+                     "stage": p.stage, "ok": p.action != "record"})
+    return {
+        "n": len(rows),
+        "auto_written": sum(not r["ok"] for r in rows),
+        "confirmed_or_none": sum(r["ok"] for r in rows),
+        "cases": rows,
+    }
+
+
+def _real_llm():
     key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not key:
         raise ParserEvalNotMeasured(
@@ -308,64 +414,74 @@ def _real_backend(scenarios: list[dict]) -> tuple[list[Prediction], dict]:
     from app.providers.factory import get_llm_provider
 
     # Fresh provider per run: the cached one holds an HTTP client bound to the
-    # event loop of the previous run. Primary only: a Gemini failover would silently change the model under test.
+    # event loop of the previous run. Primary only: a Gemini failover would
+    # silently change the model under test.
     build = getattr(get_llm_provider, "__wrapped__", get_llm_provider)  # bypass lru_cache
     provider = build()
     primary = getattr(provider, "primary", provider)
-    llm = _RecordingLLM(primary)
-    preds = _run_production(scenarios, llm)
-    meta = {
-        "provider": llm.model_id,
-        "fast_model": getattr(primary, "_fast_model", None),
-        "tiers": sorted(llm.tiers),
-        "temperatures": sorted(llm.temperatures),
-        "llm_calls": llm.calls,
-    }
-    return preds, meta
+    return _RecordingLLM(primary), primary
 
 
 def run(dataset: Path = DEFAULT_DATASET, seed: int = 42, runs: int = 1) -> dict:
-    """Load parser_intent scenarios and evaluate them with the selected backend.
+    """Load parser scenarios and evaluate them with the selected backend.
 
     `runs` > 1 (real backend) repeats the whole evaluation to measure run-to-run
     variance — the canary required before freezing a real baseline.
     """
     backend = os.environ.get("EVAL_PARSER_BACKEND", "fake")
-    scenarios = [
-        s for s in load_scenarios(dataset, layer="parser")
-        if s.get("category") == "parser_intent"
-    ]
+    all_parser = load_scenarios(dataset, layer="parser")
+    scenarios = [s for s in all_parser if s.get("category") == "parser_intent"]
+    trigger_set = [s for s in all_parser if s.get("category") == "parser_confirmation"]
     if not scenarios:
         raise SystemExit("[eval_parser] no parser_intent scenarios in dataset")
 
     ceiling = production_path_ceiling(scenarios)
+    deterministic = deterministic_block(scenarios)
 
     if backend == "real":
+        graded_ids = model_graded_ids(scenarios)
+        graded = [s for s in scenarios if s.get("id") in graded_ids]
         runs_out: list[dict] = []
         meta: dict = {}
         for _ in range(max(1, runs)):
-            preds, meta = _real_backend(scenarios)
-            runs_out.append(compute_parser_metrics(scenarios, _replay(preds)))
+            llm, primary = _real_llm()
+            preds = _run_production(graded + trigger_set, llm)
+            graded_preds, trigger_preds = preds[:len(graded)], preds[len(graded):]
+            r = compute_parser_metrics(graded, _replay(graded_preds))
+            r["confirmation_trigger"] = confirmation_trigger(trigger_set, trigger_preds)
+            runs_out.append(r)
+            meta = {
+                "provider": llm.model_id,
+                "fast_model": getattr(primary, "_fast_model", None),
+                "tiers": sorted(llm.tiers),
+                "temperatures": sorted(llm.temperatures),
+                "llm_calls": llm.calls,
+            }
         result = runs_out[0]
         accuracies = [r["accuracy"] for r in runs_out]
-        signatures = [[c["predicted"] for c in r["cases"]] for r in runs_out]
+        signatures = [
+            [(c["predicted"], c["action"]) for c in r["cases"]]
+            + [(c["predicted"], c["action"]) for c in r["confirmation_trigger"]["cases"]]
+            for r in runs_out
+        ]
         result.update({
             "backend": "real",
-            "measures": "production_path_model_included",
+            "measures": "free_text_path_model_included",
             "quality_signal": True,
             "model": meta,
             "canary": {
                 "runs": len(runs_out),
                 "accuracies": accuracies,
-                "variance_pp": round((max(accuracies) - min(accuracies)) * 100, 2),
+                "variance_pp": round((max(accuracies) - min(accuracies)) * 100, 2)
+                if None not in accuracies else None,
                 "identical_predictions": all(s == signatures[0] for s in signatures),
             },
-            "thresholds": {
-                "accuracy_min": ACCURACY_MIN,
-                "precision_min": PRECISION_MIN,
-                "breaches": threshold_breaches(result),
-            },
         })
+        result["thresholds"] = {
+            "accuracy_min": ACCURACY_MIN,
+            "precision_min": PRECISION_MIN,
+            "breaches": threshold_breaches(result),
+        }
     elif backend == "fake":
         fake = FakeIntentClassifier()
         result = compute_parser_metrics(
@@ -380,4 +496,6 @@ def run(dataset: Path = DEFAULT_DATASET, seed: int = 42, runs: int = 1) -> dict:
         raise ParserEvalNotMeasured(f"unknown EVAL_PARSER_BACKEND={backend!r}")
 
     result["production_path_ceiling"] = ceiling
+    result["deterministic"] = {k: v for k, v in deterministic.items() if k != "cases"}
+    result["n_confirmation_trigger_cases"] = len(trigger_set)
     return result

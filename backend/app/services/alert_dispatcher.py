@@ -27,6 +27,7 @@ from app.core.exceptions import NotConfiguredError
 from app.db.models import RestaurantProfile, StaffingRecommendation
 from app.integrations.sendgrid_client import SendGridClient
 from app.integrations.twilio_client import TwilioClient
+from app.services.decision_messaging import buttons_available, send_with_buttons
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,17 @@ class AlertDispatcherService:
     # Private channel routing
     # ------------------------------------------------------------------
 
+    @staticmethod
+    async def _send_whatsapp_decision(client: TwilioClient, to: str, message: str) -> None:
+        """Décision #38 (ADR-0007 §16.4): attach the Accepter / Refuser / Corriger
+        quick replies when ``WHATSAPP_DECISION_BUTTONS`` is on and the approved
+        template SID is set; otherwise (or if the Content send fails) send the
+        text as before. The text path is unchanged when the flag is off."""
+        if buttons_available("decision"):
+            await send_with_buttons(client, to, message, "decision")
+        else:
+            await client.send_whatsapp(to=to, body=message)
+
     async def _send(
         self, channel: str, profile: RestaurantProfile, message: str
     ) -> None:
@@ -154,7 +166,7 @@ class AlertDispatcherService:
                     f"Invalid or missing phone_number for profile {profile.id}"
                 )
             client = TwilioClient()
-            await client.send_whatsapp(to=to, body=message)
+            await self._send_whatsapp_decision(client, to, message)
 
         elif channel == "sms":
             to = profile.phone_number or ""

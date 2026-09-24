@@ -47,6 +47,20 @@ TWILIO_SKIP_SIGNATURE_VALIDATION: bool = (
 # When set, overrides X-Forwarded-Proto / X-Forwarded-Host header inference.
 TWILIO_WEBHOOK_BASE_URL: str = _os.getenv("TWILIO_WEBHOOK_BASE_URL", "")
 
+# Décision #38 / ADR-0007 §16.4 — WhatsApp quick-reply buttons for the manager's
+# decision (Accepter / Refuser / Corriger) and for HITL confirmations (Oui / Non).
+# Off by default: the decision template must first be approved by WhatsApp
+# (business-initiated). When off, or when a Content SID is missing, or when the
+# Content send fails, the plain-text path is used. Inbound button payloads are
+# handled whatever the flag.
+WHATSAPP_DECISION_BUTTONS: bool = (
+    _os.getenv("WHATSAPP_DECISION_BUTTONS", "false").lower() == "true"
+)
+TWILIO_CONTENT_SID_DECISION_FR: str = _os.getenv("TWILIO_CONTENT_SID_DECISION_FR", "")
+TWILIO_CONTENT_SID_DECISION_EN: str = _os.getenv("TWILIO_CONTENT_SID_DECISION_EN", "")
+TWILIO_CONTENT_SID_CONFIRM_FR: str = _os.getenv("TWILIO_CONTENT_SID_CONFIRM_FR", "")
+TWILIO_CONTENT_SID_CONFIRM_EN: str = _os.getenv("TWILIO_CONTENT_SID_CONFIRM_EN", "")
+
 # ─── Phase 2 Receipts (P2-3) ─────────────────────────────────────────────────
 # Hour (0–23) at which the daily Receipt is dispatched, in RECEIPT_TIMEZONE.
 RECEIPT_DISPATCH_HOUR: int = int(_os.getenv("RECEIPT_DISPATCH_HOUR", "18"))

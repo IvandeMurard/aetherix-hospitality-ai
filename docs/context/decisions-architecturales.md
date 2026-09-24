@@ -401,6 +401,24 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Public surfaces.** Any mention of a parser accuracy, or of "parser accuracy delta" as a working gate signal, is drift until the real run exists: label it **Design** (Décision #33).
 
+### 38 — Manager decision capture: deterministic first, model confirmed below threshold (24/09/2026)
+
+**Trigger:** the product defect found by Décision #37 (free text could never record `accepted`/`rejected`; ceiling 36.2%). PO decision (Ivan) on the three open points of `open-decisions.md` §"Inbound reply → recorded outcome". Full detail: ADR-0007 §16.
+
+**Decision.**
+- **Decision vs comment.** The decision (`accepted | rejected | modified | none`) is arm C's ground truth: deterministic wherever possible, auditable (`staffing_recommendations.decision_source` + `decision_confidence`). The comment (reason, detail) is optional and never changes a recorded decision.
+- **(a) Schema.** The classifier returns an explicit `decision` + `confidence` (+ corrected value, reason, reason route), validated by `ClassifierOutput` (Décision #35 D2). Out-of-schema answers and call failures record nothing (typed `why`), never `modified`.
+- **(b) Bare acknowledgement** ("ok", "👍", "parfait") records `accepted` only when exactly one recommendation is pending and the reply comes within 12 h of dispatch; source `bare_ack_rule`, so arm C can separate it from an explicit accept. Otherwise: confirmation (or nothing if none is pending).
+- **(c) Exact-keyword fast path kept and widened** to FR/EN forms (oui/validé/✅… ; non/refusé/❌…), whole reply only, every form unit-tested; ambiguous forms ("non merci", "tel quel", "pas besoin") → confirmation, never a guess.
+- **(d) Quick-reply buttons** Accepter / Refuser / Corriger + Oui / Non, fixed payload IDs, no model. Behind `WHATSAPP_DECISION_BUTTONS` (off), text fallback. The recommendation is business-initiated → a WhatsApp-approved Content template is required: **pending ops step**. Buttons are not claimed to work end to end.
+- **HITL (Décision #6).** Model decision < 0.85, ambiguous keyword, unattributable ack → "Je note un refus, c'est bien ça ? Oui / Non", nothing written until yes; unanswered after 60 min → recorded as unconfirmed, never as a decision.
+- **Optional reason** after a reject or a correction only: typed route `memory | decision_rule | policy | case_set | upstream_filter` at ≥ 0.7 confidence, unrouted otherwise. Routes are labels; no consumer yet.
+- **Outcome rules.** Actual covers never relabel a decision. They may later weigh a comment (Phase 4 follow-up). While actual covers are declared by the manager, the quantitative loop is not independent of the human loop.
+- **Metrics:** capture rate, share by source, confirmation rate, confirmation-timeout rate (`inbound_reply_events`, `GET /kpi/{hotel_id}/decision_capture`).
+- **Eval:** model graded on the free-text path only + a confirmation-trigger set (10 cases, any auto-write = breach); deterministic path reported as a code check.
+
+**State on 24/09/2026.** Built and tested with mocked Twilio and a scripted model. **Real-model quality: not measured** (no API key; `eval-parser-real.yml` has not run; no 3-run canary). Template approval pending. **0 real user.**
+
 ---
 
 ## Notes de maintenance

@@ -56,6 +56,9 @@ CATEGORIES = {
     "breakfast_dinner_mix_shift",
     "ood_edge",
     "parser_intent",
+    # Décision #38 / ADR-0007 §16.7 — free-text replies with two readings: the
+    # path must ask the manager to confirm (or record nothing), never auto-write.
+    "parser_confirmation",
     "pos_anomaly",
     # HOS-321 — runtime-guardrail trip scenarios. Distinct from the forecast
     # categories above: these assert that the right *typed reason* fires (NFR2 /

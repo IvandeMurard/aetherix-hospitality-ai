@@ -1140,3 +1140,196 @@ being written silently.
   test, not the system itself, and no layer runner in `scripts/eval/` uses it.
   Scripts outside the eval harness (`scripts/ops/benchmark_*`) were not audited
   here.
+
+---
+
+## 16. Addendum — 2026-09-24 · Manager decision capture (PO decision on §15.2)
+
+> Trace: CLAUDE.md Décision #38. Resolves the open decision "Inbound reply →
+> recorded outcome" (`docs/context/open-decisions.md`, §Resolved). Supersedes the
+> parser grading rules of §15.3–15.4 (the production-path ceiling of 36.2% no
+> longer applies to the new code).
+
+### 16.1 Principle (Ivan, product owner)
+
+The **decision** (`accepted | rejected | modified | none`) is arm C's ground
+truth (§13). It must be deterministic wherever possible, cheap, unambiguous and
+auditable. The **comment** (reason, detail) is optional and rich, and never
+changes a recorded decision silently.
+
+### 16.2 What a reply goes through (first match wins)
+
+| # | Step | Model? | Writes | `decision_source` |
+|---|---|---|---|---|
+| 1 | Quick-reply button payload (fixed IDs `aetherix.decision.{accept,reject,correct}`, `aetherix.confirm.{yes,no}`) | no | decision, or answers a confirmation | `button` |
+| 2 | Answer to a pending confirmation (`oui`/`non`/…, or the Oui/Non buttons) | no | the proposed decision on yes, nothing on no | `model_confirmed` · `keyword_confirmed` · `bare_ack_confirmed` |
+| 3 | Exact keyword on the whole reply (§16.3) | no | explicit → decision; ambiguous → confirmation | `keyword` |
+| 3b | Bare acknowledgement ("ok", "👍", "parfait") — rule (b) | no | `accepted` only if exactly one recommendation is pending **and** the reply is within 12 h of its dispatch; nothing if none is pending; confirmation otherwise | `bare_ack_rule` |
+| 4 | Pending reason request → the reply is the reason (§16.5) | router only | typed reason; **never** the decision | — |
+| 5 | Covers pattern ("covers: 80") | no | `modified` | `correction_pattern` |
+| 6 | Model, output validated against `ClassifierOutput` (decision, confidence, corrected value, reason, reason route) | yes | ≥ 0.85 → decision; < 0.85 → confirmation; `none` → nothing; call or schema failure → nothing (typed `why`) | `model_auto` |
+
+Steps 1–3b run synchronously in the webhook; 4–6 in the background task. Code:
+`services/manager_decision.py` (pure rules), `services/inbound_decision.py`
+(DB), `api/routes/twilio_inbound.py`. `receipts.resolve_feedback` /
+`outcome_for_feedback` remain the single definition shared with the eval.
+
+**HITL (Décision #6).** A model decision below `DECISION_CONFIDENCE_THRESHOLD =
+0.85`, an ambiguous keyword, and an unattributable bare acknowledgement write
+**nothing**: a `manager_prompts` row is created and the manager gets "Je note un
+refus, c'est bien ça ?" (buttons Oui / Non, or "Répondez OUI ou NON."). Unanswered
+after 60 min → `expired`, logged as `confirmation_expired`, **never** a decision.
+The threshold applies to `modified` too (stricter than asked; nothing inferred is
+written unconfirmed below it). The model's confidence is **not calibrated**: 0.85
+is a policy until the first real eval run shows whether it separates right from
+wrong answers.
+
+A confirmed decision writes the decision only: a corrected figure proposed with
+it stays on the prompt and is not persisted as actual covers. A confirmation
+whose recommendation was decided meanwhile writes nothing. A reply containing
+"?" is never a keyword ("ok?" is doubt, not acceptance).
+
+**Behaviour change vs §15.2:** a model failure no longer records `modified`;
+it records nothing and asks for an explicit decision. `modified` now also lands
+on `staffing_recommendations.status/action` (it was only in memory before).
+
+### 16.3 Keyword mapping choices (every form unit-tested, `tests/services/test_manager_decision.py`)
+
+- **Whole reply only.** "oui" is a keyword; "oui mais 3 serveurs" goes to the model.
+- **Accept:** accept(ed), accepter/accepté, j'accepte, oui, yes, yep, ouais,
+  validé/valide/valider, validated, approve(d), agreed, go, ✅, ✔, "ok validé",
+  "je valide", "c'est validé", "ok pour moi", "d'accord", "go for it" — alone or
+  with acknowledgement tokens ("agreed thx", "Validé 👌").
+- **Reject:** reject(ed), rejeter/rejeté, refuse(d)/refusé/refuser, "je refuse",
+  decline(d), non, no, nope, nan, ❌, 👎, "pas d'accord", "not ok".
+- **Modify (records `modified`, then asks what changed):** corriger, correction,
+  correct, modifier, modify, ajuster, adjust, ✏️, 📝. "CORRIGER" is what the text
+  fallback tells managers to reply, ✏️ is the Daily Receipt's modify glyph.
+  "oui corriger" is ambiguous (proposed reading `modified`).
+- **Bare acknowledgement (rule b):** ok, okay, merci, thanks, thx, parfait,
+  perfect, great, super, top, cool, noted, compris, got it, bien reçu, 👍, 👌, 🙏 …
+  **👍 is an acknowledgement, ✅ is an acceptance** — 👍 routinely answers the
+  daily Receipt; ✅ answers "validate?". Documented choice.
+- **Ambiguous → confirmation, proposed reading `rejected`:** "non merci" (declines
+  the recommendation | "no thanks, all good"), "on garde tel quel" / "tel quel" /
+  "keep as is" (keep the recommendation | keep our own plan), "pas besoin" / "no
+  need" (we don't need the extra staff | nothing to change), "bof", and any reply
+  mixing a refusal token with an acceptance/ack token ("non ok", "👎 merci").
+  The heldout case "non merci on garde tel quel" (labelled `rejected`) is one of
+  these: the product now asks instead of guessing, and the manager's "oui" is what
+  records it.
+
+### 16.4 WhatsApp quick-reply buttons — constraint check
+
+What the code sent before this change: `TwilioClient.send_whatsapp` posts a
+free-form `Body` to `Messages.json`; the staffing recommendation
+(`alert_dispatcher`) and the daily Receipt (`receipts_dispatcher`) are
+**business-initiated**. No Content API use anywhere.
+
+What applies (Twilio docs `twilio/quick-reply`, "Using Buttons in WhatsApp" and the
+Content API FAQ; direct fetch of twilio.com was blocked from this session, the
+statements below come from those pages' indexed text and must be re-checked in the
+Twilio console before rollout):
+
+1. Buttons require a **Content template** (`ContentSid` + `ContentVariables`
+   instead of `Body`). TwiML `<Message>` cannot carry them, so a reply with
+   buttons is sent via REST and the webhook returns an empty `<Response/>`.
+2. **Business-initiated** messages need a template **approved by WhatsApp**
+   (category Utility). Up to 10 quick-reply buttons, titles ≤ 20 characters.
+3. **Inside the 24 h customer-service window** (the manager just wrote to us),
+   quick replies can be sent **without approval** (template saved, not
+   submitted), **max 3 buttons**. The Oui / Non confirmation qualifies.
+4. The inbound webhook carries the tapped button's id as `ButtonPayload` (plus
+   `ButtonText`, `OriginalRepliedMessageSid`).
+5. **Pre-existing gap, independent of buttons:** a free-form WhatsApp message
+   outside the 24 h window is refused by WhatsApp. The current text dispatch of
+   the recommendation and the Receipt only works in the sandbox or inside a
+   session. A production number needs approved templates for both, buttons or not.
+
+Implementation: behind `WHATSAPP_DECISION_BUTTONS` (default off) +
+`TWILIO_CONTENT_SID_{DECISION,CONFIRM}_{FR,EN}`. Flag off, SID missing, or Content
+send failing → the same text is sent, with "Répondez ACCEPTER, REFUSER ou
+CORRIGER." when it is a decision request. Inbound payloads are handled whatever
+the flag. Proven by tests: request shape, fallbacks, payload → decision mapping,
+route pass-through. **Not proven:** that WhatsApp approves and renders the
+template.
+
+Pending ops step (out of reach of a coding session): create in Twilio Content
+Template Builder (a) `aetherix_decision_fr` / `_en`, `twilio/quick-reply`, body
+with fixed text around `{{1}}` (Meta rejects a template that starts or ends with a
+variable), buttons Accepter / Refuser / Corriger with ids
+`aetherix.decision.accept|reject|correct`, submitted for WhatsApp approval
+(Utility); (b) `aetherix_confirm_fr` / `_en`, body `{{1}}`, buttons Oui / Non with
+ids `aetherix.confirm.yes|no`, saved only. Then set the SIDs and the flag via
+`flyctl secrets set`. Known limit: the button carries no recommendation id; the
+decision applies to the most recent pending recommendation. Using
+`OriginalRepliedMessageSid` (store the outbound SID at dispatch) would remove that
+ambiguity — follow-up.
+
+### 16.5 Optional reason
+
+After a recorded **reject or correction only** (never after an accept —
+interruption budget), one line: "Une raison ? (facultatif)" / "Quel changement,
+et pourquoi ? (facultatif)". Not asked when the reply already carried a reason.
+The next free-text reply within 60 min is the reason: stored in
+`inbound_reply_events.reason_text`, routed by the model to one of `memory |
+decision_rule | policy | case_set | upstream_filter` with its confidence, **only
+at ≥ 0.7**, unrouted otherwise. A bare "ok" closes the request. The reason never
+touches `staffing_recommendations`. The routes are **labels**: no consumer exists
+yet for any of them (not even `memory`: writing a reason into feedback memory
+would change the ledger's latest manager answer). Wiring consumers is a
+follow-up. Few replies are expected.
+
+### 16.6 Outcome loop — two rules
+
+1. **The outcome never relabels the decision.** Actual covers are never read
+   when capturing or confirming a decision (pinned by
+   `test_decision_rules_never_read_the_outcome` and
+   `test_decision_does_not_depend_on_actual_covers`). Decision and outcome stay
+   independent variables, or arm C learns circularly.
+2. **The outcome may later weigh a comment, not a decision.** E.g. a reason "trop
+   de monde" vs actuals above forecast, as a confidence signal on the reason only.
+   Phase 4 follow-up, not implemented.
+
+**Stated plainly:** `actual_covers` comes from `manager_feedback` today (POS is
+Phase 4/5). While the manager declares both the decision and the actual covers,
+the quantitative loop is **not independent** of the human loop: the same person
+produces the label and the outcome. Arm C conclusions drawn before POS data carry
+that caveat.
+
+### 16.7 Eval (EVAL-4) — what is graded now
+
+- **Deterministic block** (keyword, ambiguous keyword, bare ack, covers): code
+  check on every run, fake or real, no model. 12 of the 47 labelled cases; all 12
+  land on their label (5 bare ack, 4 covers, 2 keyword, 1 ambiguous →
+  confirmation). The golden set now carries `expected.decision` and
+  `expected.path`; a test fails if routing drifts from the annotated path.
+- **Model graded on the free-text path only** (35 of 47 cases): decision
+  accuracy (written or proposed) ≥ 90%, per-decision precision ≥ 0.85,
+  auto-written precision per decision ≥ 0.85, confirmation rate reported.
+- **Confirmation trigger:** 10 new `parser_confirmation` cases (two readings,
+  FR/EN, `split: heldout`). Any write without confirmation is a breach.
+- Fake backend unchanged: plumbing only. Production-path ceiling is now 100%
+  (the model can land on any decision): no longer a useful number, kept as a
+  reachability check.
+- **Real-model quality: not measured.** No `ANTHROPIC_API_KEY` in this session;
+  `eval-parser-real.yml` has not run. No baseline exists.
+
+### 16.8 Metrics
+
+`inbound_reply_events` (one row per reply, one per expired confirmation) +
+structured log `inbound_decision_event` (typed fields, never the body).
+`GET /kpi/{hotel_id}/decision_capture?days=7` (tenant-checked) returns: capture
+rate (decisions written ÷ decision-seeking replies; a confirmed decision is
+credited once), decisions by source and share, confirmation rate, confirmation
+timeout rate, declined count, `not_recorded` by typed `why`, reasons captured /
+routed. Arm C should filter or weight by `decision_source`: a `bare_ack_rule`
+acceptance is weaker evidence than a `button` one.
+
+### 16.9 Schema
+
+Migration `20260924120000_manager_decision_capture.sql`:
+`staffing_recommendations.decision_source` / `decision_confidence`; tables
+`manager_prompts` (HITL state) and `inbound_reply_events` (RLS, service role only;
+`reason_text` in the DSAR plan as REVIEW). The `decision_ledger` SQL view is not
+changed; `DecisionLedgerService` exposes `decision_source`/`decision_confidence`.

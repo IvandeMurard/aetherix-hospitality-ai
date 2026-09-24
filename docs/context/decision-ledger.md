@@ -130,6 +130,7 @@ Section volontairement explicite : la story naît d'une review qui reprochait au
 | **Qualité des données du contexte** | Approchée par `triggering_factors` + `actual_covers_source` (`manager_feedback` vs `manager_feedback_flagged`, HOS-250) + les trips `feedback.ingestion`. Pas de score de qualité de première classe |
 | **`recommendation_cache` reste hors boucle** | Cache legacy à granularité journalière, sans FK vers la décision. Le rattacher demanderait de le migrer, pas de le lier |
 | **L'apprentissage** | Le ledger **enregistre**. Il ne prouve pas que l'agent s'améliore. Voir §6 |
+| **Indépendance décision / outcome** (Décision #38, ADR-0007 §16.6) | Depuis le 24/09/2026 toute décision WhatsApp atterrit aussi sur `staffing_recommendations.action` avec sa source (`decision_source` : `button`, `keyword`, `bare_ack_rule`, `model_auto`, `*_confirmed`…) et sa confiance ; le service les expose. Deux règles : l'outcome ne relabellise **jamais** une décision (sinon le bras C apprend en circuit fermé) ; il pourra plus tard pondérer un commentaire (Phase 4). **Tant que `actual_covers` est déclaré par le manager** (`actual_covers_source = manager_feedback`, POS en Phase 4/5), la boucle quantitative **n'est pas indépendante** de la boucle humaine : la même personne produit le label et l'outcome |
 
 ---
 

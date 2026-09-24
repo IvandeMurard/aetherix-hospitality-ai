@@ -109,8 +109,10 @@ def main() -> int:
             ceiling = result["production_path_ceiling"]["max_accuracy"]
             if result.get("quality_signal"):
                 summary = (
-                    f"accuracy {(result['accuracy'] or 0) * 100:.1f}% (production path, "
-                    f"real model) · n={result['n']} · errors={result['n_errors']} · "
+                    f"decision accuracy {(result['accuracy'] or 0) * 100:.1f}% (free-text "
+                    f"path, real model) · n={result['n']} · errors={result['n_errors']} · "
+                    f"auto-written {result['auto_write']['n_written']} · "
+                    f"trigger auto-writes {result['confirmation_trigger']['auto_written']} · "
                     f"threshold breaches={len(result['thresholds']['breaches'])} · "
                     f"regressed={diff['regressed']}"
                 )

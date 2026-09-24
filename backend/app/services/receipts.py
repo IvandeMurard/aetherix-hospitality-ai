@@ -7,8 +7,10 @@ P2-2: Enriches each `ReceiptLine` with `memory_hits` — `operational_memory` ro
 P2-3: `compose_narrative` builds an OQ4-tone WhatsApp message from a ReceiptPayload
       using LLMProvider (Claude Sonnet). Terse + sharp bullets + luxury feel.
 P2-4: `parse_inbound` classifies a manager's WhatsApp reply into one of three intents:
-      structured_correction (regex) | free_form (Haiku) | acknowledge (regex).
-      Confidence logged via structured log. Auto-modified + thumbs-up prompt if < 0.6.
+      structured_correction (regex) | free_form (Haiku) | acknowledge (regex), plus
+      an explicit decision (accepted | rejected | modified | none, ADR-0007 §16).
+      `resolve_feedback` decides what is written; low-confidence model decisions
+      are confirmed with the manager, never written silently (Décision #6).
 P2-5: `weekly_digest` aggregates the 3 Niveau-2 KPIs (tool success rate, memory writes,
       agent errors) from `agent_action_log` + `memory_instrumentation_daily` MV for
       the past 7 days. `compose_weekly_narrative` formats the result OQ4-style.
@@ -21,7 +23,6 @@ PM-locked decisions: CLAUDE.md Decision #15.
 """
 from __future__ import annotations
 
-import json
 import logging
 import re
 from collections import Counter, defaultdict
@@ -42,6 +43,19 @@ from app.i18n.abstention_messages import DEFAULT_LOCALE, localized_message
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
 from app.services.abstention import AgentAbstention
+from app.services.manager_decision import (
+    DECISION_CONFIDENCE_THRESHOLD,
+    RECORDABLE_DECISIONS,
+    ClassifierOutput,
+    DecisionSource,
+    PendingContext,
+    ReasonRouteOutput,
+    Resolution,
+    is_bare_ack,
+    parse_model_json,
+    resolve_bare_ack,
+    resolve_model,
+)
 
 # Below this inbound-parser confidence the parser abstains (ADR-0007 §D6 / Décision #15).
 _PARSER_ABSTAIN_THRESHOLD = 0.6
@@ -104,26 +118,40 @@ _COVERS_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Acknowledgement patterns — single-intent, no memory write needed
-_ACK_RE = re.compile(
-    r"^\s*(?:ok|okay|thanks?(?:\s+you)?|got\s+it|noted|sure|great|perfect|cool|"
-    r"merci|compris|bien\s+reçu|👍|✅|💪|🙏)\s*[!.]*\s*$",
-    re.IGNORECASE,
-)
-
 _HAIKU_CLASSIFIER_SYSTEM = """\
-You are a hotel operations assistant classifying a manager's WhatsApp reply to a daily operational Receipt.
+You are a hotel operations assistant. A restaurant manager replied on WhatsApp to a staffing recommendation (or to the daily operational Receipt). Decide what the manager DECIDED about the recommendation.
 
-Classify the message into exactly one of these intents:
-- structured_correction: manager corrects a specific number (covers, guests, staff count)
-- free_form: manager adds context or correction that is not a simple number (events, changes, notes)
-- acknowledge: pure acknowledgement with no operational content (ok, thanks, noted, emoji only)
+decision (required, exactly one):
+- accepted: the manager agrees to follow the recommendation as sent
+- rejected: the manager declines it and keeps the current plan (polite refusals, sarcasm, "we keep it as is" meaning their own plan)
+- modified: the manager accepts a changed version (a different number of covers or staff, an added or removed role)
+- none: the reply takes no position on the recommendation (a question, context only, a greeting)
 
-Respond with a single JSON object only — no explanation, no markdown:
-{"intent": "<intent>", "confidence": <0.0-1.0>, "outcome": "modified", "actual_value": <number or null>, "notes": "<cleaned manager note or empty string>"}\
+confidence: your probability (0.0-1.0) that the decision is right. Use a low value when the reply could be read two ways. Low-confidence decisions are confirmed with the manager, never recorded silently.
+
+intent: structured_correction (corrects a specific number) | free_form (context or a non-numeric change) | acknowledge (pure acknowledgement).
+corrected_value: the corrected number of covers if the manager gives one, else null.
+reason: the manager's reason in their own words if they give one, else null. Never invent one.
+reason_route: only if a reason is given, where it belongs: memory (situational context for similar nights) | decision_rule (a rule the manager applies) | policy (a hotel or company constraint) | case_set (a case where the forecast was wrong for an identifiable cause) | upstream_filter (the input data was wrong) | null.
+reason_route_confidence: 0.0-1.0, or null.
+
+Respond with a single JSON object only, no explanation, no markdown:
+{"decision": "<decision>", "confidence": <0.0-1.0>, "intent": "<intent>", "corrected_value": <number or null>, "reason": <string or null>, "reason_route": <string or null>, "reason_route_confidence": <number or null>, "notes": "<cleaned manager note or empty string>"}\
 """
 
 _HAIKU_CLASSIFIER_USER = "Manager reply: {text}"
+
+_REASON_ROUTER_SYSTEM = """\
+A restaurant manager gave a reason after declining or correcting a staffing recommendation. Say where the reason belongs:
+- memory: situational context worth recalling on similar nights (an event, weather, a group)
+- decision_rule: a rule the manager applies ("never fewer than 3 servers on Fridays")
+- policy: a hotel or company constraint (budget freeze, labour rule)
+- case_set: a case where the forecast was wrong for an identifiable cause
+- upstream_filter: the input data was wrong (occupancy, cancelled event)
+- null: none of these, or you cannot tell
+
+Respond with a single JSON object only: {"route": <string or null>, "confidence": <0.0-1.0>}\
+"""
 
 # HOS-283 + Décision #35: this classification task needs a cheap, deterministic
 # model, not the reasoning one. Ask for the "fast" tier; each provider maps it
@@ -131,65 +159,89 @@ _HAIKU_CLASSIFIER_USER = "Manager reply: {text}"
 # narrative paths keep the default "reasoning" tier.
 _CLASSIFIER_TIER = "fast"
 
-# Low-confidence threshold: auto-downgrade + request thumbs-up confirmation (OQ2)
-_CONFIDENCE_THRESHOLD = 0.6
-
 
 class FeedbackIntent:
     """Classification result from `ReceiptsService.parse_inbound`.
 
     Attributes:
         intent: One of ``structured_correction``, ``free_form``, ``acknowledge``.
-        outcome: Feedback outcome for `submit_feedback_to_memory` — always
-                 ``"modified"`` for P2-4 (manager is correcting, not accepting/rejecting).
-        actual_value: Extracted numeric value (covers, pax) or None.
+        decision: ``accepted | rejected | modified | none`` (ADR-0007 §16). For
+                  the regex passes it is fixed (bare ack → ``none``, resolved by
+                  rule (b); covers → ``modified``); for the model it is the
+                  schema-validated answer; on a model error it is ``None``.
+        outcome: Legacy alias kept for callers: the decision, or ``"ignored"``.
+        actual_value: Extracted / corrected numeric value (covers) or None.
         notes: Cleaned free-text note for the memory reflection.
-        confidence: 1.0 for regex matches; Haiku classifier score for LLM path.
-        requires_confirmation: True when confidence < _CONFIDENCE_THRESHOLD.
-        source: Which pass decided the intent — ``ack_regex``, ``covers_regex``,
-                ``llm``, ``llm_unmappable`` (model answered outside the taxonomy,
-                coerced to ``free_form``) or ``llm_error`` (call or JSON parse
-                failed, defaulted to ``free_form``). Lets telemetry and the
-                parser eval (EVAL-4) tell a model decision from a fallback.
+        reason: The manager's reason if the reply gave one (model only).
+        reason_route / reason_route_confidence: where the reason belongs (typed,
+                  ``manager_decision.REASON_ROUTES``), as proposed by the model.
+        confidence: 1.0 for regex matches; the model's score otherwise.
+        requires_confirmation: True when a model decision is below
+                  ``DECISION_CONFIDENCE_THRESHOLD`` (it will be confirmed, not written).
+        source: Which pass decided — ``ack_regex``, ``covers_regex``, ``llm``,
+                ``llm_unmappable`` (answer failed the schema) or ``llm_error``
+                (call failed). The last two never carry a decision.
     """
 
-    __slots__ = ("intent", "outcome", "actual_value", "notes", "confidence",
+    __slots__ = ("intent", "decision", "outcome", "actual_value", "notes", "reason",
+                 "reason_route", "reason_route_confidence", "confidence",
                  "requires_confirmation", "source")
 
     def __init__(
         self,
         intent: Literal["structured_correction", "free_form", "acknowledge"],
-        outcome: str,
+        decision: Optional[str],
         actual_value: Optional[float],
         notes: str,
         confidence: float,
         source: str = "llm",
+        reason: Optional[str] = None,
+        reason_route: Optional[str] = None,
+        reason_route_confidence: Optional[float] = None,
     ) -> None:
         self.intent = intent
-        self.outcome = outcome
+        self.decision = decision
+        self.outcome = decision if decision in RECORDABLE_DECISIONS else "ignored"
         self.actual_value = actual_value
         self.notes = notes
+        self.reason = reason
+        self.reason_route = reason_route
+        self.reason_route_confidence = reason_route_confidence
         self.confidence = confidence
-        self.requires_confirmation = confidence < _CONFIDENCE_THRESHOLD
         self.source = source
+        self.requires_confirmation = (
+            source == "llm"
+            and decision in RECORDABLE_DECISIONS
+            and confidence < DECISION_CONFIDENCE_THRESHOLD
+        )
 
 
-def outcome_for_feedback(feedback: FeedbackIntent) -> Optional[str]:
-    """The feedback-loop outcome the inbound route records for a parsed reply.
+def resolve_feedback(feedback: FeedbackIntent, ctx: PendingContext) -> Resolution:
+    """What production does with a parsed free-text reply (ADR-0007 §16).
 
-    Single definition shared by the Twilio route (`_bg_receipt_feedback`) and the
-    parser eval (EVAL-4), so the eval grades what production writes, not a copy.
+    Single definition shared by the Twilio route and the parser eval (EVAL-4):
 
-    ``acknowledge`` → ``None``: nothing is written to memory and the
-    recommendation status is untouched. Every other intent → ``feedback.outcome``,
-    which ``parse_inbound`` always sets to ``"modified"``. Free text therefore
-    never records ``accepted`` or ``rejected``: only the exact keywords
-    ``accept`` / ``reject`` do (``action_logger.parse_action``). Known gap —
-    ADR-0007 §15.
+    * bare acknowledgement (``ack_regex``) → rule (b), ``resolve_bare_ack``;
+    * covers pattern (``covers_regex``) → ``modified``, deterministic;
+    * model (``llm``) → written at or above ``DECISION_CONFIDENCE_THRESHOLD``,
+      confirmation below it, nothing for ``none``;
+    * model error / schema failure → nothing written (typed ``why``). The old
+      path wrote ``modified`` here; a failure is never a decision.
     """
-    if feedback.intent == "acknowledge":
-        return None
-    return feedback.outcome
+    if feedback.source == "ack_regex":
+        return resolve_bare_ack(ctx)
+    if feedback.source == "covers_regex":
+        return Resolution("record", "modified", DecisionSource.correction_pattern)
+    if feedback.source == "llm":
+        return resolve_model(feedback.decision, feedback.confidence)
+    return Resolution("none", why=feedback.source)
+
+
+def outcome_for_feedback(feedback: FeedbackIntent, ctx: PendingContext) -> Optional[str]:
+    """The decision written for a parsed reply, or ``None`` (confirmation asked,
+    or nothing to record). Thin view over `resolve_feedback`."""
+    res = resolve_feedback(feedback, ctx)
+    return res.decision if res.action == "record" else None
 
 
 # ---------------------------------------------------------------------------
@@ -457,25 +509,26 @@ class ReceiptsService:
         return narrative.strip()
 
     async def parse_inbound(self, text: str) -> FeedbackIntent:
-        """Classify a manager's WhatsApp reply into a FeedbackIntent (P2-4).
+        """Classify a manager's WhatsApp reply into a FeedbackIntent (P2-4, ADR-0007 §16).
 
         Routing:
-          1. Acknowledge regex → ``acknowledge`` at confidence 1.0, no DB write.
-          2. Covers regex → ``structured_correction`` at confidence 1.0.
-          3. Haiku classifier → ``free_form`` or fallback.
+          1. Bare acknowledgement (``manager_decision.is_bare_ack``) → ``acknowledge``,
+             decision ``none`` (rule (b) decides later), no model call.
+          2. Covers regex → ``structured_correction``, decision ``modified``.
+          3. Model (fast tier) → output validated against ``ClassifierOutput``.
+             A call failure is ``llm_error``, a schema failure ``llm_unmappable``:
+             neither carries a decision, nothing is coerced.
 
-        Confidence is logged as a structured INFO line. If confidence < 0.6 the
-        caller must set ``outcome="modified"`` and request manager confirmation.
-        No migration required — confidence is captured in the memory reflection
-        string (ADR 0002) and the structured log.
+        Explicit keywords ("oui", "refusé", "✅") never reach this method: the
+        route matches them first (``action_logger.parse_action``).
         """
         stripped = text.strip()
 
-        # --- Pass 1: acknowledge ---
-        if _ACK_RE.match(stripped):
+        # --- Pass 1: bare acknowledgement ---
+        if is_bare_ack(stripped):
             intent = FeedbackIntent(
                 intent="acknowledge",
-                outcome="ignored",
+                decision="none",
                 actual_value=None,
                 notes="",
                 confidence=1.0,
@@ -494,7 +547,7 @@ class ReceiptsService:
             actual = float(raw_val) if raw_val else None
             intent = FeedbackIntent(
                 intent="structured_correction",
-                outcome="modified",
+                decision="modified",
                 actual_value=actual,
                 notes=stripped,
                 confidence=1.0,
@@ -507,59 +560,78 @@ class ReceiptsService:
             )
             return intent
 
-        # --- Pass 3: Haiku classifier ---
+        # --- Pass 3: model, schema-validated ---
         try:
             raw = await self._llm.complete(
                 messages=[{"role": "user", "content": _HAIKU_CLASSIFIER_USER.format(text=stripped[:500])}],
-                max_tokens=120,
+                max_tokens=200,
                 temperature=0.0,
                 system=_HAIKU_CLASSIFIER_SYSTEM,
                 tier=_CLASSIFIER_TIER,
             )
-            # Strip markdown code fences if LLM wraps the JSON
-            clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-            parsed = json.loads(clean)
-            llm_intent: str = parsed.get("intent", "free_form")
-            confidence: float = float(parsed.get("confidence", 0.5))
-            actual_val: Optional[float] = parsed.get("actual_value")
-            notes: str = parsed.get("notes", stripped)
-
-            source = "llm"
-            if llm_intent not in ("structured_correction", "free_form", "acknowledge"):
-                llm_intent = "free_form"
-                source = "llm_unmappable"
-
-            intent = FeedbackIntent(
-                intent=llm_intent,  # type: ignore[arg-type]
-                outcome="modified",
-                actual_value=float(actual_val) if actual_val is not None else None,
-                notes=notes,
-                confidence=confidence,
-                source=source,
-            )
         except Exception:
             logger.exception(
-                "receipts.parse_inbound: Haiku classifier failed, defaulting to free_form text=%r",
-                stripped[:80],
+                "receipts.parse_inbound: classifier call failed text=%r", stripped[:80]
             )
             intent = FeedbackIntent(
-                intent="free_form",
-                outcome="modified",
-                actual_value=None,
-                notes=stripped,
-                confidence=0.5,
-                source="llm_error",
+                intent="free_form", decision=None, actual_value=None,
+                notes=stripped, confidence=0.0, source="llm_error",
             )
+        else:
+            try:
+                out = parse_model_json(raw, ClassifierOutput)
+            except ValueError:  # pydantic ValidationError is a ValueError
+                logger.warning(
+                    "receipts.parse_inbound: classifier answer failed the schema text=%r raw=%r",
+                    stripped[:80],
+                    raw[:200],
+                )
+                intent = FeedbackIntent(
+                    intent="free_form", decision=None, actual_value=None,
+                    notes=stripped, confidence=0.0, source="llm_unmappable",
+                )
+            else:
+                intent = FeedbackIntent(
+                    intent=out.intent,
+                    decision=out.decision,
+                    actual_value=out.corrected_value,
+                    notes=out.notes or stripped,
+                    confidence=out.confidence,
+                    source="llm",
+                    reason=out.reason,
+                    reason_route=out.reason_route,
+                    reason_route_confidence=out.reason_route_confidence,
+                )
 
         logger.info(
-            "receipts.parse_inbound: intent=%s source=%s confidence=%.2f requires_confirmation=%s text=%r",
+            "receipts.parse_inbound: intent=%s decision=%s source=%s confidence=%.2f "
+            "requires_confirmation=%s text=%r",
             intent.intent,
+            intent.decision,
             intent.source,
             intent.confidence,
             intent.requires_confirmation,
             stripped[:80],
         )
         return intent
+
+    async def route_reason(self, text: str) -> tuple[Optional[str], Optional[float]]:
+        """Route a follow-up reason (after a reject / correction) to one of
+        ``REASON_ROUTES``. Returns ``(route, confidence)``; ``(None, None)`` on a
+        model error or schema failure — the reason is then kept unrouted."""
+        try:
+            raw = await self._llm.complete(
+                messages=[{"role": "user", "content": f"Reason: {text.strip()[:500]}"}],
+                max_tokens=60,
+                temperature=0.0,
+                system=_REASON_ROUTER_SYSTEM,
+                tier=_CLASSIFIER_TIER,
+            )
+            out = parse_model_json(raw, ReasonRouteOutput)
+        except Exception:
+            logger.warning("receipts.route_reason: routing failed, reason kept unrouted")
+            return None, None
+        return out.route, out.confidence
 
     # -----------------------------------------------------------------------
     # P3-11b (HOS-217 / EVAL-2): AgentAbstention contract — parser low-confidence
