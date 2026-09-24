@@ -31,6 +31,7 @@ from app.services.manager_decision import (
     match_keyword,
     parse_model_json,
     resolve_bare_ack,
+    proposes_change,
     resolve_keyword,
     resolve_model,
     routed_reason,
@@ -62,12 +63,14 @@ REJECT_FORMS = [
     "nope", "nan", "❌", "👎", "pas d'accord", "not ok", "non non",
 ]
 MODIFY_FORMS = ["corriger", "CORRIGER", "correct", "modifier", "modify", "✏️", "✏️ merci", "ajuster"]
-AMBIGUOUS_FORMS = [
-    # "non merci": declines the recommendation | "no thanks, nothing needed" (all good)
+# "Decline / keep as is" (PO clarification 24/09/2026, ADR-0007 §17.8): rejected
+# when the recommendation proposes a change; confirmation otherwise.
+DECLINE_FORMS = [
     "non merci", "Non merci !", "no thanks", "no thank you", "nan merci", "non merci beaucoup",
-    # "tel quel": keep the recommendation as is | keep our current plan as is
     "non merci on garde tel quel", "on garde tel quel", "tel quel", "on garde comme ça",
     "keep as is", "keep it as is", "as is",
+]
+AMBIGUOUS_FORMS = [
     # "pas besoin": we don't need the extra staff | no need to change anything
     "pas besoin", "no need", "pas nécessaire",
     # a refusal token next to an acceptance / ack token
@@ -123,6 +126,31 @@ def test_ambiguous_forms_go_to_confirmation(body):
     res = resolve_keyword(m, _ctx())
     assert res.action == "confirm" and res.origin == "keyword_ambiguous"
     assert res.decision == "rejected"  # the reading proposed; the manager has the last word
+
+
+@pytest.mark.parametrize("body", DECLINE_FORMS)
+def test_decline_forms_reject_a_recommendation_that_proposes_a_change(body):
+    m = match_keyword(body)
+    assert m.kind == "decline"
+    assert parse_action(body) == ActionType.decline
+    ctx = PendingContext(1, NOW - timedelta(hours=1), NOW, latest_proposes_change=True)
+    res = resolve_keyword(m, ctx)
+    assert (res.action, res.decision, res.source) == ("record", "rejected", DecisionSource.keyword)
+
+
+@pytest.mark.parametrize("proposes,reading,why", [
+    (False, "accepted", "no_change_proposed"),   # "keep as is" of a no-change recommendation
+    (None, "rejected", "change_unknown"),        # cannot be told → ask, never guess
+])
+def test_decline_forms_confirm_otherwise(proposes, reading, why):
+    ctx = PendingContext(1, NOW - timedelta(hours=1), NOW, latest_proposes_change=proposes)
+    res = resolve_keyword(match_keyword("non merci on garde tel quel"), ctx)
+    assert (res.action, res.decision, res.origin, res.why) == ("confirm", reading, "keyword_ambiguous", why)
+
+
+@pytest.mark.parametrize("headcount,expected", [(2, True), (-1, True), (0, False), (None, None)])
+def test_proposes_change(headcount, expected):
+    assert proposes_change(headcount) is expected
 
 
 @pytest.mark.parametrize("body", BARE_ACK_FORMS)

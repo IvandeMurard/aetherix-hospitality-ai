@@ -177,15 +177,22 @@ ACK_TOKENS: frozenset[str] = frozenset({
     "👍", "👌", "🙏", "💪", "🙂", "😊",
 })
 
-# Whole-reply forms that must be confirmed, not guessed. Each one has two
-# plausible readings (documented in ADR-0007 §16.3):
-#   "non merci"          declines the recommendation   | "no thanks, nothing needed" (all good)
-#   "on garde tel quel"  keep the recommendation as is | keep our current plan as is
-#   "pas besoin"         we don't need the extra staff | no need to change anything
-AMBIGUOUS_PHRASES: frozenset[str] = frozenset({
+# "Decline / keep as is" forms (PO clarification, 24/09/2026, ADR-0007 §17.8):
+# "non merci on garde tel quel" declines the recommendation when the
+# recommendation proposes a change (the usual case: add or remove staff) →
+# `rejected`, recorded. Only when the recommendation proposed no change, or
+# when that cannot be told, is it confirmed instead of guessed.
+DECLINE_KEEP_PHRASES: frozenset[str] = frozenset({
     "non merci", "no thanks", "no thank you", "nan merci", "non merci beaucoup",
     "non merci on garde tel quel", "on garde tel quel", "on garde comme ça",
     "tel quel", "keep as is", "keep it as is", "as is",
+})
+
+# Whole-reply forms that must be confirmed, not guessed, whatever the
+# recommendation. Two plausible readings each (ADR-0007 §16.3):
+#   "pas besoin"  we don't need the extra staff | no need to change anything
+#   "bof"         reluctant yes | soft no
+AMBIGUOUS_PHRASES: frozenset[str] = frozenset({
     "pas besoin", "no need", "pas nécessaire",
     "bof",
 })
@@ -209,7 +216,7 @@ CONFIRM_NO_TOKENS: frozenset[str] = frozenset({
 })
 
 
-KeywordKind = Literal["accept", "reject", "modify", "ambiguous", "bare_ack"]
+KeywordKind = Literal["accept", "reject", "modify", "decline", "ambiguous", "bare_ack"]
 
 
 @dataclass(frozen=True)
@@ -237,6 +244,8 @@ def match_keyword(body: str) -> Optional[KeywordMatch]:
     norm = normalise(body)
     if not norm:
         return None
+    if norm in DECLINE_KEEP_PHRASES:
+        return KeywordMatch("decline", proposed="rejected")
     if norm in AMBIGUOUS_PHRASES:
         return KeywordMatch("ambiguous", proposed="rejected")
     if norm in _ACCEPT_PHRASES:
@@ -473,6 +482,10 @@ class PendingContext:
     pending_count: int
     latest_dispatched_at: Optional[datetime]
     now: datetime
+    # Does the latest pending recommendation propose a change? True / False /
+    # None = cannot be told (see ``proposes_change``). Read only by the
+    # "decline / keep as is" rule.
+    latest_proposes_change: Optional[bool] = None
 
     def single_in_window(self) -> bool:
         return (
@@ -499,6 +512,26 @@ class Resolution:
     why: Optional[str] = None
 
 
+def proposes_change(recommended_headcount: Optional[int]) -> Optional[bool]:
+    """A staffing recommendation proposes a change when it adds or removes
+    staff (``recommended_headcount`` ≠ 0). ``None`` → cannot be told."""
+    if recommended_headcount is None:
+        return None
+    return int(recommended_headcount) != 0
+
+
+def resolve_decline(ctx: PendingContext) -> Resolution:
+    """"non merci" / "on garde tel quel" (ADR-0007 §17.8): a rejection of a
+    recommendation that proposes a change. Recommendation proposing no change →
+    confirm, reading "keep as is" = accepted. Cannot be told → confirm,
+    reading rejected."""
+    if ctx.latest_proposes_change is True:
+        return Resolution("record", "rejected", DecisionSource.keyword)
+    if ctx.latest_proposes_change is False:
+        return Resolution("confirm", "accepted", origin="keyword_ambiguous", why="no_change_proposed")
+    return Resolution("confirm", "rejected", origin="keyword_ambiguous", why="change_unknown")
+
+
 def resolve_keyword(match: KeywordMatch, ctx: PendingContext) -> Resolution:
     if match.kind == "accept":
         return Resolution("record", "accepted", DecisionSource.keyword)
@@ -506,6 +539,8 @@ def resolve_keyword(match: KeywordMatch, ctx: PendingContext) -> Resolution:
         return Resolution("record", "rejected", DecisionSource.keyword)
     if match.kind == "modify":
         return Resolution("record", "modified", DecisionSource.keyword)
+    if match.kind == "decline":
+        return resolve_decline(ctx)
     if match.kind == "ambiguous":
         return Resolution("confirm", match.proposed, origin="keyword_ambiguous")
     return resolve_bare_ack(ctx)

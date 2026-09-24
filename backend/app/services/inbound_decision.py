@@ -57,6 +57,7 @@ from app.services.manager_decision import (
     match_keyword,
     match_recap_command,
     match_revision_command,
+    proposes_change,
     recorded_message,
     resolve_keyword,
     routed_reason,
@@ -141,7 +142,10 @@ class InboundDecisionService:
     @staticmethod
     def pending_context(recs: list[StaffingRecommendation], now: datetime) -> PendingContext:
         latest = _utc(recs[0].dispatched_at) if recs else None
-        return PendingContext(pending_count=len(recs), latest_dispatched_at=latest, now=now)
+        return PendingContext(
+            pending_count=len(recs), latest_dispatched_at=latest, now=now,
+            latest_proposes_change=proposes_change(recs[0].recommended_headcount) if recs else None,
+        )
 
     async def open_prompt(self, profile: RestaurantProfile, now: datetime) -> Optional[ManagerPrompt]:
         await self.expire_stale_prompts(now, property_id=uuid.UUID(str(profile.id)))

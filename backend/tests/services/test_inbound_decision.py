@@ -130,7 +130,24 @@ async def test_unknown_button_payload_records_nothing(db):
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
+async def test_decline_of_a_change_is_recorded_as_rejected(db):
+    """ADR-0007 §17.8: "non merci on garde tel quel" answering a recommendation
+    that adds staff is a rejection, recorded without confirmation."""
+    profile, [rec] = await _seed(db)
+    rec.recommended_headcount = 2
+    await db.commit()
+    plan = await InboundDecisionService(db).handle_deterministic(
+        profile, "non merci on garde tel quel", "", NOW)
+    rec = await _reload(db, rec)
+    assert (rec.status, rec.decision_source, rec.decided_by) == ("rejected", "keyword", "human_whatsapp")
+    assert plan.result == "recorded"
+    assert await _prompts(db) != []  # the optional reason request, not a confirmation
+    assert all(p.kind == "reason_request" for p in await _prompts(db))
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_keyword_writes_nothing_until_confirmed(db):
+    # recommended_headcount unset → whether a change is proposed cannot be told
     profile, [rec] = await _seed(db)
     svc = InboundDecisionService(db)
     plan = await svc.handle_deterministic(profile, "non merci on garde tel quel", "", NOW)

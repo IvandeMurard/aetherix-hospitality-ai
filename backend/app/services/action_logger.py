@@ -46,6 +46,7 @@ def parse_action(body: str) -> ActionType:
         "accept": ActionType.accept,
         "reject": ActionType.reject,
         "modify": ActionType.modify,
+        "decline": ActionType.decline,
         "ambiguous": ActionType.ambiguous,
     }[match.kind]
 

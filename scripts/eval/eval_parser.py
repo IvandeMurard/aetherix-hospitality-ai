@@ -75,8 +75,11 @@ _NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 def _eval_context():
     from app.services.manager_decision import PendingContext
 
-    # One pending recommendation, dispatched an hour ago (inside the window).
-    return PendingContext(pending_count=1, latest_dispatched_at=_NOW - timedelta(hours=1), now=_NOW)
+    # One pending recommendation, dispatched an hour ago (inside the window),
+    # proposing a change (add/remove staff — the usual case). The golden
+    # replies answer such a recommendation (ADR-0007 §17.8).
+    return PendingContext(pending_count=1, latest_dispatched_at=_NOW - timedelta(hours=1), now=_NOW,
+                          latest_proposes_change=True)
 
 
 class ParserEvalNotMeasured(RuntimeError):
@@ -280,7 +283,7 @@ async def _production_prediction(service, message: str) -> Prediction:
     action = parse_action(message)
     if action != ActionType.unknown:
         res = resolve_keyword(match_keyword(message), ctx)
-        stage = "keyword_ambiguous" if action == ActionType.ambiguous else "keyword"
+        stage = "keyword_ambiguous" if res.action == "confirm" else "keyword"
         return Prediction(res.decision or "not_recorded", stage, action=res.action)
 
     feedback = await service.parse_inbound(message)

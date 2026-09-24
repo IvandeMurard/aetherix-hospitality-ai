@@ -176,7 +176,8 @@ def test_production_path_routing_and_typed_errors():
         _sc("kw-a", "accepted", "Accept"),
         _sc("kw-oui", "accepted", "oui"),
         _sc("kw-r", "rejected", " refusé "),
-        _sc("amb", "rejected", "non merci"),
+        _sc("decl", "rejected", "non merci"),
+        _sc("amb", "rejected", "pas besoin"),
         _sc("ack", "accepted", "👍"),
         _sc("cov", "modified", "covers: 80"),
         _sc("llm-none", "accepted", "noted, see you later"),
@@ -193,6 +194,8 @@ def test_production_path_routing_and_typed_errors():
     assert got["kw-a"] == ("accepted", "keyword", "record")
     assert got["kw-oui"] == ("accepted", "keyword", "record")
     assert got["kw-r"] == ("rejected", "keyword", "record")
+    # Decline of a recommendation proposing a change (EVAL_CONTEXT) → rejected (§17.8).
+    assert got["decl"] == ("rejected", "keyword", "record")
     # Ambiguous keyword → confirmation, never a write.
     assert got["amb"] == ("rejected", "keyword_ambiguous", "confirm")
     # Bare ack, one pending recommendation inside the window (EVAL_CONTEXT) → rule (b).

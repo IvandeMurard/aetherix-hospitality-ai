@@ -21,7 +21,9 @@ class ActionType(str, Enum):
     - accept    : the whole reply is an explicit FR/EN acceptance ("oui", "validé", "✅")
     - reject    : the whole reply is an explicit refusal ("non", "refusé", "❌")
     - modify    : the whole reply is an explicit correction ("corriger", "✏️")
-    - ambiguous : a keyword form with two readings ("non merci", "tel quel") —
+    - decline   : "non merci", "on garde tel quel" — `rejected` when the
+                  recommendation proposes a change, else confirmation (ADR-0007 §17.8)
+    - ambiguous : a keyword form with two readings ("pas besoin", "bof") —
                   confirmation is asked, nothing is written until confirmed
     - unknown   : anything else — goes to the free-text path
     """
@@ -29,6 +31,7 @@ class ActionType(str, Enum):
     accept = "accept"
     reject = "reject"
     modify = "modify"
+    decline = "decline"
     ambiguous = "ambiguous"
     unknown = "unknown"
 
