@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 
-from app.providers.base import LLMProvider
+from app.providers.base import LLMProvider, ModelTier
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class FallbackLLMProvider:
         max_tokens: int = 500,
         temperature: float = 0.3,
         system: str | None = None,
-        model: str | None = None,
+        tier: ModelTier = "reasoning",
     ) -> str:
         """Try primary provider; on transient errors, transparently retry with fallback.
 
@@ -74,9 +74,11 @@ class FallbackLLMProvider:
             max_tokens:  Maximum tokens to generate.
             temperature: Sampling temperature.
             system:      Optional system instruction.
-            model:       Optional per-call model override (HOS-283) — propagated
-                         to BOTH the primary and the fallback provider so the
-                         task-based tier survives a failover.
+            tier:        Capability tier (Décision #35), sent to BOTH providers.
+                         A tier is vendor-neutral, so each side maps it to its
+                         own model and the tier survives a failover. (A model
+                         ID used to travel here instead; Gemini rejected the
+                         Claude ID and the failover died for those calls.)
 
         Returns:
             The first successful text response (primary or fallback).
@@ -91,7 +93,7 @@ class FallbackLLMProvider:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system,
-                model=model,
+                tier=tier,
             )
         except Exception as primary_exc:
             if not _is_transient_error(primary_exc):
@@ -120,7 +122,7 @@ class FallbackLLMProvider:
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system,
-                model=model,
+                tier=tier,
             )
 
     async def check_fallback_health(self) -> bool:

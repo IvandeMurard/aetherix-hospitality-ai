@@ -275,6 +275,10 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Gel terminologique post-acceptation :** tout changement de vocabulaire futur passe par amendement d'ADR explicite, pas un renommage silencieux.
 
+**Amendement 06/07/2026 — reste privé, exception au méta-repo public :** décision Ivan — contrairement à `mesh-architecture.md`, ce document ne migre jamais vers le méta-repo public (Décision #25/ADR-0010 Q2), malgré son caractère cross-cutting (≥2 nœuds). C'est l'IP différenciante du produit, pas de la gouvernance/infra. Amendement correspondant : ADR-0010 §Q2. Si une mention publique apparaît un jour, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
+
+**Document canonique :** `docs/adr/0012-mesh-signal-contract.md`.
+
 ---
 
 ### 32 — Processus de calibration LLM-judge, pré-requis EVAL-6 (ADR-0007 §14) (30/07/2026)
@@ -290,11 +294,9 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Pourquoi maintenant plutôt qu'au moment de construire EVAL-6** : coût de correction nul aujourd'hui (EVAL-6 n'est pas encore construit, Phase 4) — documenter le processus avant plutôt que de découvrir le gap une fois le juge déjà déployé sans calibration.
 
+**Amendement 24/09/2026 (Décision #35) — juge d'une autre famille :** le juge n'appartient à la famille d'aucun générateur dont il note les sorties (primaire Claude **et** fallback Gemini exclus aujourd'hui → troisième famille, choisie par la calibration ; Mistral candidat le moins coûteux). Le kappa ≥ 0.8 reste la condition d'admission. Remplace le choix Sonnet et l'escalade Opus. Détail : ADR-0007 §14.5.
+
 **Détail complet :** `docs/adr/0007-evaluation-by-design.md` §14. Amende `docs/planning/evaluation-by-design.md` (EVAL-6 acceptance criteria) et `eval/FAILURE_THRESHOLDS.md` (ligne LLM reasoning).
-
-**Amendement 06/07/2026 — reste privé, exception au méta-repo public :** décision Ivan — contrairement à `mesh-architecture.md`, ce document ne migre jamais vers le méta-repo public (Décision #25/ADR-0010 Q2), malgré son caractère cross-cutting (≥2 nœuds). C'est l'IP différenciante du produit, pas de la gouvernance/infra. Amendement correspondant : ADR-0010 §Q2. Si une mention publique apparaît un jour, elle se limite à une ligne générique sans vocabulaire ni mécanisme de calibration.
-
-**Document canonique :** `docs/adr/0012-mesh-signal-contract.md`.
 
 ---
 
@@ -329,6 +331,36 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 **Conditions de bascule (rouvrir le spike A2A si l'une se déclenche)** : **B1** spec A2A publique sur `apaleo.dev` (protocole + auth + endpoint) · **B2** un tiers publie un agent F&B/covers/staffing via Agent Hub ou A2A (partagé avec le trigger W2 ci-dessus) · **B3** un design partner exige la livraison via Copilot · **B4** Apaleo conditionne le référencement Agent Hub à une connexion A2A. Sans trigger : **re-vérification trimestrielle, 30/10/2026.**
 
 **Statut watchlist W2 (canari Apaleo Copilot scope F&B) :** dé-escaladé — cadence bi-hebdo → mensuelle (7 semaines sans nouveau signal F&B). Reste **ouvert** (`docs/context/open-decisions.md`), ce n'est pas le canari lui-même qui est tranché, seul le volet protocole A2A l'est. Détail complet et vivant : vault Obsidian `Veille/Veille_Watchlist_W2_Apaleo.md` (source de vérité pour tout futur update de ce canari, cf. Décision consolidation veille 10/07 — pas dans ce repo).
+
+---
+
+### 35 — Portabilité de modèle : tiers de capacité + qualification par le gate (24/09/2026)
+
+**Trigger :** question PM 23/09/2026 — « l'architecture est tool-agnostic, comment la rendre model-agnostic ? ». L'audit du code a montré que Décision #9 ne donne que la portabilité **d'appel** : un identifiant de modèle Claude codé en dur dans `receipts.py` était transmis tel quel au fallback Gemini, qui le rejetait — le failover était mort pour le classifieur inbound (corrigé commit `0db9d41`). Motivations PM, dans l'ordre : (1) résilience ; (2) capacité d'adaptation aux évolutions des modèles ; (3) amélioration continue du produit ; (4) évaluation plus efficace.
+
+**Définition retenue.** *Model-agnostic* = **tout modèle qui passe le gate d'éval est admissible, et le qualifier coûte un run de gate, pas un chantier.** Ce n'est **pas** du multi-modèle en production : Sonnet reste primaire (Décision #1 et verdict `llm-provider-strategy-review-2026-06.md` §3 inchangés). La portabilité est une capacité qu'on entretient, pas une diversification qu'on exerce.
+
+**Périmètre :** toute l'architecture — règle de Mesh, pas seulement Aetherix. Aetherix l'applique ici ; les autres nœuds l'adoptent dans leur propre repo. Non vérifié à cette date : si et comment Tacet appelle un LLM.
+
+**Quatre couches, une règle chacune :**
+
+- **D1 — Appels : des tiers, jamais d'identifiant de modèle dans un service.** `LLMProvider.complete(tier="reasoning"|"fast")` ; chaque provider traduit le tier en son propre modèle (config `LLM_MODEL` / `LLM_FAST_MODEL` / `LLM_FALLBACK_MODEL` / `LLM_FALLBACK_FAST_MODEL`). Le tier traverse le failover (restaure l'intention de HOS-283 AC2). Tier inconnu → `ValueError`, jamais de routage silencieux. **Livré avec cette décision** (`backend/app/providers/base.py`).
+- **D2 — Contrat de sortie : un schéma, pas du texte.** Toute sortie LLM consommée par du code est validée par un schéma Pydantic à la frontière du provider ; chaque adapter utilise le mécanisme natif de son fournisseur (tool use chez Claude, `response_schema` chez Gemini). Le parsing à la main de texte libre (`receipts.py` Pass 3, `anomaly_detection.py`) est la dette à résorber. Sans D2, une comparaison entre fournisseurs mesure le formatage, pas la qualité. **Design.**
+- **D3 — Qualité : le gate juge l'admissibilité.** Le golden dataset tourne sur une matrice (provider × modèle) avec une baseline par couple ; la couche parser tourne sur un LLM réel, au moins sur le primaire et le fallback ; les couches recommendation et receipt (3 cas chacune au 24/09) sont enrichies avant toute comparaison. **Exception assumée à D1 : l'éval épingle des identifiants de modèle exacts**, parce qu'un run doit être reproductible et qu'un tier remappé change le sujet mesuré. **Design.**
+- **D4 — Données : chaque vecteur sait quel modèle l'a produit.** Colonne `embedding_model` sur `fb_patterns` et `operational_memory` ; un changement de modèle d'embedding = double écriture puis bascule, jamais une réindexation en place. C'est le verrou le plus coûteux de l'architecture, avant le LLM. **Design.**
+
+**D5 — Cycle de vie du golden dataset (planifié dès maintenant).** Trois zones : **noyau figé** (contrats métier : guardrails, format, refus — ne change pas, sert à comparer dans le temps) · **zone datée** (tout cas dont la vérité dépend du monde réel porte une date de revue) · **zone de croissance** (échecs de production promus en cas, HOS-287 — c'est ce qui empêche la saturation). Un cas ne se modifie jamais en place : on le retire et on en ajoute un. Le dataset porte une version de contenu distincte de `schema_version` ; les baselines sont indexées par (version du dataset × modèle). Toute version comparée est gelée avant lecture des résultats (protocole HOS-316). **Design.**
+
+**Garde-fous :**
+- **Qualifier automatiquement, oui ; promouvoir automatiquement, non.** Un modèle qui passe le gate devient *admissible* ; le passer en primaire reste une décision humaine (Décision #6, niveau (c) de `llm-provider-strategy-review-2026-06.md` §6).
+- **Juge (Décision #32, amendée ici) :** le juge appartient à une famille de modèles différente de celle de tout générateur qu'il note — primaire et fallback compris, donc une troisième famille aujourd'hui (ADR-0007 §14.5). L'ancrage reste le kappa ≥ 0.8 contre labels humains, pas la récence ni la famille du modèle. Version du juge épinglée (D3).
+- **Latence :** le gate matriciel tourne hors ligne (coût CI, zéro latence utilisateur). Aucun juge runtime sur un chemin MCP synchrone (budget < 500 ms, Décision #3) : asynchrone ou échantillonné, et sur les sorties à fort impact seulement.
+
+**Rapport au gel Epic 16 (HOS-300) :** dérogation explicite, sign-off PM 24/09/2026, pas de nouvel ADR — le détail vit ici. Motif : D1 est un correctif de résilience ; D2 à D5 renforcent la **preuve** (le gate), pas le Mesh — ils servent l'objet même de l'Epic 16. Ce qui était gelé le reste (Anima, Learning Engine, Hive, Context Graph).
+
+**Statut public :** « model-agnostic » se dit **Design** sur toute surface publique tant qu'aucun second fournisseur n'a passé le gate (D3). D1 seul ne suffit pas à passer en Built : une portabilité jamais évaluée reste une hypothèse.
+
+**Falsifiable par :** un run du gate matriciel où le fallback échoue massivement sur des cas que le primaire passe. La portabilité réelle serait alors plus faible qu'annoncé — c'est l'information recherchée, pas un échec du projet.
 
 ---
 

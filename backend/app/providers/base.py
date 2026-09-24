@@ -5,7 +5,27 @@ at runtime (e.g. in factory assertions and unit tests).
 """
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, get_args, runtime_checkable
+
+# Vendor-neutral capability tier (Décision #35). Callers ask for a tier, never
+# for a model ID: each provider maps the tier to its own model, so a tier
+# survives a failover and a provider swap. A vendor model ID in a service is a
+# leak — it broke the Claude→Gemini fallback before this contract (HOS-283).
+ModelTier = Literal["fast", "reasoning"]
+MODEL_TIERS: tuple[str, ...] = get_args(ModelTier)
+
+
+def resolve_tier_model(tier: str, *, reasoning: str, fast: str) -> str:
+    """Map a capability tier to a provider's concrete model ID.
+
+    Raises ``ValueError`` on an unknown tier rather than silently routing to a
+    default: a misrouted call is invisible, a raised one is not.
+    """
+    if tier == "reasoning":
+        return reasoning
+    if tier == "fast":
+        return fast
+    raise ValueError(f"Unknown model tier {tier!r} — expected one of {MODEL_TIERS}")
 
 
 @runtime_checkable
@@ -22,7 +42,7 @@ class LLMProvider(Protocol):
         max_tokens: int = 500,
         temperature: float = 0.3,
         system: str | None = None,
-        model: str | None = None,
+        tier: ModelTier = "reasoning",
     ) -> str:
         """Return the model's plain-text response.
 
@@ -33,9 +53,10 @@ class LLMProvider(Protocol):
             system:      Optional system-level instruction.  Providers that
                          support a dedicated system field (e.g. Anthropic) use
                          it directly; others prepend it as a system message.
-            model:       Optional per-call model override (task-based routing,
-                         HOS-283).  When ``None`` the provider's default model is
-                         used — existing callers are unchanged.
+            tier:        Capability tier (Décision #35). ``"reasoning"`` (default)
+                         is the provider's main model; ``"fast"`` its cheap,
+                         low-latency one (classification, extraction). Each
+                         provider maps the tier to its own model ID.
         """
         ...
 

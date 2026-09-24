@@ -99,19 +99,47 @@ class TestGeminiProviderComplete:
         assert call_kwargs["model"] == "gemini-2.0-flash"
 
     @pytest.mark.asyncio
-    async def test_complete_model_override_supersedes_default(self):
-        """HOS-283: model= overrides the provider default for this call only."""
+    async def test_complete_fast_tier_uses_fast_model(self):
+        """Décision #35: tier="fast" maps to fast_model; default tier to model."""
+        mock_client = _make_mock_client("ok")
+
+        with patch("google.genai.Client", return_value=mock_client):
+            provider = GeminiProvider(
+                api_key="sk-test", model="gemini-1.5-pro", fast_model="gemini-2.0-flash"
+            )
+            await provider.complete(
+                messages=[{"role": "user", "content": "ping"}], tier="fast"
+            )
+            await provider.complete(messages=[{"role": "user", "content": "ping"}])
+
+        calls = mock_client.aio.models.generate_content.call_args_list
+        assert calls[0].kwargs["model"] == "gemini-2.0-flash"
+        assert calls[1].kwargs["model"] == "gemini-1.5-pro"
+
+    @pytest.mark.asyncio
+    async def test_complete_fast_tier_defaults_to_main_model(self):
+        """No fast_model configured → the fast tier reuses the main model."""
         mock_client = _make_mock_client("ok")
 
         with patch("google.genai.Client", return_value=mock_client):
             provider = GeminiProvider(api_key="sk-test", model="gemini-2.0-flash")
             await provider.complete(
-                messages=[{"role": "user", "content": "ping"}],
-                model="gemini-1.5-pro",
+                messages=[{"role": "user", "content": "ping"}], tier="fast"
             )
 
         call_kwargs = mock_client.aio.models.generate_content.call_args.kwargs
-        assert call_kwargs["model"] == "gemini-1.5-pro"
+        assert call_kwargs["model"] == "gemini-2.0-flash"
+
+    @pytest.mark.asyncio
+    async def test_complete_unknown_tier_raises(self):
+        mock_client = _make_mock_client("ok")
+
+        with patch("google.genai.Client", return_value=mock_client):
+            provider = GeminiProvider(api_key="sk-test")
+            with pytest.raises(ValueError, match="Unknown model tier"):
+                await provider.complete(
+                    messages=[{"role": "user", "content": "ping"}], tier="huge"
+                )
 
 
 # ---------------------------------------------------------------------------

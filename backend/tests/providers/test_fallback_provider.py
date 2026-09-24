@@ -89,24 +89,42 @@ class TestFallbackProviderPrimarySuccess:
             max_tokens=300,
             temperature=0.3,
             system="You are a hotel assistant.",
-            model=None,
+            tier="reasoning",
         )
 
     @pytest.mark.asyncio
-    async def test_model_override_propagates_to_primary_and_fallback(self):
-        """HOS-283 AC2: a per-call model= override reaches BOTH providers so the
-        task-based tier survives a failover."""
+    async def test_tier_propagates_to_primary_and_fallback(self):
+        """Décision #35 (restores HOS-283 AC2 intent): the tier is vendor-neutral,
+        so it reaches BOTH providers and survives a failover."""
         primary = _failing_provider("claude/sonnet", TimeoutError("boom"))
         fallback = _mock_provider("gemini/flash", "ok")
 
         provider = FallbackLLMProvider(primary=primary, fallback=fallback)
-        await provider.complete(
-            messages=_MESSAGES,
-            model="claude-haiku-4-5-20251001",
-        )
+        result = await provider.complete(messages=_MESSAGES, tier="fast")
 
-        assert primary.complete.await_args.kwargs["model"] == "claude-haiku-4-5-20251001"
-        assert fallback.complete.await_args.kwargs["model"] == "claude-haiku-4-5-20251001"
+        assert result == "ok"
+        assert primary.complete.await_args.kwargs["tier"] == "fast"
+        assert fallback.complete.await_args.kwargs["tier"] == "fast"
+
+    @pytest.mark.asyncio
+    async def test_fast_tier_failover_reaches_real_gemini_with_gemini_model(self):
+        """Regression: a fast-tier call that fails over must reach Gemini with
+        Gemini's fast model — never a Claude model ID (killed the failover)."""
+        from app.providers.gemini_provider import GeminiProvider
+
+        primary = _failing_provider("claude/sonnet", TimeoutError("boom"))
+        gemini = GeminiProvider(model="gemini-1.5-pro", fast_model="gemini-2.0-flash")
+        response = MagicMock()
+        response.text = "ok"
+        gemini._client = MagicMock()
+        gemini._client.aio.models.generate_content = AsyncMock(return_value=response)
+
+        provider = FallbackLLMProvider(primary=primary, fallback=gemini)
+        result = await provider.complete(messages=_MESSAGES, tier="fast")
+
+        assert result == "ok"
+        call = gemini._client.aio.models.generate_content.await_args
+        assert call.kwargs["model"] == "gemini-2.0-flash"
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +198,7 @@ class TestFallbackProviderArgPassthrough:
             max_tokens=400,
             temperature=0.5,
             system="Be concise.",
-            model=None,
+            tier="reasoning",
         )
 
 
