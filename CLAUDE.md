@@ -72,6 +72,7 @@
 | 32 | Processus de calibration LLM-judge, pré-requis EVAL-6 (**ADR-0007 §14**) : rubrique binaire miroir `FAILURE_THRESHOLDS.md` · golden set dédié `eval/judge_calibration_set.jsonl` · juge Sonnet via `LLMProvider` (Décision #9) · Cohen's kappa ≥ 0.8 avant scoring autonome · recalibration sur triggers explicites | 30/07/2026 |
 | 33 | Gate honnêteté métriques (HOS-318) : taxonomie **Built / Shadow-mode / Synthetic PoC / Design / Research** obligatoire sur toute surface (`docs/context/status-taxonomy.md`, `Built` ≠ adopté, `Built (PoC)` interdit) · 15.09 % synthétique = circulaire, gate interne seul, usage non qualifié = drift D7 · verdict Recruit = **PASS formel MAPE + clause pivot déclenchée volontairement** (à J+1 Prophet est derrière la naïve en médiane) · amendement protocole §7 : WAPE reporté obligatoire, Δ MdAPE reste primaire | 01/08/2026 |
 | 34 | Apaleo A2A **tranché : wait-and-see, Aetherix reste MCP standalone** (audit Trace Agent HOS-285 + spike A2A HOS-278) — A2A = cap annoncé, pas d'interface (aucune spec/auth/endpoint sur `apaleo.dev` au 30/07) · Décision #19 rend Aetherix déjà prêt sans dette à provisionner · risque branchement précoce = Daily Receipt disparaît derrière l'UI Copilot, commoditise l'exécution · vecteur de menace reformulé : Apaleo fournit les rails (Agent Hub/Agent Factory), pas les agents — risque = un tiers publie un agent F&B en 1 trimestre · 4 conditions de bascule B1-B4, re-vérification trimestrielle 30/10/2026 · canari W2 dé-escaladé (mensuel) mais reste ouvert | 30/07/2026 |
+| 35 | Portabilité de modèle (règle de Mesh) : services → **tiers** `reasoning`/`fast`, jamais d'ID de modèle (livré) · sorties validées par schéma · gate matriciel provider×modèle = juge d'admissibilité (qualifier auto oui, promouvoir auto non) · `embedding_model` par vecteur · cycle de vie du golden dataset (noyau figé / zone datée / croissance). Dérogation au gel Epic 16 (renforce la preuve, pas le Mesh). Public : **Design** tant qu'aucun 2e fournisseur n'a passé le gate | 24/09/2026 |
 
 ---
 
@@ -126,7 +127,7 @@ scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian,
 
 ## Variables d'environnement
 
-18 variables (LLM, Supabase, Apaleo, Redis, Logfire, outillage) → [`docs/ops/environment-variables.md`](docs/ops/environment-variables.md). Secrets en prod via `flyctl secrets set`, jamais committés.
+23 variables (LLM, Supabase, Apaleo, Redis, Logfire, outillage) → [`docs/ops/environment-variables.md`](docs/ops/environment-variables.md). Secrets en prod via `flyctl secrets set`, jamais committés.
 
 ---
 

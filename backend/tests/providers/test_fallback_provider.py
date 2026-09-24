@@ -89,45 +89,38 @@ class TestFallbackProviderPrimarySuccess:
             max_tokens=300,
             temperature=0.3,
             system="You are a hotel assistant.",
-            model=None,
+            tier="reasoning",
         )
 
     @pytest.mark.asyncio
-    async def test_model_override_reaches_primary_only(self):
-        """HOS-283: the per-call model= override is a vendor-specific ID. It
-        reaches the primary; the fallback runs on its own default model, since
-        a Claude model ID sent to Gemini is rejected and kills the failover."""
+    async def test_tier_propagates_to_primary_and_fallback(self):
+        """Décision #35 (restores HOS-283 AC2 intent): the tier is vendor-neutral,
+        so it reaches BOTH providers and survives a failover."""
         primary = _failing_provider("claude/sonnet", TimeoutError("boom"))
         fallback = _mock_provider("gemini/flash", "ok")
 
         provider = FallbackLLMProvider(primary=primary, fallback=fallback)
-        result = await provider.complete(
-            messages=_MESSAGES,
-            model="claude-haiku-4-5-20251001",
-        )
+        result = await provider.complete(messages=_MESSAGES, tier="fast")
 
         assert result == "ok"
-        assert primary.complete.await_args.kwargs["model"] == "claude-haiku-4-5-20251001"
-        assert fallback.complete.await_args.kwargs["model"] is None
+        assert primary.complete.await_args.kwargs["tier"] == "fast"
+        assert fallback.complete.await_args.kwargs["tier"] == "fast"
 
     @pytest.mark.asyncio
-    async def test_override_does_not_break_failover_on_real_gemini(self):
-        """Regression: with the real GeminiProvider as fallback, an overridden
-        call must reach Gemini with a Gemini model, not the Claude ID."""
+    async def test_fast_tier_failover_reaches_real_gemini_with_gemini_model(self):
+        """Regression: a fast-tier call that fails over must reach Gemini with
+        Gemini's fast model — never a Claude model ID (killed the failover)."""
         from app.providers.gemini_provider import GeminiProvider
 
         primary = _failing_provider("claude/sonnet", TimeoutError("boom"))
-        gemini = GeminiProvider(api_key="test-key", model="gemini-2.0-flash")
+        gemini = GeminiProvider(model="gemini-1.5-pro", fast_model="gemini-2.0-flash")
         response = MagicMock()
         response.text = "ok"
         gemini._client = MagicMock()
         gemini._client.aio.models.generate_content = AsyncMock(return_value=response)
 
         provider = FallbackLLMProvider(primary=primary, fallback=gemini)
-        result = await provider.complete(
-            messages=_MESSAGES,
-            model="claude-haiku-4-5-20251001",
-        )
+        result = await provider.complete(messages=_MESSAGES, tier="fast")
 
         assert result == "ok"
         call = gemini._client.aio.models.generate_content.await_args
@@ -205,7 +198,7 @@ class TestFallbackProviderArgPassthrough:
             max_tokens=400,
             temperature=0.5,
             system="Be concise.",
-            model=None,
+            tier="reasoning",
         )
 
 

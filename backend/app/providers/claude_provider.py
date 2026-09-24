@@ -13,7 +13,7 @@ import time
 from anthropic import AsyncAnthropic
 
 from app.context import request_id_var
-from app.providers.base import LLMProvider  # noqa: F401 — satisfies Protocol
+from app.providers.base import LLMProvider, ModelTier, resolve_tier_model  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,11 @@ class ClaudeProvider:
         self,
         api_key: str = "",
         model: str = "claude-sonnet-4-6",
+        fast_model: str = "claude-haiku-4-5-20251001",
     ) -> None:
         self._api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
         self._model = model
+        self._fast_model = fast_model or model
         # Client is only created when a key is present; stays None otherwise.
         self._client: AsyncAnthropic | None = (
             AsyncAnthropic(api_key=self._api_key) if self._api_key else None
@@ -48,7 +50,7 @@ class ClaudeProvider:
         max_tokens: int = 500,
         temperature: float = 0.3,
         system: str | None = None,
-        model: str | None = None,
+        tier: ModelTier = "reasoning",
     ) -> str:
         """Call the Claude Messages API and return the assistant's text.
 
@@ -59,8 +61,8 @@ class ClaudeProvider:
             temperature: Sampling temperature.
             system:      System-level instruction passed to Anthropic's
                          top-level ``system=`` field (not injected as a message).
-            model:       Optional per-call model override (task-based routing,
-                         HOS-283).  Falls back to the provider default when None.
+            tier:        Capability tier (Décision #35): ``"reasoning"`` →
+                         the default model, ``"fast"`` → ``fast_model``.
 
         Raises:
             RuntimeError: If ``ANTHROPIC_API_KEY`` was not set at instantiation
@@ -76,7 +78,9 @@ class ClaudeProvider:
             self._api_key = key
             self._client = AsyncAnthropic(api_key=key)
 
-        effective_model = model or self._model
+        effective_model = resolve_tier_model(
+            tier, reasoning=self._model, fast=self._fast_model
+        )
         kwargs: dict = dict(
             model=effective_model,
             max_tokens=max_tokens,
