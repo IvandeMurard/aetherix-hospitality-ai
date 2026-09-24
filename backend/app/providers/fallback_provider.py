@@ -74,9 +74,12 @@ class FallbackLLMProvider:
             max_tokens:  Maximum tokens to generate.
             temperature: Sampling temperature.
             system:      Optional system instruction.
-            model:       Optional per-call model override (HOS-283) — propagated
-                         to BOTH the primary and the fallback provider so the
-                         task-based tier survives a failover.
+            model:       Optional per-call model override (HOS-283). It is a
+                         vendor-specific identifier, so it is sent to the
+                         primary only. The fallback always runs on its own
+                         default model: forwarding e.g. a Claude model ID to
+                         Gemini is rejected by the Gemini API, which silently
+                         killed the failover for every overridden call.
 
         Returns:
             The first successful text response (primary or fallback).
@@ -115,12 +118,19 @@ class FallbackLLMProvider:
                 primary_exc,
                 self._fallback.model_id,
             )
+            if model is not None:
+                logger.info(
+                    "FallbackLLMProvider: dropping primary-specific model override "
+                    "%r — fallback %s runs on its default model",
+                    model,
+                    self._fallback.model_id,
+                )
             return await self._fallback.complete(
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system,
-                model=model,
+                model=None,
             )
 
     async def check_fallback_health(self) -> bool:

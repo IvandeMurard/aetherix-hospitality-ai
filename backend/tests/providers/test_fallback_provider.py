@@ -93,20 +93,45 @@ class TestFallbackProviderPrimarySuccess:
         )
 
     @pytest.mark.asyncio
-    async def test_model_override_propagates_to_primary_and_fallback(self):
-        """HOS-283 AC2: a per-call model= override reaches BOTH providers so the
-        task-based tier survives a failover."""
+    async def test_model_override_reaches_primary_only(self):
+        """HOS-283: the per-call model= override is a vendor-specific ID. It
+        reaches the primary; the fallback runs on its own default model, since
+        a Claude model ID sent to Gemini is rejected and kills the failover."""
         primary = _failing_provider("claude/sonnet", TimeoutError("boom"))
         fallback = _mock_provider("gemini/flash", "ok")
 
         provider = FallbackLLMProvider(primary=primary, fallback=fallback)
-        await provider.complete(
+        result = await provider.complete(
             messages=_MESSAGES,
             model="claude-haiku-4-5-20251001",
         )
 
+        assert result == "ok"
         assert primary.complete.await_args.kwargs["model"] == "claude-haiku-4-5-20251001"
-        assert fallback.complete.await_args.kwargs["model"] == "claude-haiku-4-5-20251001"
+        assert fallback.complete.await_args.kwargs["model"] is None
+
+    @pytest.mark.asyncio
+    async def test_override_does_not_break_failover_on_real_gemini(self):
+        """Regression: with the real GeminiProvider as fallback, an overridden
+        call must reach Gemini with a Gemini model, not the Claude ID."""
+        from app.providers.gemini_provider import GeminiProvider
+
+        primary = _failing_provider("claude/sonnet", TimeoutError("boom"))
+        gemini = GeminiProvider(api_key="test-key", model="gemini-2.0-flash")
+        response = MagicMock()
+        response.text = "ok"
+        gemini._client = MagicMock()
+        gemini._client.aio.models.generate_content = AsyncMock(return_value=response)
+
+        provider = FallbackLLMProvider(primary=primary, fallback=gemini)
+        result = await provider.complete(
+            messages=_MESSAGES,
+            model="claude-haiku-4-5-20251001",
+        )
+
+        assert result == "ok"
+        call = gemini._client.aio.models.generate_content.await_args
+        assert call.kwargs["model"] == "gemini-2.0-flash"
 
 
 # ---------------------------------------------------------------------------
