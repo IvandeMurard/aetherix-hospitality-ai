@@ -33,12 +33,10 @@ Exit codes (ADR §D2.f): `0` PASS · `1` FAIL (regression > 3pp **or** category
 coverage < 60%) · `2` ERROR · `3` WARN (coverage 60–80%, or touched-but-not-
 evaluated). Run it locally with `python scripts/ci/check_eval_coverage.py`.
 
-**Rollout WARN → blocking (AC5).** Because the gate runs Prophet in CI (stochastic
-— ADR §9 R2/R4), it ships **non-blocking**: `eval-gate.yml` sets
-`EVAL_GATE_BLOCKING: "false"`, so a FAIL is surfaced in the PR comment but does not
-block the merge. Once N green PRs prove Prophet-in-CI stable, flip it to blocking —
-a one-line change (`EVAL_GATE_BLOCKING: "true"`) + a CLAUDE.md trace. The script
-already emits the real exit codes, so no other change is needed.
+**Rollout WARN → blocking (AC5).** The gate shipped non-blocking and was flipped
+to blocking on 2026-07-04 (Décision #29): `eval-gate.yml` sets
+`EVAL_GATE_BLOCKING: "true"`, so FAIL (1) and ERROR (2) block the merge; WARN (3)
+does not. Emergency rollback = `"false"`.
 
 ### `eval-exempt` label (override)
 
@@ -123,8 +121,14 @@ a Sprint N+2 milestone (blocks EVAL-3 / EVAL-5 only).
   is the actual `y` for that date — not invented. (The model predicts aggregate
   covers `y`; the `covers_dinner`/`covers_breakfast` split shown in the ADR
   example is a Phase-4 refinement once per-service data exists.)
-- **parser_intent** scenarios are deterministic from `ReceiptsService.parse_inbound`
-  behaviour (Décision #15) and are authoritative.
+- **parser_intent** scenarios are labelled with the **manager's intent**
+  (accepted / rejected / modified), not with what `parse_inbound` returns — the
+  two taxonomies differ (ADR-0007 §15). The original 17 cases are the `dev` split
+  (the fake heuristic was written against them); the 30 `"split": "heldout"` cases
+  are adversarial and were never used to tune anything. The PR gate runs the
+  **fake backend — a plumbing check, not a quality measure**. Model quality comes
+  only from the opt-in real run (`.github/workflows/eval-parser-real.yml`) and is
+  **not yet measured**.
 - **recommendation / receipt abstention** scenarios encode the `AgentAbstention`
   contract (ADR-0007 §D6) — the expected `abstention_reason` is the contract,
   implemented in EVAL-2 (HOS-206).
@@ -151,5 +155,5 @@ milestone. Exit 0 = valid. Wired into CI (`eval-dataset` job).
 | EVAL-1 | `scripts/eval/eval_forecast.py` stratified MAPE + CI regression gate |
 | EVAL-2 | `AgentAbstention` contract + WhatsApp variants + telemetry |
 | EVAL-3 | distribution-shift detector + cold-start auto-disable hook |
-| EVAL-4 | Haiku parser accuracy + `FakeIntentClassifier` |
+| EVAL-4 | Parser eval on the production path (real model, opt-in workflow) + fake plumbing check — corrected 24/09/2026, ADR-0007 §15 |
 | EVAL-5 | latency SLO bench + dashboard MV |

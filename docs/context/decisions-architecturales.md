@@ -385,6 +385,24 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 ---
 
+### 37 — Parser eval (EVAL-4) grades the production path; the fake backend is a plumbing check (24/09/2026)
+
+**Trigger:** audit of the portfolio claim that Aetherix's evaluation is verifiable. The only parser number (`parser_baseline.json`, accuracy 1.0, n=16) came from a keyword heuristic scored on the cases it was written for. The "nightly real run" never existed, and the `real` backend fell back to the heuristic on `free_form`. Full detail: ADR-0007 §15.
+
+**Decision.**
+- The parser eval grades **what production records**: `parse_action` → `parse_inbound` → `receipts.outcome_for_feedback`, the single definition shared by the Twilio route and the eval. Model included, primary provider only, no heuristic fallback. A model error or an out-of-taxonomy answer is a typed error and counts as a miss.
+- **Fake backend = plumbing check**, labelled as such in the result, report and sticky PR comment. It has no baseline, cannot be frozen as one, and never counts as parser quality. The fake parser baseline file (eval/baselines/parser_baseline.json) is deleted; that path is reserved for a real-model baseline.
+- **Real run = opt-in** workflow `eval-parser-real.yml` (label `eval-parser-real`, dispatch, weekly). Missing key → exit 2 "NOT MEASURED", never PASS.
+- **Real baseline** only after the canary: 3 runs, identical per-case predictions, variance stated (Décision #29 rule applied to the LLM).
+- **Dataset:** +30 held-out adversarial cases (10 per intent, FR/EN), never used to tune the heuristic.
+- **FAILURE_THRESHOLDS.md parser row:** threshold values unchanged; scope made explicit (real backend only, "nothing recorded"/errors are failures, an intent never predicted is a breach).
+
+**State on 24/09/2026.** Parser model quality: **not yet measured** (no key available to the session that made the change; the workflow has not run yet). Production-path ceiling, measured deterministically without a model: **36.2%** on 47 cases, 0% max recall on `accepted`/`rejected`. That is a product defect (free text never records accepted/rejected), tracked in `open-decisions.md` §"Inbound reply → recorded outcome". It is not hidden in the eval.
+
+**Public surfaces.** Any mention of a parser accuracy, or of "parser accuracy delta" as a working gate signal, is drift until the real run exists: label it **Design** (Décision #33).
+
+---
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).

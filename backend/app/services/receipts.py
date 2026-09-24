@@ -146,10 +146,15 @@ class FeedbackIntent:
         notes: Cleaned free-text note for the memory reflection.
         confidence: 1.0 for regex matches; Haiku classifier score for LLM path.
         requires_confirmation: True when confidence < _CONFIDENCE_THRESHOLD.
+        source: Which pass decided the intent — ``ack_regex``, ``covers_regex``,
+                ``llm``, ``llm_unmappable`` (model answered outside the taxonomy,
+                coerced to ``free_form``) or ``llm_error`` (call or JSON parse
+                failed, defaulted to ``free_form``). Lets telemetry and the
+                parser eval (EVAL-4) tell a model decision from a fallback.
     """
 
     __slots__ = ("intent", "outcome", "actual_value", "notes", "confidence",
-                 "requires_confirmation")
+                 "requires_confirmation", "source")
 
     def __init__(
         self,
@@ -158,6 +163,7 @@ class FeedbackIntent:
         actual_value: Optional[float],
         notes: str,
         confidence: float,
+        source: str = "llm",
     ) -> None:
         self.intent = intent
         self.outcome = outcome
@@ -165,6 +171,25 @@ class FeedbackIntent:
         self.notes = notes
         self.confidence = confidence
         self.requires_confirmation = confidence < _CONFIDENCE_THRESHOLD
+        self.source = source
+
+
+def outcome_for_feedback(feedback: FeedbackIntent) -> Optional[str]:
+    """The feedback-loop outcome the inbound route records for a parsed reply.
+
+    Single definition shared by the Twilio route (`_bg_receipt_feedback`) and the
+    parser eval (EVAL-4), so the eval grades what production writes, not a copy.
+
+    ``acknowledge`` → ``None``: nothing is written to memory and the
+    recommendation status is untouched. Every other intent → ``feedback.outcome``,
+    which ``parse_inbound`` always sets to ``"modified"``. Free text therefore
+    never records ``accepted`` or ``rejected``: only the exact keywords
+    ``accept`` / ``reject`` do (``action_logger.parse_action``). Known gap —
+    ADR-0007 §15.
+    """
+    if feedback.intent == "acknowledge":
+        return None
+    return feedback.outcome
 
 
 # ---------------------------------------------------------------------------
@@ -454,6 +479,7 @@ class ReceiptsService:
                 actual_value=None,
                 notes="",
                 confidence=1.0,
+                source="ack_regex",
             )
             logger.info(
                 "receipts.parse_inbound: intent=acknowledge confidence=1.0 text=%r",
@@ -472,6 +498,7 @@ class ReceiptsService:
                 actual_value=actual,
                 notes=stripped,
                 confidence=1.0,
+                source="covers_regex",
             )
             logger.info(
                 "receipts.parse_inbound: intent=structured_correction actual_value=%s confidence=1.0 text=%r",
@@ -497,8 +524,10 @@ class ReceiptsService:
             actual_val: Optional[float] = parsed.get("actual_value")
             notes: str = parsed.get("notes", stripped)
 
+            source = "llm"
             if llm_intent not in ("structured_correction", "free_form", "acknowledge"):
                 llm_intent = "free_form"
+                source = "llm_unmappable"
 
             intent = FeedbackIntent(
                 intent=llm_intent,  # type: ignore[arg-type]
@@ -506,6 +535,7 @@ class ReceiptsService:
                 actual_value=float(actual_val) if actual_val is not None else None,
                 notes=notes,
                 confidence=confidence,
+                source=source,
             )
         except Exception:
             logger.exception(
@@ -518,11 +548,13 @@ class ReceiptsService:
                 actual_value=None,
                 notes=stripped,
                 confidence=0.5,
+                source="llm_error",
             )
 
         logger.info(
-            "receipts.parse_inbound: intent=%s confidence=%.2f requires_confirmation=%s text=%r",
+            "receipts.parse_inbound: intent=%s source=%s confidence=%.2f requires_confirmation=%s text=%r",
             intent.intent,
+            intent.source,
             intent.confidence,
             intent.requires_confirmation,
             stripped[:80],

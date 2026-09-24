@@ -8,6 +8,10 @@ Usage:
   python -m scripts.eval.run_all --layers forecast --md-out r.md --json-out r.json
   python -m scripts.eval.run_all --layers forecast --update-baseline   # freeze baseline
   python -m scripts.eval.run_all --layers forecast --strict            # exit 1 on regression
+  EVAL_PARSER_BACKEND=real python -m scripts.eval.run_all --layers parser --runs 3 --strict
+
+Exit codes: 0 ok · 1 regression / threshold breach (with --strict) · 2 not measured
+(e.g. real parser eval without an API key, or a refused baseline freeze).
 """
 from __future__ import annotations
 
@@ -43,6 +47,13 @@ def main() -> int:
         help="Freeze the current run as the layer baseline (eval/baselines/<layer>_baseline.json).",
     )
     parser.add_argument(
+        "--runs",
+        type=int,
+        default=1,
+        help="parser/real only: repeat the eval N times to measure run-to-run variance "
+        "(>= 3 identical runs required to freeze a real baseline).",
+    )
+    parser.add_argument(
         "--strict",
         action="store_true",
         help="Exit 1 if a per-category regression > 3pp is detected (for the CI gate).",
@@ -58,9 +69,20 @@ def main() -> int:
             print(f"[eval] layer {layer!r} not implemented yet — skipping")
             continue
 
-        result = runner(dataset=args.dataset, seed=args.seed)
+        kwargs = {"runs": args.runs} if layer == "parser" else {}
+        try:
+            result = runner(dataset=args.dataset, seed=args.seed, **kwargs)
+        except eval_parser.ParserEvalNotMeasured as exc:
+            print(f"[eval] {layer}: NOT MEASURED — {exc}", file=sys.stderr)
+            return 2
 
         if args.update_baseline:
+            refusal = (
+                baselines.parser_baseline_freeze_refusal(result) if layer == "parser" else None
+            )
+            if refusal:
+                print(f"[eval] {layer}: baseline NOT frozen — {refusal}", file=sys.stderr)
+                return 2
             path = baselines.save_baseline(layer, result)
             print(f"[eval] {layer}: baseline frozen -> {path}")
 
@@ -84,13 +106,27 @@ def main() -> int:
             if diff.get("lost_reasons"):
                 summary += f" · PERDUES: {', '.join(diff['lost_reasons'])}"
         else:  # parser
-            summary = (
-                f"accuracy {(result['accuracy'] or 0) * 100:.1f}% · n={result['n']} · "
-                f"regressed={diff['regressed']}"
-            )
+            ceiling = result["production_path_ceiling"]["max_accuracy"]
+            if result.get("quality_signal"):
+                summary = (
+                    f"accuracy {(result['accuracy'] or 0) * 100:.1f}% (production path, "
+                    f"real model) · n={result['n']} · errors={result['n_errors']} · "
+                    f"threshold breaches={len(result['thresholds']['breaches'])} · "
+                    f"regressed={diff['regressed']}"
+                )
+            else:
+                summary = (
+                    "PLUMBING CHECK ONLY (fake backend) — not a model-quality measurement · "
+                    f"n={result['n']} · model quality: not measured"
+                )
+            summary += f" · production-path ceiling {(ceiling or 0) * 100:.1f}%"
         print(f"[eval] {layer}: {summary} -> {paths['md']}")
 
-        regressed = bool(diff.get("regressions")) or diff.get("regressed", False)
+        regressed = (
+            bool(diff.get("regressions"))
+            or diff.get("regressed", False)
+            or diff.get("below_threshold", False)
+        )
         if args.strict and regressed:
             exit_code = 1
 

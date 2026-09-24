@@ -1,0 +1,125 @@
+name: Eval — inbound parser (real model, opt-in)
+
+# EVAL-4 real-model run (ADR-0007 §15, Décision #37). The PR gate (eval-gate.yml)
+# only runs the fake backend, which is a plumbing check and measures nothing about
+# the model. This workflow is the only place the parser is graded with the model
+# in the loop: the production path (parse_action → parse_inbound → the route's
+# outcome mapping), primary provider only, no heuristic fallback.
+#
+# Triggers (opt-in — never blocks a merge on its own):
+#   - PR label `eval-parser-real` (runs when the label is added and on every push
+#     while it stays on the PR)
+#   - workflow_dispatch (manual, choose the number of runs)
+#   - weekly schedule (Mon 05:00 UTC) — the recurring real signal
+#
+# Exit contract (scripts/eval/run_all.py):
+#   0 PASS — meets FAILURE_THRESHOLDS.md and no regression vs the real baseline
+#   1 FAIL — below the contract (accuracy < 90% or a per-intent precision < 0.85)
+#            or > 2pp regression vs the frozen real baseline
+#   2 ERROR / NOT MEASURED — e.g. the ANTHROPIC_API_KEY secret is missing. The job
+#            fails red: a run that could not measure is never reported as PASS.
+#
+# Cost estimate (Claude Haiku 4.5 list price, $1 / MTok input, $5 / MTok output):
+#   only replies that get past the keyword/regex steps reach the model — 42 of
+#   the 47 parser_intent cases today. Per call: ~200 input tokens (system prompt +
+#   reply) and at most 120 output tokens (max_tokens in parse_inbound), i.e.
+#   <= $0.0008 worst case. One run <= ~$0.035; the default 3-run canary <= ~$0.11.
+#   Weekly schedule: < $0.50 / month. Scales linearly with the dataset.
+#
+# Freezing a real baseline is a separate, deliberate step (not done here):
+#   EVAL_PARSER_BACKEND=real python -m scripts.eval.run_all --layers parser \
+#     --runs 3 --update-baseline
+# It is refused unless the 3 runs produce identical per-case predictions
+# (canary rule, Décision #29) — then committed via PR + CLAUDE.md trace.
+
+on:
+  pull_request:
+    types: [labeled, synchronize]
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Number of runs (>= 3 measures run-to-run variance)"
+        required: false
+        default: "3"
+  schedule:
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  parser-real:
+    name: parser-real
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'eval-parser-real') ||
+      (github.event.action == 'synchronize' &&
+       contains(github.event.pull_request.labels.*.name, 'eval-parser-real'))
+    runs-on: ubuntu-latest
+    env:
+      EVAL_PARSER_BACKEND: real
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      RUNS: ${{ github.event.inputs.runs || '3' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/pyproject.toml"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Run parser eval (real model, production path)
+        id: run
+        run: |
+          set +e
+          uv run --project backend python -m scripts.eval.run_all \
+            --layers parser --runs "$RUNS" --strict \
+            --md-out parser-real.md --json-out parser-real.json
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ ! -s parser-real.md ]; then
+            {
+              echo "# Eval report — parser (real model)"
+              echo
+              echo "🛑 **NOT MEASURED** (exit $code) — the run produced no result."
+              echo "Most likely cause: the \`ANTHROPIC_API_KEY\` repository secret is not set."
+              echo "No parser model-quality number exists for this commit."
+            } > parser-real.md
+          fi
+          cat parser-real.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post sticky PR comment
+        if: always() && github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: eval-parser-real
+          path: parser-real.md
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parser-real-report
+          path: |
+            parser-real.md
+            parser-real.json
+          if-no-files-found: ignore
+
+      - name: Enforce verdict
+        if: always()
+        run: |
+          code="${{ steps.run.outputs.exit_code }}"
+          case "$code" in
+            0) echo "Parser eval (real model): PASS." ;;
+            1) echo "::error::Parser eval (real model): FAIL — below FAILURE_THRESHOLDS.md or regressed vs baseline."; exit 1 ;;
+            *) echo "::error::Parser eval (real model): NOT MEASURED (exit $code) — never reported as PASS."; exit 1 ;;
+          esac

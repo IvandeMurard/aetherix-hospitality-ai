@@ -236,6 +236,42 @@ class TestConfidenceThreshold:
         assert result.requires_confirmation is False
 
 
+# ---------------------------------------------------------------------------
+# ADR-0007 §15 — decision source + recorded outcome (shared with the parser eval)
+# ---------------------------------------------------------------------------
+
+class TestSourceAndRecordedOutcome:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "text,kwargs,source",
+        [
+            ("ok", {}, "ack_regex"),
+            ("covers: 80", {}, "covers_regex"),
+            ("private event tomorrow", {}, "llm"),
+            ("x", {"llm_response": '{"intent":"rejected","confidence":0.9}'}, "llm_unmappable"),
+            ("x", {"llm_response": "not json"}, "llm_error"),
+            ("x", {"llm_raises": True}, "llm_error"),
+        ],
+    )
+    async def test_source_tells_model_decision_from_fallback(self, text, kwargs, source):
+        result = await _service(**kwargs).parse_inbound(text)
+        assert result.source == source
+
+    @pytest.mark.asyncio
+    async def test_acknowledge_records_nothing(self):
+        from app.services.receipts import outcome_for_feedback
+
+        assert outcome_for_feedback(await _service().parse_inbound("ok")) is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("text", ["non merci on garde tel quel", "covers: 80"])
+    async def test_free_text_only_ever_records_modified(self, text):
+        # Known gap (ADR-0007 §15): free text never records accepted/rejected.
+        from app.services.receipts import outcome_for_feedback
+
+        assert outcome_for_feedback(await _service().parse_inbound(text)) == "modified"
+
+
 # ===========================================================================
 # HOS-200 (Story 10.10 / P3-10) — persist_actual_covers
 #

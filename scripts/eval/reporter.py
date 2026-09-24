@@ -74,37 +74,91 @@ def _render_guardrail_md(result: dict, diff: dict) -> str:
 
 
 def _render_parser_md(result: dict, diff: dict) -> str:
+    """Parser report (EVAL-4, ADR-0007 §15).
+
+    The fake backend is labelled as a plumbing check at the top and never shows
+    an "Accuracy" headline: its agreement with the labels is not a quality
+    measure, and a reader skimming the first lines must not take it for one.
+    """
+    from .eval_parser import PREDICTED_LABELS
     from .fake_intent_classifier import INTENTS
 
-    lines = [
-        "# Eval report — parser",
-        "",
-        f"- **Accuracy**: {_pct(result['accuracy'])}  ·  n={result['n']}  ·  backend={result['backend']}",
-        "",
-        "## Per-intent",
-        "",
-        "| Intent | precision | recall | support |",
-        "|---|---|---|---|",
-    ]
-    for intent in INTENTS:
-        m = result["per_intent"][intent]
-        lines.append(
-            f"| {intent} | {_pct(m['precision'])} | {_pct(m['recall'])} | {m['support']} |"
-        )
-    lines += ["", "## Confusion matrix (rows = true, cols = predicted)", "",
-              "| true ↓ / pred → | " + " | ".join(INTENTS) + " |",
-              "|---|" + "---|" * len(INTENTS)]
-    cm = result["confusion_matrix"]
-    for t in INTENTS:
-        lines.append(f"| {t} | " + " | ".join(str(cm[t][p]) for p in INTENTS) + " |")
-
-    lines.append("")
-    if not diff.get("has_baseline"):
-        lines.append("> No baseline yet — this run establishes it.")
-    elif diff.get("regressed"):
-        lines.append(f"> ⚠️ **Accuracy regressed {diff['accuracy_delta_pp']}pp vs baseline.**")
+    real = bool(result.get("quality_signal"))
+    ceiling = result.get("production_path_ceiling") or {}
+    if real:
+        model = result.get("model") or {}
+        canary = result.get("canary") or {}
+        lines = [
+            "# Eval report — parser (production path, real model)",
+            "",
+            f"- **Accuracy**: {_pct(result['accuracy'])}  ·  n={result['n']}  ·  "
+            f"typed errors={result['n_errors']}",
+            f"- **Model**: {model.get('provider')} · fast model `{model.get('fast_model')}` · "
+            f"tiers {model.get('tiers')} · temperature {model.get('temperatures')} · "
+            f"{model.get('llm_calls')} API calls",
+            f"- **Runs**: {canary.get('runs')} · accuracies "
+            f"{[_pct(a) for a in canary.get('accuracies', [])]} · variance "
+            f"{canary.get('variance_pp')}pp · identical predictions: "
+            f"{canary.get('identical_predictions')}",
+        ]
     else:
-        lines.append("> ✅ No accuracy regression > 2pp vs baseline.")
+        lines = [
+            "# Eval report — parser · PLUMBING CHECK (fake backend)",
+            "",
+            "> ⚠️ **Not a model-quality measurement.** The fake backend is a keyword "
+            "heuristic whose rules were written against the `dev` cases. Its agreement "
+            "with the labels says nothing about the production parser or the model. "
+            "**Model quality: not measured on this run** — the real run is opt-in "
+            "(`eval-parser-real` label or workflow_dispatch).",
+            "",
+            f"- **Pipeline**: ran end to end on n={result['n']} cases",
+            f"- Heuristic agreement (plumbing only, not quality): "
+            f"{_pct(result['accuracy'])} overall · "
+            + " · ".join(
+                f"{s} {_pct(v['accuracy'])} (n={v['n']})"
+                for s, v in (result.get("per_split") or {}).items()
+            ),
+        ]
+
+    lines += [
+        f"- **Production-path ceiling** (model-independent, computed on the production "
+        f"code with no API call): max accuracy {_pct(ceiling.get('max_accuracy'))} · "
+        f"{ceiling.get('decided_before_model')}/{ceiling.get('n')} replies decided before "
+        f"the model · max recall "
+        + " · ".join(f"{i} {_pct(r)}" for i, r in (ceiling.get("max_recall") or {}).items()),
+    ]
+
+    if real:
+        lines += ["", "## Per split", "", "| split | accuracy | n |", "|---|---|---|"]
+        for s, v in (result.get("per_split") or {}).items():
+            lines.append(f"| {s} | {_pct(v['accuracy'])} | {v['n']} |")
+        lines += ["", "## Per intent", "", "| Intent | precision | recall | support |",
+                  "|---|---|---|---|"]
+        for intent in INTENTS:
+            m = result["per_intent"][intent]
+            lines.append(
+                f"| {intent} | {_pct(m['precision'])} | {_pct(m['recall'])} | {m['support']} |"
+            )
+        lines += ["", "## Confusion matrix (rows = expected, cols = recorded)", "",
+                  "| expected ↓ / recorded → | " + " | ".join(PREDICTED_LABELS) + " |",
+                  "|---|" + "---|" * len(PREDICTED_LABELS)]
+        cm = result["confusion_matrix"]
+        for t in INTENTS:
+            lines.append(f"| {t} | " + " | ".join(str(cm[t][p]) for p in PREDICTED_LABELS) + " |")
+        lines += ["", f"Decided by: {result.get('decided_by')}"]
+
+        breaches = (result.get("thresholds") or {}).get("breaches") or []
+        lines.append("")
+        if breaches:
+            lines.append("> 🛑 **Below the FAILURE_THRESHOLDS.md contract:** " + "; ".join(breaches))
+        else:
+            lines.append("> ✅ Meets the FAILURE_THRESHOLDS.md contract.")
+        if not diff.get("has_baseline"):
+            lines.append("> No real-model baseline frozen yet — not yet measured.")
+        elif diff.get("regressed"):
+            lines.append(f"> ⚠️ **Accuracy regressed {diff['accuracy_delta_pp']}pp vs baseline.**")
+        else:
+            lines.append(f"> Δ vs real baseline: {diff.get('accuracy_delta_pp')}pp.")
     return "\n".join(lines) + "\n"
 
 
@@ -117,6 +171,7 @@ def _render_forecast_md(result: dict, diff: dict) -> str:
         f"- **Interval coverage** (80%): {_pct(result['interval_coverage_pct'])}",
         f"- **Tolerance pass rate**: {_pct(result['tolerance_pass_rate'])}",
         f"- **Scenarios**: {result['scenario_count']} · seed {result['seed']}",
+        f"- **Data**: {result.get('data_provenance', 'unspecified')}",
         "",
         "## Per-category MAPE",
         "",

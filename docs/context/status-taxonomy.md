@@ -43,6 +43,7 @@
 |---|---|---|
 | **Daily Receipt** (P2-1→P2-7) | **Built** | Déployé staging Fly.io, smoke E2E 5/5. Données sandbox + synthétiques. **0 utilisateur réel.** |
 | **Forecast Prophet** | **Shadow-mode** | Benchmarké sur données réelles publiques (Recruit, 30 restaurants JP tirés d'un dataset de 829, 1 193 points — [`mape-benchmark.md`](mape-benchmark.md)). Aucune décision livrée à un manager sur cette base. Shadow-mode sur données hôtelières réelles = HOS-308, non démarré. |
+| **Inbound feedback parser** (WhatsApp reply → outcome) | **Built** — quality **not measured** | Code runs (P2-4). Parser model quality has never been measured: the only number ever produced (accuracy 1.0 in the old fake baseline) came from a heuristic scored on the cases its rules were written for (ADR-0007 §15, 24/09/2026). Measured without a model: free text can never record `accepted`/`rejected`, ceiling 36.2% on 47 cases. **0 real user.** |
 | **MCP Server v0** | **Built** | Live Fly.io, 3 tools atomiques, multi-tenant, token binding. 0 consommateur externe. |
 | **Mémoire opérationnelle** (pgvector) | **Built** | Instrumentée (ADR-0002/0003). Corpus synthétique — la mémoire n'a jamais mémorisé un vrai service. |
 | **Guardrails runtime** (Epic 12, G-1→G-5) | **Built** | 11 raisons typées, tests + eval layer `guardrail` (HOS-321). Éprouvés en CI, pas en incident réel. |

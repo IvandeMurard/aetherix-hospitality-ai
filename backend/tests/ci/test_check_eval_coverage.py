@@ -139,8 +139,10 @@ def test_touched_but_not_evaluated_warns(monkeypatch):
 
 
 def test_layer_without_runner_warns(monkeypatch):
-    # receipts.py -> 'receipt' layer, which has no runner yet -> WARN, no engine call.
-    _set_changed(monkeypatch, ["backend/app/services/receipts.py"])
+    # reasoning_service.py -> 'recommendation' layer, which has no runner yet ->
+    # WARN, no engine call. (receipts.py used to be the example; it now also maps
+    # to 'parser' — ADR-0007 §15.)
+    _set_changed(monkeypatch, ["backend/app/services/reasoning_service.py"])
     called = {"n": 0}
 
     def _boom(*a, **k):
@@ -185,3 +187,26 @@ def test_cache_hit_skips_engine(monkeypatch):
 
     monkeypatch.setattr(gate, "invoke_run_all", _boom)
     assert gate.main() == gate.PASS
+
+
+def test_inbound_parser_production_path_triggers_parser_layer():
+    # ADR-0007 §15: parse_inbound lives in receipts.py, the exact accept/reject
+    # keywords in action_logger.py, the outcome mapping in the Twilio route.
+    for path in (
+        "backend/app/services/receipts.py",
+        "backend/app/services/action_logger.py",
+        "backend/app/api/routes/twilio_inbound.py",
+    ):
+        _, layers = gate.detect([path])
+        assert "parser" in layers, path
+    _, layers = gate.detect(["backend/app/services/receipts.py"])
+    assert layers == {"receipt", "parser"}
+
+
+def test_fake_parser_summary_never_reads_as_quality():
+    result = {"layer": "parser", "accuracy": 1.0, "n": 47, "quality_signal": False,
+              "production_path_ceiling": {"max_accuracy": 0.3617}}
+    line = gate._layer_summary("parser", result, {"plumbing_only": True}, 0, 0)
+    assert "accuracy" not in line.lower()
+    assert "Model quality not measured" in line
+    assert "36.2%" in line

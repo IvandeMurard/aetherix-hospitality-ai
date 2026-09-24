@@ -47,7 +47,7 @@ from app.schemas.webhook import ActionType, TwilioInboundPayload
 from app.services.action_logger import ActionLoggerService, parse_action
 from app.services.explainability_service import ExplainabilityService
 from app.services.query_parser import QueryParserService
-from app.services.receipts import ReceiptsService
+from app.services.receipts import ReceiptsService, outcome_for_feedback
 
 logger = logging.getLogger(__name__)
 
@@ -331,8 +331,10 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
         # Step 3: classify intent
         service = ReceiptsService(db)
         feedback = await service.parse_inbound(body)
+        # Shared with the parser eval (EVAL-4) so the eval grades what is written.
+        outcome = outcome_for_feedback(feedback)
 
-        if feedback.intent == "acknowledge":
+        if outcome is None:  # acknowledge — nothing recorded
             logger.info(
                 "_bg_receipt_feedback: acknowledge hotel_id=%s — no DB write", hotel_id
             )
@@ -385,7 +387,7 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
                 result = await tool_submit_feedback_to_memory(
                     hotel_id=hotel_id,
                     recommendation_id=recommendation_id,
-                    outcome=feedback.outcome,
+                    outcome=outcome,
                     db=db,
                     actual_value=memory_actual,
                     notes=notes_text,

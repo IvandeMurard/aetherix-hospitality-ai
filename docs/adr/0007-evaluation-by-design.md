@@ -548,17 +548,31 @@ Refactor de `scripts/ops/measure_mape_j1.py` :
 
 ### 5.c `eval_parser.py`
 
+> **Amended 24/09/2026 — see §15.** The original spec below said the real backend
+> "calls real Haiku" and that CI uses a deterministic `FakeIntentClassifier`. As
+> implemented until 24/09, the real backend fell back to the fake heuristic whenever
+> the model answered `free_form`, no workflow ever ran it, and the only number ever
+> produced (`parser_baseline.json`, accuracy 1.0, n=16) came from the fake backend
+> scored on the cases its rules were written for. **No parser model-quality number
+> has ever been measured.** Current behaviour and the remaining gap: §15.
+
 ```python
-"""Haiku parser eval — EVAL-4
-- Loads parser_intent scenarios
-- Calls real Haiku in non-CI mode (env: EVAL_PARSER_BACKEND=real)
-- Calls FakeIntentClassifier in CI (EVAL_PARSER_BACKEND=fake, deterministic outputs)
-- Computes confusion matrix (3x3: accepted/rejected/modified)
-- Outputs: accuracy global, precision per intent, recall per intent, confusion matrix
+"""Parser eval — EVAL-4 (as amended by §15)
+- Loads parser_intent scenarios (split: dev | heldout)
+- EVAL_PARSER_BACKEND=real (opt-in workflow eval-parser-real.yml): grades the
+  production path parse_action → parse_inbound → outcome_for_feedback, model
+  included, primary provider only, no heuristic fallback; model errors and
+  out-of-taxonomy answers are typed errors (count as misses). No API key → exit 2.
+- EVAL_PARSER_BACKEND=fake (PR gate): plumbing check only, quality_signal=false,
+  never compared to a baseline, never frozen as one
+- Always: production-path ceiling (best accuracy reachable whatever the model says)
+- Outputs: accuracy, per-intent precision/recall, confusion matrix
+  (rows accepted/rejected/modified, cols + not_recorded/error), per-split accuracy
 """
 ```
 
-> **Décision implicite** : un `FakeIntentClassifier` (analogue à `FakeEmbeddingProvider` D11 ADR-0002) est requis. Stocké dans `backend/tests/providers/fake_intent_classifier.py`. Returns deterministic labels via hash. EVAL-4 Story DoD.
+> ~~**Décision implicite** : un `FakeIntentClassifier` (analogue à `FakeEmbeddingProvider` D11 ADR-0002) est requis. Stocké dans `backend/tests/providers/fake_intent_classifier.py`. Returns deterministic labels via hash. EVAL-4 Story DoD.~~
+> Superseded 24/09/2026 (§15): the fake lives in `scripts/eval/fake_intent_classifier.py`, is keyword rules (not a hash) written against the `dev` cases, and is a plumbing check only. Unlike `FakeEmbeddingProvider`, which replaces an input to the system under test, this fake replaced the system under test itself, so it cannot measure it.
 
 ### 5.d `eval_drift.py`
 
@@ -754,7 +768,7 @@ CREATE UNIQUE INDEX abstention_daily_unique_idx
 | R1 | **Golden dataset curation bottleneck** : 71 scenarios à annoter par PM seul. | Bloque EVAL-1 → EVAL-5 (cascading 2 sprints). | Phase 3 : commencer par 40 scenarios (couvrir 6/11 catégories min PASS) → permet ship EVAL-1/2/4 ; compléter à 71 en sprint N+2 en parallèle EVAL-3/5. |
 | R2 | **CI time budget** : suite eval full > 5 min sur GitHub Actions. | Slow PR feedback, dev rejet. | Cache cleverly (D2.e), subset filtré par layer (D2.b), split en jobs parallel si > 3 min. Mesurer après EVAL-1 ship. |
 | R3 | **Baseline drift sans détection** : équipe oublie de mettre à jour eval/baselines lors de model upgrade volontaire. | Eval gate devient faux positif chronique → ignored. | Tooling: `scripts/eval/bump_baseline.py` avec check obligatoire `--reason` + commit message tag `[BASELINE_BUMP]` + entrée CLAUDE.md auto. |
-| R4 | **LLM non-determinism** : Haiku parser eval peut fluctuer même avec temperature 0. | Faux positifs CI, dev frustration. | `FakeIntentClassifier` en CI (déterministe), `--backend=real` réservé aux runs nightly schedulés (signal qualité reelle, pas gate PR). |
+| R4 | **LLM non-determinism** : Haiku parser eval peut fluctuer même avec temperature 0. | Faux positifs CI, dev frustration. | `FakeIntentClassifier` en CI (déterministe), `--backend=real` réservé aux runs nightly schedulés (signal qualité reelle, pas gate PR). **Amended 24/09/2026 (§15):** the nightly run never existed; the real run is now the opt-in workflow `eval-parser-real.yml` (label / dispatch / weekly), and the fake in CI is a plumbing check, not a quality signal. |
 | R5 | **Drift snapshot baseline obsolescence** : snapshot training set figé devient irrelevant après 6 mois (saisonnalité). | Auto-disable cold-start meta-learner perpétuellement → forecast dégradé. | Revue trimestrielle PM des baselines drift. PR `BASELINE_RESET` documentée. |
 | R6 | **Mauvaise interaction ADR-0005 et EVAL-3** : 2 mécanismes auto-disable concurrent (Day-7 MAPE > 25% ET drift FAIL). | Cold-start désactivé sans cause claire. | EVAL-3 emit `auto_disable_reason` distinct → log dans `agent_action_log` permet diagnostic. ADR-0005 wrap reason. |
 | R7 | **`eval-exempt` label abusé** : devient flag pour bypass eval sur changes risqués. | Régressions silencieuses, gate inefficace. | SM review obligatoire de toute PR `eval-exempt` (cas humain). Audit trimestriel : compter PR `eval-exempt` mergées par catégorie. |
@@ -997,3 +1011,132 @@ Recalibrer si l'un de ces événements survient (le calendrier fixe seul — Air
 **Limite assumée :** un juge qui applique une rubrique fixe n'est pas une revue adversariale complète — il vérifie, il ne *cherche* pas activement les défaillances. Une passe de type red-team (générer des cas conçus pour faire échouer le générateur) est un chantier distinct, non couvert ici.
 
 **Trigger de recalibration ajouté :** tout changement de la famille d'un générateur (primaire ou fallback) qui la ferait coïncider avec celle du juge.
+
+---
+
+## 15. Addendum — 2026-09-24 · The parser eval did not measure the model (EVAL-4 correction)
+
+> Trace: CLAUDE.md Décision #37. Supersedes the parser parts of §5.c and R4.
+
+### 15.1 What was wrong
+
+An audit of EVAL-4 (HOS-208) found that the inbound-parser layer never measured
+the model or the production path. Each point below was checked against the code on
+24/09/2026.
+
+1. **Circular number.** `eval/baselines/parser_baseline.json` reported accuracy 1.0
+   on n=16 with `"backend": "fake"`. `FakeIntentClassifier`'s rules were written
+   to "resolve the curated golden scenarios correctly (so the pipeline runs green
+   in CI)", and some are visibly fitted to single cases (`🙄` as a rejection
+   marker). The file was also stale: the dataset held 17 parser cases.
+2. **The real signal did not exist.** The fake's docstring pointed to a "nightly
+   `EVAL_PARSER_BACKEND=real` run". None of the four workflows ran it.
+3. **Even `real` wasn't real.** When `parse_inbound` returned `free_form`, the
+   runner fell back to the fake heuristic, so "rejected" (and part of "accepted")
+   was always decided by the heuristic. Any unknown label was silently coerced to
+   `accepted`.
+4. **The gate watched the wrong file.** `receipts.py` (where `parse_inbound`
+   lives) mapped only to the `receipt` layer, so changing the classifier prompt
+   never re-ran the parser eval. The documented contract (accuracy ≥ 90%,
+   per-intent precision ≥ 0.85) was asserted only by a unit test on the fake.
+5. **Taxonomy mismatch.** `parse_inbound` emits `structured_correction |
+   acknowledge | free_form`. The feedback loop records `accepted | rejected |
+   modified | ignored`. Nothing mapped one onto the other in production.
+
+### 15.2 Product defect found on the way (not an eval problem)
+
+Tracing the production path (`api/routes/twilio_inbound.py`):
+
+- `accepted` / `rejected` are recorded **only** for the exact keywords `accept` /
+  `reject` (`action_logger.parse_action`, whole-body match, case-insensitive).
+- Any other reply goes to `parse_inbound`. `acknowledge` records **nothing**
+  (`outcome_for_feedback` → `None`). Every other intent records `modified`
+  (`parse_inbound` hard-codes `outcome="modified"`, including when the model
+  fails).
+- So **no free-text reply can record `rejected` or `accepted`**: "non merci on
+  garde tel quel" is stored as `modified`, and "ok merci" leaves the
+  recommendation `dispatched`. The model only decides between `modified` and
+  "nothing recorded".
+
+Measured on the 47 labelled parser cases by running the production code with a
+stub model (no API call, deterministic): **the production path cannot exceed
+36.2% accuracy whatever the model answers.** Max recall is 0% for `accepted` and
+`rejected` and 100% for `modified`. 42 of 47 replies reach the model; 5 are
+decided before it. This is a property of the code, not a model measurement. It also
+means `recommendation_acceptance_rate` (KPI level 3) cannot count a free-text
+acceptance or refusal today.
+
+This is reported as a product defect and is **not** papered over in the eval:
+the eval grades what production records, so it will stay below contract until
+the product changes. Proposed fix (open decision, `docs/context/open-decisions.md`
+§"Inbound reply → recorded outcome"): extend the classifier's output schema with
+an explicit decision field (`accepted | rejected | modified | none`), validated by
+schema (Décision #35 D2), mapped by `outcome_for_feedback`. Keep HITL (Décision
+#6): a low-confidence `rejected`/`accepted` asks the manager to confirm instead of
+being written silently.
+
+### 15.3 What changed (24/09/2026)
+
+- **One definition of "recorded outcome".** `receipts.outcome_for_feedback` is
+  called by the route and by the eval. `FeedbackIntent.source` records which step
+  decided (`ack_regex`, `covers_regex`, `llm`, `llm_unmappable`, `llm_error`), so a
+  fallback is never mistaken for a model answer, in logs or in the eval.
+- **Real backend = production path, model included.** `parse_action` →
+  `parse_inbound` → `outcome_for_feedback`, the route's order. The model is the
+  primary provider only: a silent Gemini failover would change the model under
+  test. Measuring the fallback is Décision #35 D3, still Design. A model error or an
+  out-of-taxonomy answer is a typed `error` prediction and counts as a miss.
+  Predictions can be `not_recorded`. No `ANTHROPIC_API_KEY` → `ParserEvalNotMeasured`
+  → exit 2 (ERROR), never PASS.
+- **Opt-in real workflow** `.github/workflows/eval-parser-real.yml`: label
+  `eval-parser-real`, `workflow_dispatch`, weekly schedule. Cost ≤ ~$0.035 per run,
+  ≤ ~$0.11 for the 3-run canary, at Haiku 4.5 list price (estimate in the workflow
+  header). It fails red when the secret is missing ("NOT MEASURED") and when the
+  result is below the FAILURE_THRESHOLDS.md contract.
+- **Fake backend = plumbing check, labelled everywhere.** The result carries
+  `quality_signal: false`, `measures: pipeline_plumbing_only`. It is never compared
+  to a baseline and cannot be frozen as one (`run_all --update-baseline` refuses).
+  The reporter and the sticky PR comment show no "Accuracy" headline for it: they
+  say "plumbing check — model quality not measured". `parser_baseline.json` (fake)
+  is **deleted**. That path is now reserved for a real-model baseline.
+- **Held-out adversarial set.** 30 cases (`"split": "heldout"`, 10 per intent,
+  FR/EN): sarcasm, mixed intent ("ok mais plutôt 40"), polite refusals, emojis,
+  typos, numbers that are not corrections, negation words in acceptances. Each
+  has its `failure_trigger`. They were written after the fake was frozen, and
+  it is not tuned to them. The fake agrees with the labels on 100% of the 17
+  `dev` cases and 50% of the 30 `heldout` cases. That gap makes the
+  circularity visible; it is not a quality figure.
+- **Baseline protocol (canary, Décision #29 applied to the LLM).** A real baseline
+  is frozen only from `--runs 3` with identical per-case predictions at the
+  production temperature (0.0, recorded by the run), variance stated. Otherwise
+  refused, exit 2.
+- **Gate trigger paths.** `receipts.py` → `receipt` + `parser`; `action_logger.py`
+  and `api/routes/twilio_inbound.py` → `parser`.
+
+### 15.4 What is measured now — and what is not
+
+| Signal | Status on 24/09/2026 |
+|---|---|
+| Eval pipeline runs end to end (fake) | Measured on every triggering PR — plumbing only |
+| Production-path ceiling | **Measured: 36.2%** (n=47, deterministic, no model) |
+| Parser model quality (production path, real model) | **Not yet measured.** No API key was available to the session that made this change, and the workflow has not run yet. No real-model number exists anywhere in the repo. |
+| Real-model baseline | **Absent** until a 3-run canary passes |
+| Fallback-model (Gemini) quality | Not measured (Décision #35 D3, Design) |
+| Pilot gate "EVAL-4 = pilot-blocking" (§8) | Was satisfied by a non-measurement. To be re-read with the PM once a real run exists. |
+
+### 15.5 Other layers checked for the same class of problem
+
+- **Forecast** — real Prophet, but trained and graded on the synthetic series
+  (`generate_demo_data.py`, same regressors: the Décision #33 circularity). Fine as
+  a non-regression signal. The result and baseline now carry `data_provenance:
+  synthetic`, and the report prints it. Numbers unchanged, not re-frozen.
+- **Guardrail** — accuracy 1.0 on 27 is a contract test of deterministic
+  predicates (does the typed reason fire). It is not model quality and is not
+  presented as such. No change.
+- **Latency** — `latency_baseline.json` holds SLO **targets** copied from
+  `docs/ops/latency-slo.md`, not measurements. Now labelled
+  `kind: slo_targets_not_measurements`. No measured latency baseline exists.
+- **Embeddings** — `FakeEmbeddingProvider` replaces an input to the system under
+  test, not the system itself, and no layer runner in `scripts/eval/` uses it.
+  Scripts outside the eval harness (`scripts/ops/benchmark_*`) were not audited
+  here.

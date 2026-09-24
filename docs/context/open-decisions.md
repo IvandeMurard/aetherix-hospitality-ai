@@ -253,6 +253,18 @@ Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni co
 
 **Voisins :** [HOS-326](https://linear.app/hospitalityagent/issue/HOS-326) (trace d'émission) · §Rattachement Bras C ci-dessus · §Politique d'exploration éthique · §Méthode off-policy evaluation · Décision #6 · Décision #32 · Décision #33.
 
+### Inbound reply → recorded outcome: free text cannot record accepted/rejected (24/09/2026)
+
+**Status:** Open — product defect found by the EVAL-4 correction (ADR-0007 §15.2, Décision #37).
+
+**Fact.** In `api/routes/twilio_inbound.py`, only the exact bodies `accept` / `reject` record `accepted` / `rejected`. Every other reply goes through `parse_inbound`: `acknowledge` records nothing, every other intent records `modified`, including when the model fails. "non merci on garde tel quel" is stored as `modified`; "ok merci" leaves the recommendation `dispatched`. Measured without a model on the 47 labelled cases: the path cannot exceed **36.2%** accuracy, with 0% max recall on `accepted` and `rejected`. `recommendation_acceptance_rate` therefore cannot count a free-text acceptance or refusal.
+
+**Proposed fix.** Add an explicit decision field to the classifier's output schema (`accepted | rejected | modified | none`), validated by schema (Décision #35 D2), mapped in `receipts.outcome_for_feedback` (the single definition shared with the eval). A `rejected`/`accepted` below the confidence threshold asks the manager to confirm instead of being written (Décision #6, HITL). Whether `acknowledge` of a Receipt (vs of a staffing recommendation) should count as `accepted` needs a product call: the reply's target is ambiguous today.
+
+**To decide:** (a) accept the schema change; (b) semantics of a bare acknowledgement; (c) whether to keep the exact-keyword path as a fast path.
+
+**Gate for closing:** the opt-in real parser eval (`eval-parser-real.yml`) passes the FAILURE_THRESHOLDS.md contract on dev + heldout.
+
 ---
 
 ## Resolved (archive)

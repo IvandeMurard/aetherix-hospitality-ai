@@ -55,6 +55,12 @@ class FallbackLLMProvider:
         self._primary = primary
         self._fallback = fallback
 
+    @property
+    def primary(self) -> LLMProvider:
+        """The primary provider, for callers that must not fail over (e.g. an
+        eval that has to know which model produced an answer)."""
+        return self._primary
+
     async def complete(
         self,
         messages: list[dict],
