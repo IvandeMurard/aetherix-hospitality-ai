@@ -63,6 +63,7 @@ from app.workers.receipts_dispatcher import (
     register_receipt_dispatch_job,
     register_weekly_digest_job,
 )
+from app.workers.recap_dispatcher import register_weekly_recap_job
 from app.workers.weather_sync import start_weather_scheduler
 
 logger = logging.getLogger(__name__)
@@ -157,6 +158,8 @@ async def lifespan(app: FastAPI):
     register_receipt_dispatch_job(_scheduler)
     # P2-5 — weekly KPI digest every Sunday at RECEIPT_DISPATCH_HOUR.
     register_weekly_digest_job(_scheduler)
+    # ADR-0007 §17.3 — opt-in weekly decision recap (Monday), 24 h rule respected.
+    register_weekly_recap_job(_scheduler)
     # HOS-248 (Epic 12 G-1) — dead-man's switch over scheduled dispatchers.
     register_heartbeat_monitor_job(_scheduler)
     # HOS-249 (Epic 12 G-2) — rolling-window error-rate / LLM-timeout alerting.

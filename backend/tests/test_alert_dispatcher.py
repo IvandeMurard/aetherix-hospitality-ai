@@ -416,6 +416,9 @@ def notifications_client():
         yield db
 
     app.dependency_overrides[get_db] = _mock_db
+    from app.core.security import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: {"id": "ops", "is_superuser": True}
 
     with patch(
         "app.services.alert_dispatcher.AlertDispatcherService.run_pending",

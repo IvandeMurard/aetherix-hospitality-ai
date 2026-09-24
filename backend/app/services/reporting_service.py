@@ -1,107 +1,134 @@
-import logging
-from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Dict, List
+"""Weekly report — the deterministic recap template for one week (ADR-0007 §17.1).
 
-import pandas as pd  # For easy data manipulation
+Until 24/09/2026 this was the "Friday Audit": when no ground-truth rows
+existed it fell back to hard-coded demo covers, then printed "Accuracy",
+"MAPE", "Estimated Savings: £…", "Value Delivered: Nx monthly cost" (from a
+"$50 mock SaaS cost") and "Aetherix is optimizing your labor costs
+effectively", with nothing saying the numbers were invented.
+
+Now:
+  * no mock anywhere on this path — no data → "no measured data yet", no metric;
+  * the content is ``decision_recap`` for the week: one definition shared with
+    the WhatsApp ``recap`` command, the MCP ``get_decision_recap`` tool and the
+    acceptance KPI;
+  * no savings, no ROI: nothing measured feeds them (no measured labour hours,
+    no measured revenue). They come back only with measured inputs and the
+    formula and assumptions printed next to the figure;
+  * no marketing prose.
+
+The internal ops side effect (Obsidian note, Linear alert on a degraded forecast)
+is kept, fed by measured numbers only.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import date, timedelta
+from typing import Any, Dict, Optional
+
+from app.services.decision_recap import build_recap, render_text
 
 logger = logging.getLogger(__name__)
 
 MAPE_ALERT_THRESHOLD = 30.0  # % — above this triggers a Linear issue
+# Below this many measured recommendations a weekly mean is not alerted on.
+MAPE_ALERT_MIN_OBSERVATIONS = 3
+
+NO_DATA_STATUS = "no_measured_data"
+FINANCIAL_OMITTED = (
+    "Not computed: no measured labour-cost or revenue input exists for this "
+    "tenant. A savings figure is reported only from measured inputs, with its "
+    "formula and assumptions stated."
+)
+
+
+def no_data_text(locale: Optional[str] = "fr") -> str:
+    if (locale or "").lower().startswith("en"):
+        return "Weekly report: no measured data yet for this period."
+    return "Rapport hebdomadaire : pas encore de donnée mesurée sur la période."
+
 
 class ReportingService:
-    """
-    Performance Reporting Layer (Phase 3).
-    Calculates MAPE and Financial ROI for the "Friday Audit".
-    """
-
     def __init__(self, db_service=None):
-        # AsyncSession when wired from the route (real pilot data); None in
-        # contexts without a DB, where we fall back to the demo mock.
         self.db = db_service
 
-    async def generate_weekly_metrics(self, tenant_id: str, week_start: date) -> Dict[str, Any]:
-        """
-        Calculates MAPE and labor savings for a given tenant's week.
-        """
-        # 1. Fetch real prediction-vs-actual rows (Story 10.10 / HOS-200).
-        #    Falls back to the demo mock only when no ground-truth rows exist
-        #    yet (gated on actual_covers IS NULL — AC4).
-        data = await self._get_weekly_data(tenant_id, week_start)
-        if not data:
-            data = self._get_mock_weekly_data(tenant_id, week_start)
+    async def generate_weekly_metrics(
+        self, tenant_id: str, week_start: date, locale: Optional[str] = "fr"
+    ) -> Dict[str, Any]:
+        """Weekly recap for ``tenant_id`` (Monday ``week_start`` → Sunday).
 
-        df = pd.DataFrame(data)
-        
-        # 2. Calculate MAPE (Mean Absolute Percentage Error)
-        if not df.empty:
-            df['abs_error'] = abs(df['actual_covers'] - df['predicted_covers'])
-            df['percentage_error'] = df['abs_error'] / df['actual_covers']
-            mape = df['percentage_error'].mean() * 100
+        ``status`` is ``no_measured_data`` when the week holds no
+        recommendation, ``ok`` otherwise. ``financial_impact`` is always
+        ``None`` today (see ``FINANCIAL_OMITTED``).
+        """
+        week_end = week_start + timedelta(days=6)
+        if self.db is None:
+            summary = None
         else:
-            mape = 0.0
+            summary = await build_recap(self.db, tenant_id, "week", start=week_start, end=week_end)
 
-        # 3. Calculate Estimated Labor Savings
-        # Logic: savings = (Idle hours saved) + (Lost revenue captured)
-        # simplified for pilot: £15/cover for captured revenue, £12/hr for labor reduction
-        labor_savings = self._calculate_savings(df)
-
-        result = {
+        no_data = summary is None or summary.received == 0
+        result: Dict[str, Any] = {
             "tenant_id": tenant_id,
-            "period": f"{week_start} to {week_start + timedelta(days=6)}",
-            "metrics": {
-                "mape": round(mape, 2),
-                "accuracy": round(100 - mape, 2),
-                "total_covers": int(df['actual_covers'].sum())
-            },
-            "financial_impact": {
-                "estimated_savings_gbp": round(labor_savings, 2),
-                "roi_multiplier": round(labor_savings / 50.0, 1) # $50 is a mock SaaS cost
-            }
+            "period": f"{week_start} to {week_end}",
+            "status": NO_DATA_STATUS if no_data else "ok",
+            "recap": summary.as_dict() if summary else None,
+            "summary_text": no_data_text(locale) if no_data else render_text(summary, locale),
+            "financial_impact": None,
+            "financial_impact_note": FINANCIAL_OMITTED,
         }
-
-        await self._dispatch_ops(result, mape)
+        if not no_data:
+            await self._dispatch_ops(result)
         return result
 
-    async def _dispatch_ops(self, result: Dict[str, Any], mape: float) -> None:
-        """Fire-and-forget: write audit to Obsidian; alert Linear if accuracy drops.
+    async def _dispatch_ops(self, result: Dict[str, Any]) -> None:
+        """Fire-and-forget internal ops note (Obsidian) + Linear alert when the
+        measured weekly forecast error is degraded.
 
-        HOS-248 (AC5): this is the path that 500'd `/reports/weekly` in HOS-211
-        (VAULT_FOLDERS ImportError). It is now genuinely fire-and-forget — any
-        failure here is swallowed (never breaks the caller) AND trips a typed ops
-        alert via the heartbeat instrumentation instead of failing silently.
+        HOS-248 (AC5): any failure here is swallowed and trips a typed ops
+        alert instead of breaking the caller. Only measured numbers are written.
         """
         try:
             from app.integrations.obsidian import VAULT_FOLDERS
             from app.services.ops_dispatcher import dispatch_anomaly, dispatch_report
 
-            m = result["metrics"]
-            f = result["financial_impact"]
+            r = result["recap"]
             period = result["period"]
             tenant = result["tenant_id"]
-
+            err = r["forecast_error_pct"]
+            err_cell = (
+                f"{err}% over {r['forecast_error_days']} day(s), "
+                f"{r['forecast_error_observations']} recommendation(s)"
+                if err is not None else "not measured (no actual covers)"
+            )
+            human = r["human"]
             note_content = (
-                f"# Weekly Audit — {tenant}\n\n"
+                f"# Weekly recap — {tenant}\n\n"
                 f"**Period:** {period}\n\n"
                 f"| Metric | Value |\n|---|---|\n"
-                f"| Accuracy | {m['accuracy']}% |\n"
-                f"| MAPE | {m['mape']}% |\n"
-                f"| Total covers | {m['total_covers']} |\n"
-                f"| Estimated savings | £{f['estimated_savings_gbp']} |\n"
-                f"| ROI | {f['roi_multiplier']}x |\n"
+                f"| Recommendations received | {r['received']} |\n"
+                f"| Accepted / rejected / corrected | {r['accepted']} / {r['rejected']} / {r['corrected']} |\n"
+                f"| No reply / awaiting confirmation | {r['no_reply']} / {r['awaiting_confirmation']} |\n"
+                f"| Human acceptance rate | {human['acceptance_rate']} (n={human['decided']}) |\n"
+                f"| Mean forecast error | {err_cell} |\n"
             )
             await dispatch_report(
-                title=f"Weekly Audit {period}",
+                title=f"Weekly recap {period}",
                 content=note_content,
                 folder=VAULT_FOLDERS["reports"],
-                tags=["weekly-audit", tenant],
+                tags=["weekly-recap", tenant],
             )
 
-            if mape > MAPE_ALERT_THRESHOLD:
+            if (
+                err is not None
+                and err > MAPE_ALERT_THRESHOLD
+                and r["forecast_error_observations"] >= MAPE_ALERT_MIN_OBSERVATIONS
+            ):
                 await dispatch_anomaly(
-                    title=f"[{tenant}] Forecast accuracy degraded — MAPE {m['mape']}%",
+                    title=f"[{tenant}] Forecast error degraded — {err}%",
                     detail=(
-                        f"Weekly MAPE exceeded {MAPE_ALERT_THRESHOLD}% threshold for period {period}.\n"
-                        f"Accuracy: {m['accuracy']}% | Covers: {m['total_covers']}\n\n"
+                        f"Weekly mean forecast error above {MAPE_ALERT_THRESHOLD}% for {period} "
+                        f"({r['forecast_error_observations']} measured recommendation(s), "
+                        f"{r['forecast_error_days']} day(s)).\n\n"
                         "Possible causes: missing PMS data, model drift, or unusual demand spike."
                     ),
                     tags=["model", "accuracy"],
@@ -114,107 +141,7 @@ class ReportingService:
                 await record_trip(
                     "reporting_service",
                     REASON_JOB_ERROR,
-                    f"_dispatch_ops failed during weekly audit. Error: {exc!r}",
+                    f"_dispatch_ops failed during weekly report. Error: {exc!r}",
                 )
             except Exception as inner:  # noqa: BLE001
                 logger.warning("reporting_service: trip alert failed: %s", inner)
-
-    def _calculate_savings(self, df: pd.DataFrame) -> float:
-        """Heuristic for labor savings based on prediction accuracy."""
-        if df.empty:
-            return 0.0
-        
-        # Captured Revenue (Surges predicted correctly)
-        # Assume correct surge predictions (actual > baseline + 10%) saved 10% of that revenue
-        surge_savings = df[df['actual_covers'] > 150]['actual_covers'].sum() * 0.10 * 15.0 # £15 per cover
-        
-        # Idle Labor Reduction (Quiet days predicted correctly)
-        # Assume correct quiet predictions saved 2 server shifts (£60 each)
-        quiet_savings = df[df['actual_covers'] < 100].shape[0] * 120.0 # £120 per quiet day
-        
-        return surge_savings + quiet_savings
-
-    async def _get_weekly_data(self, tenant_id: str, week_start: date) -> List[Dict]:
-        """Fetch real prediction-vs-actual rows for the week (Story 10.10 / HOS-200).
-
-        Reads `staffing_recommendations` where `actual_covers IS NOT NULL`
-        (ground truth persisted from manager feedback) AND `predicted_covers
-        IS NOT NULL`, for the 7-day window starting at `week_start`. Returns one
-        dict per recommendation: ``{date, actual_covers, predicted_covers}``.
-
-        Returns an empty list when no DB session is wired or no ground-truth rows
-        exist yet — the caller then gates onto the demo mock (AC4).
-        """
-        if self.db is None:
-            return []
-
-        # Local imports keep the module importable without the ORM/DB stack
-        # (e.g. pure mock-data unit tests).
-        from sqlalchemy import select
-
-        from app.db.models import StaffingRecommendation
-
-        week_end = week_start + timedelta(days=7)
-        window_start = datetime.combine(week_start, time.min, tzinfo=timezone.utc)
-        window_end = datetime.combine(week_end, time.min, tzinfo=timezone.utc)
-
-        result = await self.db.execute(
-            select(StaffingRecommendation)
-            .where(StaffingRecommendation.tenant_id == tenant_id)
-            .where(StaffingRecommendation.actual_covers.isnot(None))
-            .where(StaffingRecommendation.predicted_covers.isnot(None))
-            .where(StaffingRecommendation.window_start >= window_start)
-            .where(StaffingRecommendation.window_start < window_end)
-            .order_by(StaffingRecommendation.window_start)
-        )
-        rows = result.scalars().all()
-
-        data: List[Dict] = []
-        for r in rows:
-            ws = r.window_start
-            data.append(
-                {
-                    "date": ws.date() if hasattr(ws, "date") else ws,
-                    "actual_covers": float(r.actual_covers),
-                    "predicted_covers": float(r.predicted_covers),
-                }
-            )
-
-        logger.info(
-            "reporting_service._get_weekly_data: tenant=%s week_start=%s real_rows=%d",
-            tenant_id,
-            week_start,
-            len(data),
-        )
-        return data
-
-    def _get_mock_weekly_data(self, tenant_id: str, week_start: date) -> List[Dict]:
-        """Simulates DB result for the pilot audit (with surge/quiet days)."""
-        return [
-            {"date": week_start, "actual_covers": 85, "predicted_covers": 90}, # Quiet day
-            {"date": week_start + timedelta(days=1), "actual_covers": 120, "predicted_covers": 115},
-            {"date": week_start + timedelta(days=2), "actual_covers": 175, "predicted_covers": 170}, # Surge day
-            {"date": week_start + timedelta(days=3), "actual_covers": 130, "predicted_covers": 135},
-            {"date": week_start + timedelta(days=4), "actual_covers": 140, "predicted_covers": 140},
-            {"date": week_start + timedelta(days=5), "actual_covers": 145, "predicted_covers": 145},
-            {"date": week_start + timedelta(days=6), "actual_covers": 150, "predicted_covers": 150},
-        ]
-
-    async def format_audit_email(self, metrics: Dict[str, Any]) -> str:
-        """Generates a markdown/html summary for the Friday Audit email."""
-        m = metrics['metrics']
-        f = metrics['financial_impact']
-        
-        return (
-            f"📅 *Aetherix Weekly Audit: {metrics['tenant_id']}*\n"
-            f"Period: {metrics['period']}\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"📈 *Forecasting Performance:*\n"
-            f"• Accuracy: {m['accuracy']}%\n"
-            f"• MAPE: {m['mape']}%\n"
-            f"• Covers Processed: {m['total_covers']}\n\n"
-            f"💰 *Operational ROI:*\n"
-            f"• Estimated Savings: £{f['estimated_savings_gbp']}\n"
-            f"• Value Delivered: {f['roi_multiplier']}x monthly cost\n\n"
-            f"Aetherix is optimizing your labor costs effectively."
-        )

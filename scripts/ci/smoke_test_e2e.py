@@ -251,15 +251,23 @@ def step4_memory(client: httpx.Client, base_url: str, token: str, hotel_id: str)
             {"target_date": tomorrow, "service_type": "dinner"},
         )
         rec_id = pred.get("recommendation_id") or pred.get("id")
-        if not rec_id:
-            # Synthesize a UUID — submit_feedback will reject if unknown, that
-            # is a meaningful failure signal we want to surface.
+        synthesized = not rec_id
+        if synthesized:
+            # Predictions do not create a staffing recommendation: a synthesized
+            # id must be refused as unknown for this property (tenant check,
+            # ADR-0007 §17.4) — that refusal is the expected outcome.
             rec_id = str(uuid.uuid4())
 
-        _mcp_call(
-            client, base_url, token, "submit_feedback_to_memory",
-            {"recommendation_id": rec_id, "outcome": "accepted", "notes": "smoke test"},
-        )
+        feedback_args = {
+            "recommendation_id": rec_id, "outcome": "accepted", "notes": "smoke test",
+            # ADR-0007 §17.4: who decided + a structured reason are mandatory.
+            "decided_by": "human_via_host", "reason_code": "none_given", "reason_source": "human",
+        }
+        try:
+            _mcp_call(client, base_url, token, "submit_feedback_to_memory", feedback_args)
+        except RuntimeError as exc:
+            if not (synthesized and "unknown_recommendation" in str(exc)):
+                raise
 
         recall = _mcp_call(
             client, base_url, token, "get_recommendations_with_memory_context",

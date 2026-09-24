@@ -1,8 +1,16 @@
 """Trust-KPI read endpoint — HOS-177 (P3-3).
 
 GET /api/v1/kpi/{hotel_id}/recommendation_acceptance?days=7
-  → Returns 7-day rolling acceptance rate, trend arrow, and daily timeseries.
-  → Auth: MCP bearer token with receipts:read scope (same as Receipt drill-down).
+  → Returns the rolling acceptance rate, trend arrow, and daily timeseries.
+  → Auth: MCP bearer token with receipts:read scope, bound to `hotel_id`.
+
+Definition (ADR-0007 §17.6): `decision_recap.acceptance_rate`, computed live
+from `staffing_recommendations` — the table where the decision, its source and
+who decided now live — human decisions only. Until 24/09/2026 this read
+`kpi_daily`, fed by a materialized view joining feedback memory rows to
+recommendation/prediction tool calls on request_id: feedback rows carry the
+request_id of the feedback call itself, so WhatsApp and MCP decisions were
+essentially never counted.
 """
 from __future__ import annotations
 
@@ -12,9 +20,9 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.tenant_scope import require_token_hotel
 from app.db.session import get_db
 from app.mcp_core import MCPAuthError, RECEIPTS_READ_SCOPE
 from app.mcp_server import verify_bearer
@@ -34,9 +42,17 @@ class DailyRate(BaseModel):
 
 
 class RecommendationAcceptanceResponse(BaseModel):
-    rolling_rate: Optional[float]
+    rolling_rate: Optional[float]      # pooled over the window, human decisions only
     trend: str  # "up" | "down" | "flat"
     daily: list[DailyRate]
+    decided: int = 0                   # human decisions in the window
+    accepted: int = 0
+    no_reply: int = 0
+    by_decided_by: dict[str, int] = {}
+    agent_decided: int = 0             # host agent alone — never in the rate
+    override_rate: Optional[float] = None
+    median_response_minutes: Optional[float] = None  # latency, not effort
+    definition: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -109,58 +125,58 @@ async def get_recommendation_acceptance(
     """Return rolling recommendation acceptance rate for `hotel_id` over the last `days` days.
 
     Fetches 2× the window from kpi_daily to compute the trend (last half vs prior half).
+    The token must be bound to `hotel_id` (tenant isolation, ADR-0007 §17.7).
     """
-    today = date.today()
-    trend_window = days * 2
-    trend_start = today - timedelta(days=trend_window - 1)
+    require_token_hotel(token, hotel_id)
+    from datetime import datetime, timezone
 
-    result = await db.execute(
-        text("""
-            SELECT kpi_date, value
-            FROM kpi_daily
-            WHERE tenant_id = :tenant_id
-              AND kpi_name  = :kpi_name
-              AND kpi_date BETWEEN :trend_start AND :today
-            ORDER BY kpi_date ASC
-        """),
-        {
-            "tenant_id": hotel_id,
-            "kpi_name": "recommendation_acceptance_rate",
-            "trend_start": trend_start,
-            "today": today,
-        },
+    from app.services.decision_recap import (
+        ACCEPTANCE_DEFINITION,
+        _tz,
+        acceptance_rate,
+        load_rows,
+        summarize,
+        utc_window,
     )
-    rows = result.fetchall()
-    date_map: dict[date, Optional[float]] = {row.kpi_date: row.value for row in rows}
+    from app.services.decision_provenance import HUMAN_DECIDERS
 
-    # Requested window (most recent `days` days)
+    tz = _tz()
+    today = datetime.now(tz=timezone.utc).astimezone(tz).date()
+    trend_start = today - timedelta(days=days * 2 - 1)
     window_start = today - timedelta(days=days - 1)
-    daily = [
-        DailyRate(date=window_start + timedelta(days=i), rate=date_map.get(window_start + timedelta(days=i)))
-        for i in range(days)
-    ]
+    lo, hi = utc_window(trend_start, today, tz)
+    rows = await load_rows(db, hotel_id, lo, hi)
 
-    values = [r.rate for r in daily if r.rate is not None]
-    rolling_rate = sum(values) / len(values) if values else None
+    def _day_rate(d: date) -> Optional[float]:
+        human = [r for r in rows
+                 if r.received_at.astimezone(tz).date() == d and r.decided_by in HUMAN_DECIDERS]
+        return acceptance_rate(sum(1 for r in human if r.status == "accepted"), len(human))
 
-    # Trend over the full 2× window
     full_window = [
-        DailyRate(date=trend_start + timedelta(days=i), rate=date_map.get(trend_start + timedelta(days=i)))
-        for i in range(trend_window)
+        DailyRate(date=trend_start + timedelta(days=i), rate=_day_rate(trend_start + timedelta(days=i)))
+        for i in range(days * 2)
     ]
+    daily = full_window[days:]
+    in_window = [r for r in rows if r.received_at.astimezone(tz).date() >= window_start]
+    summary = summarize(in_window, "window", window_start, today, tz)
     trend = _compute_trend(full_window)
 
     logger.info(
-        "kpi_route: hotel_id=%s rolling_rate=%s trend=%s days=%d",
-        hotel_id,
-        rolling_rate,
-        trend,
-        days,
+        "kpi_route: hotel_id=%s rolling_rate=%s decided=%d trend=%s days=%d",
+        hotel_id, summary.human.acceptance_rate, summary.human.decided, trend, days,
     )
     return RecommendationAcceptanceResponse(
-        rolling_rate=rolling_rate,
+        rolling_rate=summary.human.acceptance_rate,
         trend=trend,
         daily=daily,
+        decided=summary.human.decided,
+        accepted=summary.human.accepted,
+        no_reply=summary.no_reply,
+        by_decided_by=summary.by_decided_by,
+        agent_decided=summary.agent.decided,
+        override_rate=summary.human.override_rate,
+        median_response_minutes=summary.human.median_response_minutes,
+        definition=ACCEPTANCE_DEFINITION,
     )
 
 
@@ -185,6 +201,7 @@ class DecisionCaptureResponse(BaseModel):
     not_recorded_by_why: dict[str, int]
     reasons_captured: int
     reasons_routed: int
+    revisions: int = 0
 
 
 @router.get("/{hotel_id}/decision_capture", response_model=DecisionCaptureResponse)
@@ -204,8 +221,7 @@ async def get_decision_capture(
 
     from app.services.inbound_decision import InboundDecisionService
 
-    if getattr(token, "hotel_id", hotel_id) != hotel_id:
-        raise HTTPException(status_code=403, detail="Token not scoped to this hotel")
+    require_token_hotel(token, hotel_id)
     until = datetime.now(tz=timezone.utc)
     metrics = await InboundDecisionService(db).capture_metrics(
         hotel_id, until - timedelta(days=days), until

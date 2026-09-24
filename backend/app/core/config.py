@@ -14,11 +14,15 @@ import os as _os
 # ROI Calculator defaults  (Story 3.3b)
 # ---------------------------------------------------------------------------
 
-#: Default average revenue per cover (£) used when the property has no
+#: Currency of every amount in client-facing text (ISO 4217). ADR-0007 §17.1:
+#: one configured currency, formatted by app.core.money — no hard-coded symbol.
+CURRENCY: str = _os.getenv("CURRENCY", "EUR").upper()
+
+#: Default average revenue per cover (in CURRENCY) used when the property has no
 #: per-property override set.
 DEFAULT_AVG_SPEND_PER_COVER: float = 40.0
 
-#: Default hourly cost per additional front-of-house staff member (£).
+#: Default hourly cost per additional front-of-house staff member (in CURRENCY).
 DEFAULT_STAFF_HOURLY_RATE: float = 14.0
 
 #: Default captation rate — fraction of the excess demand that the property
@@ -60,6 +64,11 @@ TWILIO_CONTENT_SID_DECISION_FR: str = _os.getenv("TWILIO_CONTENT_SID_DECISION_FR
 TWILIO_CONTENT_SID_DECISION_EN: str = _os.getenv("TWILIO_CONTENT_SID_DECISION_EN", "")
 TWILIO_CONTENT_SID_CONFIRM_FR: str = _os.getenv("TWILIO_CONTENT_SID_CONFIRM_FR", "")
 TWILIO_CONTENT_SID_CONFIRM_EN: str = _os.getenv("TWILIO_CONTENT_SID_CONFIRM_EN", "")
+# ADR-0007 §17.3: approved Content template for the opt-in weekly recap push
+# (business-initiated → WhatsApp approval required; body = {{1}}). Empty → the
+# push is sent only inside the 24 h session window, otherwise not sent.
+TWILIO_CONTENT_SID_RECAP_FR: str = _os.getenv("TWILIO_CONTENT_SID_RECAP_FR", "")
+TWILIO_CONTENT_SID_RECAP_EN: str = _os.getenv("TWILIO_CONTENT_SID_RECAP_EN", "")
 
 # ─── Phase 2 Receipts (P2-3) ─────────────────────────────────────────────────
 # Hour (0–23) at which the daily Receipt is dispatched, in RECEIPT_TIMEZONE.

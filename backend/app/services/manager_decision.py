@@ -56,6 +56,9 @@ class DecisionSource(str, Enum):
     model_confirmed = "model_confirmed"      # model below threshold, manager said yes
     keyword_confirmed = "keyword_confirmed"  # ambiguous keyword, manager said yes
     bare_ack_confirmed = "bare_ack_confirmed"  # unattributable ack, manager said yes
+    manager_revision = "manager_revision"    # "corriger mardi" from the recap, confirmed (ADR-0007 §17.2)
+    host_relay = "host_relay"                # MCP: a human's decision relayed by a host agent (§17.4)
+    host_agent = "host_agent"                # MCP: host agent alone — refused by the default policy
 
 
 # Origin of a confirmation prompt → source recorded when the manager says yes.
@@ -284,6 +287,112 @@ def match_confirmation_answer(body: str) -> Optional[bool]:
 
 
 # ---------------------------------------------------------------------------
+# Commands: "recap …" and "corriger <jour> [décision]" (ADR-0007 §17.2)
+# ---------------------------------------------------------------------------
+# Checked before keywords. Whole reply only, like keywords. "corriger" alone
+# stays the modify keyword; it is a revision command only with a day after it.
+
+_RECAP_WORDS = frozenset({
+    "recap", "récap", "recapitulatif", "récapitulatif", "résumé", "resume", "bilan", "summary",
+})
+_RECAP_PERIODS: dict[str, tuple[str, Optional[str]]] = {
+    "jour": ("day", "fr"), "aujourd'hui": ("day", "fr"), "semaine": ("week", "fr"),
+    "mois": ("month", "fr"),
+    "day": ("day", "en"), "today": ("day", "en"), "week": ("week", "en"), "month": ("month", "en"),
+}
+_RECAP_LOCALE_HINT = {"summary": "en", "résumé": "fr", "récap": "fr", "bilan": "fr"}
+
+
+@dataclass(frozen=True)
+class RecapCommand:
+    period: str                     # day | week | month
+    locale: Optional[str] = None    # None → the profile's / default locale
+
+
+def match_recap_command(body: str) -> Optional[RecapCommand]:
+    """``recap`` (this week), ``recap jour|semaine|mois``, ``recap day|week|month``,
+    ``summary``… Anything else → ``None``."""
+    toks = tokens(body)
+    if not toks or len(toks) > 2 or toks[0] not in _RECAP_WORDS:
+        return None
+    if len(toks) == 1:
+        return RecapCommand("week", _RECAP_LOCALE_HINT.get(toks[0]))
+    hit = _RECAP_PERIODS.get(toks[1])
+    return RecapCommand(*hit) if hit else None
+
+
+_REVISION_WORDS = {"corriger": "fr", "rectifier": "fr", "fix": "en", "correct": "en"}
+WEEKDAYS: dict[str, int] = {
+    "lundi": 0, "mardi": 1, "mercredi": 2, "jeudi": 3, "vendredi": 4, "samedi": 5, "dimanche": 6,
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6,
+}
+_RELATIVE_DAYS = {"hier": 1, "yesterday": 1, "aujourd'hui": 0, "today": 0}
+_REVISION_DECISIONS: dict[str, Decision] = {
+    "validation": "accepted", "validé": "accepted", "valide": "accepted", "accepté": "accepted",
+    "accepter": "accepted", "oui": "accepted", "accepted": "accepted", "accept": "accepted",
+    "yes": "accepted",
+    "refus": "rejected", "refusé": "rejected", "refuser": "rejected", "non": "rejected",
+    "rejected": "rejected", "reject": "rejected", "refused": "rejected", "no": "rejected",
+    "correction": "modified", "corrigé": "modified", "modifié": "modified",
+    "corrected": "modified", "modified": "modified",
+}
+_DATE_RE = re.compile(r"^(\d{1,2})/(\d{1,2})$")
+
+
+@dataclass(frozen=True)
+class RevisionCommand:
+    """"corriger mardi [refus]": the manager flags a wrongly recorded decision.
+    ``day`` is a weekday index, a relative offset ("hier") or a (day, month)."""
+
+    weekday: Optional[int] = None
+    days_ago: Optional[int] = None
+    day_month: Optional[tuple[int, int]] = None
+    decision: Optional[Decision] = None
+    locale: Optional[str] = None
+    ref: str = ""                   # the day as typed, echoed in replies
+
+    def target_date(self, today) -> Optional[object]:
+        from datetime import date as _date
+
+        if self.days_ago is not None:
+            return today - timedelta(days=self.days_ago)
+        if self.weekday is not None:
+            return today - timedelta(days=(today.weekday() - self.weekday) % 7)
+        if self.day_month is not None:
+            d, m = self.day_month
+            try:
+                candidate = _date(today.year, m, d)
+            except ValueError:
+                return None
+            return candidate if candidate <= today else candidate.replace(year=today.year - 1)
+        return None
+
+
+def match_revision_command(body: str) -> Optional[RevisionCommand]:
+    toks = tokens(body)
+    if not (2 <= len(toks) <= 3) or toks[0] not in _REVISION_WORDS:
+        return None
+    locale = _REVISION_WORDS[toks[0]]
+    day = toks[1]
+    kwargs: dict = {"locale": locale, "ref": toks[1]}
+    if day in WEEKDAYS:
+        kwargs["weekday"] = WEEKDAYS[day]
+    elif day in _RELATIVE_DAYS:
+        kwargs["days_ago"] = _RELATIVE_DAYS[day]
+    elif _DATE_RE.match(day):
+        d, m = _DATE_RE.match(day).groups()
+        kwargs["day_month"] = (int(d), int(m))
+    else:
+        return None
+    if len(toks) == 3:
+        decision = _REVISION_DECISIONS.get(toks[2])
+        if decision is None:
+            return None
+        kwargs["decision"] = decision
+    return RevisionCommand(**kwargs)
+
+
+# ---------------------------------------------------------------------------
 # (d) Quick-reply button payloads — fixed IDs, no model involved
 # ---------------------------------------------------------------------------
 
@@ -480,6 +589,30 @@ _COPY = {
         "en": ("Accept", "Reject", "Correct"),
     },
     "buttons_confirm": {"fr": ("Oui", "Non"), "en": ("Yes", "No")},
+    "revision_info": {
+        "fr": "{day} : {recorded} Pour changer, répondez « corriger {ref} validation », « corriger {ref} refus » ou « corriger {ref} correction ».",
+        "en": "{day}: {recorded} To change it, reply \"fix {ref} accepted\", \"fix {ref} rejected\" or \"fix {ref} corrected\".",
+    },
+    "revision_question": {
+        "fr": "{day} : je remplace {old} par {new}, c'est bien ça ?",
+        "en": "{day}: I'm replacing {old} with {new}, is that right?",
+    },
+    "revision_same": {
+        "fr": "{day} : {recorded} Rien ne change.",
+        "en": "{day}: {recorded} Nothing changes.",
+    },
+    "revision_none": {
+        "fr": "Aucune décision enregistrée le {day}.",
+        "en": "No decision recorded on {day}.",
+    },
+    "revision_several": {
+        "fr": "Plusieurs recommandations le {day} : impossible de savoir laquelle corriger par message. Rien n'est modifié.",
+        "en": "Several recommendations on {day}: I can't tell which one to fix by message. Nothing changed.",
+    },
+    "revision_done": {
+        "fr": "Corrigé. {recorded}",
+        "en": "Fixed. {recorded}",
+    },
     "decision_text_hint": {
         "fr": "Répondez ACCEPTER, REFUSER ou CORRIGER.",
         "en": "Reply ACCEPT, REJECT or CORRECT.",
@@ -494,6 +627,11 @@ def _loc(locale: Optional[str]) -> str:
 def text_for(key: str, locale: Optional[str] = "fr", **fmt: str):
     value = _COPY[key][_loc(locale)]
     return value.format(**fmt) if isinstance(value, str) and fmt else value
+
+
+def decision_word(decision: str, locale: Optional[str] = "fr") -> str:
+    """"un refus" / "a refusal" — the noun phrase used in confirmation copy."""
+    return _DECISION_WORD[_loc(locale)][decision]
 
 
 def confirmation_question(decision: str, locale: Optional[str] = "fr") -> str:
@@ -517,8 +655,13 @@ REPLY_RESULTS: tuple[str, ...] = (
     "declined",               # reply declined a pending prompt → nothing written
     "not_recorded",           # nothing written (typed `why`)
     "reason_captured",        # reply answered a reason prompt (never a decision)
+    "recap_served",           # "recap …" command answered (ADR-0007 §17.2)
+    "revision_info",          # "corriger mardi" without a new decision, or nothing to fix
+    "revision_requested",     # "corriger mardi refus": confirmation asked, nothing written
+    "revised",                # revision confirmed → decision replaced (source manager_revision)
+    "revision_declined",      # revision not confirmed → nothing changed
 )
-NON_REPLY_RESULTS: tuple[str, ...] = ("confirmation_expired",)
+NON_REPLY_RESULTS: tuple[str, ...] = ("confirmation_expired", "revision_expired")
 
 _DECISION_SEEKING = ("recorded", "confirmation_requested", "not_recorded")
 
@@ -540,6 +683,9 @@ class CaptureMetrics:
     not_recorded_by_why: dict[str, int] = field(default_factory=dict)
     reasons_captured: int = 0
     reasons_routed: int = 0
+    # Decisions the manager fixed from the recap ("corriger mardi"): the human
+    # audit of the capture. Not counted as decisions written.
+    revisions: int = 0
 
     def as_dict(self) -> dict:
         return dict(self.__dict__)
@@ -570,6 +716,8 @@ def compute_capture_metrics(events: Iterable[dict]) -> CaptureMetrics:
             m.decisions_written += 1
             src = ev.get("decision_source") or "unknown"
             m.by_source[src] = m.by_source.get(src, 0) + 1
+        if result == "revised":
+            m.revisions += 1
         if result == "confirmation_requested":
             m.confirmations_requested += 1
         elif result == "confirmed":

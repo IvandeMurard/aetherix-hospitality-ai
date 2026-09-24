@@ -26,6 +26,8 @@ from app.core.pii import pseudonymise
 from app.db.models import RestaurantProfile, StaffingRecommendation
 from app.schemas.webhook import ActionType
 from app.services.manager_decision import DecisionSource, match_keyword
+from app.services.decision_policy import authorize_decision
+from app.services.decision_provenance import DecidedBy
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +127,10 @@ class ActionLoggerService:
         recommendation.actioned_at = datetime.now(tz=timezone.utc)
         recommendation.decision_source = source.value
         recommendation.decision_confidence = 1.0
+        recommendation.decided_by = DecidedBy.human_whatsapp.value
+        recommendation.decision_policy_version = authorize_decision(
+            profile.tenant_id, DecidedBy.human_whatsapp.value
+        ).version
 
         await session.commit()
 

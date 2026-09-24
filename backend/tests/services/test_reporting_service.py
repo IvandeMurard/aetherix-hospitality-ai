@@ -1,8 +1,10 @@
-"""HOS-200 (Story 10.10 / P3-10) — ReportingService real-rows path.
+"""Weekly report = the deterministic recap for one week (ADR-0007 §17.1).
 
-Verifies that `_get_weekly_data` reads ground-truth StaffingRecommendation rows
-(manager-reported actual covers) and that `generate_weekly_metrics` prefers them
-over the demo mock, falling back only when no ground-truth rows exist (AC4).
+Pins what the old "Friday Audit" got wrong:
+  * no mock data on any tenant path — an empty week says "no measured data",
+    with no metric;
+  * no savings / ROI / SaaS cost, no £ or $, no marketing sentence;
+  * measured numbers only, from the same definition as the recap.
 """
 from __future__ import annotations
 
@@ -12,14 +14,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.models import Base, StaffingRecommendation
-from app.services.reporting_service import ReportingService
+from app.services import reporting_service
+from app.services.reporting_service import NO_DATA_STATUS, ReportingService
 
 WEEK_START = date(2026, 6, 1)  # Monday
 TENANT = "pilot_hotel"
@@ -36,106 +35,86 @@ async def db_session():
     await engine.dispose()
 
 
-async def _seed_rec(
-    session: AsyncSession,
-    *,
-    day_offset: int,
-    predicted: float,
-    actual: float | None,
-    tenant_id: str = TENANT,
-) -> None:
-    ws = datetime.combine(
-        WEEK_START + timedelta(days=day_offset), time(19, 0), tzinfo=timezone.utc
-    )
-    rec = StaffingRecommendation(
-        id=uuid.uuid4(),
-        tenant_id=tenant_id,
-        property_id=uuid.uuid4(),
-        anomaly_id=uuid.uuid4(),
-        message_text="m",
-        window_start=ws,
-        window_end=ws,
-        predicted_covers=predicted,
-        actual_covers=actual,
-        actual_covers_source="manager_feedback" if actual is not None else None,
-        actual_covers_at=ws if actual is not None else None,
-        status="dispatched",
-    )
-    session.add(rec)
+async def _seed(session: AsyncSession, *, day: int, predicted: float, actual, status="dispatched",
+                decided_by=None, source=None, tenant=TENANT):
+    ws = datetime.combine(WEEK_START + timedelta(days=day), time(19, 0), tzinfo=timezone.utc)
+    session.add(StaffingRecommendation(
+        id=uuid.uuid4(), tenant_id=tenant, property_id=uuid.uuid4(), anomaly_id=uuid.uuid4(),
+        message_text="m", window_start=ws, window_end=ws,
+        dispatched_at=ws - timedelta(hours=6),
+        predicted_covers=predicted, actual_covers=actual,
+        status=status, decided_by=decided_by, decision_source=source,
+        actioned_at=ws - timedelta(hours=5) if decided_by else None,
+    ))
     await session.commit()
 
 
-class TestGetWeeklyData:
-    @pytest.mark.asyncio
-    async def test_returns_real_rows_with_actual_covers(self, db_session):
-        await _seed_rec(db_session, day_offset=0, predicted=100.0, actual=90.0)
-        await _seed_rec(db_session, day_offset=2, predicted=170.0, actual=175.0)
-        # Row without actual_covers must be excluded.
-        await _seed_rec(db_session, day_offset=3, predicted=120.0, actual=None)
-
-        svc = ReportingService(db_service=db_session)
-        data = await svc._get_weekly_data(TENANT, WEEK_START)
-
-        assert len(data) == 2
-        assert {d["actual_covers"] for d in data} == {90.0, 175.0}
-        assert all("predicted_covers" in d for d in data)
-
-    @pytest.mark.asyncio
-    async def test_excludes_other_tenants_and_other_weeks(self, db_session):
-        await _seed_rec(db_session, day_offset=0, predicted=100.0, actual=90.0)
-        await _seed_rec(
-            db_session, day_offset=0, predicted=100.0, actual=90.0, tenant_id="other"
-        )
-        # Next week — outside the 7-day window.
-        await _seed_rec(db_session, day_offset=8, predicted=100.0, actual=90.0)
-
-        svc = ReportingService(db_service=db_session)
-        data = await svc._get_weekly_data(TENANT, WEEK_START)
-
-        assert len(data) == 1
-
-    @pytest.mark.asyncio
-    async def test_no_db_returns_empty(self):
-        svc = ReportingService()  # no session wired
-        assert await svc._get_weekly_data(TENANT, WEEK_START) == []
+def test_no_mock_data_path_remains():
+    assert not hasattr(ReportingService, "_get_mock_weekly_data")
+    assert not hasattr(ReportingService, "_calculate_savings")
+    src = open(reporting_service.__file__, encoding="utf-8").read()
+    for forbidden in ("£", "$50", "roi_multiplier", "optimizing your labor"):
+        assert forbidden not in src.split('"""', 2)[2], forbidden
 
 
-class TestGenerateWeeklyMetrics:
-    @pytest.mark.asyncio
-    async def test_uses_real_rows_when_present(self, db_session):
-        # Perfect prediction → MAPE 0, distinguishable from the mock (~2.4%).
-        await _seed_rec(db_session, day_offset=0, predicted=100.0, actual=100.0)
-        await _seed_rec(db_session, day_offset=1, predicted=150.0, actual=150.0)
+@pytest.mark.asyncio
+async def test_empty_week_says_no_measured_data(db_session):
+    svc = ReportingService(db_service=db_session)
+    svc._dispatch_ops = AsyncMock()
+    result = await svc.generate_weekly_metrics(TENANT, WEEK_START)
 
-        svc = ReportingService(db_service=db_session)
-        svc._dispatch_ops = AsyncMock()  # isolate from Obsidian/Linear side effects
-        result = await svc.generate_weekly_metrics(TENANT, WEEK_START)
+    assert result["status"] == NO_DATA_STATUS
+    assert result["financial_impact"] is None
+    assert "pas encore de donnée mesurée" in result["summary_text"]
+    for word in ("MAPE", "Accuracy", "€", "£", "$"):
+        assert word not in result["summary_text"]
+    svc._dispatch_ops.assert_not_awaited()
 
-        assert result["metrics"]["mape"] == 0.0
-        assert result["metrics"]["total_covers"] == 250
 
-    @pytest.mark.asyncio
-    async def test_falls_back_to_mock_when_no_real_rows(self, db_session):
-        # Empty DB → no ground-truth rows → demo mock (7 days, total 945 covers).
-        svc = ReportingService(db_service=db_session)
-        svc._dispatch_ops = AsyncMock()  # isolate from Obsidian/Linear side effects
-        result = await svc.generate_weekly_metrics(TENANT, WEEK_START)
+@pytest.mark.asyncio
+async def test_no_db_never_falls_back_to_mock():
+    result = await ReportingService().generate_weekly_metrics(TENANT, WEEK_START, locale="en")
+    assert result["status"] == NO_DATA_STATUS
+    assert result["recap"] is None
+    assert result["summary_text"] == "Weekly report: no measured data yet for this period."
 
-        assert result["metrics"]["total_covers"] == 945
 
-    @pytest.mark.asyncio
-    async def test_dispatch_ops_runs_without_importerror(self, tmp_path, monkeypatch):
-        """HOS-211 regression: the **real** _dispatch_ops must not crash.
+@pytest.mark.asyncio
+async def test_measured_week_uses_the_recap_definition(db_session):
+    await _seed(db_session, day=0, predicted=100.0, actual=80.0, status="accepted",
+                decided_by="human_whatsapp", source="keyword")
+    await _seed(db_session, day=1, predicted=150.0, actual=150.0, status="rejected",
+                decided_by="human_whatsapp", source="button")
+    await _seed(db_session, day=2, predicted=120.0, actual=None)
+    await _seed(db_session, day=0, predicted=10.0, actual=10.0, tenant="other")
 
-        Before the fix, `from app.integrations.obsidian import VAULT_FOLDERS`
-        raised ImportError → generate_weekly_metrics 500'd. Here _dispatch_ops is
-        deliberately NOT patched; the Obsidian write goes to a temp vault and the
-        mock-data MAPE (~2.4%) stays under the Linear-alert threshold.
-        """
-        monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
-        svc = ReportingService()  # no db → demo mock path
-        result = await svc.generate_weekly_metrics(TENANT, WEEK_START)
+    svc = ReportingService(db_service=db_session)
+    svc._dispatch_ops = AsyncMock()
+    result = await svc.generate_weekly_metrics(TENANT, WEEK_START)
 
-        assert result["metrics"]["total_covers"] == 945
-        # The weekly-audit note was actually written to the vault.
-        assert list(tmp_path.rglob("*.md")), "expected a weekly-audit note to be written"
+    r = result["recap"]
+    assert result["status"] == "ok"
+    assert (r["received"], r["accepted"], r["rejected"], r["no_reply"]) == (3, 1, 1, 1)
+    # |100-80|/80 = 25 %, |150-150|/150 = 0 % → mean 12.5 % over 2 days
+    assert r["forecast_error_pct"] == 12.5
+    assert r["forecast_error_days"] == 2
+    assert r["human"]["acceptance_rate"] == 0.5
+    assert result["financial_impact"] is None
+    assert "12.5 % (2 jours mesurés)" in result["summary_text"]
+    svc._dispatch_ops.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_ops_writes_measured_note(tmp_path, monkeypatch, db_session):
+    """HOS-211 regression kept: the real _dispatch_ops must not crash and
+    writes the internal note, with measured numbers only."""
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+    await _seed(db_session, day=0, predicted=100.0, actual=100.0, status="accepted",
+                decided_by="human_whatsapp", source="keyword")
+    result = await ReportingService(db_service=db_session).generate_weekly_metrics(TENANT, WEEK_START)
+
+    notes = list(tmp_path.rglob("*.md"))
+    assert notes, "expected a weekly note to be written"
+    body = notes[0].read_text(encoding="utf-8")
+    assert "savings" not in body.lower() and "ROI" not in body
+    assert result["recap"]["forecast_error_pct"] == 0.0

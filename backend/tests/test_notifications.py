@@ -216,6 +216,16 @@ def test_not_configured_error_message_contains_service_name():
 _TEST_CLIENT = TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.fixture(autouse=True)
+def _as_ops_user():
+    """The notification routes are superuser-only (ADR-0007 §17.7)."""
+    from app.core.security import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: {"id": "ops", "is_superuser": True}
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_test_notification_route_sms_returns_200():
     """Route returns 200 and a SID for SMS channel when Twilio is mocked."""
     mock_response = MagicMock(

@@ -35,6 +35,9 @@ from app.db.models import (
     RestaurantProfile,
     StaffingRecommendation,
 )
+from app.services.decision_policy import authorize_decision
+from app.services.decision_provenance import DecidedBy
+from app.services.decision_recap import _tz, build_recap, render_text
 from app.services.receipts import FeedbackIntent, resolve_feedback
 from app.services.manager_decision import (
     BUTTON_CONFIRMATIONS,
@@ -44,11 +47,16 @@ from app.services.manager_decision import (
     CaptureMetrics,
     DecisionSource,
     PendingContext,
+    RecapCommand,
     Resolution,
+    RevisionCommand,
     compute_capture_metrics,
     confirmation_question,
+    decision_word,
     match_confirmation_answer,
     match_keyword,
+    match_recap_command,
+    match_revision_command,
     recorded_message,
     resolve_keyword,
     routed_reason,
@@ -180,8 +188,17 @@ class InboundDecisionService:
             return await self._not_recorded(profile, None, "unknown_button_payload", channel,
                                             request_id, text_for("not_understood", self.locale), "decision", now=now)
 
-        # 2. Answer to a pending confirmation
-        if prompt is not None and prompt.kind == "decision_confirmation":
+        # 1b. Commands (ADR-0007 §17.2): "recap …", "corriger mardi [refus]".
+        #     No model. A recap never touches an open prompt.
+        recap = match_recap_command(body)
+        if recap is not None:
+            return await self._serve_recap(profile, recap, now, channel, request_id)
+        revision = match_revision_command(body)
+        if revision is not None:
+            return await self._revise(profile, revision, prompt, now, channel, request_id)
+
+        # 2. Answer to a pending confirmation (decision or revision)
+        if prompt is not None and prompt.kind in ("decision_confirmation", "decision_revision"):
             answer = match_confirmation_answer(body)
             if answer is not None:
                 return await self._answer_confirmation(profile, prompt, answer, now, channel, request_id)
@@ -276,6 +293,12 @@ class InboundDecisionService:
         for p in stale:
             p.status = "expired"
             p.resolved_at = now
+            if p.kind == "decision_revision":
+                self.db.add(InboundReplyEvent(
+                    created_at=now, tenant_id=p.tenant_id, property_id=p.property_id,
+                    recommendation_id=p.recommendation_id, prompt_id=p.id,
+                    channel="system", result="revision_expired", why="unconfirmed",
+                ))
             if p.kind == "decision_confirmation":
                 self.db.add(InboundReplyEvent(
                     created_at=now,
@@ -369,11 +392,16 @@ class InboundDecisionService:
             return await self._not_recorded(profile, None, "no_pending_recommendation", channel,
                                             request_id, text_for("no_pending", self.locale), now=now)
         rec = recs[0]
+        # Single seam (decision_policy): a human on WhatsApp is allowed under
+        # every policy; the version in force is stored with the decision.
+        policy = authorize_decision(profile.tenant_id, DecidedBy.human_whatsapp.value, at=now)
         rec.status = decision
         rec.action = decision
         rec.actioned_at = now
         rec.decision_source = source.value
         rec.decision_confidence = round(float(confidence), 3)
+        rec.decided_by = DecidedBy.human_whatsapp.value
+        rec.decision_policy_version = policy.version
         await self._event(
             profile, rec.id, result, channel, request_id,
             prompt_id=prompt.id if prompt else None, decision=decision,
@@ -433,10 +461,12 @@ class InboundDecisionService:
         channel: str,
         request_id: str,
     ) -> ReplyPlan:
-        if prompt is None or prompt.kind != "decision_confirmation":
+        if prompt is None or prompt.kind not in ("decision_confirmation", "decision_revision"):
             return await self._not_recorded(profile, None, "no_pending_confirmation", channel,
                                             request_id, text_for("not_understood", self.locale),
                                             "decision", now=now)
+        if prompt.kind == "decision_revision":
+            return await self._answer_revision(profile, prompt, yes, now, channel, request_id)
         prompt.resolved_at = now
         if not yes:
             prompt.status = "declined"
@@ -466,6 +496,142 @@ class InboundDecisionService:
             float(prompt.confidence) if prompt.confidence is not None else 1.0,
             now, channel, request_id, prompt=prompt, result="confirmed",
         )
+
+    # ------------------------------------------------------------------
+    # Recap and revision (ADR-0007 §17.2)
+    # ------------------------------------------------------------------
+
+    def _locale_for(self, profile: RestaurantProfile, hint: Optional[str]) -> str:
+        return hint or getattr(profile, "manager_locale", None) or self.locale
+
+    async def _serve_recap(
+        self, profile: RestaurantProfile, cmd: RecapCommand, now: datetime,
+        channel: str, request_id: str,
+    ) -> ReplyPlan:
+        locale = self._locale_for(profile, cmd.locale)
+        summary = await build_recap(self.db, profile.tenant_id, cmd.period, now=now)
+        await self._event(profile, None, "recap_served", channel, request_id, why=cmd.period, now=now)
+        await self.db.commit()
+        return ReplyPlan(text=render_text(summary, locale), result="recap_served",
+                         extras={"period": cmd.period})
+
+    @staticmethod
+    def _day_label(day, locale: str) -> str:
+        names = {
+            "fr": ("Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"),
+            "en": ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+        }["en" if locale.startswith("en") else "fr"]
+        return f"{names[day.weekday()]} {day:%d/%m}"
+
+    async def _revision_info(self, profile, rec_id, why, text, channel, request_id, now) -> ReplyPlan:
+        await self._event(profile, rec_id, "revision_info", channel, request_id, why=why, now=now)
+        await self.db.commit()
+        return ReplyPlan(text=text, result="revision_info", extras={"why": why})
+
+    async def _revise(
+        self, profile: RestaurantProfile, cmd: RevisionCommand, prompt: Optional[ManagerPrompt],
+        now: datetime, channel: str, request_id: str,
+    ) -> ReplyPlan:
+        """"corriger mardi [décision]": find the one decided recommendation of
+        that day; without a new decision, say what is recorded; with one, ask
+        for confirmation (same Oui / Non path) — nothing changes until yes."""
+        locale = self._locale_for(profile, cmd.locale)
+        tz = _tz()
+        target = cmd.target_date(now.astimezone(tz).date())
+        if target is None:
+            return await self._revision_info(profile, None, "unparseable_day",
+                                             text_for("not_understood", locale), channel, request_id, now)
+        day = self._day_label(target, locale)
+        decided = (await self.db.execute(
+            select(StaffingRecommendation).where(
+                StaffingRecommendation.property_id == uuid.UUID(str(profile.id)),
+                StaffingRecommendation.status.in_(["accepted", "rejected", "modified"]),
+            )
+        )).scalars().all()
+        recs = [r for r in decided
+                if _utc(r.window_start) is not None and _utc(r.window_start).astimezone(tz).date() == target]
+        if not recs:
+            return await self._revision_info(profile, None, "no_decision_that_day",
+                                             text_for("revision_none", locale, day=day),
+                                             channel, request_id, now)
+        if len(recs) > 1:
+            return await self._revision_info(profile, None, "several_recommendations_that_day",
+                                             text_for("revision_several", locale, day=day),
+                                             channel, request_id, now)
+        rec = recs[0]
+        recorded = recorded_message(rec.status, locale)
+        if cmd.decision is None:
+            return await self._revision_info(
+                profile, rec.id, "revision_needs_decision",
+                text_for("revision_info", locale, day=day, recorded=recorded, ref=cmd.ref),
+                channel, request_id, now)
+        if cmd.decision == rec.status:
+            return await self._revision_info(profile, rec.id, "revision_same",
+                                             text_for("revision_same", locale, day=day, recorded=recorded),
+                                             channel, request_id, now)
+        await self._supersede(prompt, now)
+        new_prompt = ManagerPrompt(
+            id=uuid.uuid4(), created_at=now,
+            tenant_id=profile.tenant_id, property_id=uuid.UUID(str(profile.id)),
+            recommendation_id=rec.id, kind="decision_revision",
+            proposed_decision=cmd.decision, origin="revision", confidence=1.0,
+            status="pending", expires_at=now + PROMPT_WINDOW, request_id=request_id,
+        )
+        self.db.add(new_prompt)
+        await self._event(profile, rec.id, "revision_requested", channel, request_id,
+                          prompt_id=new_prompt.id, decision=cmd.decision,
+                          why=f"from_{rec.status}", now=now)
+        await self.db.commit()
+        question = text_for("revision_question", locale, day=day,
+                            old=decision_word(rec.status, locale), new=decision_word(cmd.decision, locale))
+        return ReplyPlan(text=f"{question} {text_for('confirm_text_hint', locale)}", buttons="confirm",
+                         result="revision_requested", decision=cmd.decision)
+
+    async def _answer_revision(
+        self, profile: RestaurantProfile, prompt: ManagerPrompt, yes: bool, now: datetime,
+        channel: str, request_id: str,
+    ) -> ReplyPlan:
+        prompt.resolved_at = now
+        if not yes:
+            prompt.status = "declined"
+            await self._event(profile, prompt.recommendation_id, "revision_declined", channel,
+                              request_id, prompt_id=prompt.id, now=now)
+            await self.db.commit()
+            return ReplyPlan(text=text_for("declined", self.locale), result="revision_declined")
+        rec = None
+        if prompt.recommendation_id is not None:
+            rec = (await self.db.execute(
+                select(StaffingRecommendation).where(
+                    StaffingRecommendation.id == prompt.recommendation_id,
+                    StaffingRecommendation.status.in_(["accepted", "rejected", "modified"]),
+                )
+            )).scalars().first()
+        if rec is None:
+            prompt.status = "superseded"
+            return await self._not_recorded(profile, prompt.recommendation_id, "revision_target_changed",
+                                            channel, request_id, text_for("declined", self.locale), now=now)
+        prompt.status = "confirmed"
+        previous = rec.status
+        policy = authorize_decision(profile.tenant_id, DecidedBy.human_whatsapp.value, at=now)
+        rec.status = prompt.proposed_decision
+        rec.action = prompt.proposed_decision
+        rec.actioned_at = now
+        rec.decision_source = DecisionSource.manager_revision.value
+        rec.decision_confidence = 1.0
+        rec.decided_by = DecidedBy.human_whatsapp.value
+        rec.decision_policy_version = policy.version
+        # The reason belonged to the replaced decision (kept in the event trail).
+        rec.reason_code = rec.reason_detail = rec.reason_source = None
+        rec.reason_evidence = None
+        rec.decided_by_caller = None
+        await self._event(profile, rec.id, "revised", channel, request_id, prompt_id=prompt.id,
+                          decision=rec.status, decision_source=DecisionSource.manager_revision.value,
+                          confidence=1.0, why=f"revised_from_{previous}", now=now)
+        await self.db.commit()
+        return ReplyPlan(text=text_for("revision_done", self.locale,
+                                       recorded=recorded_message(rec.status, self.locale)),
+                         result="revised", decision=rec.status,
+                         source=DecisionSource.manager_revision.value)
 
     async def _supersede(self, prompt: Optional[ManagerPrompt], now: datetime) -> None:
         """A new decision-bearing reply replaces any open prompt (not counted as

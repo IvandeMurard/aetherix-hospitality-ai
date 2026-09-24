@@ -28,6 +28,7 @@ from typing import Any, Dict, List
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.money import format_money
 from app.services.roi_calculator import ROICalculatorService
 
 logger = logging.getLogger(__name__)
@@ -77,9 +78,9 @@ def format_message(
     """Build the plain-text staffing directive.
 
     For **surges** (direction == "surge"):
-        "Add {headcount} staff to capture an estimated £{revenue:.0f} in
+        "Add {headcount} staff to capture an estimated {money(revenue)} in
         additional covers between {HH:MM}–{HH:MM}. Est. additional labour
-        cost: £{labor:.0f}. Trigger: {factor}."
+        cost: {money(labor)}. Trigger: {factor}."  (currency: config.CURRENCY)
 
     For **lulls**:
         "Consider reducing staffing by {abs(headcount)} for the
@@ -92,9 +93,9 @@ def format_message(
     if direction == "surge":
         return (
             f"Add {headcount} staff to capture an estimated "
-            f"£{revenue_opp:.0f} in additional covers between "
+            f"{format_money(revenue_opp)} in additional covers between "
             f"{start_str}–{end_str}. "
-            f"Est. additional labour cost: £{labor_cost:.0f}. "
+            f"Est. additional labour cost: {format_money(labor_cost)}. "
             f"Trigger: {factor}."
         )
     else:

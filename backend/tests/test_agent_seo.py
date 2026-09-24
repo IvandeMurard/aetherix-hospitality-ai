@@ -173,8 +173,9 @@ class TestAgentManifest:
         assert required.issubset(_manifest.keys())
 
     @_skip_manifest
-    def test_exactly_three_tools(self):
-        assert len(_manifest["tools"]) == 3
+    def test_exactly_four_tools(self):
+        # get_decision_recap added 24/09/2026 (ADR-0007 §17.2)
+        assert len(_manifest["tools"]) == 4
 
     @_skip_manifest
     def test_tool_names_match_mcp_core(self):
@@ -184,6 +185,7 @@ class TestAgentManifest:
         # when /mcp/v0/ was retired (HOS-315).
         assert "recall_memory" in names
         assert "submit_feedback_to_memory" in names
+        assert "get_decision_recap" in names
 
     @_skip_manifest
     def test_mcp_endpoint_path(self):
@@ -247,4 +249,4 @@ class TestWellKnownHTTP:
     def test_agent_json_has_tools(self):
         resp = _client.get("/.well-known/agent.json")
         body = resp.json()
-        assert len(body["tools"]) == 3
+        assert len(body["tools"]) == 4

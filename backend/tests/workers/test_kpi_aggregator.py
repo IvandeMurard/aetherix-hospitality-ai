@@ -8,6 +8,7 @@ Covered:
   3. compute_rate: all rejected → 0.0
   4. compute_rate: mixed 2/1/1 → 0.5
   5. run_kpi_aggregation: zero recommendations → no kpi_daily row written
+     (source = staffing_recommendations, human decisions only — ADR-0007 §17.6)
   6. run_kpi_aggregation: single tenant → correct upsert called
   7. run_kpi_aggregation: two tenants → two upserts
   8. _check_and_emit_alerts: rolling < 0.30, denom >= 5 → alert row written
@@ -64,17 +65,7 @@ def _make_engine_mock(mv_rows: list[_FakeRow], rolling_rows: list[_FakeRow], ded
 
     execute_results = []
 
-    # Call 1: SELECT relispopulated → .scalar() truthy so the worker takes the
-    # CONCURRENTLY refresh path (MV already populated, the steady-state case)
-    populated_result = MagicMock()
-    populated_result.scalar.return_value = True
-    execute_results.append(populated_result)
-
-    # Call 2: REFRESH MV → no result consumed
-    refresh_result = MagicMock()
-    execute_results.append(refresh_result)
-
-    # Call 3: SELECT from recommendation_acceptance_daily
+    # Call 1: SELECT human decisions from staffing_recommendations
     mv_result = MagicMock()
     mv_result.fetchall.return_value = mv_rows
     execute_results.append(mv_result)
@@ -124,8 +115,8 @@ async def test_zero_recommendations_no_row_written():
     with patch("app.workers.kpi_aggregator.engine", engine_mock):
         await run_kpi_aggregation()
 
-    # relispopulated SELECT + REFRESH + MV SELECT + alert rolling SELECT
-    assert conn.execute.await_count == 4
+    # decisions SELECT + alert rolling SELECT
+    assert conn.execute.await_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -143,11 +134,11 @@ async def test_single_tenant_upsert_called():
     with patch("app.workers.kpi_aggregator.engine", engine_mock):
         await run_kpi_aggregation()
 
-    # relispopulated + refresh + mv select + upsert + alert select = 5
-    assert conn.execute.await_count == 5
+    # decisions select + upsert + alert select = 3
+    assert conn.execute.await_count == 3
 
-    # Check upsert call params (index 3: after relispopulated, refresh, mv select)
-    upsert_call = conn.execute.await_args_list[3]
+    # Check upsert call params (index 1: after the decisions select)
+    upsert_call = conn.execute.await_args_list[1]
     params = upsert_call.args[1]
     assert params["kpi_name"] == _KPI_NAME
     assert params["value"] == pytest.approx(1.0)
@@ -173,11 +164,11 @@ async def test_two_tenants_two_upserts():
     with patch("app.workers.kpi_aggregator.engine", engine_mock):
         await run_kpi_aggregation()
 
-    # relispopulated + refresh + mv select + 2 upserts + alert select = 6
-    assert conn.execute.await_count == 6
+    # decisions select + 2 upserts + alert select = 4
+    assert conn.execute.await_count == 4
 
-    upsert_a = conn.execute.await_args_list[3].args[1]
-    upsert_b = conn.execute.await_args_list[4].args[1]
+    upsert_a = conn.execute.await_args_list[1].args[1]
+    upsert_b = conn.execute.await_args_list[2].args[1]
     assert upsert_a["tenant_id"] == "hotel_a"
     assert upsert_a["value"] == pytest.approx(0.5)
     assert upsert_b["tenant_id"] == "hotel_b"
@@ -238,3 +229,16 @@ async def test_no_alert_when_denominator_below_minimum():
 
     # Only the rolling SELECT — no dedup check, no INSERT
     assert conn.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_aggregation_reads_human_decisions_on_recommendations():
+    """ADR-0007 §17.6: the rate is read from staffing_recommendations, human
+    deciders only — not from the old request_id-joined materialized view."""
+    engine_mock, conn = _make_engine_mock(mv_rows=[], rolling_rows=[], dedup_rows=[])
+    with patch("app.workers.kpi_aggregator.engine", engine_mock):
+        await run_kpi_aggregation()
+    sql = str(conn.execute.await_args_list[0].args[0])
+    assert "FROM staffing_recommendations" in sql
+    assert "decided_by IN ('human_whatsapp', 'human_via_host')" in sql
+    assert "recommendation_acceptance_daily" not in sql

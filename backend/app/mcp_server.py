@@ -1,9 +1,10 @@
 """Aetherix MCP Server — inbound, agent-callable (ADR 0001 · HOS-71 · P1-2).
 
-Exposes three tools to third-party agents (Claude Desktop, enterprise hubs):
+Exposes tools to third-party agents (Claude Desktop, enterprise hubs):
   - get_operational_predictions
   - get_recommendations_with_memory_context
-  - submit_feedback_to_memory
+  - submit_feedback_to_memory  (a host's decision: who decided + why, ADR-0007 §17.4)
+  - get_decision_recap          (deterministic recap, read-only, ADR-0007 §17.2)
 
 Backs the `/mcp/v1/` route (ADR-0004). The `/mcp/v0/` route was retired on
 2026-08-01 (HOS-315); `get_recommendations_with_memory_context` stays
@@ -248,7 +249,12 @@ async def tool_submit_feedback_to_memory(
     actual_value: Optional[float] = None,
     notes: Optional[str] = None,
     request_id: str = "",
+    decided_by: str = "human_whatsapp",
 ) -> dict[str, Any]:
+    """Feedback-memory write. Called after a decision was recorded: by the
+    WhatsApp path directly, by MCP through ``tool_record_host_decision``.
+    ``decided_by`` is written into the reflection so recall can tell a human's
+    answer from a host agent's (ADR-0007 §17.5)."""
     if outcome not in ("accepted", "rejected", "modified", "ignored"):
         raise MCPAuthError(400, "invalid_input",
                            "outcome must be accepted|rejected|modified|ignored")
@@ -261,7 +267,7 @@ async def tool_submit_feedback_to_memory(
     feedback_map = {"accepted": "followed", "rejected": "rejected",
                     "modified": "neutral", "ignored": "neutral"}
 
-    reflection = f"[rec={rec_uuid}] outcome={outcome}"
+    reflection = f"[rec={rec_uuid}] outcome={outcome} decided_by={decided_by}"
     if actual_value is not None:
         reflection += f" actual={actual_value}"
     if clean_notes:
@@ -327,6 +333,126 @@ async def tool_submit_feedback_to_memory(
         "status": embedding_status,
         "embedding_dim": len(embedding_vec) if embedding_vec else 0,
     }
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 §17.4 — decisions from host agents: provenance + reason + policy
+# ---------------------------------------------------------------------------
+
+# Recommendation states a host may still decide. `ready_to_push` covers a
+# headless tenant whose recommendations never go through WhatsApp.
+_HOST_DECIDABLE_STATUSES = ("ready_to_push", "dispatched")
+
+
+async def tool_record_host_decision(
+    hotel_id: str,
+    db: AsyncSession,
+    caller: str,
+    recommendation_id: str,
+    outcome: str,
+    embedding_provider: Any = None,
+    actual_value: Optional[float] = None,
+    notes: Optional[str] = None,
+    request_id: str = "",
+    **provenance: Any,
+) -> dict[str, Any]:
+    """MCP ``submit_feedback_to_memory``: record a host's decision.
+
+    Order: outcome + provenance/reason validation (400, typed) → the
+    recommendation must belong to the token's hotel (404, never another
+    tenant's) → the decision policy seam (403 ``autonomy_not_permitted`` for a
+    host agent deciding alone under the default policy) → still undecided
+    (409 ``already_decided``) → write decision + who + why on the
+    recommendation → feedback memory (unchanged path).
+
+    ``ignored`` records no decision on the recommendation (memory only).
+    """
+    from app.db.models import StaffingRecommendation
+    from app.services.decision_policy import DecisionNotPermitted, authorize_decision
+    from app.services.decision_provenance import ProvenanceError, parse_agent_decision
+    from app.services.manager_decision import DecisionSource
+
+    if outcome not in ("accepted", "rejected", "modified", "ignored"):
+        raise MCPAuthError(400, "invalid_input",
+                           "outcome must be accepted|rejected|modified|ignored")
+    try:
+        decision = parse_agent_decision(provenance)
+    except ProvenanceError as exc:
+        raise MCPAuthError(400, "invalid_input", f"{exc.code}: {exc.detail}") from exc
+    try:
+        rec_uuid = UUID(recommendation_id)
+    except (ValueError, AttributeError) as exc:
+        raise MCPAuthError(400, "invalid_input", f"Bad recommendation_id: {exc}") from exc
+
+    rec = (await db.execute(
+        select(StaffingRecommendation).where(
+            StaffingRecommendation.id == rec_uuid,
+            StaffingRecommendation.tenant_id == hotel_id,
+        )
+    )).scalars().first()
+    if rec is None:
+        raise MCPAuthError(404, "unknown_recommendation",
+                           "No recommendation with this id for the authenticated property")
+
+    now = datetime.now(timezone.utc)
+    try:
+        policy = authorize_decision(hotel_id, decision.decided_by, at=now)
+    except DecisionNotPermitted as exc:
+        logger.info("host_decision_refused hotel=%s rec=%s code=%s policy=%s caller=%s",
+                    hotel_id, rec_uuid, exc.code, exc.policy.version, caller)
+        raise MCPAuthError(403, exc.code, exc.detail) from exc
+
+    if outcome != "ignored":
+        if rec.status not in _HOST_DECIDABLE_STATUSES:
+            raise MCPAuthError(409, "already_decided",
+                               f"recommendation already decided ({rec.status})")
+        rec.status = outcome
+        rec.action = outcome
+        rec.actioned_at = now
+        rec.decision_source = (
+            DecisionSource.host_relay.value if decision.decided_by == "human_via_host"
+            else DecisionSource.host_agent.value
+        )
+        rec.decision_confidence = 1.0
+        rec.decided_by = decision.decided_by
+        rec.decided_by_caller = caller
+        rec.reason_code = decision.reason_code
+        rec.reason_detail = decision.reason_detail or None
+        rec.reason_source = decision.reason_source
+        rec.reason_evidence = [e.model_dump() for e in decision.evidence] or None
+        rec.decision_policy_version = policy.version
+        logger.info(
+            "host_decision_recorded hotel=%s rec=%s outcome=%s decided_by=%s reason_code=%s "
+            "reason_source=%s caller=%s policy=%s",
+            hotel_id, rec_uuid, outcome, decision.decided_by, decision.reason_code,
+            decision.reason_source, caller, policy.version,
+        )
+
+    memory = await tool_submit_feedback_to_memory(
+        hotel_id, recommendation_id, outcome, db,
+        embedding_provider=embedding_provider, actual_value=actual_value, notes=notes,
+        request_id=request_id, decided_by=decision.decided_by,
+    )
+    return {
+        **memory,
+        "decision_recorded": outcome != "ignored",
+        "decided_by": decision.decided_by,
+        "decision_policy_version": policy.version,
+    }
+
+
+async def tool_get_decision_recap(
+    hotel_id: str, db: AsyncSession, period: str = "week", locale: str = "fr",
+) -> dict[str, Any]:
+    """MCP ``get_decision_recap`` — same deterministic recap as WhatsApp."""
+    from app.services.decision_recap import PERIODS, build_recap, render_text
+
+    if period not in PERIODS:
+        raise MCPAuthError(400, "invalid_input", f"period must be one of {', '.join(PERIODS)}")
+    if locale not in ("fr", "en"):
+        raise MCPAuthError(400, "invalid_input", "locale must be fr|en")
+    summary = await build_recap(db, hotel_id, period)
+    return {"recap": summary.as_dict(), "text": render_text(summary, locale)}
 
 
 # ---------------------------------------------------------------------------
@@ -410,10 +536,13 @@ async def dispatch_tool(
                     tok.hotel_id, db=db, embedding_provider=embedding_provider, **args,
                 )
             elif tool_name == "submit_feedback_to_memory":
-                result = await tool_submit_feedback_to_memory(
-                    tok.hotel_id, db=db, embedding_provider=embedding_provider,
+                result = await tool_record_host_decision(
+                    tok.hotel_id, db=db, caller=tok.label or tok.token_prefix or str(tok.id),
+                    embedding_provider=embedding_provider,
                     request_id=event.request_id, **args,
                 )
+            elif tool_name == "get_decision_recap":
+                result = await tool_get_decision_recap(tok.hotel_id, db=db, **args)
             else:
                 raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
         except MCPAuthError as exc:

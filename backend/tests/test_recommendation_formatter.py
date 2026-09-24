@@ -230,10 +230,14 @@ def test_format_message_surge_includes_time_window():
     assert "21:00" in msg
 
 
-def test_format_message_surge_pound_sign():
-    """Directive uses £ currency symbol."""
+def test_format_message_uses_configured_currency(monkeypatch):
+    """Directive uses the configured currency (default EUR), never a
+    hard-coded £/$ (ADR-0007 §17.1)."""
     msg = format_message("surge", 2, 500, 100, _T0, _T1, "event")
-    assert "£" in msg
+    assert "€500" in msg and "€100" in msg
+    assert "£" not in msg and "$" not in msg
+    monkeypatch.setattr("app.core.config.CURRENCY", "GBP")
+    assert "£500" in format_message("surge", 2, 500, 100, _T0, _T1, "event")
 
 
 def test_format_message_lull_different_text():

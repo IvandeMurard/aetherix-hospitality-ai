@@ -118,8 +118,14 @@ class RestaurantProfile(Base):
     gps_lng = Column(Float)
 
     # ROI configuration (Story 3.3b) — overrides system defaults when set
-    avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # £ per cover
-    staff_hourly_rate = Column(Numeric(8, 2), nullable=True)     # £ per staff/hour
+    avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # per cover, in config.CURRENCY
+    staff_hourly_rate = Column(Numeric(8, 2), nullable=True)     # per staff/hour, in config.CURRENCY
+
+    # ADR-0007 §17: weekly recap push only on opt-in (interruption budget);
+    # recap/confirmation copy locale (fr | en; None → fr).
+    # Mirror of migration 20260924160000 (schema drift gate — Décision #16).
+    weekly_recap_opt_in = Column(Boolean, nullable=False, default=False)
+    manager_locale = Column(String, nullable=True)
 
     # Agent constitution (Prompt B — WhatsApp conversational agent)
     manager_name = Column(String, nullable=True)
@@ -358,6 +364,20 @@ class StaffingRecommendation(Base):
     decision_source = Column(String, nullable=True)
     decision_confidence = Column(Numeric(4, 3), nullable=True)
 
+    # ADR-0007 §17: WHO decided (decision_provenance.DecidedBy) and WHY. An
+    # agent-decided record is never a human trust signal; a reason a host agent
+    # inferred is flagged `agent_inferred`, never stored as the human's.
+    # decision_policy_version = the policy in force (decision_policy), so
+    # metrics split before/after a policy change.
+    # Mirror of migration 20260924160000 (schema drift gate — Décision #16).
+    decided_by = Column(String, nullable=True)
+    decided_by_caller = Column(String, nullable=True)
+    reason_code = Column(String, nullable=True)
+    reason_detail = Column(Text, nullable=True)
+    reason_source = Column(String, nullable=True)
+    reason_evidence = Column(JSONB, nullable=True)
+    decision_policy_version = Column(String, nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -383,7 +403,7 @@ class ManagerPrompt(Base):
         ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
         nullable=True,
     )
-    kind = Column(String, nullable=False)                # decision_confirmation | reason_request
+    kind = Column(String, nullable=False)                # decision_confirmation | reason_request | decision_revision
     proposed_decision = Column(String, nullable=True)    # accepted | rejected | modified
     origin = Column(String, nullable=True)               # model | keyword_ambiguous | bare_ack | <decision source>
     confidence = Column(Numeric(4, 3), nullable=True)

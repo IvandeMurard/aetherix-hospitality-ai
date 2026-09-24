@@ -106,8 +106,8 @@ class ROICalculatorService:
             deviation_pct:      (expected - baseline) / baseline * 100.
             expected_demand:    Projected demand for the window.
             baseline_demand:    Historical baseline demand for the window.
-            avg_spend_per_cover: Average revenue per cover (£).
-            staff_hourly_rate:  Hourly cost per additional staff member (£).
+            avg_spend_per_cover: Average revenue per cover (config.CURRENCY).
+            staff_hourly_rate:  Hourly cost per additional staff member (config.CURRENCY).
             captation_rate:     Fraction of extra demand the property can capture.
             window_hours:       Duration of the anomaly window in hours (default 4).
 

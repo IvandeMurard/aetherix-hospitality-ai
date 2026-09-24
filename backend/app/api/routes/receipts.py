@@ -17,6 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.tenant_scope import require_token_hotel
 from app.db.session import get_db
 from app.mcp_core import MCPAuthError, RECEIPTS_READ_SCOPE
 from app.mcp_server import verify_bearer
@@ -63,10 +64,11 @@ async def get_receipt(
 ) -> ReceiptPayload:
     """Return the enriched ReceiptPayload for `hotel_id` on `receipt_date`.
 
-    The token's hotel_id is not enforced here — the frontend passes the hotel_id
-    from the deep link. For Phase 2 Sandbox (single-hotel), this is sufficient.
-    Multi-hotel scoping will be added in Phase 3 when tenant isolation is required.
+    The token must be bound to `hotel_id`. Until 24/09/2026 it was not
+    enforced (single-hotel sandbox assumption); any valid receipts:read token
+    could read any hotel's receipt (ADR-0007 §17.7).
     """
+    require_token_hotel(token, hotel_id)
     service = ReceiptsService(db)
     payload = await service.daily_receipt(hotel_id, receipt_date)
     logger.info(

@@ -3,6 +3,7 @@ import asyncio
 from datetime import date
 from typing import Any, Dict, List
 
+from app.core.money import format_money
 from app.core.demo_events import demo_emit
 from app.core.pii import digest_identifier
 from app.db.models import PMSSyncLog
@@ -137,7 +138,7 @@ class PMSSyncService:
                 f"**Date:** {target_date.isoformat()}  \n\n"
                 f"| Field | Value |\n|---|---|\n"
                 f"| Occupancy | {occupancy} rooms |\n"
-                f"| F&B Revenue | £{revenue:.2f} |\n"
+                f"| F&B Revenue | {format_money(revenue, 2)} |\n"
                 f"| Status | success |\n"
             ),
             folder=VAULT_FOLDERS["sync_logs"],

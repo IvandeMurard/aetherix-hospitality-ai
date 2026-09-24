@@ -19,6 +19,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
+from app.core.money import format_money
 from app.core import config
 from app.core.observability import guardrail_trip
 from app.db.models import AgentActionLog
@@ -105,8 +106,8 @@ def evaluate(
         verdict.flags.append((
             REASON_BUDGET,
             (
-                f"projected daily labor cost £{labor_cost:.0f} exceeds daily budget "
-                f"£{labor_budget:.0f} (overage £{labor_cost - labor_budget:.0f})."
+                f"projected daily labor cost {format_money(labor_cost)} exceeds daily budget "
+                f"{format_money(labor_budget)} (overage {format_money(labor_cost - labor_budget)})."
             ),
         ))
 

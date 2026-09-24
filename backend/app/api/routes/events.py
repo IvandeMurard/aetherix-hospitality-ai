@@ -17,6 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.api.tenant_scope import require_user_owns_tenant
 from app.core.security import get_current_user
 from app.db.models import RestaurantProfile
 from app.db.session import AsyncSessionLocal, get_db
@@ -63,14 +64,16 @@ async def trigger_event_sync(
     Events within ``radius_km`` of the property GPS (default 5 km) and
     starting within the next ``days_ahead`` days (default 30) are fetched.
     """
-    result = await db.execute(
-        select(RestaurantProfile).where(
-            RestaurantProfile.owner_id == current_user["id"]
-            if not body.tenant_id
-            else RestaurantProfile.tenant_id == body.tenant_id
+    if body.tenant_id:
+        # An explicit tenant must be one the caller owns (ADR-0007 §17.7).
+        profile = await require_user_owns_tenant(db, current_user, body.tenant_id)
+    else:
+        result = await db.execute(
+            select(RestaurantProfile).where(
+                RestaurantProfile.owner_id == current_user["id"]
+            )
         )
-    )
-    profile = result.scalars().first()
+        profile = result.scalars().first()
 
     if profile is None:
         raise HTTPException(
