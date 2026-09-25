@@ -29,7 +29,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.money import format_money
-from app.services import task_classes
+from app.services import risk_assessment, task_classes
 from app.services.roi_calculator import ROICalculatorService
 
 logger = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ class RecommendationFormatterService:
                        direction, triggering_factors,
                        roi_revenue_opp, roi_labor_cost, roi_net,
                        window_start, window_end,
-                       deviation_pct, expected_demand
+                       deviation_pct, expected_demand, baseline_demand
                 FROM demand_anomalies
                 WHERE property_id = :property_id
                   AND status = 'roi_positive'
@@ -205,7 +205,7 @@ class RecommendationFormatterService:
                        direction, triggering_factors,
                        roi_revenue_opp, roi_labor_cost, roi_net,
                        window_start, window_end,
-                       deviation_pct, expected_demand
+                       deviation_pct, expected_demand, baseline_demand
                 FROM demand_anomalies
                 WHERE status = 'roi_positive'
                 ORDER BY window_start
@@ -259,6 +259,7 @@ class RecommendationFormatterService:
             window_end,
             deviation_pct,
             expected_demand,
+            baseline_demand,
         ) = row
 
         # Guard: window times are required
@@ -305,23 +306,45 @@ class RecommendationFormatterService:
         # when the hotel set its own rates (the ROI defaults are placeholders).
         ctx = await self._load_decision_context(db, tenant_id, property_id)
 
-        message = format_message(
-            direction=direction,
-            headcount=headcount,
-            revenue_opp=revenue_opp_f,
-            labor_cost=labor_cost_f,
-            window_start=ws,
-            window_end=we,
-            factor=factor,
-            show_money=bool(ctx["rates_set"]),
-        )
+        # ADR-0007 §18.4 — risk-based recommendation: newsvendor when the
+        # forecaster has a calibration and the hotel set its costs; otherwise
+        # the ROI headcount scale stays the recommendation (rule recorded).
+        assessment = self._assess(ctx, direction, headcount, expected_demand, baseline_demand)
+        rule = assessment["decision_rule"]
+        delta = int(assessment["recommended_delta_staff"])
+        if rule == risk_assessment.RULE_NEWSVENDOR:
+            headcount = delta
+            if delta > 0:
+                message = format_message("surge", delta, 0.0, 0.0, ws, we, factor, show_money=False)
+            elif delta < 0:
+                message = format_message("lull", delta, 0.0, 0.0, ws, we, factor)
+            else:
+                message = (
+                    f"Keep the usual staffing for {ws:%H:%M}–{we:%H:%M} "
+                    f"(risk-balanced). Trigger: {factor}."
+                )
+        else:
+            message = format_message(
+                direction=direction,
+                headcount=headcount,
+                revenue_opp=revenue_opp_f,
+                labor_cost=labor_cost_f,
+                window_start=ws,
+                window_end=we,
+                factor=factor,
+                show_money=bool(ctx["rates_set"]),
+            )
+        # Interruption budget: the two lines go in the daily message only when
+        # the gap between the options is material; always stored (recap, MCP).
+        if assessment["material"]:
+            message = "\n".join([message, *risk_assessment.render_lines(assessment, ctx["locale"])])
 
         now = datetime.now(tz=timezone.utc)
 
         # ADR-0007 §18.1 — point of no return: the task class, its commit point
         # and the correction window left when the recommendation is issued. Shown
         # to the manager only when it matters (closing or passed); always stored.
-        task_class = task_classes.for_direction(direction)
+        task_class = task_classes.TaskClassKey(assessment["task_class"])
         window = task_classes.correction_window(
             task_class, ws, now, offset_hours=ctx["commit_offsets"].get(task_class.value)
         )
@@ -344,6 +367,7 @@ class RecommendationFormatterService:
                          window_start, window_end,
                          roi_net, roi_labor_cost, predicted_covers,
                          task_class, commit_at, correction_window,
+                         decision_rule, risk_assessment,
                          status, created_at, updated_at)
                     VALUES
                         (:id, :tenant_id, :property_id, :anomaly_id,
@@ -351,6 +375,7 @@ class RecommendationFormatterService:
                          :window_start, :window_end,
                          :roi_net, :roi_labor_cost, :predicted_covers,
                          :task_class, :commit_at, :correction_window,
+                         :decision_rule, :risk_assessment,
                          'ready_to_push', :now, :now)
                     ON CONFLICT (anomaly_id) DO UPDATE SET
                         status = 'ready_to_push',
@@ -359,6 +384,9 @@ class RecommendationFormatterService:
                         task_class = EXCLUDED.task_class,
                         commit_at = EXCLUDED.commit_at,
                         correction_window = EXCLUDED.correction_window,
+                        recommended_headcount = EXCLUDED.recommended_headcount,
+                        decision_rule = EXCLUDED.decision_rule,
+                        risk_assessment = EXCLUDED.risk_assessment,
                         updated_at = EXCLUDED.updated_at
                     """
                 ),
@@ -378,6 +406,8 @@ class RecommendationFormatterService:
                     "task_class": task_class.value,
                     "commit_at": window.commit_at,
                     "correction_window": json.dumps(window.as_dict()),
+                    "decision_rule": rule,
+                    "risk_assessment": json.dumps(assessment),
                     "now": now.isoformat(),
                 },
             )
@@ -423,13 +453,15 @@ class RecommendationFormatterService:
 
         ctx: Dict[str, Any] = {
             "locale": None, "tz": _tz(), "commit_offsets": {}, "rates_set": False,
+            "covers_per_server": None,
         }
         try:
             async with db.begin_nested():
                 row = (
                     await db.execute(
                         text(
-                            "SELECT manager_locale, avg_spend_per_cover, staff_hourly_rate "
+                            "SELECT manager_locale, avg_spend_per_cover, staff_hourly_rate, "
+                            "covers_per_server "
                             "FROM restaurant_profiles WHERE id = :pid"
                         ),
                         {"pid": str(property_id)},
@@ -438,6 +470,7 @@ class RecommendationFormatterService:
             if row is not None:
                 ctx["locale"] = row[0]
                 ctx["rates_set"] = row[1] is not None and row[2] is not None
+                ctx["covers_per_server"] = row[3]
         except Exception:  # noqa: BLE001 — degrade-open
             logger.debug("recommendation_formatter: locale lookup failed for %s", property_id)
         # ADR-0007 §18.3: the hotel's own parameters (commit offsets, costs).
@@ -452,3 +485,46 @@ class RecommendationFormatterService:
         except Exception:  # noqa: BLE001 — degrade-open
             logger.debug("recommendation_formatter: parameter lookup failed for %s", tenant_id)
         return ctx
+
+    @staticmethod
+    def _assess(
+        ctx: Dict[str, Any], direction: str, fallback_headcount: int,
+        expected_demand: Any, baseline_demand: Any,
+    ) -> Dict[str, Any]:
+        """ADR-0007 §18.4. Covers per extra staff: the hotel's own parameter,
+        else the profile's covers-per-server ratio (a hotel setting, labelled
+        ``profile_ratio``), else none — the options are then described by
+        their headcount only."""
+        from app.services import hotel_parameters
+        from app.services.forecast_calibration import load_active
+
+        params = ctx.get("params") or hotel_parameters.HotelParameters(tenant_id="")
+        c = params.get("covers_per_extra_staff")
+        c_source = "hotel_parameter" if c is not None else None
+        if c is None and ctx.get("covers_per_server"):
+            c, c_source = float(ctx["covers_per_server"]), "profile_ratio"
+        point = float(expected_demand) if expected_demand is not None else 0.0
+        base = float(baseline_demand) if baseline_demand is not None else point
+        try:
+            calibration = load_active(risk_assessment.ANOMALY_FORECASTER)
+        except Exception:  # noqa: BLE001 — no calibration → qualitative, never a guess
+            calibration = None
+        fallback = int(fallback_headcount) if direction == "surge" else -abs(int(fallback_headcount))
+        assessment = risk_assessment.assess(risk_assessment.Inputs(
+            task_class=task_classes.for_direction(direction),
+            point_forecast=point,
+            baseline_covers=base,
+            fallback_delta_staff=fallback,
+            forecaster=risk_assessment.ANOMALY_FORECASTER,
+            calibration=calibration,
+            params=params,
+            covers_per_staff=c,
+            covers_per_staff_source=c_source,
+        ))
+        # Task class follows the recommended action, not the anomaly direction.
+        delta = assessment["recommended_delta_staff"]
+        if delta > 0:
+            assessment["task_class"] = task_classes.TaskClassKey.staffing_add.value
+        elif delta < 0:
+            assessment["task_class"] = task_classes.TaskClassKey.staffing_reduce.value
+        return assessment

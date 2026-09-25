@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS restaurant_profiles (
     id TEXT PRIMARY KEY,
     manager_locale TEXT,
     avg_spend_per_cover REAL,
-    staff_hourly_rate REAL
+    staff_hourly_rate REAL,
+    covers_per_server INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS staffing_recommendations (
@@ -104,6 +105,8 @@ CREATE TABLE IF NOT EXISTS staffing_recommendations (
     task_class TEXT,
     commit_at TEXT,
     correction_window TEXT,
+    decision_rule TEXT,
+    risk_assessment TEXT,
     status TEXT NOT NULL DEFAULT 'ready_to_push',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL

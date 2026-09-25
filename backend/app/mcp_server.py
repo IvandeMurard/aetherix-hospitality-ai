@@ -455,6 +455,53 @@ async def tool_get_decision_recap(
     return {"recap": summary.as_dict(), "text": render_text(summary, locale)}
 
 
+async def tool_get_pending_recommendations(
+    hotel_id: str, db: AsyncSession, locale: str = "fr", limit: int = 20,
+) -> dict[str, Any]:
+    """MCP ``get_pending_recommendations`` (ADR-0007 §18.4) — the token's hotel
+    only; typed consequences as stored at issue time, never recomputed."""
+    from sqlalchemy import select as _select
+
+    from app.db.models import StaffingRecommendation
+    from app.services.risk_assessment import render_lines
+
+    if locale not in ("fr", "en"):
+        raise MCPAuthError(400, "invalid_input", "locale must be fr|en")
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        raise MCPAuthError(400, "invalid_input", "limit must be an integer") from None
+    if not 1 <= limit <= 50:
+        raise MCPAuthError(400, "invalid_input", "limit must be within [1, 50]")
+    rows = (
+        await db.execute(
+            _select(StaffingRecommendation)
+            .where(
+                StaffingRecommendation.tenant_id == hotel_id,
+                StaffingRecommendation.status.in_(("ready_to_push", "dispatched")),
+            )
+            .order_by(StaffingRecommendation.window_start)
+            .limit(limit)
+        )
+    ).scalars().all()
+    items = []
+    for r in rows:
+        ra = r.risk_assessment if isinstance(r.risk_assessment, dict) else None
+        items.append({
+            "recommendation_id": str(r.id),
+            "status": r.status,
+            "window_start": r.window_start.isoformat() if r.window_start else None,
+            "window_end": r.window_end.isoformat() if r.window_end else None,
+            "task_class": r.task_class,
+            "recommended_delta_staff": r.recommended_headcount,
+            "decision_rule": r.decision_rule,
+            "correction_window": r.correction_window,
+            "risk": ra,
+            "lines": render_lines(ra, locale) if ra else [],
+        })
+    return {"hotel_id": hotel_id, "recommendations": items}
+
+
 # ---------------------------------------------------------------------------
 # Dispatcher — used by the HTTP shim and integration tests
 # ---------------------------------------------------------------------------
@@ -543,6 +590,8 @@ async def dispatch_tool(
                 )
             elif tool_name == "get_decision_recap":
                 result = await tool_get_decision_recap(tok.hotel_id, db=db, **args)
+            elif tool_name == "get_pending_recommendations":
+                result = await tool_get_pending_recommendations(tok.hotel_id, db=db, **args)
             else:
                 raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
         except MCPAuthError as exc:

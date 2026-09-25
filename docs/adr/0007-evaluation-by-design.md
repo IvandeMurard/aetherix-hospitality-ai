@@ -1711,3 +1711,71 @@ superuser via `tenant_scope.require_user_owns_tenant`; `GET` values + catalog,
   defaults internally (unchanged, not shown).
 - The hotel's `commit_offset_hours.*` now replace the catalog defaults in the
   correction window (§18.1), which then stops saying "default".
+
+### 18.4 Risk-based recommendation — the decision rule, not a paragraph
+
+`backend/app/services/risk_assessment.py` (pure), applied in the formatter to
+every staffing recommendation; stored as `staffing_recommendations
+.decision_rule` + `.risk_assessment` (migration `20260925120000`).
+
+**Rule.** Newsvendor in staff units (`newsvendor-v1`): one extra person serves
+`c = covers_per_extra_staff` covers; overage `co = extra_shift_cost`; underage
+`cu = c × lost_cover_value`; critical ratio `CR = cu / (cu + co)`; staff for
+the demand quantile `Q = F⁻¹(CR)` of the **calibrated** distribution:
+`Δstaff = ceil((Q − baseline) / c)`, within `max_extra_staff` /
+`max_staff_reduction` (±4 when unset, the previous rule's range). Stated
+assumption: the usual staffing is sized for the anomaly's `baseline_demand`.
+
+**Fallback, recorded.** If any input is missing — a calibration **for the
+forecaster in use**, `extra_shift_cost`, `lost_cover_value`, covers per staff —
+the previous rule (`deviation-scale-v1`, the ROI headcount scale) stays the
+recommendation and `fallback_missing_inputs` lists why. Covers per staff: the
+hotel's parameter, else the profile's `covers_per_server` (a hotel setting,
+labelled `profile_ratio`), else none.
+
+**Today, every dispatched recommendation takes the fallback**: they come from
+the anomaly heuristic (`anomaly-heuristic-v1`), for which no calibration
+exists (§18.2), and no hotel has configured costs. The newsvendor path is
+built and tested (with a calibration injected in tests), not exercised on any
+real recommendation.
+
+**Per-option consequences** (typed, `risk-assessment-v1`), for *accept*
+(Δstaff) and *refuse* (no change): extra shifts and their cost (**money only
+from configured costs**), shortfall probability `P(D > capacity)` and expected
+shortfall / idle covers and their value (**probability only from a
+calibration of this forecaster**, with its provenance label), expected total
+cost, else a qualitative band (`likely` / `possible` / `unlikely` from
+capacity vs point forecast, ±10 %). Also stored: point forecast, baseline,
+interval at nominal level (for arm C coverage), parameters version,
+calibration version, critical ratio, quantile.
+
+**Lines** (deterministic, FR default / EN), e.g.:
+
+- `If accepted: +3 shifts (€540); shortfall risk ≈15%, ~0.6 covers (≈€14) (synthetic-calibrated uncertainty).`
+- `If refused: no change; shortfall risk ≈85%, ~30.6 covers (≈€764) (synthetic-calibrated uncertainty).`
+- without calibration or costs: `If refused: no change; shortfall likely if the forecast holds (qualitative, uncertainty not calibrated).`
+
+Probabilities are shown to the nearest 5 %, never 0 % or 100 % (the stored
+grid does not resolve the tails).
+
+**Interruption budget.** The two lines go into the daily message only when the
+expected-cost gap between the options is at least `risk_display_min_gap`
+(hotel) or `RISK_DISPLAY_MIN_GAP_DEFAULT` (50, env); without money, when
+calibrated shortfall probabilities differ by ≥ `RISK_DISPLAY_MIN_PROB_GAP`
+(0.20); never when nothing is quantified or both options are the same action.
+Always available: recap (undecided recommendations of the period, up to 3 in
+the text, all in `as_dict`) and **MCP `get_pending_recommendations`**
+(`receipts:read`, token-bound hotel): recommendation id, window, task class,
+Δstaff, rule, correction window, typed risk, rendered lines. This also closes
+the §17.4 gap — a host agent can now obtain a `recommendation_id`.
+
+**Other changes.** When the newsvendor sets Δstaff, `recommended_headcount`
+is that Δ (so the §17.8 "proposes a change" test follows it), the task class
+follows its sign, and the message says "Add N staff …", "Consider reducing …"
+or "Keep the usual staffing … (risk-balanced)".
+
+**Seen, not changed:** a lull anomaly never becomes a recommendation (its ROI
+is 0 by construction, so it never reaches `roi_positive`), and its message
+would read "reducing staffing by 0" (`recommended_headcount` returns 0 for
+lulls). Reduction recommendations therefore only exist through the newsvendor
+path once it runs.

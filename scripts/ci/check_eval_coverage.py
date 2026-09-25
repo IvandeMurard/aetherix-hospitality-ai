@@ -42,6 +42,8 @@ EVAL_TRIGGER_PATHS = [
     "backend/app/services/prediction_engine.py",
     # ADR-0007 §18.2: the interval every risk statement rests on.
     "backend/app/services/forecast_calibration.py",
+    # ADR-0007 §18.4: the decision rule that sets the recommended headcount.
+    "backend/app/services/risk_assessment.py",
     "backend/app/services/staffing_service.py",
     "backend/app/services/recommendation_formatter.py",
     "backend/app/services/reasoning_service.py",
@@ -74,6 +76,7 @@ EVAL_TRIGGER_PATHS = [
 LAYER_BY_PATH = {
     "backend/app/services/prediction_engine.py": "forecast",
     "backend/app/services/forecast_calibration.py": "forecast",
+    "backend/app/services/risk_assessment.py": "forecast",
     "backend/app/services/staffing_service.py": "forecast",
     "backend/app/services/data_transformer.py": "forecast",
     "backend/app/services/demand_modifiers.py": "forecast",

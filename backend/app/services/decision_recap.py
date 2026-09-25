@@ -84,6 +84,8 @@ class RecRow:
     predicted_covers: Optional[float]
     actual_covers: Optional[float]
     awaiting_confirmation: bool = False
+    # ADR-0007 §18.4: typed per-option consequences stored at issue time.
+    risk_assessment: Optional[dict] = None
 
 
 def acceptance_rate(accepted: int, decided: int) -> Optional[float]:
@@ -122,6 +124,10 @@ class RecapSummary:
     human: DeciderStats = field(default_factory=DeciderStats)
     agent: DeciderStats = field(default_factory=DeciderStats)
     acceptance_definition: str = ACCEPTANCE_DEFINITION
+    # ADR-0007 §18.4: undecided recommendations with their per-option risk —
+    # always available here, whatever the interruption budget did in the
+    # daily message. Newest window last.
+    pending_risk: list[dict] = field(default_factory=list)
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -174,6 +180,12 @@ def summarize(rows: Iterable[RecRow], period: str, start: date, end: date,
             s.awaiting_confirmation += 1
         else:
             s.no_reply += 1
+        if r.status not in DECIDED_STATUSES and r.risk_assessment:
+            s.pending_risk.append({
+                "recommendation_id": str(r.id),
+                "window_start": (r.window_start or r.received_at).isoformat(),
+                "risk": r.risk_assessment,
+            })
 
     s.human = _stats([r for r in decided if r.decided_by in HUMAN_DECIDERS])
     s.agent = _stats([r for r in decided if r.decided_by in AGENT_DECIDERS])
@@ -240,6 +252,7 @@ _T = {
         "sources_none": "Décidé via : aucune décision.",
         "agent_note": "Décisions d'agent autonome : {n} (exclues des taux de confiance).",
         "fix": "Décision mal enregistrée ? Répondez « corriger mardi ».",
+        "risk_head": "Risque par option, sans réponse :",
         "bucket": {"button": "bouton", "keyword": "mot-clé", "model": "modèle",
                    "confirmed": "confirmé", "revised": "corrigé après coup",
                    "host": "outil hôte", "agent": "agent", "unattributed": "non attribué"},
@@ -256,11 +269,17 @@ _T = {
         "sources_none": "Decided via: no decision.",
         "agent_note": "Autonomous agent decisions: {n} (excluded from trust rates).",
         "fix": "Decision recorded wrong? Reply \"fix tuesday\".",
+        "risk_head": "Risk per option, no reply yet:",
         "bucket": {"button": "button", "keyword": "keyword", "model": "model",
                    "confirmed": "confirmed", "revised": "fixed later",
                    "host": "host tool", "agent": "agent", "unattributed": "unattributed"},
     },
 }
+
+
+# At most this many recommendations get their risk lines in the recap text
+# (all of them are in as_dict / MCP).
+RECAP_RISK_MAX = 3
 
 
 def _loc(locale: Optional[str]) -> str:
@@ -290,6 +309,15 @@ def render_text(s: RecapSummary, locale: Optional[str] = "fr") -> str:
         lines.append(t["agent_note"].format(n=s.agent.decided))
     if s.accepted + s.rejected + s.corrected:
         lines.append(t["fix"])
+    if s.pending_risk:
+        from app.services.risk_assessment import render_lines
+
+        tz = _tz()
+        lines.append(t["risk_head"])
+        for item in s.pending_risk[:RECAP_RISK_MAX]:
+            when = datetime.fromisoformat(item["window_start"]).astimezone(tz)
+            lines.append(f"{when:%d/%m %H:%M}")
+            lines.extend(f"  {line}" for line in render_lines(item["risk"], locale))
     return "\n".join(lines)
 
 
@@ -331,6 +359,7 @@ async def load_rows(db: AsyncSession, tenant_id: str, lo: datetime, hi: datetime
             actioned_at=_utc(r.actioned_at),
             predicted_covers=float(r.predicted_covers) if r.predicted_covers is not None else None,
             actual_covers=float(r.actual_covers) if r.actual_covers is not None else None,
+            risk_assessment=r.risk_assessment if isinstance(r.risk_assessment, dict) else None,
         ))
     if not rows:
         return rows

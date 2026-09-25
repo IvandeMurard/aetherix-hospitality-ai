@@ -386,6 +386,11 @@ class StaffingRecommendation(Base):
     task_class = Column(String, nullable=True)
     commit_at = Column(DateTime(timezone=True), nullable=True)
     correction_window = Column(JSONB, nullable=True)
+    # ADR-0007 §18.4: which rule produced recommended_headcount
+    # (newsvendor-v1 | deviation-scale-v1) and the typed per-option
+    # consequences (risk_assessment.SCHEMA). Mirror of migration 20260925120000.
+    decision_rule = Column(String, nullable=True)
+    risk_assessment = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

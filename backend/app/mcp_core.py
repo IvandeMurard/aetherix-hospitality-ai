@@ -23,6 +23,7 @@ _TOOL_RATE_LIMITS = {
     # v1 atomic tools
     "recall_memory": 60,
     "get_decision_recap": 30,
+    "get_pending_recommendations": 30,
 }
 
 _TOOL_SCOPE = {
@@ -33,6 +34,8 @@ _TOOL_SCOPE = {
     "recall_memory": "memory:read",
     # ADR-0007 §17: same read scope as the Receipt drill-down and the KPIs
     "get_decision_recap": "receipts:read",
+    # ADR-0007 §18.4: read-only, same scope as the recap.
+    "get_pending_recommendations": "receipts:read",
 }
 
 # Separate admin scope for destructive / model-mutating operations (HOS-149 AC4)
@@ -237,6 +240,29 @@ DECISION_RECAP_TOOL: dict[str, Any] = {
     },
 }
 
+# ADR-0007 §18.4: undecided recommendations with their typed per-option
+# consequences, correction window and the rule that produced them. Also the
+# only way for a host agent to obtain a recommendation_id (§17.4 gap).
+PENDING_RECOMMENDATIONS_TOOL: dict[str, Any] = {
+    "name": "get_pending_recommendations",
+    "description": (
+        "Undecided staffing recommendations of the authenticated property, each with "
+        "recommendation_id, window, task class, recommended staff change, the rule "
+        "that produced it (newsvendor-v1 | deviation-scale-v1), the correction window "
+        "(commit point), and typed consequences per option (accept / refuse): extra "
+        "shifts and their cost only when the hotel configured costs, shortfall "
+        "probability only when the forecaster is calibrated (with the calibration's "
+        "provenance), otherwise a qualitative band."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "locale": {"type": "string", "enum": ["fr", "en"], "default": "fr"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+        },
+    },
+}
+
 _TOOLS_BY_NAME: dict[str, dict[str, Any]] = {t["name"]: t for t in TOOLS_MANIFEST}
 
 # v1 manifest: get_recommendations_with_memory_context replaced by recall_memory
@@ -245,4 +271,5 @@ V1_TOOLS_MANIFEST: list[dict[str, Any]] = [
     RECALL_MEMORY_TOOL,
     _TOOLS_BY_NAME["submit_feedback_to_memory"],
     DECISION_RECAP_TOOL,
+    PENDING_RECOMMENDATIONS_TOOL,
 ]

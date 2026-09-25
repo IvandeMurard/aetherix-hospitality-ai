@@ -60,6 +60,16 @@ _AGENT_MANIFEST = {
             "method": "POST",
             "x-mcp-tool": True,
         },
+        {
+            "name": "get_pending_recommendations",
+            "description": (
+                "Undecided recommendations with typed consequences per option "
+                "(accept / refuse), correction window and decision rule."
+            ),
+            "endpoint": "/mcp/v1/",
+            "method": "POST",
+            "x-mcp-tool": True,
+        },
     ],
     "agent_callable_endpoints": [
         {
@@ -106,6 +116,7 @@ _AGENT_MANIFEST = {
         "recall_memory": "60 req/min per hotel",
         "submit_feedback_to_memory": "20 req/min per hotel",
         "get_decision_recap": "30 req/min per hotel",
+        "get_pending_recommendations": "30 req/min per hotel",
         "default": "60 req/min",
     },
     "contact": {

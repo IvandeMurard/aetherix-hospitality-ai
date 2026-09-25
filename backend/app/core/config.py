@@ -209,3 +209,15 @@ CONVERSATIONAL_QUERY_RETENTION_DAYS: int = int(
 
 # Heure UTC du passage de purge quotidien.
 RETENTION_PURGE_HOUR: int = int(_os.getenv("RETENTION_PURGE_HOUR", "3"))
+
+# ---------------------------------------------------------------------------
+# ADR-0007 §18.4 — interruption budget for risk lines in the daily message.
+# The "if accepted / if refused" lines are always stored and served by the
+# recap and MCP; they go into the daily message only when the gap between
+# the options is material. Per-hotel override: hotel_decision_parameters
+# ``risk_display_min_gap``. A display threshold, not a cost.
+# ---------------------------------------------------------------------------
+#: Minimum expected-cost gap (in CURRENCY) between the options.
+RISK_DISPLAY_MIN_GAP_DEFAULT: float = float(_os.getenv("RISK_DISPLAY_MIN_GAP_DEFAULT", "50"))
+#: When money is not available: minimum gap between calibrated shortfall probabilities.
+RISK_DISPLAY_MIN_PROB_GAP: float = float(_os.getenv("RISK_DISPLAY_MIN_PROB_GAP", "0.20"))

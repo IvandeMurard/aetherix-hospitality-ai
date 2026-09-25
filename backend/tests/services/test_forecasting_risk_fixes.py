@@ -280,6 +280,7 @@ class TestRecommendationFormatterAtomicity:
             datetime(2026, 7, 14, 23, 59, tzinfo=timezone.utc),  # window_end
             25.0,                # deviation_pct
             130.0,               # expected_demand (HOS-200 — persisted as predicted_covers)
+            100.0,               # baseline_demand (ADR-0007 §18.4)
         )
 
         # The per-hotel context lookup (ADR-0007 §18) runs in its own read
