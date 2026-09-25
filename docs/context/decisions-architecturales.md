@@ -409,7 +409,7 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Decision.**
 - **Decision vs comment.** The decision (`accepted | rejected | modified | none`) is arm C's ground truth: deterministic wherever possible, auditable (`staffing_recommendations.decision_source` + `decision_confidence`). The comment (reason, detail) is optional and never changes a recorded decision.
-- **(a) Schema.** The classifier returns an explicit `decision` + `confidence` (+ corrected value, reason, reason route), validated by `ClassifierOutput` (Décision #35 D2). Out-of-schema answers and call failures record nothing (typed `why`), never `modified`.
+- **(a) Schema.** The classifier returns an explicit `decision` + `confidence` (+ corrected value, reason, reason route), validated by `ClassifierOutput` (Décision #35 D2). Out-of-schema answers and call failures record nothing (typed `why`), never `modified`. *Amended 25/09/2026 (Décision #41, ADR-0007 §19): the classifier returns a stance, not a decision; the decision is derived from the stance and the recommendation's proposal.*
 - **(b) Bare acknowledgement** ("ok", "👍", "parfait") records `accepted` only when exactly one recommendation is pending and the reply comes within 12 h of dispatch; source `bare_ack_rule`, so arm C can separate it from an explicit accept. Otherwise: confirmation (or nothing if none is pending).
 - **(c) Exact-keyword fast path kept and widened** to FR/EN forms (oui/validé/✅… ; non/refusé/❌…), whole reply only, every form unit-tested; ambiguous forms ("non merci", "tel quel", "pas besoin") → confirmation, never a guess.
 - **(d) Quick-reply buttons** Accepter / Refuser / Corriger + Oui / Non, fixed payload IDs, no model. Behind `WHATSAPP_DECISION_BUTTONS` (off), text fallback. The recommendation is business-initiated → a WhatsApp-approved Content template is required: **pending ops step**. Buttons are not claimed to work end to end.
@@ -450,6 +450,15 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 - §18.4 newsvendor rule with recorded fallback; typed per-option consequences; interruption budget; recap + MCP `get_pending_recommendations`.
 - §18.5 learning loop: arm C risk-statement calibration + arm B alert, realised recalibration (canary, freeze rule, Ivan activates, rollback), cost proposals (hotel or Ivan approves), routed reasons to review, case-set → eval case after review; hygiene rules tested.
 - **Nothing measured on real data**; every real recommendation today uses the fallback rule with qualitative lines.
+
+### 41 — A reply is a stance; the decision follows from the proposal (25/09/2026)
+
+**Decision (Ivan, PO: "Fix the logic, not the example"):** a manager's free-text reply is read as a **stance** toward the recommendation (`adopt_proposal | decline_proposal | keep_current | counter_value | unclear | none`), and the decision is derived by one function from the stance and what the recommendation proposed (`add | reduce | no_change | unknown`, from the stored row). Detail: **ADR-0007 §19**.
+
+- Keep current rejects a change and accepts "no change"; anything the code cannot tell → confirmation (Décision #6); `unclear` → the manager is asked for the decision.
+- Phrase lists → stance lexicons composed over the whole reply; sentence-level entries removed. "Pas besoin" / "no need": rejected for ADD, confirmation for REDUCE, accepted for no change (open decision closed).
+- The model returns a stance (schema-validated) and is shown the proposal; the eval grades stance → decision per proposal kind (+25 cases).
+- Host agents (MCP) send decisions, unchanged. **Model stance quality not measured** (no API key).
 
 ## Notes de maintenance
 
