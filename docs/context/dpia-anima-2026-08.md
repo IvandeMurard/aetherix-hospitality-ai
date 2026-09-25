@@ -550,3 +550,34 @@ Voir aussi : [`decisions-architecturales.md`](decisions-architecturales.md) §20
 [`ADR-0011`](../adr/0011-learning-engine-hive-v2.md) · [`mesh-architecture.md`](../mesh-architecture.md) §2 ·
 [`perimetre-et-conformite-prospect.md`](perimetre-et-conformite-prospect.md) ·
 [`status-taxonomy.md`](status-taxonomy.md) · [`security-review-2026-Q2.md`](security-review-2026-Q2.md)
+
+---
+
+## 13. Addendum 2026-09-25 — Gap de provenance : la Décision #6 ne couvre pas l'écriture des claims
+
+> **Trigger** : question d'Ivan (22/09/2026) — *« qui enregistrerait la claim, comment, et qui en serait responsable ? possible de faire une claim sur un guest sans être sur le terrain ? »*. Analyse faite le jour même, formalisée ici le 25/09 sur confirmation d'Ivan.
+> **Ne change pas le verdict du gate** (§11) — précise ce que M-5 doit couvrir pour être une mesure réelle, pas une nouvelle condition bloquante distincte.
+
+### 13.1 Constat
+
+Le human-in-the-loop de la **Décision #6** porte sur l'**action** : un manager valide (ou non) une recommandation avant qu'elle ne parte. Rien dans la spec Anima (ADR-0011, `mesh-architecture.md` §2) ne prévoit de checkpoint humain entre un **signal brut** (message CRM, note PMS, review publique, API vol) et l'**écriture d'une claim durable** dans la couche Semantic. Les sources listées §3.3 (PMS, CRM partenaire, API vol, reviews publiques, feedback Aetherix) permettent à une claim de se créer entièrement sans qu'aucun membre du personnel n'ait observé le guest ni validé l'inférence — propriété **voulue** de l'architecture (elle évite d'imposer une saisie manuelle au staff), mais avec une conséquence non documentée jusqu'ici : **personne ne "possède" ni ne vérifie une claim au moment où elle naît.**
+
+### 13.2 Pourquoi ce n'est pas la même chose que M-5
+
+M-5 (§9.2) couvre la rectification **après coup** — contester une claim existante. Ce constat porte sur l'**absence de validation à la création**, en amont de toute contestation. Les deux sont nécessaires et non substituables : même avec M-5 pleinement construit, une claim fausse reste active — et actionnable par l'Orchestrateur — jusqu'à ce que quelqu'un la remarque et engage une contestation, ce qui suppose déjà une visibilité qui n'existe pas par défaut.
+
+### 13.3 Lien avec R4
+
+Ce gap est la cause structurelle de **R4** (§8, *« inférence erronée durable... risque le plus probable de tous »*) : R4 est probable précisément parce qu'aucun des deux moments naturels de contrôle (création de la claim, action qui en découle) ne couvre la qualité de l'inférence elle-même — le premier n'existe pas, le second (Décision #6) valide l'action, pas la donnée qui l'a motivée.
+
+### 13.4 Mesure — M-16
+
+| Réf. | Mesure | Risque | Nature |
+|---|---|---|---|
+| M-16 | Provenance de claim traçable : chaque claim stocke une référence vers l'observation source qui l'a produite (au-delà d'`evidence_count`, un pointeur vers la donnée brute) + exposition de cette provenance au manager sur demande (art. 15(1)(h), logique du profilage) | R4, art. 15/16 | Bloquante — conception |
+
+M-16 ne bloque pas le gate isolément (absorbée par C3/C4, §11) mais doit être **conçue en même temps que M-5** : un chemin de rectification sans provenance visible force la personne qui conteste à deviner ce qu'elle conteste.
+
+### 13.5 Références
+
+Conversation Ivan 22/09/2026 · §5.3 (Décision #6, portée action) · §7 (Rectification, M-5) · §8 (R4) · Décision #36 (gel Epic 16 levé, contexte de cette reprise d'analyse)
