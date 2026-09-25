@@ -24,11 +24,18 @@ Si la story touche `app/services/{forecast,staffing,recommendation,memory,inboun
 
 **Exception** : label PR `eval-exempt` — refactor, doc, infra-only. Les stories documentaires (audits, spikes, décisions) tombent systématiquement dans cette catégorie.
 
+## Statut public (Décision #42)
+
+Toute PR qui crée, change de statut, retire ou renomme une **capacité publique** met à jour
+`public-status.yml` dans la même PR (statut, phrase publique, `verified_on`, `evidence`, `deployed`).
+Une PR qui déplace un fichier cité en `evidence` d'une entrée `Built` casse le job CI `public-status` :
+mettre le chemin à jour. Guide : `docs/ops/public-status-sync.md`.
+
 ## Gates
 
 | Niveau | Condition |
 |--------|-----------|
-| **Merge** | CI vert — schema drift (Décision #16) + eval-by-design (Décision #22) → merge manuel SM |
+| **Merge** | CI vert — schema drift (Décision #16) + eval-by-design (Décision #22) + `public-status` (Décision #42) → merge manuel SM |
 | **Fin d'Epic** | Revue d'architecture |
 | **Pré-pilote** | QA sign-off sur propriété réelle |
 

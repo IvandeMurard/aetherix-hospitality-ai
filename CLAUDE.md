@@ -79,6 +79,7 @@
 | 39 | Recap + decision provenance (**ADR-0007 §17**): deterministic recap (WhatsApp `recap`, MCP `get_decision_recap`, weekly report = same template; no mock, no savings/ROI without measured inputs, EUR from config) · `corriger mardi` → same confirmation path · `decided_by` (human_whatsapp / human_via_host / host_agent_autonomous) + MCP reason contract (typed 400, `agent_inferred` never stored as human) · single policy seam, default human validation, autonomy = **ADR-0013 proposed** (not enabled) · acceptance = human decisions on `staffing_recommendations` (old KPI undercounted) · tenant-isolation defects fixed (§17.7) · **0 real user, model quality not measured** | 24/09/2026 |
 | 40 | Risk-bearing recommendations + learning loop (**ADR-0007 §18**, `docs/context/learning-loop.md`): point of no return per task class (offsets = defaults until set) · Prophet interval recalibrated, **synthetic only** (0.667→0.881 @80 %), blocking `--check` · hotel costs bounded, who/when, missing → no € · newsvendor with recorded fallback + "if accepted / if refused" (probability only if calibrated, € only if configured) · weekly pass proposes, a named person approves (calibration: Ivan; costs: hotel or Ivan), rollback by version · ADR-0013 stays proposed · **nothing measured on real data** | 25/09/2026 |
 | 41 | Reply = stance, decision = f(stance, proposal) (**ADR-0007 §19**): `adopt / decline / keep_current / counter / unclear / none` × proposal `add / reduce / no_change / unknown` (from the stored recommendation) → one mapping `decision_for_stance` · keep current rejects a change, accepts "no change" · unknown or two readings → confirmation, `unclear` → asked · phrase lists → stance lexicons (no sentence patches) · "pas besoin" rejects ADD, confirms REDUCE · model returns a stance, shown the proposal · MCP decisions unchanged · **model quality not measured** | 25/09/2026 |
+| 42 | Public status sync (ADR-0010): meta-repo status of Aetherix comes only from curated `public-status.yml` · **Built = merged + tested**, `deployed` separate, "live" only when checked · blocking gate `check_public_status.py` (evidence exists for Built, staleness warning, leak denylist: ADR-0012/Signal Contract, ticket IDs, decision numbers, internal paths, secrets) · deterministic renderer · Action opens a PR on the meta-repo, never pushes its main · vision text stays hand-written | 25/09/2026 |
 
 ---
 
@@ -122,7 +123,7 @@ backend/app/integrations/ — Obsidian, Linear, Apaleo, Twilio, SendGrid
 backend/app/mcp_server.py — MCP Server v0 (HOS-71, PR #73) — tools atomiques uniquement
 backend/orchestrator/     — proto-orchestrateur Phase 3 (AetherixEngine migré, ADR-0004)
 backend/app/middleware/   — agent_tracking.py (Agent SEO + request_id, P1-5/HOS-72)
-scripts/ci/               — gates CI (schema drift #16, eval-by-design #22, audit_id_types HOS-163)
+scripts/ci/               — gates CI (schema drift #16, eval-by-design #22, audit_id_types HOS-163, public status #42)
 scripts/ops/              — ops & monitoring (veille_proactive, sync_obsidian, validate_apaleo_sandbox, measure_mape_j1, generate_demo_data)
 .github/workflows/        — CI (cron veille-hebdomadaire retiré le 30/07, veille → Obsidian)
 ```
