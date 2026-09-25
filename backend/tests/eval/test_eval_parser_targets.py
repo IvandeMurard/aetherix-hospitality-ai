@@ -86,7 +86,7 @@ def test_pinned_provider_maps_both_tiers_to_the_exact_model(monkeypatch):
 # ─── end to end on a stub target ──────────────────────────────────────────────
 
 def test_real_run_records_target_dataset_version_and_failure_rate(monkeypatch):
-    reply = json.dumps({"decision": "accepted", "confidence": 0.95, "intent": "free_form"})
+    reply = json.dumps({"stance": "adopt_proposal", "confidence": 0.95, "intent": "free_form"})
     stub = _StubProvider(reply)
     _real_env(monkeypatch, stub)
 

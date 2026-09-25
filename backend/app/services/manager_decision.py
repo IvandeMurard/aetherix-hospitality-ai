@@ -1,4 +1,4 @@
-"""Manager decision capture — pure rules (ADR-0007 §16, Décision #38).
+"""Manager decision capture — pure rules (ADR-0007 §16, §19; Décisions #38, #41).
 
 How a manager's reply to a staffing recommendation becomes a recorded
 **decision** (``accepted | rejected | modified``) or nothing.
@@ -6,16 +6,21 @@ How a manager's reply to a staffing recommendation becomes a recorded
 Principle (PO decision, 24/09/2026):
 
 * The **decision** is arm C's ground truth (outcome eval, ADR-0007 §13). It is
-  decided deterministically wherever possible (button payload, exact keyword,
+  decided deterministically wherever possible (button payload, lexicon,
   bare-acknowledgement rule), cheap, unambiguous and auditable: every recorded
   decision carries its ``DecisionSource``.
+* A reply expresses a **stance** toward the recommendation (adopt it, decline
+  it, keep the current plan, counter it). The decision is derived from the
+  stance and from what the recommendation proposed (add / reduce / no change),
+  by one function, ``decision_for_stance`` (§19, PO: "fix the logic, not the
+  example"). The lexicon and the model both return stances.
 * The **comment** (reason, detail) is optional and rich. It never changes a
   recorded decision.
-* HITL (Décision #6): a model-inferred decision below
-  ``DECISION_CONFIDENCE_THRESHOLD``, an ambiguous keyword, or a bare
-  acknowledgement that cannot be attributed to exactly one pending
-  recommendation is **not written**. The manager is asked to confirm; nothing
-  is recorded until they do. Unconfirmed after the window → recorded as
+* HITL (Décision #6): a model stance below ``DECISION_CONFIDENCE_THRESHOLD``, a
+  reply with two readings, a stance whose meaning needs a direction the code
+  cannot tell, or a bare acknowledgement that cannot be attributed to exactly
+  one pending recommendation is **not written**. The manager is asked; nothing
+  is recorded until they answer. Unconfirmed after the window → recorded as
   unconfirmed, never as a decision.
 * The outcome (actual covers) is never an input here. Decision and outcome stay
   independent variables, or arm C learns circularly (§16.6). Nothing in this
@@ -26,6 +31,7 @@ form by form in ``tests/services/test_manager_decision.py``.
 """
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -134,77 +140,237 @@ def normalise(body: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# (c) Exact-keyword fast path — every mapping is a documented choice
+# Stance → decision (ADR-0007 §19) — the one mapping
 # ---------------------------------------------------------------------------
-# Matching is on the WHOLE reply, token by token: a reply is a keyword reply
-# only if every token belongs to the sets below. Anything longer goes to the
-# model. That keeps the fast path deterministic and narrow: "oui" is a keyword,
-# "oui mais 3 serveurs" is not.
+# A reply expresses a STANCE toward the recommendation; the decision follows
+# from the stance AND what the recommendation proposed, deterministically.
+# "Keep the current plan" rejects a proposal to add staff but accepts a
+# proposal to keep the usual staffing: the reply is the same, the decision is
+# not. Neither the keyword lexicon nor the model maps a reply to a decision
+# directly; both go through `decision_for_stance`.
 
-# Explicit acceptance. ✅ is here (a check mark answers "validate?"); 👍 is NOT:
+Stance = Literal[
+    "adopt_proposal",    # do what the recommendation says ("oui", "ça marche")
+    "decline_proposal",  # refuse the recommendation ("non", "refusé", "❌")
+    "keep_current",      # keep the plan in place ("on garde tel quel", "keep as is")
+    "counter_value",     # a different action or figure ("plutôt 3", "corriger")
+    "unclear",           # takes a position, but the code cannot tell which
+    "none",              # no position on the recommendation (question, other topic)
+]
+STANCES: tuple[str, ...] = (
+    "adopt_proposal", "decline_proposal", "keep_current", "counter_value", "unclear", "none",
+)
+
+# What the recommendation proposed, derived from the stored recommendation,
+# never from the reply. `unknown` = the stored fields cannot tell.
+ProposalKind = Literal["add", "reduce", "no_change", "unknown"]
+PROPOSAL_KINDS: tuple[str, ...] = ("add", "reduce", "no_change", "unknown")
+
+
+def decision_for_stance(stance: Optional[str], kind: str) -> Optional[Decision]:
+    """The single stance → decision mapping. ``None`` = no decision can be
+    derived (no stance, unclear stance, or a stance whose meaning depends on a
+    direction that is not known): the caller asks, it never guesses.
+
+    ==================  =========  =========  ==========  =========
+    stance              add        reduce     no_change   unknown
+    ==================  =========  =========  ==========  =========
+    adopt_proposal      accepted   accepted   accepted    accepted
+    decline_proposal    rejected   rejected   rejected    rejected
+    keep_current        rejected   rejected   accepted    —
+    counter_value       modified   modified   modified    modified
+    unclear / none      —          —          —           —
+    ==================  =========  =========  ==========  =========
+    """
+    if stance == "adopt_proposal":
+        return "accepted"
+    if stance == "decline_proposal":
+        return "rejected"
+    if stance == "counter_value":
+        return "modified"
+    if stance == "keep_current":
+        return {"add": "rejected", "reduce": "rejected", "no_change": "accepted"}.get(kind)  # type: ignore[return-value]
+    return None
+
+
+@dataclass(frozen=True)
+class Proposal:
+    """What a staffing recommendation proposed: direction and magnitude."""
+
+    kind: str = "unknown"                 # ProposalKind
+    magnitude: Optional[int] = None       # staff added or removed (absolute)
+    task_class: Optional[str] = None
+    window_start: Optional[datetime] = None
+    window_end: Optional[datetime] = None
+
+    def describe(self) -> str:
+        """One line for the classifier prompt. Never invents a direction."""
+        when = ""
+        if self.window_start is not None:
+            when = f" for {self.window_start:%A %d/%m %H:%M}"
+            if self.window_end is not None:
+                when += f"–{self.window_end:%H:%M}"
+        n = self.magnitude
+        if self.kind == "add":
+            what = f"ADD {n} staff" if n else "ADD staff"
+        elif self.kind == "reduce":
+            what = f"REDUCE staffing by {n}" if n else "REDUCE staffing"
+        elif self.kind == "no_change":
+            what = "NO CHANGE (keep the usual staffing)"
+        else:
+            what = "a staffing change whose direction is not recorded"
+        cls = f" (task class {self.task_class})" if self.task_class else ""
+        return f"{what}{when}{cls}"
+
+
+_ADD = "staffing.add"
+_REDUCE = "staffing.reduce"
+_NEWSVENDOR = "newsvendor"   # risk_assessment.RULE_NEWSVENDOR, not imported (keeps this module pure)
+
+
+def proposal_from_recommendation(
+    recommended_headcount: Optional[int],
+    task_class: Optional[str] = None,
+    risk_assessment: Optional[dict | str] = None,
+    window_start: Optional[datetime] = None,
+    window_end: Optional[datetime] = None,
+) -> Proposal:
+    """Direction and magnitude of a stored staffing recommendation.
+
+    1. ``risk_assessment.recommended_delta_staff`` (signed, ADR-0007 §18.4) when
+       stored: > 0 add, < 0 reduce. 0 is ``no_change`` only under the newsvendor
+       rule, whose message says "keep the usual staffing"; a 0 from the ROI
+       scale means no magnitude was computed (a lull reads "reduce by 0",
+       open decision "ROI gate and reductions") → ``unknown``.
+    2. Otherwise the signed ``recommended_headcount`` (legacy rows): > 0 add,
+       < 0 reduce; 0 or missing → ``unknown`` (no legacy message said "keep").
+    3. ``task_class`` must agree with the sign; a contradiction → ``unknown``.
+    Anything the stored fields cannot tell is ``unknown``, never a guess.
+    """
+    delta: Optional[int] = None
+    explicit_keep = False
+    ra = risk_assessment
+    if isinstance(ra, str):  # JSON column read back as text on some drivers
+        try:
+            ra = json.loads(ra)
+        except ValueError:
+            ra = None
+    ra = ra if isinstance(ra, dict) else None
+    if ra is not None and isinstance(ra.get("recommended_delta_staff"), (int, float)):
+        delta = int(ra["recommended_delta_staff"])
+        explicit_keep = delta == 0 and ra.get("decision_rule") == _NEWSVENDOR
+    elif recommended_headcount is not None:
+        delta = int(recommended_headcount)
+
+    kind = "unknown"
+    if delta is not None and delta > 0 and task_class != _REDUCE:
+        kind = "add"
+    elif delta is not None and delta < 0 and task_class != _ADD:
+        kind = "reduce"
+    elif explicit_keep:
+        kind = "no_change"
+    magnitude = abs(delta) if (delta is not None and kind in ("add", "reduce")) else None
+    return Proposal(kind, magnitude, task_class, window_start, window_end)
+
+
+# ---------------------------------------------------------------------------
+# (c) Deterministic fast path — stance lexicons, whole reply only
+# ---------------------------------------------------------------------------
+# A reply is a keyword reply only if EVERY token belongs to one of the lexicons
+# below (multi-word forms matched first, longest first). Anything longer goes
+# to the model: "oui" is a keyword, "oui mais 3 serveurs" is not. The lexicons
+# say which STANCE a form expresses, never which decision: the decision comes
+# from `decision_for_stance` once the proposal is known.
+
+# Adopt the proposal. ✅ is here (a check mark answers "validate?"); 👍 is NOT:
 # it is a bare acknowledgement under rule (b), it may answer the Receipt.
-ACCEPT_TOKENS: frozenset[str] = frozenset({
+ADOPT_TOKENS: frozenset[str] = frozenset({
     "accept", "accepted", "accepte", "accepté", "accepter", "j'accepte",
     "oui", "yes", "yep", "ouais",
     "validé", "valide", "valider", "validée", "validate", "validated",
     "approve", "approved", "approuvé", "agreed", "go",
     "✅", "✔",
 })
+ADOPT_PHRASES: frozenset[str] = frozenset({
+    "je valide", "c'est validé", "ok pour moi", "go for it", "d'accord",
+})
 
-# Explicit refusal. "non"/"no" alone are unambiguous answers to a proposal.
-REJECT_TOKENS: frozenset[str] = frozenset({
+# Decline the proposal. "non"/"no" alone are unambiguous answers to a proposal.
+DECLINE_TOKENS: frozenset[str] = frozenset({
     "reject", "rejected", "rejeter", "rejeté", "rejette",
     "refuse", "refused", "refusé", "refuser", "decline", "declined",
     "non", "no", "nope", "nan",
     "❌", "👎", "✖",
 })
+DECLINE_PHRASES: frozenset[str] = frozenset({"je refuse", "pas d'accord", "not ok"})
 
-# Explicit correction without the figure yet: records `modified`, then the
-# optional "what change?" line collects the detail. "CORRIGER" is what the text
+# Counter the proposal without the figure yet: `modified`, then the optional
+# "what change?" line collects the detail. "CORRIGER" is what the text
 # fallback tells managers to reply; ✏️ is the modify glyph of the Daily Receipt.
-MODIFY_TOKENS: frozenset[str] = frozenset({
+COUNTER_TOKENS: frozenset[str] = frozenset({
     "corriger", "correction", "correct", "modifier", "modify", "modified", "modifié",
     "ajuster", "adjust", "✏", "📝",
 })
 
-# Bare acknowledgement: no decision content, may answer the Receipt or the
-# recommendation. Rule (b) decides what it records.
+# Keep the current plan (PO clarification 24/09/2026, ADR-0007 §17.8): "keep"
+# means the manager's own plan, not the recommendation.
+KEEP_CURRENT_PHRASES: frozenset[str] = frozenset({
+    "tel quel", "on garde tel quel", "on garde comme ça",
+    "keep as is", "keep it as is", "as is",
+})
+
+# "No thanks": the idiom that declines an offer and keeps what one has. Two
+# readings, decline or keep current — the same decision when the proposal
+# changes something, different ones when it proposes no change.
+POLITE_DECLINE_PHRASES: frozenset[str] = frozenset({
+    "non merci", "nan merci", "no thanks", "no thank you",
+})
+
+# Need negation: denies a need for staff. It rejects a proposal to ADD staff
+# (keep current); to a proposal to REDUCE it reads two ways ("no need to cut"
+# keeps current | "no need for them" adopts the cut). Ivan's clarification of
+# "non merci / tel quel" generalised through the proposal's direction.
+NEED_NEGATION_PHRASES: frozenset[str] = frozenset({
+    "pas besoin", "no need", "pas nécessaire", "not necessary", "not needed",
+})
+
+# Hesitation: reluctant yes or soft no.
+HESITATION_TOKENS: frozenset[str] = frozenset({"bof"})
+
+# Acknowledgement: assent without decision content. Alone → rule (b). Next to
+# a stance it reads as adopting ("oui 👍"), so "non ok" is two readings.
 ACK_TOKENS: frozenset[str] = frozenset({
     "ok", "okay", "oki", "okk", "k",
-    "merci", "thanks", "thank", "you", "thx", "ty", "beaucoup", "much",
     "parfait", "perfect", "great", "super", "top", "cool", "nickel",
     "noted", "noté", "compris", "understood", "got", "it", "bien", "reçu",
-    "👍", "👌", "🙏", "💪", "🙂", "😊",
+    "👍", "👌", "💪", "🙂", "😊",
 })
 
-# "Decline / keep as is" forms (PO clarification, 24/09/2026, ADR-0007 §17.8):
-# "non merci on garde tel quel" declines the recommendation when the
-# recommendation proposes a change (the usual case: add or remove staff) →
-# `rejected`, recorded. Only when the recommendation proposed no change, or
-# when that cannot be told, is it confirmed instead of guessed.
-DECLINE_KEEP_PHRASES: frozenset[str] = frozenset({
-    "non merci", "no thanks", "no thank you", "nan merci", "non merci beaucoup",
-    "non merci on garde tel quel", "on garde tel quel", "on garde comme ça",
-    "tel quel", "keep as is", "keep it as is", "as is",
+# Politeness: carries no stance at all ("✏️ merci", "non merci beaucoup").
+POLITENESS_TOKENS: frozenset[str] = frozenset({
+    "merci", "thanks", "thank", "you", "thx", "ty", "beaucoup", "much", "🙏",
 })
 
-# Whole-reply forms that must be confirmed, not guessed, whatever the
-# recommendation. Two plausible readings each (ADR-0007 §16.3):
-#   "pas besoin"  we don't need the extra staff | no need to change anything
-#   "bof"         reluctant yes | soft no
-AMBIGUOUS_PHRASES: frozenset[str] = frozenset({
-    "pas besoin", "no need", "pas nécessaire",
-    "bof",
-})
-
-# Multi-word explicit forms that the token rule alone would miss.
-_ACCEPT_PHRASES: frozenset[str] = frozenset({
-    "je valide", "c'est validé", "ok validé", "ok pour moi", "go for it",
-    "d'accord", "ok d'accord",
-})
-_REJECT_PHRASES: frozenset[str] = frozenset({
-    "je refuse", "pas d'accord", "not ok",
-})
+# Lexicon unit classes, in match order for multi-word forms.
+_PHRASE_CLASSES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("polite_decline", POLITE_DECLINE_PHRASES),
+    ("keep", KEEP_CURRENT_PHRASES),
+    ("need_negation", NEED_NEGATION_PHRASES),
+    ("adopt", ADOPT_PHRASES),
+    ("decline", DECLINE_PHRASES),
+)
+_TOKEN_CLASSES: tuple[tuple[str, frozenset[str]], ...] = (
+    ("adopt", ADOPT_TOKENS),
+    ("decline", DECLINE_TOKENS),
+    ("counter", COUNTER_TOKENS),
+    ("hesitation", HESITATION_TOKENS),
+    ("ack", ACK_TOKENS),
+    ("politeness", POLITENESS_TOKENS),
+)
+_PHRASES: dict[tuple[str, ...], str] = {
+    tuple(p.split()): cls for cls, vocab in _PHRASE_CLASSES for p in vocab
+}
+_MAX_PHRASE = max(len(k) for k in _PHRASES)
 
 # Confirmation answers (used only while a confirmation prompt is pending).
 CONFIRM_YES_TOKENS: frozenset[str] = frozenset({
@@ -216,65 +382,91 @@ CONFIRM_NO_TOKENS: frozenset[str] = frozenset({
 })
 
 
-KeywordKind = Literal["accept", "reject", "modify", "decline", "ambiguous", "bare_ack"]
+def stance_readings(unit: str, kind: str) -> tuple[str, ...]:
+    """Stances a lexicon unit can express, given the proposal's direction.
+    Empty = no stance (politeness). Order is irrelevant: readings are compared
+    through the decisions they imply."""
+    if unit == "adopt" or unit == "ack":
+        return ("adopt_proposal",)
+    if unit == "decline":
+        return ("decline_proposal",)
+    if unit == "counter":
+        return ("counter_value",)
+    if unit == "keep":
+        return ("keep_current",)
+    if unit == "polite_decline":
+        return ("decline_proposal", "keep_current")
+    if unit == "need_negation":
+        return ("keep_current", "adopt_proposal") if kind == "reduce" else ("keep_current",)
+    if unit == "hesitation":
+        return ("decline_proposal", "adopt_proposal")
+    return ()
+
+
+KeywordKind = Literal["stance", "bare_ack"]
 
 
 @dataclass(frozen=True)
 class KeywordMatch:
+    """A whole-reply lexicon match: the unit classes found, in reply order.
+    ``bare_ack`` = only acknowledgement / politeness units (rule (b))."""
+
     kind: KeywordKind
-    # Decision proposed for confirmation when kind == "ambiguous" (the reading
-    # the golden labels / most managers intend); the manager has the last word.
-    proposed: Optional[Decision] = None
+    units: tuple[str, ...] = ()
+
+    def summary(self) -> str:
+        """Coarse, proposal-independent label (logs, ``ActionType``):
+        accept | reject | modify | decline | ambiguous | bare_ack.
+        ``decline`` = a form whose decision depends on the proposal."""
+        if self.kind == "bare_ack":
+            return "bare_ack"
+        stances = {u for u in self.units if u != "politeness"}
+        if stances <= {"adopt", "ack"}:
+            return "accept"
+        if stances == {"decline"}:
+            return "reject"
+        if stances == {"counter"}:
+            return "modify"
+        if stances <= {"keep", "polite_decline", "need_negation", "decline"}:
+            return "decline"
+        return "ambiguous"
 
 
-def _has_any(toks: Iterable[str], vocab: frozenset[str]) -> bool:
-    return any(t in vocab for t in toks)
+def _segment(toks: list[str]) -> Optional[list[str]]:
+    """Cover the tokens with lexicon units, longest multi-word form first.
+    ``None`` as soon as one token belongs to no lexicon."""
+    units: list[str] = []
+    i = 0
+    while i < len(toks):
+        for n in range(min(_MAX_PHRASE, len(toks) - i), 0, -1):
+            cls = _PHRASES.get(tuple(toks[i:i + n]))
+            if cls is not None:
+                units.append(cls)
+                i += n
+                break
+        else:
+            cls = next((c for c, vocab in _TOKEN_CLASSES if toks[i] in vocab), None)
+            if cls is None:
+                return None
+            units.append(cls)
+            i += 1
+    return units
 
 
 def match_keyword(body: str) -> Optional[KeywordMatch]:
-    """Deterministic keyword fast path. ``None`` = not a keyword reply.
-
-    Order: ambiguous phrases → explicit phrases → token rule. In the token
-    rule, a reply mixing a refusal token with an acceptance/ack token
-    ("non ok", "no thanks") is ambiguous → confirmation, never a guess.
-    A reply containing "?" is a question ("ok?", "oui ?"), never a keyword.
-    """
+    """Deterministic fast path. ``None`` = not a keyword reply (→ model).
+    A reply containing "?" is a question ("ok?", "oui ?"), never a keyword."""
     if "?" in body:
         return None
-    norm = normalise(body)
-    if not norm:
+    toks = tokens(body)
+    if not toks:
         return None
-    if norm in DECLINE_KEEP_PHRASES:
-        return KeywordMatch("decline", proposed="rejected")
-    if norm in AMBIGUOUS_PHRASES:
-        return KeywordMatch("ambiguous", proposed="rejected")
-    if norm in _ACCEPT_PHRASES:
-        return KeywordMatch("accept")
-    if norm in _REJECT_PHRASES:
-        return KeywordMatch("reject")
-
-    toks = norm.split()
-    known = ACCEPT_TOKENS | REJECT_TOKENS | MODIFY_TOKENS | ACK_TOKENS
-    if not all(t in known for t in toks):
+    units = _segment(toks)
+    if units is None:
         return None
-    has_accept = _has_any(toks, ACCEPT_TOKENS)
-    has_reject = _has_any(toks, REJECT_TOKENS)
-    has_modify = _has_any(toks, MODIFY_TOKENS)
-    has_ack = _has_any(toks, ACK_TOKENS)
-    if has_reject and (has_accept or has_ack or has_modify):
-        return KeywordMatch("ambiguous", proposed="rejected")
-    if has_modify and has_accept:
-        # "oui corriger": accept, or accept with a change? Ask.
-        return KeywordMatch("ambiguous", proposed="modified")
-    if has_reject:
-        return KeywordMatch("reject")
-    if has_modify:
-        return KeywordMatch("modify")
-    if has_accept:
-        return KeywordMatch("accept")
-    if has_ack:
-        return KeywordMatch("bare_ack")
-    return None
+    if all(u in ("ack", "politeness") for u in units):
+        return KeywordMatch("bare_ack", tuple(units))
+    return KeywordMatch("stance", tuple(units))
 
 
 def is_bare_ack(body: str) -> bool:
@@ -427,12 +619,16 @@ BUTTON_CONFIRMATIONS: dict[str, bool] = {
 # ---------------------------------------------------------------------------
 
 class ClassifierOutput(BaseModel):
-    """What the model must return for a free-text reply. Anything that does not
+    """What the model must return for a free-text reply: the manager's STANCE
+    toward the recommendation it was shown, never the decision (ADR-0007 §19).
+    The decision is derived by `decision_for_stance`. Anything that does not
     validate is a typed ``llm_unmappable`` result: no decision is recorded."""
 
     model_config = ConfigDict(extra="ignore")
 
-    decision: Literal["accepted", "rejected", "modified", "none"]
+    stance: Literal[
+        "adopt_proposal", "decline_proposal", "keep_current", "counter_value", "unclear", "none"
+    ]
     confidence: float = Field(ge=0.0, le=1.0)
     intent: Literal["structured_correction", "free_form", "acknowledge"] = "free_form"
     corrected_value: Optional[float] = None
@@ -477,15 +673,14 @@ def routed_reason(route: Optional[str], confidence: Optional[float]) -> Optional
 
 @dataclass(frozen=True)
 class PendingContext:
-    """What rule (b) needs about the manager's pending recommendations."""
+    """What the rules need about the manager's pending recommendations."""
 
     pending_count: int
     latest_dispatched_at: Optional[datetime]
     now: datetime
-    # Does the latest pending recommendation propose a change? True / False /
-    # None = cannot be told (see ``proposes_change``). Read only by the
-    # "decline / keep as is" rule.
-    latest_proposes_change: Optional[bool] = None
+    # What the latest pending recommendation proposes (`proposal_from_recommendation`).
+    # Read by the stance mapping; "unknown" when it cannot be told.
+    proposal: str = "unknown"
 
     def single_in_window(self) -> bool:
         return (
@@ -512,38 +707,83 @@ class Resolution:
     why: Optional[str] = None
 
 
-def proposes_change(recommended_headcount: Optional[int]) -> Optional[bool]:
-    """A staffing recommendation proposes a change when it adds or removes
-    staff (``recommended_headcount`` ≠ 0). ``None`` → cannot be told."""
-    if recommended_headcount is None:
-        return None
-    return int(recommended_headcount) != 0
+# When a reply has several readings, the confirmation proposes the first of
+# these that is possible. A refusal is the strongest signal in a mixed reply
+# ("non ok"); a correction outranks a plain yes ("oui corriger").
+_READING_PRIORITY: tuple[Decision, ...] = ("rejected", "modified", "accepted")
 
 
-def resolve_decline(ctx: PendingContext) -> Resolution:
-    """"non merci" / "on garde tel quel" (ADR-0007 §17.8): a rejection of a
-    recommendation that proposes a change. Recommendation proposing no change →
-    confirm, reading "keep as is" = accepted. Cannot be told → confirm,
-    reading rejected."""
-    if ctx.latest_proposes_change is True:
-        return Resolution("record", "rejected", DecisionSource.keyword)
-    if ctx.latest_proposes_change is False:
-        return Resolution("confirm", "accepted", origin="keyword_ambiguous", why="no_change_proposed")
-    return Resolution("confirm", "rejected", origin="keyword_ambiguous", why="change_unknown")
+def resolve_stances(
+    units: Iterable[tuple[str, ...]],
+    kind: str,
+    *,
+    source: DecisionSource,
+    origin: str,
+    confidence: float = 1.0,
+) -> Resolution:
+    """Stances → decision, for the lexicon and the model alike.
+
+    ``units``: for each part of the reply, the stances it can express. Each part
+    narrows the decisions the reply can mean (``decision_for_stance`` under the
+    proposal ``kind``); the reply means what every part allows.
+
+    * exactly one decision, derivable, confidence ≥ threshold → ``record``;
+    * several decisions (two readings, or parts that contradict each other)
+      → ``confirm`` (why ``two_readings`` / ``readings_conflict``);
+    * a stance that needs the proposal's direction when it is unknown →
+      ``confirm``, reading as if a change was proposed (why ``proposal_unknown``);
+    * below the confidence threshold → ``confirm`` (why ``below_confidence_threshold``);
+    * ``unclear`` → nothing written, the manager is asked for the decision
+      itself (no reading to confirm, why ``stance_unclear``);
+    * ``none`` / no stance → nothing (why ``no_stance``).
+    """
+    units = [tuple(u) for u in units if u]
+    stances = {s for u in units for s in u}
+    if not units or stances <= {"none"}:
+        return Resolution("none", why="no_stance", confidence=confidence)
+    if "unclear" in stances:
+        return Resolution("none", why="stance_unclear", confidence=confidence)
+
+    possible: Optional[set[str]] = None
+    union: set[str] = set()
+    direction_unknown = False
+    for readings in units:
+        decisions: set[str] = set()
+        for s in readings:
+            d = decision_for_stance(s, kind)
+            if d is None:
+                direction_unknown = True
+                d = decision_for_stance(s, "add")  # the usual case, for the question only
+            if d is not None:
+                decisions.add(d)
+        union |= decisions
+        possible = decisions if possible is None else possible & decisions
+
+    if possible and len(possible) == 1 and not direction_unknown:
+        (decision,) = possible
+        if confidence >= DECISION_CONFIDENCE_THRESHOLD:
+            return Resolution("record", decision, source, confidence=confidence)  # type: ignore[arg-type]
+        return Resolution("confirm", decision, origin=origin, confidence=confidence,  # type: ignore[arg-type]
+                          why="below_confidence_threshold")
+
+    pool = possible or union
+    reading = next(d for d in _READING_PRIORITY if d in pool)
+    if direction_unknown:
+        why = "proposal_unknown"
+    else:
+        why = "two_readings" if possible else "readings_conflict"
+    return Resolution("confirm", reading, origin=origin, confidence=confidence, why=why)  # type: ignore[arg-type]
 
 
 def resolve_keyword(match: KeywordMatch, ctx: PendingContext) -> Resolution:
-    if match.kind == "accept":
-        return Resolution("record", "accepted", DecisionSource.keyword)
-    if match.kind == "reject":
-        return Resolution("record", "rejected", DecisionSource.keyword)
-    if match.kind == "modify":
-        return Resolution("record", "modified", DecisionSource.keyword)
-    if match.kind == "decline":
-        return resolve_decline(ctx)
-    if match.kind == "ambiguous":
-        return Resolution("confirm", match.proposed, origin="keyword_ambiguous")
-    return resolve_bare_ack(ctx)
+    """Lexicon match → decision, through the stance mapping. A bare
+    acknowledgement goes to rule (b)."""
+    if match.kind == "bare_ack":
+        return resolve_bare_ack(ctx)
+    return resolve_stances(
+        (stance_readings(u, ctx.proposal) for u in match.units),
+        ctx.proposal, source=DecisionSource.keyword, origin="keyword_ambiguous",
+    )
 
 
 def resolve_bare_ack(ctx: PendingContext) -> Resolution:
@@ -559,18 +799,15 @@ def resolve_bare_ack(ctx: PendingContext) -> Resolution:
     return Resolution("confirm", "accepted", origin="bare_ack", why=why)
 
 
-def resolve_model(decision: Optional[str], confidence: float) -> Resolution:
-    """A model-inferred decision is written only at or above the threshold.
-
-    The threshold applies to ``modified`` too (stricter than the minimum asked
-    for accepted/rejected): nothing the model infers is written unconfirmed
-    below it. ``none`` records nothing."""
-    if decision not in RECORDABLE_DECISIONS:
-        return Resolution("none", why="model_decision_none", confidence=confidence)
-    if confidence >= DECISION_CONFIDENCE_THRESHOLD:
-        return Resolution("record", decision, DecisionSource.model_auto, confidence=confidence)  # type: ignore[arg-type]
-    return Resolution("confirm", decision, origin="model", confidence=confidence,  # type: ignore[arg-type]
-                      why="below_confidence_threshold")
+def resolve_model(stance: Optional[str], confidence: float, kind: str = "unknown") -> Resolution:
+    """A model stance, through the same mapping as the lexicon. A derived
+    decision is written only at or above the threshold — for ``modified`` too
+    (stricter than the minimum asked for accepted/rejected): nothing the model
+    infers is written unconfirmed below it."""
+    if stance not in STANCES:
+        return Resolution("none", why="no_stance", confidence=confidence)
+    return resolve_stances([(stance,)], kind, source=DecisionSource.model_auto,
+                           origin="model", confidence=confidence)
 
 
 def wants_reason_prompt(decision: Optional[str], reason_already_given: bool) -> bool:

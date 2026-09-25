@@ -150,7 +150,7 @@ def test_not_recap_commands(body):
 
 def test_revision_commands_and_modify_keyword_stay_apart():
     assert match_revision_command("corriger") is None
-    assert match_keyword("corriger").kind == "modify"
+    assert match_keyword("corriger").units == ("counter",)
     cmd = match_revision_command("corriger mardi refus")
     assert (cmd.weekday, cmd.decision, cmd.ref) == (1, "rejected", "mardi")
     assert match_revision_command("fix yesterday accepted").days_ago == 1

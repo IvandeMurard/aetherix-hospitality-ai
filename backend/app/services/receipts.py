@@ -8,9 +8,10 @@ P2-3: `compose_narrative` builds an OQ4-tone WhatsApp message from a ReceiptPayl
       using LLMProvider (Claude Sonnet). Terse + sharp bullets + luxury feel.
 P2-4: `parse_inbound` classifies a manager's WhatsApp reply into one of three intents:
       structured_correction (regex) | free_form (Haiku) | acknowledge (regex), plus
-      an explicit decision (accepted | rejected | modified | none, ADR-0007 §16).
-      `resolve_feedback` decides what is written; low-confidence model decisions
-      are confirmed with the manager, never written silently (Décision #6).
+      the manager's stance toward the recommendation (ADR-0007 §19). The model is
+      shown what the recommendation proposed; `resolve_feedback` derives the
+      decision from stance × proposal and decides what is written; low-confidence
+      stances are confirmed with the manager, never written silently (Décision #6).
 P2-5: `weekly_digest` aggregates the 3 Niveau-2 KPIs (tool success rate, memory writes,
       agent errors) from `agent_action_log` + `memory_instrumentation_daily` MV for
       the past 7 days. `compose_weekly_narrative` formats the result OQ4-style.
@@ -45,10 +46,10 @@ from app.providers.factory import get_llm_provider
 from app.services.abstention import AgentAbstention
 from app.services.manager_decision import (
     DECISION_CONFIDENCE_THRESHOLD,
-    RECORDABLE_DECISIONS,
     ClassifierOutput,
     DecisionSource,
     PendingContext,
+    Proposal,
     ReasonRouteOutput,
     Resolution,
     is_bare_ack,
@@ -119,15 +120,19 @@ _COVERS_RE = re.compile(
 )
 
 _HAIKU_CLASSIFIER_SYSTEM = """\
-You are a hotel operations assistant. A restaurant manager replied on WhatsApp to a staffing recommendation (or to the daily operational Receipt). Decide what the manager DECIDED about the recommendation.
+You are a hotel operations assistant. A restaurant manager replied on WhatsApp to a staffing recommendation (or to the daily operational Receipt). You are told what the recommendation proposed. Say what STANCE the manager takes toward that proposal. Do not decide whether the recommendation is accepted or rejected: that is derived from your stance and the proposal.
 
-decision (required, exactly one):
-- accepted: the manager agrees to follow the recommendation as sent
-- rejected: the manager declines it and keeps the current plan (polite refusals, sarcasm, "we keep it as is" meaning their own plan)
-- modified: the manager accepts a changed version (a different number of covers or staff, an added or removed role)
-- none: the reply takes no position on the recommendation (a question, context only, a greeting)
+stance (required, exactly one):
+- adopt_proposal: the manager will do what the recommendation proposes
+- decline_proposal: the manager refuses the recommendation (polite refusals, sarcasm)
+- keep_current: the manager keeps the plan already in place ("we keep it as is", "we stay as scheduled")
+- counter_value: the manager wants a different action or figure (another number of staff or covers, an added or removed role)
+- unclear: the manager takes a position but you cannot tell which one (hesitation, "we'll see")
+- none: the reply takes no position on this recommendation (a question, context only, a greeting)
+If the reply is about another day or another service than the recommendation's, use unclear.
+If the reply could express two different stances toward THIS proposal (e.g. "no need" to a proposal to reduce staff: no need to cut, or no need for them), give your best stance with a low confidence.
 
-confidence: your probability (0.0-1.0) that the decision is right. Use a low value when the reply could be read two ways. Low-confidence decisions are confirmed with the manager, never recorded silently.
+confidence: your probability (0.0-1.0) that the stance is right. Use a low value when the reply could be read two ways. Low-confidence answers are confirmed with the manager, never recorded silently.
 
 intent: structured_correction (corrects a specific number) | free_form (context or a non-numeric change) | acknowledge (pure acknowledgement).
 corrected_value: the corrected number of covers if the manager gives one, else null.
@@ -136,10 +141,12 @@ reason_route: only if a reason is given, where it belongs: memory (situational c
 reason_route_confidence: 0.0-1.0, or null.
 
 Respond with a single JSON object only, no explanation, no markdown:
-{"decision": "<decision>", "confidence": <0.0-1.0>, "intent": "<intent>", "corrected_value": <number or null>, "reason": <string or null>, "reason_route": <string or null>, "reason_route_confidence": <number or null>, "notes": "<cleaned manager note or empty string>"}\
+{"stance": "<stance>", "confidence": <0.0-1.0>, "intent": "<intent>", "corrected_value": <number or null>, "reason": <string or null>, "reason_route": <string or null>, "reason_route_confidence": <number or null>, "notes": "<cleaned manager note or empty string>"}\
 """
 
-_HAIKU_CLASSIFIER_USER = "Manager reply: {text}"
+# The proposal line comes first; the reply is always the last line, after
+# this prefix (the eval's scripted models key on it).
+_HAIKU_CLASSIFIER_USER = "Recommendation: {proposal}\nManager reply: {text}"
 
 _REASON_ROUTER_SYSTEM = """\
 A restaurant manager gave a reason after declining or correcting a staffing recommendation. Say where the reason belongs:
@@ -165,32 +172,35 @@ class FeedbackIntent:
 
     Attributes:
         intent: One of ``structured_correction``, ``free_form``, ``acknowledge``.
-        decision: ``accepted | rejected | modified | none`` (ADR-0007 §16). For
-                  the regex passes it is fixed (bare ack → ``none``, resolved by
-                  rule (b); covers → ``modified``); for the model it is the
-                  schema-validated answer; on a model error it is ``None``.
-        outcome: Legacy alias kept for callers: the decision, or ``"ignored"``.
+        stance: The manager's stance toward the recommendation (ADR-0007 §19):
+                ``manager_decision.STANCES``. Fixed for the regex passes (bare ack
+                → ``None``, resolved by rule (b); covers → ``counter_value``); the
+                schema-validated answer for the model; ``None`` on a model error.
+                The decision is NOT here: it depends on what the recommendation
+                proposed and is derived by `resolve_feedback`.
         actual_value: Extracted / corrected numeric value (covers) or None.
         notes: Cleaned free-text note for the memory reflection.
         reason: The manager's reason if the reply gave one (model only).
         reason_route / reason_route_confidence: where the reason belongs (typed,
                   ``manager_decision.REASON_ROUTES``), as proposed by the model.
         confidence: 1.0 for regex matches; the model's score otherwise.
-        requires_confirmation: True when a model decision is below
-                  ``DECISION_CONFIDENCE_THRESHOLD`` (it will be confirmed, not written).
+        requires_confirmation: True when a model stance that carries a decision
+                  is below ``DECISION_CONFIDENCE_THRESHOLD`` (it will be confirmed,
+                  not written). Replies with two readings are also confirmed;
+                  that depends on the proposal and is decided by `resolve_feedback`.
         source: Which pass decided — ``ack_regex``, ``covers_regex``, ``llm``,
                 ``llm_unmappable`` (answer failed the schema) or ``llm_error``
-                (call failed). The last two never carry a decision.
+                (call failed). The last two never carry a stance.
     """
 
-    __slots__ = ("intent", "decision", "outcome", "actual_value", "notes", "reason",
+    __slots__ = ("intent", "stance", "actual_value", "notes", "reason",
                  "reason_route", "reason_route_confidence", "confidence",
                  "requires_confirmation", "source")
 
     def __init__(
         self,
         intent: Literal["structured_correction", "free_form", "acknowledge"],
-        decision: Optional[str],
+        stance: Optional[str],
         actual_value: Optional[float],
         notes: str,
         confidence: float,
@@ -200,8 +210,7 @@ class FeedbackIntent:
         reason_route_confidence: Optional[float] = None,
     ) -> None:
         self.intent = intent
-        self.decision = decision
-        self.outcome = decision if decision in RECORDABLE_DECISIONS else "ignored"
+        self.stance = stance
         self.actual_value = actual_value
         self.notes = notes
         self.reason = reason
@@ -211,20 +220,22 @@ class FeedbackIntent:
         self.source = source
         self.requires_confirmation = (
             source == "llm"
-            and decision in RECORDABLE_DECISIONS
+            and stance in ("adopt_proposal", "decline_proposal", "keep_current", "counter_value")
             and confidence < DECISION_CONFIDENCE_THRESHOLD
         )
 
 
 def resolve_feedback(feedback: FeedbackIntent, ctx: PendingContext) -> Resolution:
-    """What production does with a parsed free-text reply (ADR-0007 §16).
+    """What production does with a parsed free-text reply (ADR-0007 §16, §19).
 
     Single definition shared by the Twilio route and the parser eval (EVAL-4):
 
     * bare acknowledgement (``ack_regex``) → rule (b), ``resolve_bare_ack``;
     * covers pattern (``covers_regex``) → ``modified``, deterministic;
-    * model (``llm``) → written at or above ``DECISION_CONFIDENCE_THRESHOLD``,
-      confirmation below it, nothing for ``none``;
+    * model (``llm``) → stance × ``ctx.proposal`` through the stance mapping:
+      written at or above ``DECISION_CONFIDENCE_THRESHOLD``, confirmation below
+      it or when the direction is unknown, nothing for ``none``, an explicit
+      question for ``unclear``;
     * model error / schema failure → nothing written (typed ``why``). The old
       path wrote ``modified`` here; a failure is never a decision.
     """
@@ -233,7 +244,7 @@ def resolve_feedback(feedback: FeedbackIntent, ctx: PendingContext) -> Resolutio
     if feedback.source == "covers_regex":
         return Resolution("record", "modified", DecisionSource.correction_pattern)
     if feedback.source == "llm":
-        return resolve_model(feedback.decision, feedback.confidence)
+        return resolve_model(feedback.stance, feedback.confidence, ctx.proposal)
     return Resolution("none", why=feedback.source)
 
 
@@ -508,16 +519,21 @@ class ReceiptsService:
 
         return narrative.strip()
 
-    async def parse_inbound(self, text: str) -> FeedbackIntent:
-        """Classify a manager's WhatsApp reply into a FeedbackIntent (P2-4, ADR-0007 §16).
+    async def parse_inbound(self, text: str, proposal: Optional[Proposal] = None) -> FeedbackIntent:
+        """Classify a manager's WhatsApp reply into a FeedbackIntent (P2-4, ADR-0007 §16, §19).
+
+        ``proposal``: what the pending recommendation proposed (direction,
+        magnitude, task class, window), shown to the model. ``None`` → the model
+        is told the direction is not recorded; the stance mapping then asks
+        instead of guessing whenever the decision depends on it.
 
         Routing:
           1. Bare acknowledgement (``manager_decision.is_bare_ack``) → ``acknowledge``,
-             decision ``none`` (rule (b) decides later), no model call.
-          2. Covers regex → ``structured_correction``, decision ``modified``.
-          3. Model (fast tier) → output validated against ``ClassifierOutput``.
+             no stance (rule (b) decides later), no model call.
+          2. Covers regex → ``structured_correction``, stance ``counter_value``.
+          3. Model (fast tier) → stance, validated against ``ClassifierOutput``.
              A call failure is ``llm_error``, a schema failure ``llm_unmappable``:
-             neither carries a decision, nothing is coerced.
+             neither carries a stance, nothing is coerced.
 
         Explicit keywords ("oui", "refusé", "✅") never reach this method: the
         route matches them first (``action_logger.parse_action``).
@@ -528,7 +544,7 @@ class ReceiptsService:
         if is_bare_ack(stripped):
             intent = FeedbackIntent(
                 intent="acknowledge",
-                decision="none",
+                stance=None,
                 actual_value=None,
                 notes="",
                 confidence=1.0,
@@ -547,7 +563,7 @@ class ReceiptsService:
             actual = float(raw_val) if raw_val else None
             intent = FeedbackIntent(
                 intent="structured_correction",
-                decision="modified",
+                stance="counter_value",
                 actual_value=actual,
                 notes=stripped,
                 confidence=1.0,
@@ -563,7 +579,8 @@ class ReceiptsService:
         # --- Pass 3: model, schema-validated ---
         try:
             raw = await self._llm.complete(
-                messages=[{"role": "user", "content": _HAIKU_CLASSIFIER_USER.format(text=stripped[:500])}],
+                messages=[{"role": "user", "content": _HAIKU_CLASSIFIER_USER.format(
+                    proposal=(proposal or Proposal()).describe(), text=stripped[:500])}],
                 max_tokens=200,
                 temperature=0.0,
                 system=_HAIKU_CLASSIFIER_SYSTEM,
@@ -574,7 +591,7 @@ class ReceiptsService:
                 "receipts.parse_inbound: classifier call failed text=%r", stripped[:80]
             )
             intent = FeedbackIntent(
-                intent="free_form", decision=None, actual_value=None,
+                intent="free_form", stance=None, actual_value=None,
                 notes=stripped, confidence=0.0, source="llm_error",
             )
         else:
@@ -587,13 +604,13 @@ class ReceiptsService:
                     raw[:200],
                 )
                 intent = FeedbackIntent(
-                    intent="free_form", decision=None, actual_value=None,
+                    intent="free_form", stance=None, actual_value=None,
                     notes=stripped, confidence=0.0, source="llm_unmappable",
                 )
             else:
                 intent = FeedbackIntent(
                     intent=out.intent,
-                    decision=out.decision,
+                    stance=out.stance,
                     actual_value=out.corrected_value,
                     notes=out.notes or stripped,
                     confidence=out.confidence,
@@ -604,10 +621,10 @@ class ReceiptsService:
                 )
 
         logger.info(
-            "receipts.parse_inbound: intent=%s decision=%s source=%s confidence=%.2f "
+            "receipts.parse_inbound: intent=%s stance=%s source=%s confidence=%.2f "
             "requires_confirmation=%s text=%r",
             intent.intent,
-            intent.decision,
+            intent.stance,
             intent.source,
             intent.confidence,
             intent.requires_confirmation,

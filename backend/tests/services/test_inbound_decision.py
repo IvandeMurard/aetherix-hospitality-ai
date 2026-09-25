@@ -306,11 +306,11 @@ async def _bg(db, body, llm, reply_mock):
 
 
 @pytest.mark.asyncio
-async def test_model_decision_above_threshold_is_written(db):
+async def test_model_stance_above_threshold_is_written(db):
     _, [rec] = await _seed(db)
     reply = AsyncMock()
     memory = await _bg(db, "merci mais on ne va pas suivre cette fois",
-                       _model({"decision": "rejected", "confidence": 0.93}), reply)
+                       _model({"stance": "decline_proposal", "confidence": 0.93}), reply)
     rec = await _reload(db, rec)
     assert (rec.status, rec.decision_source) == ("rejected", "model_auto")
     assert float(rec.decision_confidence) == 0.93
@@ -319,11 +319,11 @@ async def test_model_decision_above_threshold_is_written(db):
 
 
 @pytest.mark.asyncio
-async def test_low_confidence_model_decision_asks_and_writes_nothing(db):
+async def test_low_confidence_model_stance_asks_and_writes_nothing(db):
     _, [rec] = await _seed(db)
     reply = AsyncMock()
     memory = await _bg(db, "hmm je sais pas trop",
-                       _model({"decision": "rejected", "confidence": 0.55}), reply)
+                       _model({"stance": "decline_proposal", "confidence": 0.55}), reply)
     assert (await _reload(db, rec)).status == "dispatched"
     memory.assert_not_awaited()
     sent = reply.await_args.args[1]
@@ -351,7 +351,7 @@ async def test_reason_in_same_reply_is_stored_typed_and_no_prompt(db):
     _, [rec] = await _seed(db)
     reply = AsyncMock()
     await _bg(db, "non, le mariage est annulé", _model({
-        "decision": "rejected", "confidence": 0.95, "reason": "wedding cancelled",
+        "stance": "decline_proposal", "confidence": 0.95, "reason": "wedding cancelled",
         "reason_route": "upstream_filter", "reason_route_confidence": 0.8,
     }), reply)
     [ev] = await _events(db)
@@ -456,3 +456,54 @@ async def test_confirmation_after_recommendation_was_decided_writes_nothing(db):
     assert (await _reload(db, rec)).status == "accepted"
     [p] = await _prompts(db)
     assert p.status == "superseded"
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 §19 — stance × the stored recommendation's proposal
+# ---------------------------------------------------------------------------
+
+_KEEP = {"recommended_delta_staff": 0, "decision_rule": "newsvendor"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headcount,task_class,risk,body,expected", [
+    # "pas besoin" (open decision closed by §19): rejects ADD, asks for REDUCE
+    (2, "staffing.add", None, "pas besoin", ("recorded", "rejected")),
+    (-1, "staffing.reduce", None, "pas besoin", ("confirmation_requested", "dispatched")),
+    (0, "staffing.add", _KEEP, "pas besoin", ("recorded", "accepted")),
+    (None, None, None, "pas besoin", ("confirmation_requested", "dispatched")),
+    # keep current: accepts a "keep the usual staffing" recommendation
+    (0, "staffing.add", _KEEP, "non merci on garde tel quel", ("recorded", "accepted")),
+    (0, "staffing.add", _KEEP, "non merci", ("confirmation_requested", "dispatched")),
+    (-2, "staffing.reduce", None, "on garde tel quel", ("recorded", "rejected")),
+    # a plain "non" refuses whatever was proposed
+    (0, "staffing.add", _KEEP, "non", ("recorded", "rejected")),
+])
+async def test_lexicon_reply_is_read_against_the_stored_proposal(
+        db, headcount, task_class, risk, body, expected):
+    profile, [rec] = await _seed(db)
+    rec.recommended_headcount, rec.task_class, rec.risk_assessment = headcount, task_class, risk
+    await db.commit()
+    plan = await InboundDecisionService(db).handle_deterministic(profile, body, "", NOW)
+    rec = await _reload(db, rec)
+    assert (plan.result, rec.status) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("headcount,risk,status", [
+    (2, None, "rejected"),           # keep current vs "add 2 staff" → rejected
+    (0, _KEEP, "accepted"),          # keep current vs "keep the usual staffing" → accepted
+    (None, None, "dispatched"),      # direction unknown → confirmation, nothing written
+])
+async def test_route_shows_the_model_the_proposal_and_maps_its_stance(db, headcount, risk, status):
+    _, [rec] = await _seed(db)
+    rec.recommended_headcount, rec.risk_assessment = headcount, risk
+    await db.commit()
+    llm = _model({"stance": "keep_current", "confidence": 0.95})
+    await _bg(db, "on reste sur le planning prévu ce soir", llm, AsyncMock())
+    content = llm.complete.await_args.kwargs["messages"][0]["content"]
+    assert content.endswith("Manager reply: on reste sur le planning prévu ce soir")
+    if headcount == 2:
+        assert content.startswith("Recommendation: ADD 2 staff for ")
+    assert (await _reload(db, rec)).status == status
+

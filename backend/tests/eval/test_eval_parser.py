@@ -23,12 +23,12 @@ from scripts.eval.eval_parser import (
 from scripts.eval.fake_intent_classifier import FakeIntentClassifier
 
 
-def _sc(sid: str, intent: str, message: str, split: str | None = None) -> dict:
+def _sc(sid: str, intent: str, message: str, split: str | None = None, proposal: str = "add") -> dict:
     row = {
         "id": sid,
         "category": "parser_intent",
         "layer": "parser",
-        "input": {"message": message, "language": "fr"},
+        "input": {"message": message, "language": "fr", "proposal": {"kind": proposal}},
         "expected": {"intent": intent},
     }
     if split:
@@ -48,8 +48,9 @@ class _ScriptedLLM:
 
     async def complete(self, messages, max_tokens=500, temperature=0.3, system=None, tier="reasoning"):
         self.calls += 1
-        reply = messages[0]["content"].removeprefix("Manager reply: ")
-        answer = self.script.get(reply, '{"decision": "modified", "confidence": 0.9}')
+        # The reply is the last line, after the proposal line (ADR-0007 §19).
+        reply = messages[0]["content"].rsplit("Manager reply: ", 1)[-1]
+        answer = self.script.get(reply, '{"stance": "counter_value", "confidence": 0.9}')
         if isinstance(answer, Exception):
             raise answer
         return answer
@@ -164,26 +165,32 @@ def test_fake_report_has_no_accuracy_headline(monkeypatch):
 
 def test_production_path_routing_and_typed_errors():
     llm = _ScriptedLLM({
-        "noted, see you later": '{"decision": "none", "confidence": 0.9}',
-        "sounds good, will do": '{"decision": "accepted", "confidence": 0.95}',
-        "hmm not sure": '{"decision": "rejected", "confidence": 0.5}',
-        "we will see": '{"decision": "modified", "confidence": 0.9}',
+        "noted, see you later": '{"stance": "none", "confidence": 0.9}',
+        "sounds good, will do": '{"stance": "adopt_proposal", "confidence": 0.95}',
+        "hmm not sure": '{"stance": "decline_proposal", "confidence": 0.5}',
+        "we will see": '{"stance": "counter_value", "confidence": 0.9}',
+        "we stay as planned": '{"stance": "keep_current", "confidence": 0.95}',
         "boom": RuntimeError("api down"),
         "garbage": "not json at all",
-        "invented": '{"intent": "rejected", "confidence": 0.99}',
+        "invented": '{"decision": "rejected", "confidence": 0.99}',   # §16 schema: no stance
     })
     scenarios = [
         _sc("kw-a", "accepted", "Accept"),
         _sc("kw-oui", "accepted", "oui"),
         _sc("kw-r", "rejected", " refusé "),
         _sc("decl", "rejected", "non merci"),
-        _sc("amb", "rejected", "pas besoin"),
+        _sc("decl-keep", "accepted", "non merci on garde tel quel", proposal="no_change"),
+        _sc("need-add", "rejected", "pas besoin"),
+        _sc("need-red", "rejected", "pas besoin", proposal="reduce"),
+        _sc("amb", "rejected", "bof"),
         _sc("ack", "accepted", "👍"),
         _sc("cov", "modified", "covers: 80"),
         _sc("llm-none", "accepted", "noted, see you later"),
         _sc("llm-auto", "accepted", "sounds good, will do"),
         _sc("llm-low", "rejected", "hmm not sure"),
         _sc("llm-mod", "modified", "we will see"),
+        _sc("llm-keep-add", "rejected", "we stay as planned"),
+        _sc("llm-keep-none", "accepted", "we stay as planned", proposal="no_change"),
         _sc("err", "modified", "boom"),
         _sc("bad", "modified", "garbage"),
         _sc("unmap", "rejected", "invented"),
@@ -194,9 +201,14 @@ def test_production_path_routing_and_typed_errors():
     assert got["kw-a"] == ("accepted", "keyword", "record")
     assert got["kw-oui"] == ("accepted", "keyword", "record")
     assert got["kw-r"] == ("rejected", "keyword", "record")
-    # Decline of a recommendation proposing a change (EVAL_CONTEXT) → rejected (§17.8).
+    # "No thanks" to a recommendation adding staff → rejected (§17.8, §19).
     assert got["decl"] == ("rejected", "keyword", "record")
-    # Ambiguous keyword → confirmation, never a write.
+    # Keep current, composed from the lexicon, to a no-change proposal → accepted.
+    assert got["decl-keep"] == ("accepted", "keyword", "record")
+    # "Pas besoin": rejects ADD, two readings for REDUCE (§19).
+    assert got["need-add"] == ("rejected", "keyword", "record")
+    assert got["need-red"] == ("rejected", "keyword_ambiguous", "confirm")
+    # Two readings → confirmation, never a write.
     assert got["amb"] == ("rejected", "keyword_ambiguous", "confirm")
     # Bare ack, one pending recommendation inside the window (EVAL_CONTEXT) → rule (b).
     assert got["ack"] == ("accepted", "bare_ack", "record")
@@ -206,11 +218,14 @@ def test_production_path_routing_and_typed_errors():
     # Low confidence → the decision is proposed for confirmation, not written.
     assert got["llm-low"] == ("rejected", "llm", "confirm")
     assert got["llm-mod"] == ("modified", "llm", "record")
+    # Same model stance, different proposal, different decision (§19).
+    assert got["llm-keep-add"] == ("rejected", "llm", "record")
+    assert got["llm-keep-none"] == ("accepted", "llm", "record")
     # Model failures are typed errors — never a decision.
     assert got["err"] == ("error", "llm_error", "error")
     assert got["bad"] == ("error", "llm_unmappable", "error")
     assert got["unmap"] == ("error", "llm_unmappable", "error")
-    assert llm.calls == 7  # keywords and regexes never reach the model
+    assert llm.calls == 9  # keywords and regexes never reach the model
 
 
 def test_auto_write_precision_and_confirmation_rate():
@@ -280,14 +295,45 @@ def test_dataset_has_confirmation_trigger_cases():
     trig = [s for s in load_scenarios(layer="parser") if s["category"] == "parser_confirmation"]
     assert len(trig) >= 10
     assert all(s["expected"]["requires_confirmation"] is True for s in trig)
-    # They must reach the model: a keyword would decide them without it.
     from app.schemas.webhook import ActionType
     from app.services.action_logger import parse_action
     from app.services.manager_decision import is_bare_ack
 
+    by_path = {"model": [], "keyword_ambiguous": []}
     for s in trig:
+        by_path[s["expected"]["path"]].append(s)
+    # Model-path cases must reach the model: a keyword would decide them without it.
+    assert len(by_path["model"]) >= 10
+    for s in by_path["model"]:
         msg = s["input"]["message"]
         assert parse_action(msg) == ActionType.unknown and not is_bare_ack(msg), s["id"]
+    # Deterministic two-reading cases (ADR-0007 §19): confirmation with no model call.
+    preds = eval_parser._quiet_stub_run(by_path["keyword_ambiguous"])
+    for s, p in zip(by_path["keyword_ambiguous"], preds):
+        assert (p.stage, p.action) == ("keyword_ambiguous", "confirm"), s["id"]
+
+
+def test_every_proposal_kind_has_graded_cases():
+    """ADR-0007 §19: the golden set answers add, reduce and no-change proposals,
+    on the deterministic path and on the model path."""
+    from scripts.eval.loader import load_scenarios
+
+    scenarios = [s for s in load_scenarios(layer="parser") if s["category"] == "parser_intent"]
+    for kind in ("add", "reduce", "no_change"):
+        cases = [s for s in scenarios if s["input"]["proposal"]["kind"] == kind]
+        paths = {s["expected"]["path"] for s in cases}
+        assert "model" in paths and "keyword" in paths, kind
+        assert {"fr", "en"} <= {s["input"]["language"] for s in cases}, kind
+
+
+def test_per_proposal_accuracy_is_reported():
+    scenarios = [_sc("a", "accepted", "oui"), _sc("b", "rejected", "tel quel", proposal="reduce"),
+                 _sc("c", "accepted", "tel quel", proposal="no_change")]
+    preds = eval_parser._quiet_stub_run(scenarios)
+    r = compute_parser_metrics(scenarios, eval_parser._replay(preds))
+    assert r["per_proposal"] == {"add": {"accuracy": 1.0, "n": 1},
+                                 "no_change": {"accuracy": 1.0, "n": 1},
+                                 "reduce": {"accuracy": 1.0, "n": 1}}
 
 
 def test_real_backend_without_key_is_not_measured(monkeypatch):
@@ -332,8 +378,13 @@ def test_real_backend_uses_pinned_target_and_reports_canary(monkeypatch):
     assert r["n"] == r["production_path_ceiling"]["reaches_model"]
     assert all(c["stage"] == "llm" for c in r["cases"])
     assert r["deterministic"]["disagreements"] == []
-    # A model that answers "modified" to everything auto-writes the trigger cases.
-    assert r["confirmation_trigger"]["auto_written"] == r["n_confirmation_trigger_cases"]
+    # A model that answers "counter_value" to everything auto-writes every trigger
+    # case it sees; the deterministic two-reading cases (§19) never reach it and
+    # are confirmed whatever the model says.
+    trig_cases = r["confirmation_trigger"]["cases"]
+    model_seen = [c for c in trig_cases if c["stage"] == "llm"]
+    assert r["confirmation_trigger"]["auto_written"] == len(model_seen) > 0
+    assert all(c["action"] == "confirm" for c in trig_cases if c["stage"] == "keyword_ambiguous")
     assert any(b.startswith("confirmation trigger") for b in r["thresholds"]["breaches"])
     assert baselines.parser_baseline_freeze_refusal(r) is None
 
@@ -342,7 +393,7 @@ def test_real_backend_low_confidence_model_passes_trigger(monkeypatch):
     class _Unsure(_ScriptedLLM):
         async def complete(self, *a, **k):
             self.calls += 1
-            return '{"decision": "rejected", "confidence": 0.4}'
+            return '{"stance": "decline_proposal", "confidence": 0.4}'
 
     _patch_provider(monkeypatch, _Unsure({}))
     r = run(runs=1)
