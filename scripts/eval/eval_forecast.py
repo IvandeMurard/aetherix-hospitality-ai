@@ -100,6 +100,10 @@ def compute_metrics(scenarios: list[dict], predictions: dict[str, dict]) -> dict
         "overall_mape_j1_holdout": _mean(all_err),
         "per_category_mape": {c: _mean(v) for c, v in sorted(per_cat_err.items())},
         "per_category_count": {c: len(v) for c, v in sorted(per_cat_err.items())},
+        # ADR-0007 §18.2: coverage is only meaningful next to its nominal level.
+        # Prophet's raw interval — the recalibrated one is measured by
+        # eval_forecast_calibration.py (rolling-origin, disjoint test set).
+        "interval_nominal_level": INTERVAL_WIDTH,
         "interval_coverage_pct": (
             round(sum(interval_hits) / len(interval_hits), 4) if interval_hits else None
         ),

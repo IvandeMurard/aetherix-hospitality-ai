@@ -56,6 +56,15 @@ jobs:
             --json-out eval-result.json
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
+      - name: Forecast interval calibration (arm A, synthetic series)
+        # ADR-0007 §18.2: a fresh split-conformal recalibration must bring the
+        # nominal-80 % interval closer to nominal than Prophet's own, without
+        # under-covering by > 5 pp. Same-run before/after: no frozen number is
+        # compared, so CI/local environment drift cannot flip it. ~10 s.
+        run: |
+          uv run --project backend python -m scripts.eval.eval_forecast_calibration \
+            --runs 1 --check --json-out eval-calibration.json
+
       - name: Post sticky PR comment
         if: always()
         uses: marocchino/sticky-pull-request-comment@v2

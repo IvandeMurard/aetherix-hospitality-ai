@@ -1604,3 +1604,68 @@ catalog (`task-classes-v1`):
   normally requires `datetime` objects. The new `commit_at` is passed as a
   `datetime`. The existing columns were left as they were (tests run on SQLite;
   no Postgres run in this session).
+
+### 18.2 Calibrated uncertainty first (blocking prerequisite)
+
+**Finding.** `forecast_baseline.json` reports `interval_coverage_pct` 0.19:
+Prophet's interval — nominal level **80 %** (`interval_width=0.80`, now stated
+next to the number as `interval_nominal_level`) — contained the realised value
+4 times in 21 on the golden scattered hold-out. That set is edge-case weighted
+on purpose, so it overstates the problem, but the rolling-origin backtest
+below confirms under-coverage too. Any risk statement on that interval would
+understate risk.
+
+**Method** (`backend/app/services/forecast_calibration.py`, pure;
+`scripts/eval/eval_forecast_calibration.py`, arm A):
+
+- Rolling-origin backtest on the demo series with the `PredictionEngine`
+  configuration (weekly + yearly seasonality, FR holidays, three regressors,
+  interval 0.80): origins from day 120 every 7 days, horizon 7 days → 35
+  origins, 245 forecasts, per category (golden taxonomy) × lead time 1–7.
+- Origins 0–16 = calibration set (119 forecasts); 17–34 = test set (126),
+  **disjoint in time**.
+- Recalibration: split-conformal on relative residuals `(y − ŷ)/ŷ`, finite-
+  sample rank (`ceil((n+1)p)` above the median, `floor` below), stored as a
+  99-point quantile grid. Chosen because it is the simplest method whose
+  coverage can be checked directly; widening Prophet's `interval_width` would
+  not be verifiable per level.
+
+**Result — synthetic series, 3 identical runs (canary):**
+
+| Test set (n=126) | Nominal 80 % | 50 % | 90 % |
+|---|---|---|---|
+| Prophet's own interval (before) | **0.667** (−13.3 pp) | — | — |
+| Recalibrated (after) | **0.881** (+8.1 pp) | 0.587 | 0.929 |
+
+Per lead time (after): 0.94 / 0.94 / 0.89 / 0.89 / 0.78 / 0.83 / 0.89 (n=18
+each). Per category: normal_day 0.874 (n=119), event_day 1.0 (n=7); no
+weather_anomaly day falls in the test window. The recalibrated interval
+**over-covers** (conservative: it overstates, never understates, risk);
+binomial standard error at n=126 is ≈ 3.6 pp, so +8 pp is a real
+over-coverage, most likely because early origins (less training data) have
+larger errors than later ones. Accepted as is: the dangerous direction is
+under-coverage. A rolling (recent-residuals) calibration is the obvious next
+step once realised covers exist.
+
+**Rules now enforced:**
+
+- A calibration is keyed on the **forecaster** *and* the **training data**
+  (`training_data_source`). The committed one
+  (`backend/data/calibration/prophet-predictionengine-synthetic-v1.json`,
+  provenance `synthetic`) applies only to a `PredictionEngine` model trained on
+  the synthetic source (persisted in a model sidecar so it survives a restart).
+  It **never** applies to the anomaly-detection heuristic that produces the
+  dispatched staffing recommendations: no calibration exists for that
+  forecaster, so recommendations from it carry **qualitative bands only**
+  (§18.4) until realised covers calibrate it (§18.5).
+- Freeze rule: ≥ 3 identical runs, closer to nominal than before, and not
+  under-covering by > 5 pp. `--check` runs it in the blocking eval gate (same-
+  run before/after, immune to CI/local drift).
+- Every surface that uses it says **`synthetic-calibrated`**; the prediction
+  API returns Prophet's raw range unchanged plus `interval_nominal_level` and a
+  `calibrated_interval` block (bounds, version, provenance, measured coverage
+  and n), or `null` when none applies (mock model, other training data).
+- **Arm C** (`forecast_calibration.realised_coverage`): coverage of the
+  interval stored at issue time against realised covers, flagged
+  `independent_actuals=false` while actuals are manager-declared (§16.6).
+  Wired to data in §18.5; **not measured** — no realised covers exist.

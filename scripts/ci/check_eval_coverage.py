@@ -40,6 +40,8 @@ COVERAGE_FAIL = 0.60
 # Paths whose change triggers the gate (ADR §D2.a / §4). Order-independent.
 EVAL_TRIGGER_PATHS = [
     "backend/app/services/prediction_engine.py",
+    # ADR-0007 §18.2: the interval every risk statement rests on.
+    "backend/app/services/forecast_calibration.py",
     "backend/app/services/staffing_service.py",
     "backend/app/services/recommendation_formatter.py",
     "backend/app/services/reasoning_service.py",
@@ -71,6 +73,7 @@ EVAL_TRIGGER_PATHS = [
 # path -> eval layer (ADR §D2.b). Files absent here fall under the prefix rules.
 LAYER_BY_PATH = {
     "backend/app/services/prediction_engine.py": "forecast",
+    "backend/app/services/forecast_calibration.py": "forecast",
     "backend/app/services/staffing_service.py": "forecast",
     "backend/app/services/data_transformer.py": "forecast",
     "backend/app/services/demand_modifiers.py": "forecast",
