@@ -1,13 +1,20 @@
 """APScheduler job — daily Trust-KPI aggregation at 02:30 UTC (HOS-177 / P3-3).
 
-Computes recommendation_acceptance_rate per tenant from the
-recommendation_acceptance_daily materialized view and persists results to
+Computes recommendation_acceptance_rate per tenant and persists it to
 kpi_daily. Emits a trust_low alert row to agent_action_log when the 7-day
 rolling rate drops below 0.30 for a tenant with enough signal (denominator >= 5).
 
-Rate formula (spec decision — outcome vocab mismatch resolved):
-    rate = followed / (followed + rejected + neutral)
-where denominator excludes NULL manager_feedback rows (handled by the MV WHERE clause).
+Definition (ADR-0007 §17.6) = `decision_recap.acceptance_rate`:
+    rate = accepted / (accepted + rejected + modified)
+over `staffing_recommendations` received (dispatched, else created) on the
+day, human decisions only (decided_by in human_whatsapp, human_via_host).
+A host agent's own decision never counts.
+
+Until 24/09/2026 this read the `recommendation_acceptance_daily` materialized
+view, which joined feedback memory rows to recommendation/prediction tool calls
+on request_id. Feedback rows carry the request_id of the feedback call itself,
+so WhatsApp and MCP decisions were essentially never counted (undercount). The
+view is left in place, unread (dropping it is a separate migration).
 """
 from __future__ import annotations
 
@@ -45,17 +52,21 @@ def compute_rate(followed: int, rejected: int, neutral: int) -> Optional[float]:
 # ---------------------------------------------------------------------------
 
 async def _aggregate_yesterday(conn, yesterday: date) -> list[dict]:
-    """Return per-tenant aggregates for yesterday from the MV."""
+    """Per-tenant human decisions for recommendations received on `yesterday`
+    (UTC day). `followed`/`rejected`/`neutral` keep the kpi_daily column
+    semantics: accepted / rejected / modified."""
     result = await conn.execute(
         text("""
             SELECT
-                hotel_id,
-                COALESCE(SUM(cnt) FILTER (WHERE manager_feedback = 'followed'), 0) AS followed,
-                COALESCE(SUM(cnt) FILTER (WHERE manager_feedback = 'rejected'), 0) AS rejected,
-                COALESCE(SUM(cnt) FILTER (WHERE manager_feedback = 'neutral'),  0) AS neutral
-            FROM recommendation_acceptance_daily
-            WHERE kpi_date = :kpi_date
-            GROUP BY hotel_id
+                tenant_id AS hotel_id,
+                COUNT(*) FILTER (WHERE status = 'accepted') AS followed,
+                COUNT(*) FILTER (WHERE status = 'rejected') AS rejected,
+                COUNT(*) FILTER (WHERE status = 'modified') AS neutral
+            FROM staffing_recommendations
+            WHERE decided_by IN ('human_whatsapp', 'human_via_host')
+              AND status IN ('accepted', 'rejected', 'modified')
+              AND DATE(COALESCE(dispatched_at, created_at) AT TIME ZONE 'UTC') = :kpi_date
+            GROUP BY tenant_id
         """),
         {"kpi_date": yesterday},
     )
@@ -174,29 +185,7 @@ async def run_kpi_aggregation() -> None:
 
     try:
         async with engine.begin() as conn:
-            # Step 1: refresh the MV so today's slice is current.
-            # REFRESH ... CONCURRENTLY requires the MV to be already populated;
-            # on a fresh database it exists but has never been populated, so the
-            # first refresh must be non-concurrent (observed on Fly staging while
-            # closing HOS-190 AC6 — otherwise the cron silently never populates).
-            populated = (
-                await conn.execute(
-                    text(
-                        "SELECT relispopulated FROM pg_class "
-                        "WHERE oid = 'recommendation_acceptance_daily'::regclass"
-                    )
-                )
-            ).scalar()
-            if populated:
-                await conn.execute(
-                    text("REFRESH MATERIALIZED VIEW CONCURRENTLY recommendation_acceptance_daily")
-                )
-            else:
-                await conn.execute(
-                    text("REFRESH MATERIALIZED VIEW recommendation_acceptance_daily")
-                )
-
-            # Step 2: aggregate yesterday's slice per tenant → upsert kpi_daily
+            # Step 1: aggregate yesterday's slice per tenant → upsert kpi_daily
             tenant_rows = await _aggregate_yesterday(conn, yesterday)
             tenant_count = 0
             for row in tenant_rows:
@@ -215,7 +204,7 @@ async def run_kpi_aggregation() -> None:
 
             logger.info("kpi_aggregator: computed %d tenants  job_id=%s", tenant_count, job_id)
 
-            # Step 3: 7-day rolling alert check
+            # Step 2: 7-day rolling alert check
             await _check_and_emit_alerts(conn, yesterday)
 
     except Exception as exc:

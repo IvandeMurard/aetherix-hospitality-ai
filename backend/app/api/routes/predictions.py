@@ -92,6 +92,11 @@ class PredictResponse(BaseModel):
     confidence: float
     range_min: int
     range_max: int
+    # ADR-0007 §18.2: range_min/max is Prophet's nominal-80 % interval, whose
+    # measured coverage was below nominal. calibrated_interval carries the
+    # recalibrated one with its provenance label, or null when none applies.
+    interval_nominal_level: Optional[float] = None
+    calibrated_interval: Optional[dict] = None
     is_mock: bool
     reasoning_summary: str
     confidence_factors: list
@@ -207,6 +212,8 @@ async def predict(
         confidence=pred.get("confidence", 0.0),
         range_min=pred.get("range_min", covers),
         range_max=pred.get("range_max", covers),
+        interval_nominal_level=pred.get("interval_nominal_level"),
+        calibrated_interval=pred.get("calibrated_interval"),
         is_mock=pred.get("is_mock", False),
         reasoning_summary=summary,
         confidence_factors=confidence_factors,
@@ -312,6 +319,7 @@ async def train_prophet(
             include_weather=body.include_weather,
             include_events=body.include_events,
             include_occupancy=body.include_occupancy,
+            data_source=body.data_source.value,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Prophet training failed: {exc}") from exc

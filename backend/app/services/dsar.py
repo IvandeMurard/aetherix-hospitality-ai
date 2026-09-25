@@ -29,8 +29,8 @@ Trois raisons, dans l'ordre d'importance :
   les snapshots Supabase jusqu'à expiration de leur fenêtre, qui n'est ni
   bornée ni documentée. Une réponse DSAR doit le dire, plutôt qu'affirmer un
   effacement immédiat.
-- **Trois tables ne sont pas adressables par personne** : `operational_memory`,
-  `agent_action_log` et `pms_sync_logs` portent des champs libres qui *peuvent*
+- **Quatre tables ne sont pas adressables par personne** : `operational_memory`,
+  `agent_action_log`, `pms_sync_logs` et `inbound_reply_events` portent des champs libres qui *peuvent*
   contenir une donnée personnelle, mais sont clés par hôtel, jamais par
   individu. Il n'existe donc aucun index permettant de retrouver « les lignes
   de cette personne ». C'est traité par un **balayage textuel best-effort** qui
@@ -136,7 +136,8 @@ BACKUP_CAVEAT = (
     "fenêtre de rétention. La suppression n'est complète qu'à ce terme."
 )
 FREE_TEXT_CAVEAT = (
-    "Trois tables (operational_memory, agent_action_log, pms_sync_logs) portent des "
+    "Quatre tables (operational_memory, agent_action_log, pms_sync_logs, "
+    "inbound_reply_events) portent des "
     "champs libres qui ne sont pas indexés par personne. Elles ont été balayées par "
     "recherche textuelle ; les correspondances sont listées pour arbitrage manuel, "
     "jamais supprimées automatiquement."
@@ -206,6 +207,39 @@ def build_erasure_plan(subject: Subject) -> list[Step]:
     steps.append(
         Step(
             order=order,
+            table="inbound_reply_events",
+            action=Action.REVIEW,
+            target="balayage textuel sur reason_text",
+            rationale=(
+                "Décision #38 : la raison facultative d'un refus ou d'une correction est "
+                "du texte libre du manager. Table clé par hôtel, pas par personne — même "
+                "traitement qu'operational_memory. Le reste de la ligne (décision, source, "
+                "confiance) n'identifie personne et reste la vérité terrain du bras C."
+            ),
+        )
+    )
+
+    order += 1
+    steps.append(
+        Step(
+            order=order,
+            table="staffing_recommendations",
+            action=Action.REVIEW,
+            target="balayage textuel sur reason_detail | reason_evidence",
+            rationale=(
+                "ADR-0007 §17.4 : la raison d'une décision relayée par un agent hôte est "
+                "du texte libre borné (280 car.) qui peut nommer une personne (« X est "
+                "malade »). Table clé par hôtel, pas par personne — même traitement "
+                "qu'inbound_reply_events. La décision, decided_by et reason_code "
+                "n'identifient personne et restent la vérité terrain du bras C."
+            ),
+        )
+    )
+
+    order += 1
+    steps.append(
+        Step(
+            order=order,
             table="agent_action_log",
             action=Action.REVIEW,
             target="balayage textuel sur payload | abstention_context",
@@ -226,6 +260,39 @@ def build_erasure_plan(subject: Subject) -> list[Step]:
             rationale=(
                 "Le PIIStripper protège le dictionnaire de réservation, pas ces deux "
                 "champs libres qui peuvent recevoir un extrait de payload amont."
+            ),
+        )
+    )
+
+    order += 1
+    steps.append(
+        Step(
+            order=order,
+            table="learning_items",
+            action=Action.REVIEW,
+            target="balayage textuel sur payload | evidence | decision_note ; decided_by == email du sujet",
+            rationale=(
+                "ADR-0007 §18.5 : une raison routée (texte libre du manager) est recopiée "
+                "dans la file d'apprentissage pour revue, et decided_by est l'e-mail de "
+                "l'approbateur. Table clé par hôtel, pas par personne — même traitement "
+                "qu'inbound_reply_events. Un cas d'éval exporté vers le golden dataset "
+                "doit être revu dans le fichier aussi."
+            ),
+        )
+    )
+
+    order += 1
+    steps.append(
+        Step(
+            order=order,
+            table="hotel_decision_parameters",
+            action=Action.REVIEW,
+            target="set_by == email du sujet | balayage textuel sur note",
+            rationale=(
+                "ADR-0007 §18.3 : set_by est l'e-mail de l'utilisateur qui a réglé un "
+                "coût ou une contrainte ; la ligne est la trace d'audit de la valeur "
+                "(qui, quand), conservable au titre de l'art. 17(3)(b). Arbitrage "
+                "humain : pseudonymiser set_by plutôt que supprimer la valeur."
             ),
         )
     )
@@ -391,5 +458,13 @@ PII_TABLES: frozenset[str] = frozenset(
         "operational_memory",
         "agent_action_log",
         "pms_sync_logs",
+        # Décision #38 — reason_text (raison facultative, texte libre du manager).
+        "inbound_reply_events",
+        # ADR-0007 §17.4 — reason_detail / reason_evidence (agent hôte, texte libre).
+        "staffing_recommendations",
+        # ADR-0007 §18.3 — set_by (e-mail de qui a réglé la valeur) + note libre.
+        "hotel_decision_parameters",
+        # ADR-0007 §18.5 — raisons routées recopiées + e-mail de l'approbateur.
+        "learning_items",
     }
 )

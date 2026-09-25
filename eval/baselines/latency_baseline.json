@@ -3,7 +3,8 @@
   "unit": "ms",
   "seed": 42,
   "warmup": 3,
-  "note": "p95 is the SLO line enforced by eval_latency + latency_slo_worker. Frozen from docs/ops/latency-slo.md (HOS-209). Re-measure + bump via PR + CLAUDE.md trace.",
+  "kind": "slo_targets_not_measurements",
+  "note": "These are the SLO TARGETS copied from docs/ops/latency-slo.md (HOS-209), not measured latencies. eval_latency and latency_slo_worker compare a measured p95 against the p95 target below. No measured latency is recorded in this file. Changing a target: PR + CLAUDE.md trace.",
   "endpoints": {
     "GET /api/v1/predictions/today": {"p50_ms": 3000, "p95_ms": 8000, "p99_ms": 12000},
     "GET /api/v1/recommendations/today": {"p50_ms": 5000, "p95_ms": 12000, "p99_ms": 18000},

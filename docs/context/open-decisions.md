@@ -8,6 +8,26 @@
 
 ## Actives
 
+### Host-agent autonomy as a client option — ADR-0013 (proposed 24/09/2026)
+
+**Status:** Open — for Ivan. Nothing enabled. **Question:** amend Décision #6 so that a client may let its host agent accept or reject some recommendations alone? **Proposal:** [`docs/adr/0013-decision-autonomy-policy.md`](../adr/0013-decision-autonomy-policy.md) — permission ladder by reversibility and cost (staffing headcount: never; bounded prep / food-waste actions: candidate), policy as versioned configuration per tenant × task class evaluated at the single seam `decision_policy.authorize_decision` (already built, default human validation), eligibility gated by per-scope arm-A thresholds + arm-C override rate, two-sided approval, kill switch, caps, human sampling, autonomous decisions excluded from human-trust metrics. **Open sub-questions:** ladder; two-sided approval; N / thresholds / sample rate (fix before data, HOS-316); whether any autonomous task class is worth building before a design partner asks.
+
+### Phase 2 weekly digest vs the opt-in recap push (24/09/2026)
+
+**Status:** Open — for Ivan. **Found** (ADR-0007 §17.2): the Phase 2 weekly digest (`receipts_dispatcher`, Sundays, Décision #15 scope) pushes an **LLM-composed** narrative to every active hotel, **without opt-in**, as a free-form WhatsApp message that WhatsApp refuses outside the 24 h window. Its numbers are measured, but it is prose and ignores the interruption budget. **Proposal:** retire it in favour of the deterministic recap push (opt-in, template or in-session, §17.3). Not changed without a decision because Décision #15 locked the Phase 2 scope.
+
+### "Pas besoin" / "no need" mapping (24/09/2026)
+
+**Status:** Open — for Ivan. The clarification of 24/09 covers "non merci / on garde tel quel" (rejected when the recommendation proposes a change, ADR-0007 §17.8). "Pas besoin" / "no need" answering "add 2 servers" reads the same way ("we don't need the extra staff"), but it was not part of the clarification, so it still goes to confirmation. Extend the rule to it?
+
+### Risk-bearing recommendations — values to fix before any data (25/09/2026)
+
+**Status:** Open — for Ivan. Built with defaults (Décision #40, ADR-0007 §18); each is a parameter, none was tuned on data. **To confirm or change, before real outcomes exist (HOS-316 spirit):** (a) commit-offset defaults 24 h (add staff) / 72 h (reduce staff) / 4 h (prep) — or require each hotel to set its own before the correction window is shown; (b) interruption budget `RISK_DISPLAY_MIN_GAP_DEFAULT` 50 € and `RISK_DISPLAY_MIN_PROB_GAP` 0.20; (c) newsvendor cap ±4 staff when the hotel set none; (d) learning thresholds — miscalibration alert from n ≥ 30 and gap > max(10 pp, 2 SE); realised recalibration from ≥ 60 points, later third held out, ≤ 5 pp under-coverage; cost proposal from ≥ 10 decisions and ≥ 25 % change; constraint proposal from ≥ 3 rejections; (e) the synthetic Prophet recalibration over-covers (0.881 at nominal 0.80) — accepted as conservative; a rolling calibration is the alternative.
+
+### ROI gate and reductions on placeholder values (25/09/2026)
+
+**Status:** Open — for Ivan. **Found** (ADR-0007 §18.3–18.4): (1) the ROI gate that decides which anomalies become recommendations still uses `config.DEFAULT_AVG_SPEND_PER_COVER` / `DEFAULT_STAFF_HOURLY_RATE` when the hotel set no rates (the € they produce is no longer shown, but they still select what the manager receives); (2) a lull anomaly never becomes a recommendation (`calculate_for_anomaly` returns net ROI 0 for lulls and only net ROI > 0 is promoted — `roi_calculator.py`) and its message would read "reducing staffing by 0". **Options:** require configured costs for the ROI gate (else pass anomalies through to the risk-based rule), and let reductions through the newsvendor path; or keep the Phase 2 behaviour. Not changed without a decision (Décision #15 scope).
+
 ### Pricing model (HOS-179 P3-5)
 
 **Statut :** Open
@@ -256,6 +276,14 @@ Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni co
 ---
 
 ## Resolved (archive)
+
+### [x] Inbound reply → recorded outcome: free text cannot record accepted/rejected — RESOLVED 24/09/2026 → ADR-0007 §16 (Décision #38)
+
+**Opened** 24/09/2026 by the EVAL-4 correction (ADR-0007 §15.2, Décision #37): only the exact bodies `accept` / `reject` recorded a decision; free text recorded `modified` or nothing (ceiling 36.2%).
+
+**Decided by Ivan (PO), same day.** The decision is arm C's ground truth, deterministic wherever possible; the comment is optional and never changes a decision. (a) Schema change accepted: `decision` + `confidence` (+ corrected value, reason) validated by schema, mapped in `receipts.resolve_feedback` / `outcome_for_feedback`. (b) A bare acknowledgement records `accepted` only with exactly one pending recommendation inside the response window (12 h), source `bare_ack_rule`; otherwise the manager is asked. (c) Exact-keyword fast path kept and widened to FR/EN forms; ambiguous forms go to confirmation. Plus: WhatsApp quick-reply buttons behind a flag (template approval pending), mandatory confirmation below 0.85, optional typed reason after reject/correction, outcome never relabels a decision.
+
+**What is still open:** the gate for closing the original item — the real parser eval passing FAILURE_THRESHOLDS.md — has **not** run (no API key). The WhatsApp template approval is an ops step. See ADR-0007 §16.4 and §16.7.
 
 ### [x] Floor k-anonymat couche Segment — RÉSOLU 01/08/2026 (HOS-323, arbitrage Ivan)
 

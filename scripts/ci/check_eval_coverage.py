@@ -40,6 +40,10 @@ COVERAGE_FAIL = 0.60
 # Paths whose change triggers the gate (ADR §D2.a / §4). Order-independent.
 EVAL_TRIGGER_PATHS = [
     "backend/app/services/prediction_engine.py",
+    # ADR-0007 §18.2: the interval every risk statement rests on.
+    "backend/app/services/forecast_calibration.py",
+    # ADR-0007 §18.4: the decision rule that sets the recommended headcount.
+    "backend/app/services/risk_assessment.py",
     "backend/app/services/staffing_service.py",
     "backend/app/services/recommendation_formatter.py",
     "backend/app/services/reasoning_service.py",
@@ -50,6 +54,14 @@ EVAL_TRIGGER_PATHS = [
     "backend/app/services/pattern_scorer.py",
     "backend/app/services/query_parser.py",
     "backend/app/services/receipts.py",
+    # EVAL-4 production path (ADR-0007 §15): exact accept/reject keywords + the
+    # route that turns a parsed reply into a recorded outcome.
+    "backend/app/services/action_logger.py",
+    "backend/app/api/routes/twilio_inbound.py",
+    # Décision #38 (ADR-0007 §16): the decision rules (keywords, thresholds,
+    # rule (b)) and the service that applies them decide what arm C records.
+    "backend/app/services/manager_decision.py",
+    "backend/app/services/inbound_decision.py",
     "backend/app/services/agent_constitution.py",
     "backend/app/services/data_transformer.py",
     "backend/app/services/demand_modifiers.py",
@@ -63,6 +75,8 @@ EVAL_TRIGGER_PATHS = [
 # path -> eval layer (ADR §D2.b). Files absent here fall under the prefix rules.
 LAYER_BY_PATH = {
     "backend/app/services/prediction_engine.py": "forecast",
+    "backend/app/services/forecast_calibration.py": "forecast",
+    "backend/app/services/risk_assessment.py": "forecast",
     "backend/app/services/staffing_service.py": "forecast",
     "backend/app/services/data_transformer.py": "forecast",
     "backend/app/services/demand_modifiers.py": "forecast",
@@ -74,7 +88,13 @@ LAYER_BY_PATH = {
     "backend/app/services/memory_recall_service.py": "recall",
     "backend/app/services/rag_service.py": "recall",
     "backend/app/services/query_parser.py": "parser",
-    "backend/app/services/receipts.py": "receipt",
+    # receipts.py holds both the Receipt composer and parse_inbound (the inbound
+    # parser under EVAL-4) — it maps to both layers.
+    "backend/app/services/receipts.py": ("receipt", "parser"),
+    "backend/app/services/action_logger.py": "parser",
+    "backend/app/api/routes/twilio_inbound.py": "parser",
+    "backend/app/services/manager_decision.py": "parser",
+    "backend/app/services/inbound_decision.py": "parser",
 }
 
 # A change under these triggers a FULL run — an LLM/embedding/prompt swap impacts
@@ -170,7 +190,8 @@ def detect(changed: list[str]) -> tuple[list[str], set[str]]:
         if f.startswith(FULL_RUN_PREFIXES):
             layers.update(EVALUABLE_LAYERS)
         elif f in LAYER_BY_PATH:
-            layers.add(LAYER_BY_PATH[f])
+            mapped = LAYER_BY_PATH[f]
+            layers.update((mapped,) if isinstance(mapped, str) else mapped)
         elif f in FULL_CONTRACT_PATHS:
             layers.update(EVALUABLE_LAYERS)
         elif f.startswith("eval/baselines/") and f.endswith(_BASELINE_SUFFIX):
@@ -371,10 +392,24 @@ def _layer_summary(layer: str, result: dict, diff: dict, passed: int, total: int
             f"categories · {regs} regression(s) >3pp"
         )
     if layer == "parser":
+        ceiling = (result.get("production_path_ceiling") or {}).get("max_accuracy")
+        ceil_s = "—" if ceiling is None else f"{ceiling * 100:.1f}%"
+        if not result.get("quality_signal"):
+            # ADR-0007 §15: the PR gate runs the fake backend. Never print its
+            # agreement as an accuracy — it is not a model-quality measurement.
+            return (
+                "- **parser** — plumbing check only (fake backend): pipeline ran on "
+                f"n={result.get('n')} cases. **Model quality not measured on this PR** "
+                "(opt-in: label `eval-parser-real`). Production-path ceiling "
+                f"{ceil_s} (model-independent)."
+            )
         acc = result.get("accuracy")
         acc_s = "—" if acc is None else f"{acc * 100:.1f}%"
         delta = diff.get("accuracy_delta_pp")
-        return f"- **parser** — accuracy {acc_s} · Δ {delta}pp vs baseline"
+        return (
+            f"- **parser** — accuracy {acc_s} (production path, real model) · "
+            f"Δ {delta}pp vs baseline · ceiling {ceil_s}"
+        )
     return f"- **{layer}** — evaluated"
 
 

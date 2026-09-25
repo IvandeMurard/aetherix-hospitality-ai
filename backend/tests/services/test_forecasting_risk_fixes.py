@@ -280,8 +280,16 @@ class TestRecommendationFormatterAtomicity:
             datetime(2026, 7, 14, 23, 59, tzinfo=timezone.utc),  # window_end
             25.0,                # deviation_pct
             130.0,               # expected_demand (HOS-200 — persisted as predicted_covers)
+            100.0,               # baseline_demand (ADR-0007 §18.4)
         )
 
+        # The per-hotel context lookup (ADR-0007 §18) runs in its own read
+        # savepoint; stub it so this test pins the write savepoint only.
+        from zoneinfo import ZoneInfo
+
+        service._load_decision_context = AsyncMock(
+            return_value={"locale": None, "tz": ZoneInfo("UTC"), "commit_offsets": {}, "rates_set": False}
+        )
         result = await service._format_and_upsert(db, row)
 
         assert result is True

@@ -67,10 +67,11 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 ## 🏛️ Architecture
 - `ARCHITECTURE.md` — pointeur architecture (v0.3.0, 07/07/2026) : où trouver quoi + résumé 10 lignes. La vérité vit dans CLAUDE.md / mesh-architecture.md / ADRs
 - `mesh-architecture.md` — **SOURCE DE VÉRITÉ CROSS-REPOS** (Mesh : Aetherix + Tacet + Orchestrateur + Anima)
-- `adr/` — Architecture Decision Records (11) :
+- `adr/` — Architecture Decision Records :
   - `0001-aetherix-mcp-server-v0` · `0002-memory-instrumentation` · `0003-agent-observability-and-metering` · `0004-orchestrator-separation`
   - `0006-pos-integration` · `0007-evaluation-by-design` · `0008-context-graph` · `0009-runtime-guardrails`
   - `0010-multi-repo-strategy` · `0011-learning-engine-hive-v2` · `0012-mesh-signal-contract` (**privé à jamais**, Décision #31)
+  - `0013-decision-autonomy-policy` (**Proposed** 24/09/2026 — autonomie des agents hôtes, amenderait Décision #6 ; rien d'activé)
 
 ## 🧭 Context (détail par domaine)
 - `context/decisions-architecturales.md` — détail des décisions architecturales (index 1-ligne dans CLAUDE.md ; compte non figé, cf. détecteur D6)
@@ -81,6 +82,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - `context/moat.md` — **ce qui est défendable, testé contre la menace plateforme** (09/07) : 4 couches de moat + stress test "et si Apaleo/Mews shippent un forecast natif ?" + risque résiduel nommé
 - `context/data-conventions.md` — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
+- `context/learning-loop.md` — **learning loop (25/09, Décision #40, ADR-0007 §18.5)** : what is learned, from which signal, how often, who approves, how it is evaluated, how it is rolled back · hygiene rules · what is not measured
 - `context/decision-ledger.md` — **Decision Ledger (01/08, HOS-317)** : audit des 5 tables + l'unique arête manquante (`operational_memory.recommendation_id`, aucune table nouvelle) · schéma contexte→reco→réponse manager→outcome · requête bout-en-bout (service + vue `decision_ledger`) · §5 ce qui reste non fermé · vocabulaire *outcome-tracked* et non *self-improving*
 - `context/vision-future.md` — vision long terme (Phase 5, Mesh, Aetherix Voice)
 - `context/demo-apaleo.md` — Demo PRD Apaleo + résultats probe sandbox (HOS-190 AC1)

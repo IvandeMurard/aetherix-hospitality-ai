@@ -56,3 +56,20 @@
 | `RETENTION_PURGE_HOUR` | Heure UTC du passage de purge quotidien (défaut `3`). |
 
 > ⚠️ **Rotation du poivre = rupture des digests.** Changer `PII_HASH_PEPPER` rend illisibles tous les digests existants : la dédup 60 s repart de zéro (sans dommage) mais un `guest_hashed_id` d'avant rotation ne correspondra plus à celui d'après, ce qui casse tout comptage par convive dans la durée. À traiter comme une migration, pas comme une rotation de clé ordinaire.
+
+## WhatsApp — boutons de décision (Décision #38, ADR-0007 §16.4)
+
+| Variable | Rôle |
+|---|---|
+| `WHATSAPP_DECISION_BUTTONS` | `"false"` (défaut). `"true"` attache les quick replies Accepter / Refuser / Corriger à la recommandation et Oui / Non aux confirmations. Sans SID, ou si l'envoi Content échoue, le texte part seul (fallback). Les payloads entrants sont traités quel que soit le flag. |
+| `TWILIO_CONTENT_SID_DECISION_FR` / `_EN` | SID `HX…` du template `twilio/quick-reply` de décision. Message **business-initiated** → template **approuvé par WhatsApp** (catégorie Utility) requis. Étape ops en attente. |
+| `TWILIO_CONTENT_SID_CONFIRM_FR` / `_EN` | SID du template de confirmation Oui / Non. Envoyé en réponse, dans la fenêtre de 24 h → template enregistré suffit (pas de soumission), 3 boutons max. |
+| `TWILIO_CONTENT_SID_RECAP_FR` / `_EN` | SID du template du récap hebdomadaire poussé (opt-in `restaurant_profiles.weekly_recap_opt_in`). **Business-initiated** → template **approuvé** requis, corps `{{1}}`. Vide → le push ne part que si le manager a écrit il y a < 23 h 30, sinon il n'est pas envoyé (raison loggée `outside_window`) ; le récap reste disponible à la demande. ADR-0007 §17.3. |
+| `CURRENCY` | `"EUR"` (défaut). Devise ISO 4217 de tout montant dans un texte client (recommandation, explication, notes ops), formatée par `app/core/money.py`. Plus aucun £/$ codé en dur. ADR-0007 §17.1. |
+
+## Risque par option — budget d'interruption (Décision #40, ADR-0007 §18.4)
+
+| Variable | Rôle |
+|---|---|
+| `RISK_DISPLAY_MIN_GAP_DEFAULT` | `50` (défaut, en `CURRENCY`). Les lignes « Si accepté / Si refusé » ne vont dans le message quotidien que si l'écart de coût attendu entre les deux options atteint ce seuil. Surchargé par hôtel : paramètre `risk_display_min_gap` (`/api/v1/hotels/{tenant_id}/decision-parameters`). Seuil d'affichage, pas un coût. Toujours disponibles dans le récap et via MCP `get_pending_recommendations`. |
+| `RISK_DISPLAY_MIN_PROB_GAP` | `0.20` (défaut). Sans montant (coûts non configurés) mais avec incertitude calibrée : seuil sur l'écart des probabilités de manque. Sans calibration ni coût, les lignes ne vont jamais dans le message quotidien (non quantifié). |

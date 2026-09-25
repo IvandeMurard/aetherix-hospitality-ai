@@ -548,17 +548,31 @@ Refactor de `scripts/ops/measure_mape_j1.py` :
 
 ### 5.c `eval_parser.py`
 
+> **Amended 24/09/2026 — see §15.** The original spec below said the real backend
+> "calls real Haiku" and that CI uses a deterministic `FakeIntentClassifier`. As
+> implemented until 24/09, the real backend fell back to the fake heuristic whenever
+> the model answered `free_form`, no workflow ever ran it, and the only number ever
+> produced (`parser_baseline.json`, accuracy 1.0, n=16) came from the fake backend
+> scored on the cases its rules were written for. **No parser model-quality number
+> has ever been measured.** Current behaviour and the remaining gap: §15.
+
 ```python
-"""Haiku parser eval — EVAL-4
-- Loads parser_intent scenarios
-- Calls real Haiku in non-CI mode (env: EVAL_PARSER_BACKEND=real)
-- Calls FakeIntentClassifier in CI (EVAL_PARSER_BACKEND=fake, deterministic outputs)
-- Computes confusion matrix (3x3: accepted/rejected/modified)
-- Outputs: accuracy global, precision per intent, recall per intent, confusion matrix
+"""Parser eval — EVAL-4 (as amended by §15)
+- Loads parser_intent scenarios (split: dev | heldout)
+- EVAL_PARSER_BACKEND=real (opt-in workflow eval-parser-real.yml): grades the
+  production path parse_action → parse_inbound → outcome_for_feedback, model
+  included, primary provider only, no heuristic fallback; model errors and
+  out-of-taxonomy answers are typed errors (count as misses). No API key → exit 2.
+- EVAL_PARSER_BACKEND=fake (PR gate): plumbing check only, quality_signal=false,
+  never compared to a baseline, never frozen as one
+- Always: production-path ceiling (best accuracy reachable whatever the model says)
+- Outputs: accuracy, per-intent precision/recall, confusion matrix
+  (rows accepted/rejected/modified, cols + not_recorded/error), per-split accuracy
 """
 ```
 
-> **Décision implicite** : un `FakeIntentClassifier` (analogue à `FakeEmbeddingProvider` D11 ADR-0002) est requis. Stocké dans `backend/tests/providers/fake_intent_classifier.py`. Returns deterministic labels via hash. EVAL-4 Story DoD.
+> ~~**Décision implicite** : un `FakeIntentClassifier` (analogue à `FakeEmbeddingProvider` D11 ADR-0002) est requis. Stocké dans `backend/tests/providers/fake_intent_classifier.py`. Returns deterministic labels via hash. EVAL-4 Story DoD.~~
+> Superseded 24/09/2026 (§15): the fake lives in `scripts/eval/fake_intent_classifier.py`, is keyword rules (not a hash) written against the `dev` cases, and is a plumbing check only. Unlike `FakeEmbeddingProvider`, which replaces an input to the system under test, this fake replaced the system under test itself, so it cannot measure it.
 
 ### 5.d `eval_drift.py`
 
@@ -754,7 +768,7 @@ CREATE UNIQUE INDEX abstention_daily_unique_idx
 | R1 | **Golden dataset curation bottleneck** : 71 scenarios à annoter par PM seul. | Bloque EVAL-1 → EVAL-5 (cascading 2 sprints). | Phase 3 : commencer par 40 scenarios (couvrir 6/11 catégories min PASS) → permet ship EVAL-1/2/4 ; compléter à 71 en sprint N+2 en parallèle EVAL-3/5. |
 | R2 | **CI time budget** : suite eval full > 5 min sur GitHub Actions. | Slow PR feedback, dev rejet. | Cache cleverly (D2.e), subset filtré par layer (D2.b), split en jobs parallel si > 3 min. Mesurer après EVAL-1 ship. |
 | R3 | **Baseline drift sans détection** : équipe oublie de mettre à jour eval/baselines lors de model upgrade volontaire. | Eval gate devient faux positif chronique → ignored. | Tooling: `scripts/eval/bump_baseline.py` avec check obligatoire `--reason` + commit message tag `[BASELINE_BUMP]` + entrée CLAUDE.md auto. |
-| R4 | **LLM non-determinism** : Haiku parser eval peut fluctuer même avec temperature 0. | Faux positifs CI, dev frustration. | `FakeIntentClassifier` en CI (déterministe), `--backend=real` réservé aux runs nightly schedulés (signal qualité reelle, pas gate PR). |
+| R4 | **LLM non-determinism** : Haiku parser eval peut fluctuer même avec temperature 0. | Faux positifs CI, dev frustration. | `FakeIntentClassifier` en CI (déterministe), `--backend=real` réservé aux runs nightly schedulés (signal qualité reelle, pas gate PR). **Amended 24/09/2026 (§15):** the nightly run never existed; the real run is now the opt-in workflow `eval-parser-real.yml` (label / dispatch / weekly), and the fake in CI is a plumbing check, not a quality signal. |
 | R5 | **Drift snapshot baseline obsolescence** : snapshot training set figé devient irrelevant après 6 mois (saisonnalité). | Auto-disable cold-start meta-learner perpétuellement → forecast dégradé. | Revue trimestrielle PM des baselines drift. PR `BASELINE_RESET` documentée. |
 | R6 | **Mauvaise interaction ADR-0005 et EVAL-3** : 2 mécanismes auto-disable concurrent (Day-7 MAPE > 25% ET drift FAIL). | Cold-start désactivé sans cause claire. | EVAL-3 emit `auto_disable_reason` distinct → log dans `agent_action_log` permet diagnostic. ADR-0005 wrap reason. |
 | R7 | **`eval-exempt` label abusé** : devient flag pour bypass eval sur changes risqués. | Régressions silencieuses, gate inefficace. | SM review obligatoire de toute PR `eval-exempt` (cas humain). Audit trimestriel : compter PR `eval-exempt` mergées par catégorie. |
@@ -997,3 +1011,841 @@ Recalibrer si l'un de ces événements survient (le calendrier fixe seul — Air
 **Limite assumée :** un juge qui applique une rubrique fixe n'est pas une revue adversariale complète — il vérifie, il ne *cherche* pas activement les défaillances. Une passe de type red-team (générer des cas conçus pour faire échouer le générateur) est un chantier distinct, non couvert ici.
 
 **Trigger de recalibration ajouté :** tout changement de la famille d'un générateur (primaire ou fallback) qui la ferait coïncider avec celle du juge.
+
+---
+
+## 15. Addendum — 2026-09-24 · The parser eval did not measure the model (EVAL-4 correction)
+
+> Trace: CLAUDE.md Décision #37. Supersedes the parser parts of §5.c and R4.
+
+### 15.1 What was wrong
+
+An audit of EVAL-4 (HOS-208) found that the inbound-parser layer never measured
+the model or the production path. Each point below was checked against the code on
+24/09/2026.
+
+1. **Circular number.** `eval/baselines/parser_baseline.json` reported accuracy 1.0
+   on n=16 with `"backend": "fake"`. `FakeIntentClassifier`'s rules were written
+   to "resolve the curated golden scenarios correctly (so the pipeline runs green
+   in CI)", and some are visibly fitted to single cases (`🙄` as a rejection
+   marker). The file was also stale: the dataset held 17 parser cases.
+2. **The real signal did not exist.** The fake's docstring pointed to a "nightly
+   `EVAL_PARSER_BACKEND=real` run". None of the four workflows ran it.
+3. **Even `real` wasn't real.** When `parse_inbound` returned `free_form`, the
+   runner fell back to the fake heuristic, so "rejected" (and part of "accepted")
+   was always decided by the heuristic. Any unknown label was silently coerced to
+   `accepted`.
+4. **The gate watched the wrong file.** `receipts.py` (where `parse_inbound`
+   lives) mapped only to the `receipt` layer, so changing the classifier prompt
+   never re-ran the parser eval. The documented contract (accuracy ≥ 90%,
+   per-intent precision ≥ 0.85) was asserted only by a unit test on the fake.
+5. **Taxonomy mismatch.** `parse_inbound` emits `structured_correction |
+   acknowledge | free_form`. The feedback loop records `accepted | rejected |
+   modified | ignored`. Nothing mapped one onto the other in production.
+
+### 15.2 Product defect found on the way (not an eval problem)
+
+Tracing the production path (`api/routes/twilio_inbound.py`):
+
+- `accepted` / `rejected` are recorded **only** for the exact keywords `accept` /
+  `reject` (`action_logger.parse_action`, whole-body match, case-insensitive).
+- Any other reply goes to `parse_inbound`. `acknowledge` records **nothing**
+  (`outcome_for_feedback` → `None`). Every other intent records `modified`
+  (`parse_inbound` hard-codes `outcome="modified"`, including when the model
+  fails).
+- So **no free-text reply can record `rejected` or `accepted`**: "non merci on
+  garde tel quel" is stored as `modified`, and "ok merci" leaves the
+  recommendation `dispatched`. The model only decides between `modified` and
+  "nothing recorded".
+
+Measured on the 47 labelled parser cases by running the production code with a
+stub model (no API call, deterministic): **the production path cannot exceed
+36.2% accuracy whatever the model answers.** Max recall is 0% for `accepted` and
+`rejected` and 100% for `modified`. 42 of 47 replies reach the model; 5 are
+decided before it. This is a property of the code, not a model measurement. It also
+means `recommendation_acceptance_rate` (KPI level 3) cannot count a free-text
+acceptance or refusal today.
+
+This is reported as a product defect and is **not** papered over in the eval:
+the eval grades what production records, so it will stay below contract until
+the product changes. Proposed fix (open decision, `docs/context/open-decisions.md`
+§"Inbound reply → recorded outcome"): extend the classifier's output schema with
+an explicit decision field (`accepted | rejected | modified | none`), validated by
+schema (Décision #35 D2), mapped by `outcome_for_feedback`. Keep HITL (Décision
+#6): a low-confidence `rejected`/`accepted` asks the manager to confirm instead of
+being written silently.
+
+### 15.3 What changed (24/09/2026)
+
+- **One definition of "recorded outcome".** `receipts.outcome_for_feedback` is
+  called by the route and by the eval. `FeedbackIntent.source` records which step
+  decided (`ack_regex`, `covers_regex`, `llm`, `llm_unmappable`, `llm_error`), so a
+  fallback is never mistaken for a model answer, in logs or in the eval.
+- **Real backend = production path, model included.** `parse_action` →
+  `parse_inbound` → `outcome_for_feedback`, the route's order. The model is the
+  primary provider only: a silent Gemini failover would change the model under
+  test. Measuring the fallback is Décision #35 D3, still Design. A model error or an
+  out-of-taxonomy answer is a typed `error` prediction and counts as a miss.
+  Predictions can be `not_recorded`. No `ANTHROPIC_API_KEY` → `ParserEvalNotMeasured`
+  → exit 2 (ERROR), never PASS.
+- **Opt-in real workflow** `.github/workflows/eval-parser-real.yml`: label
+  `eval-parser-real`, `workflow_dispatch`, weekly schedule. Cost ≤ ~$0.035 per run,
+  ≤ ~$0.11 for the 3-run canary, at Haiku 4.5 list price (estimate in the workflow
+  header). It fails red when the secret is missing ("NOT MEASURED") and when the
+  result is below the FAILURE_THRESHOLDS.md contract.
+- **Fake backend = plumbing check, labelled everywhere.** The result carries
+  `quality_signal: false`, `measures: pipeline_plumbing_only`. It is never compared
+  to a baseline and cannot be frozen as one (`run_all --update-baseline` refuses).
+  The reporter and the sticky PR comment show no "Accuracy" headline for it: they
+  say "plumbing check — model quality not measured". `parser_baseline.json` (fake)
+  is **deleted**. That path is now reserved for a real-model baseline.
+- **Held-out adversarial set.** 30 cases (`"split": "heldout"`, 10 per intent,
+  FR/EN): sarcasm, mixed intent ("ok mais plutôt 40"), polite refusals, emojis,
+  typos, numbers that are not corrections, negation words in acceptances. Each
+  has its `failure_trigger`. They were written after the fake was frozen, and
+  it is not tuned to them. The fake agrees with the labels on 100% of the 17
+  `dev` cases and 50% of the 30 `heldout` cases. That gap makes the
+  circularity visible; it is not a quality figure.
+- **Baseline protocol (canary, Décision #29 applied to the LLM).** A real baseline
+  is frozen only from `--runs 3` with identical per-case predictions at the
+  production temperature (0.0, recorded by the run), variance stated. Otherwise
+  refused, exit 2.
+- **Gate trigger paths.** `receipts.py` → `receipt` + `parser`; `action_logger.py`
+  and `api/routes/twilio_inbound.py` → `parser`.
+
+### 15.4 What is measured now — and what is not
+
+| Signal | Status on 24/09/2026 |
+|---|---|
+| Eval pipeline runs end to end (fake) | Measured on every triggering PR — plumbing only |
+| Production-path ceiling | **Measured: 36.2%** (n=47, deterministic, no model) |
+| Parser model quality (production path, real model) | **Not yet measured.** No API key was available to the session that made this change, and the workflow has not run yet. No real-model number exists anywhere in the repo. |
+| Real-model baseline | **Absent** until a 3-run canary passes |
+| Fallback-model (Gemini) quality | Not measured (Décision #35 D3, Design) |
+| Pilot gate "EVAL-4 = pilot-blocking" (§8) | Was satisfied by a non-measurement. To be re-read with the PM once a real run exists. |
+
+### 15.5 Other layers checked for the same class of problem
+
+- **Forecast** — real Prophet, but trained and graded on the synthetic series
+  (`generate_demo_data.py`, same regressors: the Décision #33 circularity). Fine as
+  a non-regression signal. The result and baseline now carry `data_provenance:
+  synthetic`, and the report prints it. Numbers unchanged, not re-frozen.
+- **Guardrail** — accuracy 1.0 on 27 is a contract test of deterministic
+  predicates (does the typed reason fire). It is not model quality and is not
+  presented as such. No change.
+- **Latency** — `latency_baseline.json` holds SLO **targets** copied from
+  `docs/ops/latency-slo.md`, not measurements. Now labelled
+  `kind: slo_targets_not_measurements`. No measured latency baseline exists.
+- **Embeddings** — `FakeEmbeddingProvider` replaces an input to the system under
+  test, not the system itself, and no layer runner in `scripts/eval/` uses it.
+  Scripts outside the eval harness (`scripts/ops/benchmark_*`) were not audited
+  here.
+
+---
+
+### 15.6 Merge with HOS-337 (25/09/2026)
+
+HOS-337 (Décision #35 D3, PR #264) landed on `main` in parallel: real parser runs
+against ONE pinned target (`EVAL_PARSER_TARGET=<provider>:<exact model id>`, called
+directly, never through the failover), baselines keyed by (target × dataset
+version), a provider matrix workflow and a comparison script. It measured the
+pre-§16 path, where a `free_form` answer was settled by the heuristic.
+
+Merged as follows: the graded path is this section's production path (§15.3,
+§16), and the model under test is HOS-337's pinned target. The real backend
+refuses to run without a target or without the key of the target's provider
+(exit 2, not measured). The per-target fields (`accuracy_llm_decided`,
+`llm_failure_rate`, `decided_by`) are kept, with §16 semantics: every graded reply
+reaches the model; a model error or an answer failing the schema is a miss and is
+also counted in the failure rate — no heuristic rescues it. The source labels of
+the old heuristic path are gone. `eval-parser-real.yml` pins
+`claude:claude-haiku-4-5-20251001`; `eval-parser-matrix.yml` runs Claude and Gemini.
+The structured output HOS-338 (D2) asks for is what §16's `ClassifierOutput`
+provides for the reply classifier.
+
+## 16. Addendum — 2026-09-24 · Manager decision capture (PO decision on §15.2)
+
+> Trace: CLAUDE.md Décision #38. Resolves the open decision "Inbound reply →
+> recorded outcome" (`docs/context/open-decisions.md`, §Resolved). Supersedes the
+> parser grading rules of §15.3–15.4 (the production-path ceiling of 36.2% no
+> longer applies to the new code).
+
+### 16.1 Principle (Ivan, product owner)
+
+The **decision** (`accepted | rejected | modified | none`) is arm C's ground
+truth (§13). It must be deterministic wherever possible, cheap, unambiguous and
+auditable. The **comment** (reason, detail) is optional and rich, and never
+changes a recorded decision silently.
+
+### 16.2 What a reply goes through (first match wins)
+
+| # | Step | Model? | Writes | `decision_source` |
+|---|---|---|---|---|
+| 1 | Quick-reply button payload (fixed IDs `aetherix.decision.{accept,reject,correct}`, `aetherix.confirm.{yes,no}`) | no | decision, or answers a confirmation | `button` |
+| 2 | Answer to a pending confirmation (`oui`/`non`/…, or the Oui/Non buttons) | no | the proposed decision on yes, nothing on no | `model_confirmed` · `keyword_confirmed` · `bare_ack_confirmed` |
+| 3 | Exact keyword on the whole reply (§16.3) | no | explicit → decision; ambiguous → confirmation | `keyword` |
+| 3b | Bare acknowledgement ("ok", "👍", "parfait") — rule (b) | no | `accepted` only if exactly one recommendation is pending **and** the reply is within 12 h of its dispatch; nothing if none is pending; confirmation otherwise | `bare_ack_rule` |
+| 4 | Pending reason request → the reply is the reason (§16.5) | router only | typed reason; **never** the decision | — |
+| 5 | Covers pattern ("covers: 80") | no | `modified` | `correction_pattern` |
+| 6 | Model, output validated against `ClassifierOutput` (decision, confidence, corrected value, reason, reason route) | yes | ≥ 0.85 → decision; < 0.85 → confirmation; `none` → nothing; call or schema failure → nothing (typed `why`) | `model_auto` |
+
+Steps 1–3b run synchronously in the webhook; 4–6 in the background task. Code:
+`services/manager_decision.py` (pure rules), `services/inbound_decision.py`
+(DB), `api/routes/twilio_inbound.py`. `receipts.resolve_feedback` /
+`outcome_for_feedback` remain the single definition shared with the eval.
+
+**HITL (Décision #6).** A model decision below `DECISION_CONFIDENCE_THRESHOLD =
+0.85`, an ambiguous keyword, and an unattributable bare acknowledgement write
+**nothing**: a `manager_prompts` row is created and the manager gets "Je note un
+refus, c'est bien ça ?" (buttons Oui / Non, or "Répondez OUI ou NON."). Unanswered
+after 60 min → `expired`, logged as `confirmation_expired`, **never** a decision.
+The threshold applies to `modified` too (stricter than asked; nothing inferred is
+written unconfirmed below it). The model's confidence is **not calibrated**: 0.85
+is a policy until the first real eval run shows whether it separates right from
+wrong answers.
+
+A confirmed decision writes the decision only: a corrected figure proposed with
+it stays on the prompt and is not persisted as actual covers. A confirmation
+whose recommendation was decided meanwhile writes nothing. A reply containing
+"?" is never a keyword ("ok?" is doubt, not acceptance).
+
+**Behaviour change vs §15.2:** a model failure no longer records `modified`;
+it records nothing and asks for an explicit decision. `modified` now also lands
+on `staffing_recommendations.status/action` (it was only in memory before).
+
+### 16.3 Keyword mapping choices (every form unit-tested, `tests/services/test_manager_decision.py`)
+
+- **Whole reply only.** "oui" is a keyword; "oui mais 3 serveurs" goes to the model.
+- **Accept:** accept(ed), accepter/accepté, j'accepte, oui, yes, yep, ouais,
+  validé/valide/valider, validated, approve(d), agreed, go, ✅, ✔, "ok validé",
+  "je valide", "c'est validé", "ok pour moi", "d'accord", "go for it" — alone or
+  with acknowledgement tokens ("agreed thx", "Validé 👌").
+- **Reject:** reject(ed), rejeter/rejeté, refuse(d)/refusé/refuser, "je refuse",
+  decline(d), non, no, nope, nan, ❌, 👎, "pas d'accord", "not ok".
+- **Modify (records `modified`, then asks what changed):** corriger, correction,
+  correct, modifier, modify, ajuster, adjust, ✏️, 📝. "CORRIGER" is what the text
+  fallback tells managers to reply, ✏️ is the Daily Receipt's modify glyph.
+  "oui corriger" is ambiguous (proposed reading `modified`).
+- **Bare acknowledgement (rule b):** ok, okay, merci, thanks, thx, parfait,
+  perfect, great, super, top, cool, noted, compris, got it, bien reçu, 👍, 👌, 🙏 …
+  **👍 is an acknowledgement, ✅ is an acceptance** — 👍 routinely answers the
+  daily Receipt; ✅ answers "validate?". Documented choice.
+- **Ambiguous → confirmation, proposed reading `rejected`:** "non merci" (declines
+  the recommendation | "no thanks, all good"), "on garde tel quel" / "tel quel" /
+  "keep as is" (keep the recommendation | keep our own plan), "pas besoin" / "no
+  need" (we don't need the extra staff | nothing to change), "bof", and any reply
+  mixing a refusal token with an acceptance/ack token ("non ok", "👎 merci").
+  The heldout case "non merci on garde tel quel" (labelled `rejected`) is one of
+  these: the product now asks instead of guessing, and the manager's "oui" is what
+  records it.
+
+### 16.4 WhatsApp quick-reply buttons — constraint check
+
+What the code sent before this change: `TwilioClient.send_whatsapp` posts a
+free-form `Body` to `Messages.json`; the staffing recommendation
+(`alert_dispatcher`) and the daily Receipt (`receipts_dispatcher`) are
+**business-initiated**. No Content API use anywhere.
+
+What applies (Twilio docs `twilio/quick-reply`, "Using Buttons in WhatsApp" and the
+Content API FAQ; direct fetch of twilio.com was blocked from this session, the
+statements below come from those pages' indexed text and must be re-checked in the
+Twilio console before rollout):
+
+1. Buttons require a **Content template** (`ContentSid` + `ContentVariables`
+   instead of `Body`). TwiML `<Message>` cannot carry them, so a reply with
+   buttons is sent via REST and the webhook returns an empty `<Response/>`.
+2. **Business-initiated** messages need a template **approved by WhatsApp**
+   (category Utility). Up to 10 quick-reply buttons, titles ≤ 20 characters.
+3. **Inside the 24 h customer-service window** (the manager just wrote to us),
+   quick replies can be sent **without approval** (template saved, not
+   submitted), **max 3 buttons**. The Oui / Non confirmation qualifies.
+4. The inbound webhook carries the tapped button's id as `ButtonPayload` (plus
+   `ButtonText`, `OriginalRepliedMessageSid`).
+5. **Pre-existing gap, independent of buttons:** a free-form WhatsApp message
+   outside the 24 h window is refused by WhatsApp. The current text dispatch of
+   the recommendation and the Receipt only works in the sandbox or inside a
+   session. A production number needs approved templates for both, buttons or not.
+
+Implementation: behind `WHATSAPP_DECISION_BUTTONS` (default off) +
+`TWILIO_CONTENT_SID_{DECISION,CONFIRM}_{FR,EN}`. Flag off, SID missing, or Content
+send failing → the same text is sent, with "Répondez ACCEPTER, REFUSER ou
+CORRIGER." when it is a decision request. Inbound payloads are handled whatever
+the flag. Proven by tests: request shape, fallbacks, payload → decision mapping,
+route pass-through. **Not proven:** that WhatsApp approves and renders the
+template.
+
+Pending ops step (out of reach of a coding session): create in Twilio Content
+Template Builder (a) `aetherix_decision_fr` / `_en`, `twilio/quick-reply`, body
+with fixed text around `{{1}}` (Meta rejects a template that starts or ends with a
+variable), buttons Accepter / Refuser / Corriger with ids
+`aetherix.decision.accept|reject|correct`, submitted for WhatsApp approval
+(Utility); (b) `aetherix_confirm_fr` / `_en`, body `{{1}}`, buttons Oui / Non with
+ids `aetherix.confirm.yes|no`, saved only. Then set the SIDs and the flag via
+`flyctl secrets set`. Known limit: the button carries no recommendation id; the
+decision applies to the most recent pending recommendation. Using
+`OriginalRepliedMessageSid` (store the outbound SID at dispatch) would remove that
+ambiguity — follow-up.
+
+### 16.5 Optional reason
+
+After a recorded **reject or correction only** (never after an accept —
+interruption budget), one line: "Une raison ? (facultatif)" / "Quel changement,
+et pourquoi ? (facultatif)". Not asked when the reply already carried a reason.
+The next free-text reply within 60 min is the reason: stored in
+`inbound_reply_events.reason_text`, routed by the model to one of `memory |
+decision_rule | policy | case_set | upstream_filter` with its confidence, **only
+at ≥ 0.7**, unrouted otherwise. A bare "ok" closes the request. The reason never
+touches `staffing_recommendations`. The routes are **labels**: no consumer exists
+yet for any of them (not even `memory`: writing a reason into feedback memory
+would change the ledger's latest manager answer). Wiring consumers is a
+follow-up. Few replies are expected.
+
+### 16.6 Outcome loop — two rules
+
+1. **The outcome never relabels the decision.** Actual covers are never read
+   when capturing or confirming a decision (pinned by
+   `test_decision_rules_never_read_the_outcome` and
+   `test_decision_does_not_depend_on_actual_covers`). Decision and outcome stay
+   independent variables, or arm C learns circularly.
+2. **The outcome may later weigh a comment, not a decision.** E.g. a reason "trop
+   de monde" vs actuals above forecast, as a confidence signal on the reason only.
+   Phase 4 follow-up, not implemented.
+
+**Stated plainly:** `actual_covers` comes from `manager_feedback` today (POS is
+Phase 4/5). While the manager declares both the decision and the actual covers,
+the quantitative loop is **not independent** of the human loop: the same person
+produces the label and the outcome. Arm C conclusions drawn before POS data carry
+that caveat.
+
+### 16.7 Eval (EVAL-4) — what is graded now
+
+- **Deterministic block** (keyword, ambiguous keyword, bare ack, covers): code
+  check on every run, fake or real, no model. 12 of the 47 labelled cases; all 12
+  land on their label (5 bare ack, 4 covers, 2 keyword, 1 ambiguous →
+  confirmation). The golden set now carries `expected.decision` and
+  `expected.path`; a test fails if routing drifts from the annotated path.
+- **Model graded on the free-text path only** (35 of 47 cases): decision
+  accuracy (written or proposed) ≥ 90%, per-decision precision ≥ 0.85,
+  auto-written precision per decision ≥ 0.85, confirmation rate reported.
+- **Confirmation trigger:** 10 new `parser_confirmation` cases (two readings,
+  FR/EN, `split: heldout`). Any write without confirmation is a breach.
+- Fake backend unchanged: plumbing only. Production-path ceiling is now 100%
+  (the model can land on any decision): no longer a useful number, kept as a
+  reachability check.
+- **Real-model quality: not measured.** No `ANTHROPIC_API_KEY` in this session;
+  `eval-parser-real.yml` has not run. No baseline exists.
+
+### 16.8 Metrics
+
+`inbound_reply_events` (one row per reply, one per expired confirmation) +
+structured log `inbound_decision_event` (typed fields, never the body).
+`GET /kpi/{hotel_id}/decision_capture?days=7` (tenant-checked) returns: capture
+rate (decisions written ÷ decision-seeking replies; a confirmed decision is
+credited once), decisions by source and share, confirmation rate, confirmation
+timeout rate, declined count, `not_recorded` by typed `why`, reasons captured /
+routed. Arm C should filter or weight by `decision_source`: a `bare_ack_rule`
+acceptance is weaker evidence than a `button` one.
+
+### 16.9 Schema
+
+Migration `20260924120000_manager_decision_capture.sql`:
+`staffing_recommendations.decision_source` / `decision_confidence`; tables
+`manager_prompts` (HITL state) and `inbound_reply_events` (RLS, service role only;
+`reason_text` in the DSAR plan as REVIEW). The `decision_ledger` SQL view is not
+changed; `DecisionLedgerService` exposes `decision_source`/`decision_confidence`.
+
+---
+
+## 17. Addendum — 2026-09-24 · Recap on demand, decision provenance, no fabricated report
+
+> Trace: CLAUDE.md Décision #39. PO requests (Ivan, 24/09/2026) after §16.
+> Autonomy of host agents is **not** decided here: it is ADR-0013 (status
+> **proposed**). Code: commits `8b90394`, `44edf50`.
+
+### 17.1 Weekly report: no mock, no invented money
+
+**Found.** `reporting_service.generate_weekly_metrics` fell back to
+`_get_mock_weekly_data` (7 hard-coded days, 945 covers) whenever no
+ground-truth row existed, and `format_audit_email` then printed "Accuracy",
+"MAPE", "Estimated Savings: £…" (heuristic: £15/cover on days > 150 covers,
+£120 per day < 100 covers), "Value Delivered: Nx monthly cost" (from a
+"$50 mock SaaS cost") and "Aetherix is optimizing your labor costs
+effectively". Nothing said the numbers were invented.
+
+**Now.** No mock on any tenant path; the mock and the savings heuristic are
+deleted (tests pin their absence). No recommendation in the week →
+`status: no_measured_data`, text "pas encore de donnée mesurée", no metric. The
+report *is* the recap template (§17.2) for the week. `financial_impact` is
+always `null` with a stated reason: no measured labour-cost or revenue input
+exists. A savings or ROI figure comes back only from measured inputs, with its
+formula and assumptions printed next to it. Currency: `config.CURRENCY`
+(default EUR) through `app/core/money.py`; the £ symbols in the recommendation
+text, the explanation prompt, the sanity-guard reasons and the PMS ops note are
+gone too. The internal Obsidian note and the Linear alert remain, fed by
+measured numbers only (alert only with ≥ 3 measured recommendations).
+
+**Could a tenant have received a mock-based report?** Checked in the code: the
+text was produced only by `GET /api/v1/reports/weekly`. No scheduler, email or
+WhatsApp path called `format_audit_email`, and the frontend never called the
+route. But the route was **public** (no auth, `tenant_id` in the query string),
+so anyone who called it for a tenant without ground truth got the mock figures,
+and each call also wrote the mock audit into the Obsidian vault
+(`AI Reports/…/Weekly Audit`, internal). Production logs (Fly.io) were not
+accessible from the coding session: whether it was ever called is **not
+verified**. With 0 real user and no ground-truth rows, any call would have
+returned mock data. To check: Fly logs for `GET /api/v1/reports/weekly` and the
+vault folder for "Weekly Audit" notes.
+
+### 17.2 Recap on demand (deterministic, no prose)
+
+`services/decision_recap.py`, one definition for four surfaces: WhatsApp
+command, MCP tool `get_decision_recap` (scope `receipts:read`),
+`GET /reports/weekly`, and the acceptance KPI (§17.6).
+
+- **Commands** (whole reply, before keywords): `recap` (this week), `recap
+  jour|semaine|mois`, `recap day|week|month`, `summary`. Periods are local
+  (`RECEIPT_TIMEZONE`): today, Monday → today, 1st → today.
+- **Content, one block:** period · recommendations received · accepted ·
+  rejected · corrected · no reply · awaiting confirmation · mean forecast error
+  (mean |predicted − actual| / actual, **only** on recommendations with actual
+  covers, printed with the number of days it covers; none → "aucun couvert réel
+  saisi") · decision source split (button / keyword / model / confirmed / fixed
+  later / host tool / agent / unattributed). No data → "Aucune recommandation
+  sur la période." FR/EN.
+- **"Received"** = dispatched in the period, or — for a headless tenant whose
+  recommendations never go through WhatsApp — decided by a host in the period.
+- **Correction line** "Décision mal enregistrée ? Répondez « corriger mardi »."
+  `corriger <jour|hier|jj/mm> [validation|refus|correction]` (EN `fix …`): finds
+  the single decided recommendation of that day; without a decision word it
+  says what is recorded; with one it asks "Mardi 22/09 : je remplace une
+  validation par un refus, c'est bien ça ?" — same Oui / Non path, nothing
+  changes until yes; recorded with `decision_source = manager_revision`, the
+  previous decision kept in the event trail (`revised_from_<x>`). Several
+  recommendations that day → nothing changes, typed `why`. Revisions are the
+  human audit of the capture: counted (`revisions`), never as decisions
+  written. "corriger" alone remains the modify keyword.
+- **Why it replaces the weekly audit report:** one template avoids two
+  definitions of the same week. The report route now returns this template.
+
+**Not changed, flagged for the PO:** the Phase 2 **weekly digest**
+(`receipts_dispatcher`, Sundays, Décision #15 scope) still pushes an
+LLM-composed narrative to every active hotel, without opt-in and outside the
+24 h window. Its numbers are measured, but it is prose and it ignores the
+interruption budget. Proposed: replace it with the opt-in recap push (§17.3).
+Open decision, `open-decisions.md`.
+
+### 17.3 WhatsApp 24 h window — what can be sent when
+
+| Message | Initiated by | Inside 24 h of the manager's last message | Outside |
+|---|---|---|---|
+| Recap on demand, confirmation "c'est bien ça ?", reason request, revision question, "recorded" acks | reply to the manager | free-form ✅ (always inside: it answers a message received seconds ago) | n/a |
+| Weekly recap push (opt-in `weekly_recap_opt_in`) | business | free-form ✅ if last inbound < 23 h 30 (30 min margin) | **approved** template `TWILIO_CONTENT_SID_RECAP_*` (body `{{1}}`) ✅; else **not sent**, typed log `outside_window`; the recap stays available on demand |
+| Staffing recommendation, Daily Receipt, Phase 2 weekly digest | business | free-form ✅ | ❌ refused by WhatsApp without an approved template — pre-existing gap (§16.4 point 5), unchanged here |
+
+"Deferral" means: nothing is queued for later; the next `recap` is the
+delivery. The last inbound time is read from `inbound_reply_events` (every
+reply writes one). Not proven: template approval and rendering (ops step).
+
+### 17.4 Decision provenance and the reason contract for agent callers
+
+Aetherix can run headless: the party deciding may be a host platform's agent
+calling MCP `submit_feedback_to_memory`, which recorded neither who decided
+nor why, wrote only to feedback memory (never on the recommendation), and
+accepted **any** recommendation UUID (no tenant check).
+
+- **`decided_by`** on `staffing_recommendations`: `human_whatsapp` |
+  `human_via_host` | `host_agent_autonomous` | `timeout` (reserved: never
+  written; an unanswered recommendation is "no reply", not a decision, Décision
+  #6). Complements `decision_source` (how it was captured: `host_relay`,
+  `host_agent` added). Backfill: rows with a §16 `decision_source` →
+  `human_whatsapp`; older decided rows stay `NULL` = **unattributed**, excluded
+  from human rates and shown as such.
+- **MCP contract** (typed 400 otherwise): `decided_by` ∈ {`human_via_host`,
+  `host_agent_autonomous`}; `reason_code` from a closed enum (positive:
+  `agrees_with_drivers`, `matches_own_plan`; negative: `forecast_too_high`,
+  `forecast_too_low`, `event_not_in_forecast`, `event_cancelled`,
+  `staffing_constraint`, `budget`, `policy`, `data_issue`, `already_handled`;
+  `none_given`; `other` → `reason_detail` required); `reason_detail` sanitised
+  (control characters stripped), ≤ 280; `evidence` ≤ 5 × {source ∈ pms, pos,
+  weather, events, rota, manager_message, host_notes, other; detail ≤ 200};
+  `reason_source` ∈ {`human`, `agent_inferred`}.
+- **The burden stays on the agent.** A human who gave no reason is recorded as
+  `none_given` + `reason_source=human` — allowed only for `human_via_host`. A
+  reason the agent infers must say `agent_inferred`; an autonomous agent's
+  reason cannot claim `human` (typed 400).
+- **Order of checks:** schema → the recommendation belongs to the token's hotel
+  (404 otherwise) → decision policy (§17.5, 403 `autonomy_not_permitted`) →
+  still undecided (`ready_to_push` or `dispatched`, else 409) → write decision,
+  who, why, caller (`decided_by_caller` = token label), policy version → feedback
+  memory (reflection now carries `decided_by=`). `ignored` writes no decision.
+- **"Required" is not "informative."** Required fields get filled with filler.
+  `decision_provenance.informativeness` computes per caller the share of
+  `other`, of empty details, of near-duplicate details and of `agent_inferred`
+  reasons: a runtime signal (arm B) to look at, not a gate that rejects calls.
+  Not yet exposed on a route or alert (follow-up).
+- **Breaking change** for MCP callers: calls without the new fields now fail.
+  No external consumer exists (status taxonomy: MCP server, 0 consumer).
+- **Gap found:** no MCP tool lists pending staffing recommendations, so a host
+  agent has no way to obtain a `recommendation_id` today. Follow-up.
+
+### 17.5 The decision-policy seam; learning from agent-generated data
+
+`services/decision_policy.py` is the single seam where a decision path is
+authorised; both write paths (WhatsApp `InboundDecisionService`, MCP) call
+`authorize_decision`. Only policy: **human validation everywhere**
+(`default-human-validation-v1`, approved by Décision #6). Humans pass; a host
+agent deciding alone is refused and nothing is written. The version is stored
+on every decision (`decision_policy_version`) so metrics can later be split
+before/after a policy change. Autonomy as configuration is designed in
+**ADR-0013 (proposed)**, not enabled.
+
+**Rule for learning from agent-generated data (3d):**
+1. Human-decided and agent-decided records stay separable (`decided_by`,
+   `decision_source`, `reason_source`) in every table and export.
+2. Agent-decided records and `agent_inferred` reasons are **never ground
+   truth** for arm C, for acceptance metrics, or for training anything that
+   predicts what a manager would decide.
+3. The outcome loop (actual covers; POS/PMS when available) is the independent
+   arbiter of whether a decision was good. While actual covers are typed by the
+   manager (§16.6) it is not independent of the human loop — that caveat
+   stands.
+4. **Self-confirmation risk:** a system that learns from decisions taken by
+   itself, or by another agent that learned from it, converges on its own
+   priors and reads agreement as validation. Hence rule 2, and ADR-0013's
+   periodic human sampling of autonomous decisions.
+
+### 17.6 One acceptance definition
+
+**Confirmed undercount.** `recommendation_acceptance_rate` was read from
+`kpi_daily`, fed by the materialized view `recommendation_acceptance_daily`,
+which joined `operational_memory` feedback rows to `agent_action_log`
+recommendation/prediction tool calls **on `request_id`**. A feedback row
+carries the `request_id` of the call that wrote it (WhatsApp background task
+or `submit_feedback_to_memory`), never the recommendation tool's, so decisions
+were essentially never counted. `modified`/`ignored` were also folded into one
+"neutral" bucket.
+
+**Now** (`decision_recap.acceptance_rate`): accepted ÷ (accepted + rejected +
+modified), over `staffing_recommendations` keyed by dispatch time (creation if
+never dispatched), **human deciders only**. Reported alongside, split by
+`decided_by`: override rate (rejected + modified ÷ decided), median response
+time from dispatch to decision — a **latency, not a measure of human effort**
+("human minutes per accepted output" does not exist in the code and is not
+claimed) — and agent-decided counts, never in the rates. Used by the KPI route
+(live, pooled over the window), the daily aggregator (kpi_daily + trust_low
+alert) and the recap. The view is left in place, unread. The aggregator's
+Postgres SQL is tested with a mocked connection only.
+
+### 17.7 Tenant isolation defects (confirmed and fixed)
+
+Rule now in `app/api/tenant_scope.py`, tests in
+`tests/security/test_route_tenant_scope.py`:
+
+| Route | Before | Now |
+|---|---|---|
+| `GET /kpi/{hotel_id}/recommendation_acceptance` | any `receipts:read` token, any hotel | token bound to `hotel_id` (403) |
+| `GET /kpi/{hotel_id}/decision_capture` | checked, but via `getattr(…, default=hotel_id)` | same helper |
+| `GET /receipts/{hotel_id}/{date}` | not enforced ("single-hotel sandbox") | token bound (403) |
+| `GET /reports/weekly?tenant_id=` | **no auth at all** | bearer + `receipts:read` + bound |
+| `GET /baselines/{tenant_id}`, `POST …/recalculate` | any dashboard user | owner or superuser |
+| `POST /events/sync`, `POST /weather/sync` (explicit tenant) | any dashboard user | owner or superuser |
+| `POST /notifications/test`, `/dispatch` | **public** (send to any number; push every tenant) | superuser only |
+| `POST /anomalies/roi`; `POST /anomalies/format` (no property / other property) | any dashboard user, every tenant or any property | superuser for all-tenant runs; own property otherwise |
+| MCP `submit_feedback_to_memory` | any recommendation UUID | recommendation of the token's hotel (404) |
+
+Checked and already correct: `predictions/predict` (body hotel vs token),
+`dashboard/*`, `anomalies/scan` and `GET /anomalies`, `pms/*` (resolve the
+caller's own property), MCP tools (hotel from token). Not verified here: RLS at
+the database (the service role bypasses it by design). Seen, not fixed
+(pre-existing, out of scope): `anomalies._resolve_property_for_user` casts
+`tenant_id` to a UUID although it is a slug since HOS-165, so `/anomalies/scan`
+and `GET /anomalies` would 500 for a slug tenant.
+
+### 17.8 "Non merci, on garde tel quel" (PO clarification)
+
+A decline ("non merci", "no thanks", "tel quel", "on garde tel quel", "keep as
+is") answering a recommendation that **proposes a change**
+(`recommended_headcount` ≠ 0, the usual case) is recorded as `rejected`,
+source `keyword`. Recommendation proposing no change → confirmation, reading
+"keep as is" = accepted. Cannot be told (`recommended_headcount` unset) →
+confirmation, reading rejected. "pas besoin", "bof" and mixed-token forms stay
+ambiguous (not covered by the clarification). Eval context = one pending
+recommendation proposing a change; golden case
+`parser-heldout-rejected-keep-as-is-fr-001` path `keyword_ambiguous` →
+`keyword` (label unchanged; edited in place — Décision #35 D5's "retire and
+add" rule is Design, not yet applied to the dataset).
+
+### 17.9 What is and is not measured
+
+| Signal | Status 24/09/2026 |
+|---|---|
+| Recap, commands, revision, provenance, policy seam, tenant checks | Built, tested (SQLite, mocked Twilio). **0 real user.** |
+| Weekly recap push | Built behind opt-in; template approval pending; delivery not proven |
+| Parser model quality | **Not measured** (no API key; unchanged from §16.7) |
+| Acceptance rate | Definition fixed; **no real decision exists** to compute it on |
+| Informativeness of agent reasons | Computed by a pure function; no caller exists |
+
+## 18. Addendum — 2026-09-25 · Risk-bearing recommendations and the learning loop
+
+> Trace: CLAUDE.md Décision #40. Scope approved by Ivan (PO). Goal: every
+> recommendation carries its risk — what happens if it is accepted, what
+> happens if it is refused — and the outcome loop changes the system, under
+> safeguards. Built in slices; each subsection says what is built and what is
+> measured.
+
+### 18.1 Point of no return per task class
+
+A hotel cannot undo a service. What exists is a **correction window** before
+the action commits. `backend/app/services/task_classes.py` is the single
+catalog (`task-classes-v1`):
+
+| Task class | Recommended today | Commit point | Default offset before service | Corrective before commit | After commit | Downside bounded |
+|---|---|---|---|---|---|---|
+| `staffing.add` (surge) | yes | extra shift confirmed to a person or agency | 24 h | don't call in, call in fewer, standby | cancel with cost, reassign | yes (extra shifts' cost / covers not served, capped by capacity) |
+| `staffing.reduce` (lull) | yes | staff notified not to come | 72 h | keep the shift, reduce fewer, move to another outlet | call back if available | yes, not reversible |
+| `food_prep.batch` | **no** (food-waste tracking is an open decision) | prep starts | 4 h | adjust / split batch, cook to order | repurpose, staff meal, 86 the item | yes |
+
+- **Offsets are assumptions**, labelled `offset_basis = default_assumption`,
+  until the hotel sets its own (`commit_offset_hours`, part 3, bounded
+  0 h–30 days). The real notice period depends on staff contracts, agency terms
+  and the collective agreement; no legal claim is made here.
+- **Stored** on every staffing recommendation (migration `20260925100000`):
+  `task_class`, `commit_at`, `correction_window` (typed: commit point, offset,
+  basis, status at issue time, catalog version).
+- **Surfaced** in the manager's message only when it matters: the commit point
+  is within 48 h of issue (`closing`) or already passed (`passed`) — one
+  deterministic line, FR default / EN, and it says when the offset is a
+  default. Farther away (`open`) it stays in the record, recap and MCP.
+- **ADR-0013 (still proposed)**: `autonomy_eligibility_facts` feeds §2.4.5 as
+  an input (correction window, bounded downside, reversibility). Facts, not a
+  gate; staffing stays L0 in §2.1.
+- Seen, not verified: the formatter's pre-existing insert passes `window_start`
+  / `window_end` as ISO strings to `timestamptz` columns through asyncpg, which
+  normally requires `datetime` objects. The new `commit_at` is passed as a
+  `datetime`. The existing columns were left as they were (tests run on SQLite;
+  no Postgres run in this session).
+
+### 18.2 Calibrated uncertainty first (blocking prerequisite)
+
+**Finding.** `forecast_baseline.json` reports `interval_coverage_pct` 0.19:
+Prophet's interval — nominal level **80 %** (`interval_width=0.80`, now stated
+next to the number as `interval_nominal_level`) — contained the realised value
+4 times in 21 on the golden scattered hold-out. That set is edge-case weighted
+on purpose, so it overstates the problem, but the rolling-origin backtest
+below confirms under-coverage too. Any risk statement on that interval would
+understate risk.
+
+**Method** (`backend/app/services/forecast_calibration.py`, pure;
+`scripts/eval/eval_forecast_calibration.py`, arm A):
+
+- Rolling-origin backtest on the demo series with the `PredictionEngine`
+  configuration (weekly + yearly seasonality, FR holidays, three regressors,
+  interval 0.80): origins from day 120 every 7 days, horizon 7 days → 35
+  origins, 245 forecasts, per category (golden taxonomy) × lead time 1–7.
+- Origins 0–16 = calibration set (119 forecasts); 17–34 = test set (126),
+  **disjoint in time**.
+- Recalibration: split-conformal on relative residuals `(y − ŷ)/ŷ`, finite-
+  sample rank (`ceil((n+1)p)` above the median, `floor` below), stored as a
+  99-point quantile grid. Chosen because it is the simplest method whose
+  coverage can be checked directly; widening Prophet's `interval_width` would
+  not be verifiable per level.
+
+**Result — synthetic series, 3 identical runs (canary):**
+
+| Test set (n=126) | Nominal 80 % | 50 % | 90 % |
+|---|---|---|---|
+| Prophet's own interval (before) | **0.667** (−13.3 pp) | — | — |
+| Recalibrated (after) | **0.881** (+8.1 pp) | 0.587 | 0.929 |
+
+Per lead time (after): 0.94 / 0.94 / 0.89 / 0.89 / 0.78 / 0.83 / 0.89 (n=18
+each). Per category: normal_day 0.874 (n=119), event_day 1.0 (n=7); no
+weather_anomaly day falls in the test window. The recalibrated interval
+**over-covers** (conservative: it overstates, never understates, risk);
+binomial standard error at n=126 is ≈ 3.6 pp, so +8 pp is a real
+over-coverage, most likely because early origins (less training data) have
+larger errors than later ones. Accepted as is: the dangerous direction is
+under-coverage. A rolling (recent-residuals) calibration is the obvious next
+step once realised covers exist.
+
+**Rules now enforced:**
+
+- A calibration is keyed on the **forecaster** *and* the **training data**
+  (`training_data_source`). The committed one
+  (`backend/data/calibration/prophet-predictionengine-synthetic-v1.json`,
+  provenance `synthetic`) applies only to a `PredictionEngine` model trained on
+  the synthetic source (persisted in a model sidecar so it survives a restart).
+  It **never** applies to the anomaly-detection heuristic that produces the
+  dispatched staffing recommendations: no calibration exists for that
+  forecaster, so recommendations from it carry **qualitative bands only**
+  (§18.4) until realised covers calibrate it (§18.5).
+- Freeze rule: ≥ 3 identical runs, closer to nominal than before, and not
+  under-covering by > 5 pp. `--check` runs it in the blocking eval gate (same-
+  run before/after, immune to CI/local drift).
+- Every surface that uses it says **`synthetic-calibrated`**; the prediction
+  API returns Prophet's raw range unchanged plus `interval_nominal_level` and a
+  `calibrated_interval` block (bounds, version, provenance, measured coverage
+  and n), or `null` when none applies (mock model, other training data).
+- **Arm C** (`forecast_calibration.realised_coverage`): coverage of the
+  interval stored at issue time against realised covers, flagged
+  `independent_actuals=false` while actuals are manager-declared (§16.6).
+  Wired to data in §18.5; **not measured** — no realised covers exist.
+
+### 18.3 Costs configured per hotel, never invented
+
+`hotel_decision_parameters` (migration `20260925110000`, RLS service-role
+only) + `backend/app/services/hotel_parameters.py` + route
+`/api/v1/hotels/{tenant_id}/decision-parameters` (dashboard user, owner or
+superuser via `tenant_scope.require_user_owns_tenant`; `GET` values + catalog,
+`GET …/history`, `PUT …/{parameter}` with `value: null` to clear).
+
+| Parameter | Unit | Bounds | Read by |
+|---|---|---|---|
+| `extra_shift_cost` | money | ]0, 2000] | staffing (cost of adding one shift, saving of removing one) |
+| `lost_cover_value` | money | ]0, 1000] | staffing (value of a cover not served — margin or revenue, the hotel says which in the note) |
+| `food_cost_per_cover`, `stockout_cost_per_cover` | money | ]0, 500] / ]0, 1000] | food prep (catalogued, not recommended today) |
+| `covers_per_extra_staff` | covers | [1, 200] | staffing (labour constraint: covers one extra person serves in the window) |
+| `max_extra_staff`, `max_staff_reduction` | staff (whole) | [0, 50] | staffing caps |
+| `risk_display_min_gap` | money | [0, 100000] | interruption budget (§18.4) |
+| `commit_offset_hours.<task class>` | hours | [0, 720] | correction window (§18.1) |
+
+- **Missing → no money.** Nothing reads the legacy
+  `restaurant_profiles.staff_hourly_rate` / `avg_spend_per_cover` or the
+  `config.DEFAULT_*` placeholders for a risk statement: they carry no record of
+  who set them, and the defaults are simulator placeholders.
+- **Refused, never clamped**, when out of bounds (422); staff counts are whole.
+- **Provenance:** append-only; each row has `set_by` (user e-mail/id, or
+  `proposal:<id>`), `set_via` (`dashboard_api` | `ops` | `proposal_approval`),
+  `set_at`, optional note. The value in force is the latest row. The
+  parameters' `version()` (latest `set_at`) is stored with each risk
+  assessment (§18.4).
+- **Currency:** money rows record the currency entered (`config.CURRENCY`); if
+  the configured currency changes, those values are ignored (listed), never
+  converted.
+- **DSAR:** `set_by` is an e-mail → REVIEW step (audit trail, pseudonymise
+  rather than delete); table added to `PII_TABLES`.
+- **Existing message fixed:** the surge message showed "capture an estimated
+  €X … labour cost €Y" computed from the placeholder defaults whenever the
+  hotel had not set its rates. It now shows money only when the hotel set both
+  legacy rates; otherwise "Add N staff for HH:MM–HH:MM. Trigger: …". The ROI
+  gate that selects which anomalies become recommendations still uses the
+  defaults internally (unchanged, not shown).
+- The hotel's `commit_offset_hours.*` now replace the catalog defaults in the
+  correction window (§18.1), which then stops saying "default".
+
+### 18.4 Risk-based recommendation — the decision rule, not a paragraph
+
+`backend/app/services/risk_assessment.py` (pure), applied in the formatter to
+every staffing recommendation; stored as `staffing_recommendations
+.decision_rule` + `.risk_assessment` (migration `20260925120000`).
+
+**Rule.** Newsvendor in staff units (`newsvendor-v1`): one extra person serves
+`c = covers_per_extra_staff` covers; overage `co = extra_shift_cost`; underage
+`cu = c × lost_cover_value`; critical ratio `CR = cu / (cu + co)`; staff for
+the demand quantile `Q = F⁻¹(CR)` of the **calibrated** distribution:
+`Δstaff = ceil((Q − baseline) / c)`, within `max_extra_staff` /
+`max_staff_reduction` (±4 when unset, the previous rule's range). Stated
+assumption: the usual staffing is sized for the anomaly's `baseline_demand`.
+
+**Fallback, recorded.** If any input is missing — a calibration **for the
+forecaster in use**, `extra_shift_cost`, `lost_cover_value`, covers per staff —
+the previous rule (`deviation-scale-v1`, the ROI headcount scale) stays the
+recommendation and `fallback_missing_inputs` lists why. Covers per staff: the
+hotel's parameter, else the profile's `covers_per_server` (a hotel setting,
+labelled `profile_ratio`), else none.
+
+**Today, every dispatched recommendation takes the fallback**: they come from
+the anomaly heuristic (`anomaly-heuristic-v1`), for which no calibration
+exists (§18.2), and no hotel has configured costs. The newsvendor path is
+built and tested (with a calibration injected in tests), not exercised on any
+real recommendation.
+
+**Per-option consequences** (typed, `risk-assessment-v1`), for *accept*
+(Δstaff) and *refuse* (no change): extra shifts and their cost (**money only
+from configured costs**), shortfall probability `P(D > capacity)` and expected
+shortfall / idle covers and their value (**probability only from a
+calibration of this forecaster**, with its provenance label), expected total
+cost, else a qualitative band (`likely` / `possible` / `unlikely` from
+capacity vs point forecast, ±10 %). Also stored: point forecast, baseline,
+interval at nominal level (for arm C coverage), parameters version,
+calibration version, critical ratio, quantile.
+
+**Lines** (deterministic, FR default / EN), e.g.:
+
+- `If accepted: +3 shifts (€540); shortfall risk ≈15%, ~0.6 covers (≈€14) (synthetic-calibrated uncertainty).`
+- `If refused: no change; shortfall risk ≈85%, ~30.6 covers (≈€764) (synthetic-calibrated uncertainty).`
+- without calibration or costs: `If refused: no change; shortfall likely if the forecast holds (qualitative, uncertainty not calibrated).`
+
+Probabilities are shown to the nearest 5 %, never 0 % or 100 % (the stored
+grid does not resolve the tails).
+
+**Interruption budget.** The two lines go into the daily message only when the
+expected-cost gap between the options is at least `risk_display_min_gap`
+(hotel) or `RISK_DISPLAY_MIN_GAP_DEFAULT` (50, env); without money, when
+calibrated shortfall probabilities differ by ≥ `RISK_DISPLAY_MIN_PROB_GAP`
+(0.20); never when nothing is quantified or both options are the same action.
+Always available: recap (undecided recommendations of the period, up to 3 in
+the text, all in `as_dict`) and **MCP `get_pending_recommendations`**
+(`receipts:read`, token-bound hotel): recommendation id, window, task class,
+Δstaff, rule, correction window, typed risk, rendered lines. This also closes
+the §17.4 gap — a host agent can now obtain a `recommendation_id`.
+
+**Other changes.** When the newsvendor sets Δstaff, `recommended_headcount`
+is that Δ (so the §17.8 "proposes a change" test follows it), the task class
+follows its sign, and the message says "Add N staff …", "Consider reducing …"
+or "Keep the usual staffing … (risk-balanced)".
+
+**Seen, not changed:** a lull anomaly never becomes a recommendation
+(`calculate_for_anomaly` returns net ROI 0 for lulls and only net ROI > 0 is
+promoted to `roi_positive` — `roi_calculator.py`), and its message
+would read "reducing staffing by 0" (`recommended_headcount` returns 0 for
+lulls). Reduction recommendations therefore only exist through the newsvendor
+path once it runs.
+
+### 18.5 Learning continuously from what actually happened
+
+End to end, one page: **[`docs/context/learning-loop.md`](../context/learning-loop.md)**
+(what is learned, from which signal, how often, who approves, how it is
+evaluated, how it is rolled back). In short:
+
+- **Arm C, risk statements:** `learning_loop.risk_statement_calibration` —
+  for each decided recommendation with a realised actual, the option taken,
+  its stated shortfall probability (or band) and whether the shortfall
+  happened; per task class × decider × calibration version (before/after
+  split); Brier, reliability bins. **Arm B:** a miscalibrated group (n ≥ 30,
+  gap > max(10 pp, 2 SE)) → typed trip `risk_statement_miscalibrated` +
+  ops anomaly.
+- **Recalibration schedule:** weekly pass proposes a realised calibration per
+  tenant × forecaster (≥ 60 points, later third held out); canary (3
+  identical recomputations) and the §18.2 freeze rule, plus "closer to nominal
+  than the active one"; **activation by Ivan only**; rollback re-applies the
+  previous version (the calibration is rolled back, not the service). An
+  approved calibration of the anomaly forecaster is what finally lets the
+  newsvendor rule (§18.4) run on real recommendations.
+- **Cost parameters:** proposals only (`learning_items`), never applied
+  silently: `lost_cover_value` from the revealed critical ratio of human
+  decisions, `max_extra_staff` from constraint rejections; approval by the
+  hotel or Ivan writes the parameter with `set_via = proposal_approval` and
+  the proposal id in `set_by`.
+- **Overrides and reasons → destination:** each routed reason becomes a
+  review item (memory, decision rule, policy, case set, upstream filter);
+  a case-set item becomes an eval case only once Ivan writes its expected
+  output; `scripts/eval/export_case_candidates.py` appends it to the golden
+  dataset (dated zone) and re-validates the file.
+- **Hygiene** (tested): human vs agent separate; `agent_inferred` reasons
+  ignored; outcomes never relabel decisions; manager-declared actuals flagged
+  `independent_actuals = false`.
+- New table `learning_items` (migration `20260925130000`, RLS service role,
+  DSAR REVIEW step); weekly job `learning_loop` (Mon 03:40); review API
+  `/api/v1/hotels/{tenant}/learning/*`.
+
+### 18.6 What is and is not measured (25/09/2026)
+
+| Item | Status |
+|---|---|
+| Correction window per task class | Built, stored on every recommendation. Offsets are **defaults (assumptions)**; no hotel has set its own |
+| Prophet interval calibration | **Synthetic only**: 0.667 → 0.881 at nominal 80 %, n=126, 3 identical runs. Not measured on real covers |
+| Anomaly-forecaster calibration (the one that drives dispatched recommendations) | **Does not exist**: no realised covers |
+| Hotel costs | None configured → no amount shown anywhere |
+| Newsvendor rule | Built and tested with injected calibrations; **never ran on a real recommendation** (fallback everywhere) |
+| Risk-statement calibration, recalibration, cost proposals | Built and tested on constructed data; **no real outcome exists** |
+| Real-model quality (parser) | Unchanged: not measured |

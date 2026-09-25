@@ -8,6 +8,7 @@ POST /baselines/{tenant_id}/recalculate — trigger a (re)calculation.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.tenant_scope import require_user_owns_tenant
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.services.captation_service import CaptationService, InsufficientDataError
@@ -22,7 +23,8 @@ async def get_baseline(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return the stored captation baseline for *tenant_id*."""
+    """Return the stored captation baseline for *tenant_id* (caller must own it)."""
+    await require_user_owns_tenant(db, current_user, tenant_id)
     baseline = await _service.get_baseline(tenant_id, db)
     if baseline is None:
         raise HTTPException(
@@ -49,6 +51,7 @@ async def recalculate_baseline(
     db: AsyncSession = Depends(get_db),
 ):
     """(Re)calculate the captation baseline from all historical PMS sync data."""
+    await require_user_owns_tenant(db, current_user, tenant_id)
     try:
         baseline = await _service.calculate_baseline(tenant_id, db)
     except InsufficientDataError as exc:

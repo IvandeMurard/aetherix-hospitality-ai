@@ -24,6 +24,8 @@ from app.api.routes import (
     dashboard,
     demo,
     events,
+    hotel_parameters,
+    learning,
     mcp_v1,
     notifications,
     pms,
@@ -63,6 +65,7 @@ from app.workers.receipts_dispatcher import (
     register_receipt_dispatch_job,
     register_weekly_digest_job,
 )
+from app.workers.recap_dispatcher import register_weekly_recap_job
 from app.workers.weather_sync import start_weather_scheduler
 
 logger = logging.getLogger(__name__)
@@ -157,12 +160,19 @@ async def lifespan(app: FastAPI):
     register_receipt_dispatch_job(_scheduler)
     # P2-5 — weekly KPI digest every Sunday at RECEIPT_DISPATCH_HOUR.
     register_weekly_digest_job(_scheduler)
+    # ADR-0007 §17.3 — opt-in weekly decision recap (Monday), 24 h rule respected.
+    register_weekly_recap_job(_scheduler)
     # HOS-248 (Epic 12 G-1) — dead-man's switch over scheduled dispatchers.
     register_heartbeat_monitor_job(_scheduler)
     # HOS-249 (Epic 12 G-2) — rolling-window error-rate / LLM-timeout alerting.
     register_error_rate_monitor_job(_scheduler)
     # HOS-209 (EVAL-5) — nightly latency SLO MV refresh + p95 breach alert.
     register_latency_slo_job(_scheduler)
+    # ADR-0007 §18.5 — weekly learning pass: arm C report, arm B alerts,
+    # proposals for review. Never applies anything.
+    from app.workers.learning_loop_worker import register_learning_loop_job
+
+    register_learning_loop_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler
@@ -232,6 +242,10 @@ app.include_router(roi.router, prefix="/api/v1")
 app.include_router(receipts_route.router, prefix="/api/v1")
 # P3-3 Trust-KPI — recommendation_acceptance_rate timeseries (HOS-177)
 app.include_router(kpi_route.router, prefix="/api/v1")
+# ADR-0007 §18.3 — per-hotel decision parameters (dashboard user, owner-scoped)
+app.include_router(hotel_parameters.router, prefix="/api/v1")
+# ADR-0007 §18.5 — learning loop review queue (nothing applied without approval)
+app.include_router(learning.router, prefix="/api/v1")
 # Aetherix MCP Server v1 — atomic tools (ADR-0004). v0 (/mcp/v0/) retired
 # 2026-08-01 per its announced Sunset header (Décision #19, HOS-315).
 app.include_router(mcp_v1.router)

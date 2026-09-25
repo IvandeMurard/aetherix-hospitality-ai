@@ -33,12 +33,10 @@ Exit codes (ADR §D2.f): `0` PASS · `1` FAIL (regression > 3pp **or** category
 coverage < 60%) · `2` ERROR · `3` WARN (coverage 60–80%, or touched-but-not-
 evaluated). Run it locally with `python scripts/ci/check_eval_coverage.py`.
 
-**Rollout WARN → blocking (AC5).** Because the gate runs Prophet in CI (stochastic
-— ADR §9 R2/R4), it ships **non-blocking**: `eval-gate.yml` sets
-`EVAL_GATE_BLOCKING: "false"`, so a FAIL is surfaced in the PR comment but does not
-block the merge. Once N green PRs prove Prophet-in-CI stable, flip it to blocking —
-a one-line change (`EVAL_GATE_BLOCKING: "true"`) + a CLAUDE.md trace. The script
-already emits the real exit codes, so no other change is needed.
+**Rollout WARN → blocking (AC5).** The gate shipped non-blocking and was flipped
+to blocking on 2026-07-04 (Décision #29): `eval-gate.yml` sets
+`EVAL_GATE_BLOCKING: "true"`, so FAIL (1) and ERROR (2) block the merge; WARN (3)
+does not. Emergency rollback = `"false"`.
 
 ### `eval-exempt` label (override)
 
@@ -109,6 +107,7 @@ versioning.
 | `breakfast_dinner_mix_shift` | 3 | — |
 | `ood_edge` | 5 | 3 (incl. abstention cases) |
 | `parser_intent` | 15 | 12 |
+| `parser_confirmation` | — (Décision #38) | — |
 | `pos_anomaly` | 0 (forward-compat ADR-0006) | 0 |
 
 **EVAL-0 ships the AC0.1 "unblocking minimum"** (6 categories ≥ 40 scenarios) —
@@ -123,8 +122,19 @@ a Sprint N+2 milestone (blocks EVAL-3 / EVAL-5 only).
   is the actual `y` for that date — not invented. (The model predicts aggregate
   covers `y`; the `covers_dinner`/`covers_breakfast` split shown in the ADR
   example is a Phase-4 refinement once per-service data exists.)
-- **parser_intent** scenarios are deterministic from `ReceiptsService.parse_inbound`
-  behaviour (Décision #15) and are authoritative.
+- **parser_intent** scenarios are labelled with the **manager's decision**
+  (`expected.decision`: accepted / rejected / modified; `expected.intent` kept as
+  an alias) and with `expected.path`, the step that should decide it (`keyword`,
+  `keyword_ambiguous`, `bare_ack`, `correction_pattern`, `model` — ADR-0007 §16).
+  Only `model` cases grade the model; the others are a deterministic code check
+  that fails if routing drifts. **parser_confirmation** cases (10, heldout) are
+  two-reading replies: any decision written without asking the manager is a
+  breach. The original 17 parser_intent cases are the `dev` split
+  (the fake heuristic was written against them); the 30 `"split": "heldout"` cases
+  are adversarial and were never used to tune anything. The PR gate runs the
+  **fake backend — a plumbing check, not a quality measure**. Model quality comes
+  only from the opt-in real run (`.github/workflows/eval-parser-real.yml`) and is
+  **not yet measured**.
 - **recommendation / receipt abstention** scenarios encode the `AgentAbstention`
   contract (ADR-0007 §D6) — the expected `abstention_reason` is the contract,
   implemented in EVAL-2 (HOS-206).
@@ -162,11 +172,15 @@ the `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` secrets).
   never through the fallback: a failover mid-run would mix two models in one score.
 - **Baselines** live in `eval/baselines/parser/<target>__<dataset version>.json`.
   The dataset version is a content hash of the scored cases (stand-in until HOS-339).
-- **How to read it.** `parse_inbound` decides with regex first (passes 1-2), and a
-  `free_form` answer is settled by the heuristic. Only the `llm` cases carry the
-  model's own answer — compare **accuracy on LLM-decided cases** and the **LLM
-  failure rate**. A failed call is rescued by the heuristic, so it never lowers
-  end-to-end accuracy: that number alone would hide a provider that cannot answer.
+- **How to read it.** The run grades the production reply path (ADR-0007 §15-§16).
+  Replies settled before the model (exact keywords, bare acknowledgement, covers
+  pattern) are reported apart as the deterministic block and score the same on every
+  provider; only the replies that reach the model are graded, so **decision accuracy
+  on the model-graded cases** is the number comparable across providers. The model
+  answers in a validated schema and there is no heuristic behind it: an API error or
+  an answer that fails the schema is a miss, and is also reported as the **model
+  failure rate**, where a formatting gap between providers shows up. (Merged
+  25/09/2026: HOS-337's pinned targets on the §15-§16 production path.)
 
 ## Roadmap (ADR-0007 §8)
 
@@ -176,5 +190,5 @@ the `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` secrets).
 | EVAL-1 | `scripts/eval/eval_forecast.py` stratified MAPE + CI regression gate |
 | EVAL-2 | `AgentAbstention` contract + WhatsApp variants + telemetry |
 | EVAL-3 | distribution-shift detector + cold-start auto-disable hook |
-| EVAL-4 | Haiku parser accuracy + `FakeIntentClassifier` |
+| EVAL-4 | Parser eval on the production path (real model, opt-in workflow) + fake plumbing check — corrected 24/09/2026, ADR-0007 §15 |
 | EVAL-5 | latency SLO bench + dashboard MV |

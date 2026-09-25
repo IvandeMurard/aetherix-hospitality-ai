@@ -410,7 +410,8 @@ class TestROIRoute:
         from app.db.session import get_db
 
         async def _fake_user():
-            return {"id": str(uuid.uuid4()), "email": "test@aetherix.io"}
+            # Ops user: the all-tenant ROI pass is superuser-only (ADR-0007 §17.7).
+            return {"id": str(uuid.uuid4()), "email": "test@aetherix.io", "is_superuser": True}
 
         async def _fake_db():
             yield AsyncMock()

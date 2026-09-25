@@ -78,6 +78,14 @@ CREATE TABLE IF NOT EXISTS demand_anomalies (
     recommendation_text TEXT
 );
 
+CREATE TABLE IF NOT EXISTS restaurant_profiles (
+    id TEXT PRIMARY KEY,
+    manager_locale TEXT,
+    avg_spend_per_cover REAL,
+    staff_hourly_rate REAL,
+    covers_per_server INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS staffing_recommendations (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -94,6 +102,11 @@ CREATE TABLE IF NOT EXISTS staffing_recommendations (
     actual_covers REAL,
     actual_covers_source TEXT,
     actual_covers_at TEXT,
+    task_class TEXT,
+    commit_at TEXT,
+    correction_window TEXT,
+    decision_rule TEXT,
+    risk_assessment TEXT,
     status TEXT NOT NULL DEFAULT 'ready_to_push',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -230,10 +243,14 @@ def test_format_message_surge_includes_time_window():
     assert "21:00" in msg
 
 
-def test_format_message_surge_pound_sign():
-    """Directive uses £ currency symbol."""
+def test_format_message_uses_configured_currency(monkeypatch):
+    """Directive uses the configured currency (default EUR), never a
+    hard-coded £/$ (ADR-0007 §17.1)."""
     msg = format_message("surge", 2, 500, 100, _T0, _T1, "event")
-    assert "£" in msg
+    assert "€500" in msg and "€100" in msg
+    assert "£" not in msg and "$" not in msg
+    monkeypatch.setattr("app.core.config.CURRENCY", "GBP")
+    assert "£500" in format_message("surge", 2, 500, 100, _T0, _T1, "event")
 
 
 def test_format_message_lull_different_text():
@@ -451,6 +468,11 @@ async def test_recommendation_includes_labor_cost(session: AsyncSession):
     aid = _anomaly_id()
     tid = _tenant_id()
     await _insert_anomaly(session, anomaly_id=aid, tenant_id=tid, roi_labor_cost=180.0)
+    # ADR-0007 §18.3: money is shown only when the hotel set its own rates.
+    await session.execute(text(
+        "INSERT INTO restaurant_profiles (id, avg_spend_per_cover, staff_hourly_rate) "
+        "VALUES ('prop-001', 38, 16)"
+    ))
 
     svc = RecommendationFormatterService()
     await svc.run_for_property(session, property_id="prop-001")
@@ -460,6 +482,25 @@ async def test_recommendation_includes_labor_cost(session: AsyncSession):
         {"aid": aid},
     )).fetchone()
     assert "180" in row[0]
+
+
+@pytest.mark.asyncio
+async def test_no_money_in_message_when_hotel_set_no_rates(session: AsyncSession):
+    """ADR-0007 §18.3: ROI amounts computed from placeholder defaults are not shown."""
+    aid = _anomaly_id()
+    await _insert_anomaly(session, anomaly_id=aid, tenant_id=_tenant_id(), roi_labor_cost=180.0)
+    await RecommendationFormatterService().run_for_property(session, property_id="prop-001")
+    msg = (await session.execute(
+        text("SELECT message_text FROM staffing_recommendations WHERE anomaly_id = :aid"),
+        {"aid": aid},
+    )).fetchone()[0]
+    assert "180" not in msg and "€" not in msg
+    assert msg.startswith("Add 1 staff for ") and "Trigger: Tech conference nearby." in msg
+
+
+def test_format_message_surge_without_money():
+    msg = format_message("surge", 2, 800.0, 180.0, _T0, _T1, "concert", show_money=False)
+    assert msg == "Add 2 staff for 18:00–21:00. Trigger: concert."
 
 
 @pytest.mark.asyncio
@@ -604,7 +645,8 @@ def _build_test_app(mock_session: AsyncSession) -> FastAPI:
         yield mock_session
 
     async def override_get_current_user():
-        return {"id": str(uuid.uuid4()), "email": "test@example.com"}
+        # Ops user: the all-tenant run is superuser-only (ADR-0007 §17.7).
+        return {"id": str(uuid.uuid4()), "email": "test@example.com", "is_superuser": True}
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
@@ -654,3 +696,52 @@ async def test_format_route_idempotent_double_call(session: AsyncSession):
 
     assert r1.status_code == 202
     assert r2.status_code == 202
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 §18.1 — point of no return stored on every recommendation
+# ---------------------------------------------------------------------------
+
+
+async def _stored_window(session, anomaly_id):
+    row = (
+        await session.execute(
+            text(
+                "SELECT task_class, commit_at, correction_window, message_text "
+                "FROM staffing_recommendations WHERE anomaly_id = :a"
+            ),
+            {"a": anomaly_id},
+        )
+    ).fetchone()
+    return row[0], row[1], json.loads(row[2]), row[3]
+
+
+@pytest.mark.asyncio
+async def test_correction_window_stored_and_surfaced_when_passed(session: AsyncSession):
+    aid = _anomaly_id()
+    await _insert_anomaly(session, anomaly_id=aid, tenant_id=_tenant_id())  # _T0 is in the past
+    await RecommendationFormatterService().run_for_property(session, "prop-001")
+    task_class, commit_at, window, message = await _stored_window(session, aid)
+    assert task_class == "staffing.add"
+    assert window["commit_point"] == "extra_shift_confirmed"
+    assert window["status"] == "passed"
+    assert window["offset_basis"] == "default_assumption"
+    assert commit_at is not None
+    assert "Point de non-retour habituel dépassé" in message
+
+
+@pytest.mark.asyncio
+async def test_correction_window_not_surfaced_when_far(session: AsyncSession):
+    from datetime import timedelta
+
+    aid = _anomaly_id()
+    start = datetime.now(tz=timezone.utc) + timedelta(days=10)
+    await _insert_anomaly(
+        session, anomaly_id=aid, tenant_id=_tenant_id(), direction="lull",
+        window_start=start, window_end=start + timedelta(hours=4),
+    )
+    await RecommendationFormatterService().run_for_property(session, "prop-001")
+    task_class, _, window, message = await _stored_window(session, aid)
+    assert task_class == "staffing.reduce"
+    assert window["status"] == "open"
+    assert "Modifiable" not in message and "non-retour" not in message

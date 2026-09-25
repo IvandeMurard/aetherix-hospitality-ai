@@ -118,8 +118,14 @@ class RestaurantProfile(Base):
     gps_lng = Column(Float)
 
     # ROI configuration (Story 3.3b) — overrides system defaults when set
-    avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # £ per cover
-    staff_hourly_rate = Column(Numeric(8, 2), nullable=True)     # £ per staff/hour
+    avg_spend_per_cover = Column(Numeric(8, 2), nullable=True)   # per cover, in config.CURRENCY
+    staff_hourly_rate = Column(Numeric(8, 2), nullable=True)     # per staff/hour, in config.CURRENCY
+
+    # ADR-0007 §17: weekly recap push only on opt-in (interruption budget);
+    # recap/confirmation copy locale (fr | en; None → fr).
+    # Mirror of migration 20260924160000 (schema drift gate — Décision #16).
+    weekly_recap_opt_in = Column(Boolean, nullable=False, default=False)
+    manager_locale = Column(String, nullable=True)
 
     # Agent constitution (Prompt B — WhatsApp conversational agent)
     manager_name = Column(String, nullable=True)
@@ -331,7 +337,7 @@ class StaffingRecommendation(Base):
     roi_net = Column(Numeric(10, 2))
     roi_labor_cost = Column(Numeric(10, 2))
 
-    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected
+    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected | modified
 
     # Story 4.2 (HOS-25): dispatch tracking
     dispatched_at = Column(DateTime(timezone=True), nullable=True)
@@ -339,7 +345,7 @@ class StaffingRecommendation(Base):
 
     # Story 4.3 (HOS-26): manager action logging
     actioned_at = Column(DateTime(timezone=True), nullable=True)
-    action = Column(String(10), nullable=True)  # accepted | rejected
+    action = Column(String(10), nullable=True)  # accepted | rejected | modified
 
     # Story 10.10 (HOS-200): close the prediction → outcome loop.
     # predicted_covers is copied from demand_anomalies.expected_demand at
@@ -351,8 +357,189 @@ class StaffingRecommendation(Base):
     actual_covers_source = Column(String, nullable=True)  # manager_feedback | pos_data (Phase 4)
     actual_covers_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Décision #38 / ADR-0007 §16: how the manager's decision was captured
+    # (manager_decision.DecisionSource) and with what confidence. Arm C uses it
+    # to keep an explicit accept apart from an inferred one.
+    # Mirror of migration 20260924120000 (schema drift gate — Décision #16).
+    decision_source = Column(String, nullable=True)
+    decision_confidence = Column(Numeric(4, 3), nullable=True)
+
+    # ADR-0007 §17: WHO decided (decision_provenance.DecidedBy) and WHY. An
+    # agent-decided record is never a human trust signal; a reason a host agent
+    # inferred is flagged `agent_inferred`, never stored as the human's.
+    # decision_policy_version = the policy in force (decision_policy), so
+    # metrics split before/after a policy change.
+    # Mirror of migration 20260924160000 (schema drift gate — Décision #16).
+    decided_by = Column(String, nullable=True)
+    decided_by_caller = Column(String, nullable=True)
+    reason_code = Column(String, nullable=True)
+    reason_detail = Column(Text, nullable=True)
+    reason_source = Column(String, nullable=True)
+    reason_evidence = Column(JSONB, nullable=True)
+    decision_policy_version = Column(String, nullable=True)
+
+    # ADR-0007 §18.1: point of no return. task_class = task_classes.TaskClassKey
+    # (staffing.add | staffing.reduce); commit_at = when the action commits
+    # (service start − commit offset); correction_window = the full typed window
+    # (commit point, offset and whether it is a default or the hotel's own,
+    # catalog version). Mirror of migration 20260925100000 (Décision #16).
+    task_class = Column(String, nullable=True)
+    commit_at = Column(DateTime(timezone=True), nullable=True)
+    correction_window = Column(JSONB, nullable=True)
+    # ADR-0007 §18.4: which rule produced recommended_headcount
+    # (newsvendor-v1 | deviation-scale-v1) and the typed per-option
+    # consequences (risk_assessment.SCHEMA). Mirror of migration 20260925120000.
+    decision_rule = Column(String, nullable=True)
+    risk_assessment = Column(JSONB, nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class HotelDecisionParameter(Base):
+    """Per-hotel decision parameter — costs, labour constraints, commit offsets
+    (ADR-0007 §18.3, Décision #40). Append-only: the value in force is the
+    latest row per (tenant_id, parameter); a row with ``value`` NULL clears it.
+    Every row records who set it, through which surface, and when. Money
+    values carry the currency they were entered in; a value in another
+    currency than ``config.CURRENCY`` is never used (no conversion, no €).
+    Mirror of migration 20260925110000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "hotel_decision_parameters"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=False)
+    parameter = Column(String, nullable=False)
+    value = Column(Numeric(12, 2), nullable=True)
+    unit = Column(String, nullable=False)                 # money | covers | staff | hours
+    currency = Column(String, nullable=True)              # ISO 4217 for money values
+    set_by = Column(String, nullable=False)               # user id / email, or proposal:<id>
+    set_via = Column(String, nullable=False)              # dashboard_api | ops | proposal_approval
+    note = Column(Text, nullable=True)
+    set_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_hotel_decision_parameters_tenant_param", "tenant_id", "parameter", "set_at"),
+    )
+
+
+class LearningItem(Base):
+    """One thing the learning loop proposes — never applied without a named
+    approver (ADR-0007 §18.5, Décision #40).
+
+    kind: cost_parameter | calibration | eval_case | memory_note |
+          decision_rule_note | policy_note | upstream_filter_note
+    status: proposed → approved | rejected | superseded; applied (the change
+            took effect); retired (a calibration rolled back or replaced).
+    reviewer_role: hotel (owner or superuser may decide) | ivan (superuser only).
+    subject: what it is about (parameter name, forecaster id, route).
+    A calibration item with status ``applied`` IS the active realised
+    calibration of that tenant × forecaster; rollback retires it and
+    re-applies the previous one.
+    Mirror of migration 20260925130000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "learning_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=False)
+    kind = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="proposed")
+    reviewer_role = Column(String, nullable=False)
+    payload = Column(JSONB, nullable=False)
+    evidence = Column(JSONB, nullable=True)
+    independent_actuals = Column(Boolean, nullable=True)
+    source_ref = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    decided_by = Column(String, nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    decision_note = Column(Text, nullable=True)
+    applied_ref = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index("idx_learning_items_tenant_kind_status", "tenant_id", "kind", "status"),
+    )
+
+
+class ManagerPrompt(Base):
+    """Pending HITL prompt sent to a manager (Décision #38, ADR-0007 §16).
+
+    ``decision_confirmation`` — "Je note un refus, c'est bien ça ?": nothing is
+    written to the recommendation until the manager answers yes. ``expired``
+    means unconfirmed, never a decision. ``reason_request`` — the optional
+    "Une raison ? (facultatif)" after a reject or a correction.
+    Mirror of migration 20260924120000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "manager_prompts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    tenant_id = Column(String, nullable=False)
+    property_id = Column(UUID(as_uuid=True), nullable=False)
+    recommendation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    kind = Column(String, nullable=False)                # decision_confirmation | reason_request | decision_revision
+    proposed_decision = Column(String, nullable=True)    # accepted | rejected | modified
+    origin = Column(String, nullable=True)               # model | keyword_ambiguous | bare_ack | <decision source>
+    confidence = Column(Numeric(4, 3), nullable=True)
+    corrected_value = Column(Numeric(10, 2), nullable=True)
+    status = Column(String, nullable=False, default="pending")
+    # pending | confirmed | declined | expired | answered | superseded
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    request_id = Column(String, nullable=False, default="")
+
+    __table_args__ = (
+        Index("idx_manager_prompts_property_status", "property_id", "status", "expires_at"),
+    )
+
+
+class InboundReplyEvent(Base):
+    """One row per inbound manager reply (+ one per expired prompt).
+
+    Typed result of the reply (``manager_decision.REPLY_RESULTS``), the decision
+    and its source when one was written, a typed ``why`` when nothing was, and
+    the optional reason with its typed route. Feeds the capture metrics
+    (``manager_decision.compute_capture_metrics``).
+    Mirror of migration 20260924120000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "inbound_reply_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    tenant_id = Column(String, nullable=False)
+    property_id = Column(UUID(as_uuid=True), nullable=True)
+    recommendation_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("staffing_recommendations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    prompt_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("manager_prompts.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    request_id = Column(String, nullable=False, default="")
+    channel = Column(String, nullable=False)             # button | text | system
+    result = Column(String, nullable=False)
+    decision = Column(String, nullable=True)
+    decision_source = Column(String, nullable=True)
+    confidence = Column(Numeric(4, 3), nullable=True)
+    why = Column(String, nullable=True)
+    reason_text = Column(Text, nullable=True)
+    reason_route = Column(String, nullable=True)
+    reason_route_confidence = Column(Numeric(4, 3), nullable=True)
+
+    __table_args__ = (
+        Index("idx_inbound_reply_events_tenant_created", "tenant_id", "created_at"),
+    )
 
 
 class ConversationalQuery(Base):

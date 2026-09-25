@@ -8,13 +8,13 @@ Covered:
   3.  Structured correction — pax / guests patterns
   4.  Structured correction — numeric value extracted correctly
   5.  Haiku classifier called when no regex matches
-  6.  Haiku returns free_form intent → forwarded
+  6.  Haiku returns free_form intent + decision → forwarded
   7.  Haiku returns structured_correction → forwarded
-  8.  Haiku returns unknown intent → coerced to free_form
-  9.  Haiku JSON parse failure → default free_form at confidence 0.5
-  10. Haiku exception → fallback free_form at confidence 0.5
-  11. requires_confirmation True when confidence < 0.6
-  12. requires_confirmation False when confidence >= 0.6
+  8.  Haiku answer outside the schema → llm_unmappable, no decision (never coerced)
+  9.  Haiku non-JSON answer → llm_unmappable, no decision
+  10. Haiku exception → llm_error, no decision
+  11. requires_confirmation True when a model decision is below 0.85 (ADR-0007 §16)
+  12. requires_confirmation False at / above the threshold
   13. French acknowledge patterns (merci, compris)
 """
 from __future__ import annotations
@@ -51,8 +51,15 @@ def _service(llm_response: str | None = None, llm_raises: bool = False) -> Recei
     elif llm_response is not None:
         mock_llm.complete = AsyncMock(return_value=llm_response)
     else:
-        mock_llm.complete = AsyncMock(return_value='{"intent":"free_form","confidence":0.8,"outcome":"modified","actual_value":null,"notes":""}')
+        mock_llm.complete = AsyncMock(return_value=_model_json("modified", 0.9))
     return ReceiptsService(db, llm=mock_llm)
+
+
+def _model_json(decision: str, confidence: float, **extra) -> str:
+    """A classifier answer in the ADR-0007 §16 schema."""
+    import json
+
+    return json.dumps({"decision": decision, "confidence": confidence, **extra})
 
 
 # ---------------------------------------------------------------------------
@@ -78,9 +85,15 @@ class TestAcknowledge:
         assert result.intent == "acknowledge"
 
     @pytest.mark.asyncio
-    async def test_checkmark_emoji(self):
+    async def test_checkmark_emoji_is_not_a_bare_ack(self):
+        # ✅ is an explicit acceptance keyword (matched before parse_inbound by
+        # parse_action), not a bare acknowledgement (ADR-0007 §16.3).
+        from app.schemas.webhook import ActionType
+        from app.services.action_logger import parse_action
+
+        assert parse_action("✅") == ActionType.accept
         result = await _service().parse_inbound("✅")
-        assert result.intent == "acknowledge"
+        assert result.source != "ack_regex"
 
     @pytest.mark.asyncio
     async def test_got_it(self):
@@ -160,9 +173,10 @@ class TestStructuredCorrection:
 class TestHaikuClassifier:
     @pytest.mark.asyncio
     async def test_free_form_forwarded(self):
-        llm_json = '{"intent":"free_form","confidence":0.85,"outcome":"modified","actual_value":null,"notes":"private event tomorrow"}'
+        llm_json = _model_json("none", 0.85, intent="free_form", notes="private event tomorrow")
         result = await _service(llm_response=llm_json).parse_inbound("private event tomorrow")
         assert result.intent == "free_form"
+        assert result.decision == "none"
         assert result.confidence == pytest.approx(0.85)
         assert result.notes == "private event tomorrow"
 
@@ -170,70 +184,165 @@ class TestHaikuClassifier:
     async def test_classifier_routed_to_fast_tier(self):
         """HOS-283 AC3 + Décision #35: Pass-3 classifier asks for the "fast" tier
         (Haiku on Claude) and never names a vendor model ID."""
-        llm_json = '{"intent":"free_form","confidence":0.8,"outcome":"modified","actual_value":null,"notes":""}'
-        svc = _service(llm_response=llm_json)
+        svc = _service(llm_response=_model_json("modified", 0.8))
         await svc.parse_inbound("some free-form manager note")
 
         svc._llm.complete.assert_awaited_once()
         kwargs = svc._llm.complete.await_args.kwargs
         assert kwargs["tier"] == "fast"
+        assert kwargs["temperature"] == 0.0
         assert "model" not in kwargs
 
     @pytest.mark.asyncio
     async def test_structured_correction_from_llm(self):
-        llm_json = '{"intent":"structured_correction","confidence":0.92,"outcome":"modified","actual_value":95.0,"notes":"95 covers"}'
+        llm_json = _model_json("modified", 0.92, intent="structured_correction",
+                               corrected_value=95.0, notes="95 covers")
         result = await _service(llm_response=llm_json).parse_inbound("we expect about 95 tomorrow")
         assert result.intent == "structured_correction"
+        assert result.decision == "modified"
         assert result.actual_value == pytest.approx(95.0)
 
     @pytest.mark.asyncio
-    async def test_unknown_intent_coerced_to_free_form(self):
-        llm_json = '{"intent":"unknown_garbage","confidence":0.7,"outcome":"modified","actual_value":null,"notes":"test"}'
-        result = await _service(llm_response=llm_json).parse_inbound("some unusual message")
-        assert result.intent == "free_form"
+    async def test_reason_and_route_forwarded(self):
+        llm_json = _model_json("rejected", 0.9, reason="wedding cancelled",
+                               reason_route="upstream_filter", reason_route_confidence=0.8)
+        result = await _service(llm_response=llm_json).parse_inbound("non, le mariage est annulé")
+        assert result.decision == "rejected"
+        assert result.reason == "wedding cancelled"
+        assert result.reason_route == "upstream_filter"
 
     @pytest.mark.asyncio
-    async def test_json_parse_failure_returns_fallback(self):
+    @pytest.mark.parametrize("answer", [
+        '{"intent":"unknown_garbage","confidence":0.7}',          # old schema, no decision
+        '{"decision":"maybe","confidence":0.7}',                  # decision out of taxonomy
+        '{"decision":"accepted","confidence":1.7}',               # confidence out of range
+        '{"decision":"accepted"}',                                # confidence missing
+        '{"decision":"rejected","confidence":0.9,"reason_route":"somewhere"}',
+    ])
+    async def test_schema_failure_is_typed_never_coerced(self, answer):
+        result = await _service(llm_response=answer).parse_inbound("some unusual message")
+        assert result.source == "llm_unmappable"
+        assert result.decision is None
+        assert result.requires_confirmation is False  # nothing to confirm: no decision
+
+    @pytest.mark.asyncio
+    async def test_json_parse_failure_has_no_decision(self):
         result = await _service(llm_response="not json at all").parse_inbound("some message")
-        assert result.intent == "free_form"
-        assert result.confidence == pytest.approx(0.5)
+        assert result.source == "llm_unmappable"
+        assert result.decision is None
 
     @pytest.mark.asyncio
-    async def test_llm_exception_returns_fallback(self):
+    async def test_llm_exception_has_no_decision(self):
         result = await _service(llm_raises=True).parse_inbound("some message")
-        assert result.intent == "free_form"
-        assert result.confidence == pytest.approx(0.5)
+        assert result.source == "llm_error"
+        assert result.decision is None
 
     @pytest.mark.asyncio
     async def test_markdown_fence_stripped_before_json_parse(self):
-        llm_json = '```json\n{"intent":"free_form","confidence":0.75,"outcome":"modified","actual_value":null,"notes":"test"}\n```'
+        llm_json = "```json\n" + _model_json("modified", 0.75) + "\n```"
         result = await _service(llm_response=llm_json).parse_inbound("some message")
-        assert result.intent == "free_form"
+        assert result.source == "llm"
         assert result.confidence == pytest.approx(0.75)
 
 
 # ---------------------------------------------------------------------------
-# 11–12. requires_confirmation threshold
+# 11–12. requires_confirmation threshold (DECISION_CONFIDENCE_THRESHOLD = 0.85)
 # ---------------------------------------------------------------------------
 
 class TestConfidenceThreshold:
     @pytest.mark.asyncio
     async def test_requires_confirmation_below_threshold(self):
-        llm_json = '{"intent":"free_form","confidence":0.55,"outcome":"modified","actual_value":null,"notes":"test"}'
-        result = await _service(llm_response=llm_json).parse_inbound("ambiguous message")
+        result = await _service(llm_response=_model_json("rejected", 0.84)).parse_inbound("hmm")
         assert result.requires_confirmation is True
 
     @pytest.mark.asyncio
     async def test_no_confirmation_at_threshold(self):
-        llm_json = '{"intent":"free_form","confidence":0.6,"outcome":"modified","actual_value":null,"notes":"test"}'
-        result = await _service(llm_response=llm_json).parse_inbound("clear message")
+        result = await _service(llm_response=_model_json("rejected", 0.85)).parse_inbound("hmm")
         assert result.requires_confirmation is False
 
     @pytest.mark.asyncio
-    async def test_no_confirmation_above_threshold(self):
-        llm_json = '{"intent":"free_form","confidence":0.9,"outcome":"modified","actual_value":null,"notes":"test"}'
-        result = await _service(llm_response=llm_json).parse_inbound("clear message")
+    async def test_decision_none_never_needs_confirmation(self):
+        result = await _service(llm_response=_model_json("none", 0.2)).parse_inbound("hmm")
         assert result.requires_confirmation is False
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 §16 — resolution shared with the parser eval
+# ---------------------------------------------------------------------------
+
+def _ctx(pending: int = 1, hours_ago: float = 1.0):
+    from datetime import timedelta
+
+    from app.services.manager_decision import PendingContext
+
+    now = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
+    return PendingContext(pending, now - timedelta(hours=hours_ago) if pending else None, now)
+
+
+class TestSourceAndRecordedOutcome:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "text,kwargs,source",
+        [
+            ("ok", {}, "ack_regex"),
+            ("covers: 80", {}, "covers_regex"),
+            ("private event tomorrow", {}, "llm"),
+            ("x", {"llm_response": '{"intent":"rejected","confidence":0.9}'}, "llm_unmappable"),
+            ("x", {"llm_response": "not json"}, "llm_unmappable"),
+            ("x", {"llm_raises": True}, "llm_error"),
+        ],
+    )
+    async def test_source_tells_model_decision_from_fallback(self, text, kwargs, source):
+        result = await _service(**kwargs).parse_inbound(text)
+        assert result.source == source
+
+    @pytest.mark.asyncio
+    async def test_bare_ack_follows_rule_b(self):
+        from app.services.receipts import outcome_for_feedback
+
+        fb = await _service().parse_inbound("ok")
+        assert outcome_for_feedback(fb, _ctx(1, 1.0)) == "accepted"
+        assert outcome_for_feedback(fb, _ctx(0)) is None           # nothing pending
+        assert outcome_for_feedback(fb, _ctx(2, 1.0)) is None      # → confirmation
+        assert outcome_for_feedback(fb, _ctx(1, 13.0)) is None     # outside window → confirmation
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("decision", ["accepted", "rejected", "modified"])
+    async def test_model_decision_written_at_or_above_threshold(self, decision):
+        from app.services.receipts import outcome_for_feedback, resolve_feedback
+
+        fb = await _service(llm_response=_model_json(decision, 0.9)).parse_inbound("free text")
+        assert outcome_for_feedback(fb, _ctx()) == decision
+        assert resolve_feedback(fb, _ctx()).source.value == "model_auto"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("decision", ["accepted", "rejected", "modified"])
+    async def test_low_confidence_model_decision_is_confirmed_not_written(self, decision):
+        from app.services.receipts import outcome_for_feedback, resolve_feedback
+
+        fb = await _service(llm_response=_model_json(decision, 0.6)).parse_inbound("free text")
+        res = resolve_feedback(fb, _ctx())
+        assert res.action == "confirm" and res.decision == decision and res.origin == "model"
+        assert outcome_for_feedback(fb, _ctx()) is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("kwargs", [{"llm_raises": True}, {"llm_response": "garbage"}])
+    async def test_model_failure_records_nothing(self, kwargs):
+        # The old path recorded "modified" on a model failure (ADR-0007 §15.2).
+        from app.services.receipts import outcome_for_feedback, resolve_feedback
+
+        fb = await _service(**kwargs).parse_inbound("free text")
+        assert outcome_for_feedback(fb, _ctx()) is None
+        assert resolve_feedback(fb, _ctx()).action == "none"
+
+    @pytest.mark.asyncio
+    async def test_covers_pattern_records_modified_without_model(self):
+        from app.services.receipts import resolve_feedback
+
+        svc = _service()
+        res = resolve_feedback(await svc.parse_inbound("covers: 80"), _ctx())
+        assert (res.action, res.decision, res.source.value) == ("record", "modified", "correction_pattern")
+        svc._llm.complete.assert_not_awaited()
 
 
 # ===========================================================================

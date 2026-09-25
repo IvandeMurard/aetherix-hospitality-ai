@@ -73,69 +73,134 @@ def _render_guardrail_md(result: dict, diff: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _render_parser_md(result: dict, diff: dict) -> str:
-    from .fake_intent_classifier import INTENTS
-
-    lines = [
-        "# Eval report — parser",
-        "",
-        f"- **Accuracy**: {_pct(result['accuracy'])}  ·  n={result['n']}  ·  backend={result['backend']}",
-        "",
-        "## Per-intent",
-        "",
-        "| Intent | precision | recall | support |",
-        "|---|---|---|---|",
-    ]
-    for intent in INTENTS:
-        m = result["per_intent"][intent]
-        lines.append(
-            f"| {intent} | {_pct(m['precision'])} | {_pct(m['recall'])} | {m['support']} |"
-        )
-    lines += ["", "## Confusion matrix (rows = true, cols = predicted)", "",
-              "| true ↓ / pred → | " + " | ".join(INTENTS) + " |",
-              "|---|" + "---|" * len(INTENTS)]
-    cm = result["confusion_matrix"]
-    for t in INTENTS:
-        lines.append(f"| {t} | " + " | ".join(str(cm[t][p]) for p in INTENTS) + " |")
-
-    if result.get("target"):
-        lines += _render_parser_target_md(result)
-    lines.append("")
-    if not diff.get("has_baseline"):
-        lines.append("> No baseline yet — this run establishes it.")
-    elif diff.get("regressed"):
-        lines.append(f"> ⚠️ **Accuracy regressed {diff['accuracy_delta_pp']}pp vs baseline.**")
-    else:
-        lines.append("> ✅ No accuracy regression > 2pp vs baseline.")
-    return "\n".join(lines) + "\n"
-
-
 def _render_parser_target_md(result: dict) -> list[str]:
-    """Real-LLM run (HOS-337): who decided each case, and the LLM-only accuracy."""
+    """Real run on a pinned target (HOS-337): the fields compared across providers."""
     lines = [
         "",
         "## Target",
         "",
-        f"- **Target**: `{result['target']}`  ·  dataset version `{result['dataset_version']}`",
-        f"- **Accuracy on LLM-decided cases**: {_pct(result['accuracy_llm_decided'])}"
-        f"  ·  n={result['llm_decided_n']}  (the only part comparable across providers)",
-        f"- **LLM failure rate**: {_pct(result['llm_failure_rate'])} of the calls that reached the LLM",
+        f"- **Target**: `{result.get('target')}`  ·  dataset version `{result.get('dataset_version')}`",
+        f"- **Decision accuracy on the model-graded cases**: {_pct(result.get('accuracy_llm_decided'))}"
+        f"  ·  n={result.get('llm_decided_n')}  (comparable across providers: every one of"
+        " these replies reaches the model)",
+        f"- **Model failure rate** (API error or answer failing the schema): "
+        f"{_pct(result.get('llm_failure_rate'))}. A failure is a miss here, never rescued "
+        "by a heuristic; read the rate on its own too.",
         "",
-        "## Who decided each case",
+        "## Which step settled each case",
         "",
-        "| Source | n | accuracy |",
+        "| Step | n | accuracy |",
         "|---|---|---|",
     ]
-    for src, n in result["decided_by"].items():
-        lines.append(f"| {src} | {n} | {_pct(result['accuracy_by_source'][src])} |")
-    lines += [
-        "",
-        "> `regex` cases never reach the LLM, and `llm_free_form_heuristic` cases are",
-        "> settled by the deterministic heuristic: both score the same on every provider.",
-        "> `llm_failed` = API error or unparseable output. The heuristic then answers, so a",
-        "> failure does NOT lower accuracy — read the failure rate above instead.",
-    ]
+    for src, n in (result.get("decided_by") or {}).items():
+        lines.append(f"| {src} | {n} | {_pct((result.get('accuracy_by_source') or {}).get(src))} |")
     return lines
+
+
+def _render_parser_md(result: dict, diff: dict) -> str:
+    """Parser report (EVAL-4, ADR-0007 §15).
+
+    The fake backend is labelled as a plumbing check at the top and never shows
+    an "Accuracy" headline: its agreement with the labels is not a quality
+    measure, and a reader skimming the first lines must not take it for one.
+    """
+    from .eval_parser import PREDICTED_LABELS
+    from .fake_intent_classifier import INTENTS
+
+    real = bool(result.get("quality_signal"))
+    ceiling = result.get("production_path_ceiling") or {}
+    det = result.get("deterministic") or {}
+    if real:
+        model = result.get("model") or {}
+        canary = result.get("canary") or {}
+        aw = result.get("auto_write") or {}
+        trig = result.get("confirmation_trigger") or {}
+        lines = [
+            "# Eval report — parser (free-text path, real model)",
+            "",
+            f"- **Decision accuracy** (replies that reach the model; written or proposed "
+            f"for confirmation): {_pct(result['accuracy'])}  ·  n={result['n']}  ·  "
+            f"typed errors={result['n_errors']}",
+            f"- **Auto-written** (no confirmation): {aw.get('n_written')} · precision "
+            f"{_pct(aw.get('precision'))} · per decision "
+            + " · ".join(f"{d} {_pct(p)}" for d, p in (aw.get('per_decision_precision') or {}).items())
+            + f"  ·  **confirmation rate** {_pct(result.get('confirmation_rate'))}",
+            f"- **Confirmation trigger** ({trig.get('n')} two-reading replies): "
+            f"{trig.get('auto_written')} written without confirmation (must be 0)",
+            f"- **Model**: {model.get('provider')} · fast model `{model.get('fast_model')}` · "
+            f"tiers {model.get('tiers')} · temperature {model.get('temperatures')} · "
+            f"{model.get('llm_calls')} API calls",
+            f"- **Runs**: {canary.get('runs')} · accuracies "
+            f"{[_pct(a) for a in canary.get('accuracies', [])]} · variance "
+            f"{canary.get('variance_pp')}pp · identical predictions: "
+            f"{canary.get('identical_predictions')}",
+        ]
+    else:
+        lines = [
+            "# Eval report — parser · PLUMBING CHECK (fake backend)",
+            "",
+            "> ⚠️ **Not a model-quality measurement.** The fake backend is a keyword "
+            "heuristic whose rules were written against the `dev` cases. Its agreement "
+            "with the labels says nothing about the production parser or the model. "
+            "**Model quality: not measured on this run** — the real run is opt-in "
+            "(`eval-parser-real` label or workflow_dispatch).",
+            "",
+            f"- **Pipeline**: ran end to end on n={result['n']} cases",
+            f"- Heuristic agreement (plumbing only, not quality): "
+            f"{_pct(result['accuracy'])} overall · "
+            + " · ".join(
+                f"{s} {_pct(v['accuracy'])} (n={v['n']})"
+                for s, v in (result.get("per_split") or {}).items()
+            ),
+        ]
+
+    lines += [
+        f"- **Deterministic path** (no model — code check, not quality): "
+        f"{det.get('agree')}/{det.get('n')} replies decided before the model land on "
+        f"their label · by step {det.get('by_stage')} · "
+        f"{det.get('confirmations')} sent to confirmation",
+        f"- **Production-path ceiling** (model-independent, computed on the production "
+        f"code with no API call): max accuracy {_pct(ceiling.get('max_accuracy'))} · "
+        f"{ceiling.get('decided_before_model')}/{ceiling.get('n')} replies decided before "
+        f"the model · max recall "
+        + " · ".join(f"{i} {_pct(r)}" for i, r in (ceiling.get("max_recall") or {}).items()),
+    ]
+
+    if real:
+        lines += ["", "## Per split", "", "| split | accuracy | n |", "|---|---|---|"]
+        for s, v in (result.get("per_split") or {}).items():
+            lines.append(f"| {s} | {_pct(v['accuracy'])} | {v['n']} |")
+        lines += ["", "## Per intent", "", "| Intent | precision | recall | support |",
+                  "|---|---|---|---|"]
+        for intent in INTENTS:
+            m = result["per_intent"][intent]
+            lines.append(
+                f"| {intent} | {_pct(m['precision'])} | {_pct(m['recall'])} | {m['support']} |"
+            )
+        lines += ["", "## Confusion matrix (rows = expected, cols = recorded)", "",
+                  "| expected ↓ / recorded → | " + " | ".join(PREDICTED_LABELS) + " |",
+                  "|---|" + "---|" * len(PREDICTED_LABELS)]
+        cm = result["confusion_matrix"]
+        for t in INTENTS:
+            lines.append(f"| {t} | " + " | ".join(str(cm[t][p]) for p in PREDICTED_LABELS) + " |")
+        if result.get("target"):
+            lines += _render_parser_target_md(result)
+        else:
+            lines += ["", f"Decided by: {result.get('decided_by')}"]
+
+        breaches = (result.get("thresholds") or {}).get("breaches") or []
+        lines.append("")
+        if breaches:
+            lines.append("> 🛑 **Below the FAILURE_THRESHOLDS.md contract:** " + "; ".join(breaches))
+        else:
+            lines.append("> ✅ Meets the FAILURE_THRESHOLDS.md contract.")
+        if not diff.get("has_baseline"):
+            lines.append("> No real-model baseline frozen yet — not yet measured.")
+        elif diff.get("regressed"):
+            lines.append(f"> ⚠️ **Accuracy regressed {diff['accuracy_delta_pp']}pp vs baseline.**")
+        else:
+            lines.append(f"> Δ vs real baseline: {diff.get('accuracy_delta_pp')}pp.")
+    return "\n".join(lines) + "\n"
 
 
 def _render_forecast_md(result: dict, diff: dict) -> str:
@@ -147,6 +212,7 @@ def _render_forecast_md(result: dict, diff: dict) -> str:
         f"- **Interval coverage** (80%): {_pct(result['interval_coverage_pct'])}",
         f"- **Tolerance pass rate**: {_pct(result['tolerance_pass_rate'])}",
         f"- **Scenarios**: {result['scenario_count']} · seed {result['seed']}",
+        f"- **Data**: {result.get('data_provenance', 'unspecified')}",
         "",
         "## Per-category MAPE",
         "",

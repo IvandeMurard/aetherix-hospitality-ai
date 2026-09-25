@@ -25,6 +25,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.money import format_money
 from app.db.models import ConversationalQuery, DemandAnomaly, StaffingRecommendation
 from app.providers.base import LLMProvider
 from app.providers.factory import get_llm_provider
@@ -106,10 +107,10 @@ def _build_prompt(
     )
 
     roi_net = (
-        f"£{float(recommendation.roi_net):,.0f}" if recommendation.roi_net else "n/a"
+        format_money(float(recommendation.roi_net)) if recommendation.roi_net else "n/a"
     )
     roi_labor = (
-        f"£{float(recommendation.roi_labor_cost):,.0f}"
+        format_money(float(recommendation.roi_labor_cost))
         if recommendation.roi_labor_cost
         else "n/a"
     )
@@ -147,7 +148,7 @@ RECOMMENDATION
 TASK
 Write a friendly, concise plain-text reply (3–5 sentences maximum) that directly
 answers the manager's question using the data above.
-- Use specific numbers (percentages, £ values) to build trust.
+- Use specific numbers (percentages, currency amounts as given) to build trust.
 - Avoid jargon; write as if texting a busy hotel manager.
 - Do NOT use markdown, bullet points, or headings — plain text only.
 - End with a one-line next-step nudge (accept or reject).

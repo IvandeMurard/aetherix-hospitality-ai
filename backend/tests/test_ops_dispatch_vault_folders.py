@@ -44,8 +44,14 @@ async def test_dispatch_ops_is_fire_and_forget_and_trips_alert():
     result = {
         "tenant_id": "h1",
         "period": "2026-06-01 to 2026-06-07",
-        "metrics": {"mape": 10.0, "accuracy": 90.0, "total_covers": 100},
-        "financial_impact": {"estimated_savings_gbp": 100.0, "roi_multiplier": 2.0},
+        "recap": {
+            "received": 3, "accepted": 2, "rejected": 1, "corrected": 0,
+            "no_reply": 0, "awaiting_confirmation": 0,
+            "forecast_error_pct": 10.0, "forecast_error_days": 3,
+            "forecast_error_observations": 3,
+            "human": {"acceptance_rate": 0.6667, "decided": 3},
+        },
+        "financial_impact": None,
     }
     trip = AsyncMock()
     with (
@@ -56,7 +62,7 @@ async def test_dispatch_ops_is_fire_and_forget_and_trips_alert():
         patch("app.workers.heartbeat.record_trip", trip),
     ):
         # Must NOT raise despite the underlying failure.
-        await ReportingService()._dispatch_ops(result, mape=10.0)
+        await ReportingService()._dispatch_ops(result)
 
     trip.assert_awaited_once()
     assert trip.await_args.args[0] == "reporting_service"

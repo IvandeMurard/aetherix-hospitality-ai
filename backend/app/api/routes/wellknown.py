@@ -42,8 +42,29 @@ _AGENT_MANIFEST = {
         {
             "name": "submit_feedback_to_memory",
             "description": (
-                "Record manager outcome for a past recommendation "
-                "(outcome-tracked operational history)."
+                "Record the decision on a recommendation with who decided "
+                "(human relayed by the host, or host agent alone — refused by the "
+                "default human-validation policy) and a structured reason."
+            ),
+            "endpoint": "/mcp/v1/",
+            "method": "POST",
+            "x-mcp-tool": True,
+        },
+        {
+            "name": "get_decision_recap",
+            "description": (
+                "Deterministic recap of recommendations and decisions over a day, "
+                "week or month. No estimated figure."
+            ),
+            "endpoint": "/mcp/v1/",
+            "method": "POST",
+            "x-mcp-tool": True,
+        },
+        {
+            "name": "get_pending_recommendations",
+            "description": (
+                "Undecided recommendations with typed consequences per option "
+                "(accept / refuse), correction window and decision rule."
             ),
             "endpoint": "/mcp/v1/",
             "method": "POST",
@@ -94,6 +115,8 @@ _AGENT_MANIFEST = {
         "get_operational_predictions": "60 req/min per hotel",
         "recall_memory": "60 req/min per hotel",
         "submit_feedback_to_memory": "20 req/min per hotel",
+        "get_decision_recap": "30 req/min per hotel",
+        "get_pending_recommendations": "30 req/min per hotel",
         "default": "60 req/min",
     },
     "contact": {

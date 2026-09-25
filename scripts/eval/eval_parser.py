@@ -1,104 +1,428 @@
-"""Inbound-parser accuracy eval — EVAL-4 (HOS-208), ADR-0007 §5.c.
+"""Inbound-parser eval — EVAL-4 (HOS-208), ADR-0007 §5.c, amended §15 and §16.
 
-Runs an intent classifier over the `parser_intent` golden scenarios and reports
-global accuracy + per-intent precision/recall + a 3×3 confusion matrix.
+Grades how a manager's WhatsApp reply becomes a recorded **decision**
+(``accepted | rejected | modified``), a **confirmation request** (nothing
+written until the manager confirms, Décision #6), or nothing.
 
-Backend (env `EVAL_PARSER_BACKEND`):
-  - `fake` (CI default) — deterministic `FakeIntentClassifier` (reproducible, no API).
-  - `real` — runs `ReceiptsService.parse_inbound` against ONE pinned provider/model
-    (HOS-337, Décision #35 D3). Never on PRs: it costs API calls and needs keys.
+Since §16 (Décision #38) most short replies are decided **before** the model,
+deterministically: exact FR/EN keywords, ambiguous keyword forms (→ confirmation),
+bare acknowledgements (rule (b)), covers corrections. Those are code, unit-tested
+form by form; the eval reports them as a **deterministic block** (a regression
+check of the routing, not a quality figure). The **model is graded on the
+free-text path only**: replies that reach it.
 
-`real` requires `EVAL_PARSER_TARGET=<provider>:<exact model id>`, e.g.
-`claude:claude-haiku-4-5-20251001` or `gemini:gemini-2.0-flash`. The model is an
-exact identifier, not a tier: a run must be reproducible, and a remapped tier
-would silently change what is measured. The target provider is called directly,
-never through `FallbackLLMProvider` — a failover mid-run would mix two models
-into one score.
+Backends (env ``EVAL_PARSER_BACKEND``):
 
-`parse_inbound` only reaches the LLM on its third pass (two regex passes come
-first), and a `free_form` answer is disambiguated by the deterministic
-heuristic. So end-to-end accuracy mostly measures the pipeline, not the model.
-Each `real` run therefore records who decided each case (`decided_by`) and the
-accuracy on the cases the LLM actually decided — that subset is the only part
-of the score that can differ between two providers.
+* ``fake`` (CI default) — **pipeline/plumbing check only.** A keyword heuristic
+  (`FakeIntentClassifier`) whose rules were written against the ``dev`` cases.
+  ``quality_signal: false``, no baseline compared. The deterministic block and the
+  ceiling are still computed on the production code (no model involved).
+* ``real`` (opt-in: ``.github/workflows/eval-parser-real.yml`` and the provider
+  matrix ``.github/workflows/eval-parser-matrix.yml``) — grades the
+  **production path**, model included, no fallback:
+  ``action_logger.parse_action`` → ``ReceiptsService.parse_inbound`` →
+  ``receipts.resolve_feedback``, the same calls as ``api/routes/twilio_inbound.py``.
+  A model error or a schema failure is a typed ``error``.
 
-The pure `compute_parser_metrics` is separated from any classifier so it unit-tests
-deterministically.
+  The model is ONE pinned target (HOS-337, Décision #35 D3):
+  ``EVAL_PARSER_TARGET=<provider>:<exact model id>``, e.g.
+  ``claude:claude-haiku-4-5-20251001`` or ``gemini:gemini-2.0-flash``. An exact
+  identifier, not a tier (a remapped tier would silently change what is measured),
+  called directly, never through ``FallbackLLMProvider`` (a failover mid-run would
+  mix two models into one score). Both tiers of the pinned provider point at that
+  model. No target, or no key for its provider → `ParserEvalNotMeasured` → exit 2.
+  Each run records ``target`` and ``dataset_version`` (content hash of the parser
+  cases); a real baseline is keyed by both, so a Gemini run is never compared to a
+  Claude baseline, nor a run to a baseline scored on other cases.
+
+Model-graded metrics (real backend, cases that reach the model):
+
+* ``accuracy`` — the decision the path lands on (written, or proposed for
+  confirmation) equals the label. ``none`` / error = miss.
+* ``auto_write`` — decisions written **without** confirmation (confidence ≥
+  ``DECISION_CONFIDENCE_THRESHOLD``) and their precision: the harmful error.
+* ``confirmation_rate`` — share sent to confirmation (manager interruption cost).
+* ``confirmation_trigger`` — ``parser_confirmation`` cases (genuinely two-reading
+  replies): any auto-write is a breach; a confirmation or no decision passes.
+
+Evaluation context: every case is graded as a reply to exactly one pending
+recommendation, inside the response window (``EVAL_CONTEXT``). Rule (b) then
+records ``accepted`` for a bare acknowledgement; its other branches are unit-tested.
+
+`compute_parser_metrics` is pure and unit-tested deterministically.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
-import logging
 import os
 import sys
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
 from .fake_intent_classifier import INTENTS, FakeIntentClassifier
 from .loader import DEFAULT_DATASET, load_scenarios
 
-ClassifyFn = Callable[[str, str], str]
+# `backend/` on the path so the production modules import (same as eval_guardrail).
+_BACKEND = Path(__file__).resolve().parent.parent.parent / "backend"
+if str(_BACKEND) not in sys.path:
+    sys.path.insert(0, str(_BACKEND))
 
+# Predictions can fall outside the 3 decisions:
+#   not_recorded — the path writes no decision and asks nothing
+#   error        — model call failed or its answer failed the schema (real only)
+PREDICTED_LABELS: tuple[str, ...] = (*INTENTS, "not_recorded", "error")
+
+# FAILURE_THRESHOLDS.md — "Inbound parser". Applied to the real backend only.
+ACCURACY_MIN = 0.90
+PRECISION_MIN = 0.85
+
+_MODEL_STAGES = ("llm", "llm_error", "llm_unmappable")
+
+_NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
+
+# HOS-337 (Décision #35 D3): one pinned provider × exact model per real run.
 TARGET_ENV = "EVAL_PARSER_TARGET"
 PROVIDERS = ("claude", "gemini")
-
-# Who decided a case in a `real` run.
-SOURCE_REGEX = "regex"  # pass 1/2 of parse_inbound — the LLM was never called
-SOURCE_LLM = "llm"  # the LLM returned an intent that maps directly
-SOURCE_LLM_FREE_FORM = "llm_free_form_heuristic"  # LLM said free_form → heuristic
-SOURCE_LLM_FAILED = "llm_failed"  # API error or unparseable output → default
-SOURCES = (SOURCE_REGEX, SOURCE_LLM, SOURCE_LLM_FREE_FORM, SOURCE_LLM_FAILED)
-
-_BACKEND = Path(__file__).resolve().parent.parent.parent / "backend"
+_KEY_ENV = {"claude": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}
 
 
-def compute_parser_metrics(scenarios: list[dict], classify: ClassifyFn) -> dict:
-    """Pure metrics: accuracy, per-intent precision/recall/support, confusion matrix.
+def _eval_context():
+    from app.services.manager_decision import PendingContext
 
-    Each scenario's `expected.intent` is the ground truth; `input.message` /
-    `input.language` feed the classifier.
+    # One pending recommendation, dispatched an hour ago (inside the window),
+    # proposing a change (add/remove staff — the usual case). The golden
+    # replies answer such a recommendation (ADR-0007 §17.8).
+    return PendingContext(pending_count=1, latest_dispatched_at=_NOW - timedelta(hours=1), now=_NOW,
+                          latest_proposes_change=True)
+
+
+class ParserEvalNotMeasured(RuntimeError):
+    """The real backend could not run (e.g. no API key). Exit 2 — not measured."""
+
+
+@dataclass(frozen=True)
+class Prediction:
+    label: str                 # decision landed on (written or proposed), or not_recorded / error
+    stage: str                 # which step decided (keyword, bare_ack, covers_regex, llm, …)
+    error: str | None = None   # typed reason when label == "error"
+    action: str = "record"     # record | confirm | none | error
+
+
+PredictFn = Callable[[str, str], Prediction]
+
+
+def _split(scenario: dict) -> str:
+    return scenario.get("split", "dev")
+
+
+def expected_decision(scenario: dict) -> str | None:
+    exp = scenario.get("expected", {})
+    return exp.get("decision", exp.get("intent"))
+
+
+def _is_labelled(scenario: dict) -> bool:
+    return scenario.get("category") == "parser_intent" and expected_decision(scenario) in INTENTS
+
+
+def compute_parser_metrics(
+    scenarios: list[dict], predict: Callable[[str, str], Prediction | str]
+) -> dict:
+    """Pure metrics: accuracy, per-decision precision/recall/support, confusion
+    matrix (rows = expected decision, cols = PREDICTED_LABELS), per-split accuracy,
+    auto-write precision and confirmation rate, and per-case detail.
+
+    `predict` may return a bare label (legacy classifiers) or a `Prediction`.
+    An unknown label is recorded as ``error`` — never coerced to a decision.
     """
-    # confusion[true][pred] = count
-    confusion: dict[str, dict[str, int]] = {t: {p: 0 for p in INTENTS} for t in INTENTS}
-    correct = 0
-    total = 0
+    confusion: dict[str, dict[str, int]] = {t: {p: 0 for p in PREDICTED_LABELS} for t in INTENTS}
+    split_totals: dict[str, list[int]] = {}
+    stages: dict[str, int] = {}
+    cases: list[dict] = []
+    correct = total = 0
+    written: dict[str, list[int]] = {t: [0, 0] for t in INTENTS}  # decision → [correct, n]
+    confirmations = 0
 
     for sc in scenarios:
-        expected = sc.get("expected", {}).get("intent")
-        if expected not in INTENTS:
-            continue  # skip non-classification scenarios (e.g. abstention/ood)
+        expected = expected_decision(sc)
+        if expected not in INTENTS or sc.get("category", "parser_intent") != "parser_intent":
+            continue  # skip non-classification scenarios (abstention/ood, confirmation set)
         message = sc.get("input", {}).get("message", "")
         language = sc.get("input", {}).get("language", "fr")
-        predicted = classify(message, language)
-        if predicted not in INTENTS:
-            predicted = "accepted"  # defensive — keep the matrix well-formed
-        confusion[expected][predicted] += 1
+        raw = predict(message, language)
+        pred = raw if isinstance(raw, Prediction) else Prediction(label=raw, stage="classifier")
+        if pred.label not in PREDICTED_LABELS:
+            pred = Prediction(label="error", stage=pred.stage, error=f"unknown_label:{pred.label}",
+                              action="error")
+
+        confusion[expected][pred.label] += 1
+        hit = pred.label == expected
         total += 1
-        if predicted == expected:
-            correct += 1
+        correct += hit
+        if pred.action == "record" and pred.label in INTENTS:
+            written[pred.label][0] += hit
+            written[pred.label][1] += 1
+        if pred.action == "confirm":
+            confirmations += 1
+        split = _split(sc)
+        split_totals.setdefault(split, [0, 0])
+        split_totals[split][0] += hit
+        split_totals[split][1] += 1
+        stages[pred.stage] = stages.get(pred.stage, 0) + 1
+        cases.append({
+            "id": sc.get("id"),
+            "split": split,
+            "expected": expected,
+            "predicted": pred.label,
+            "action": pred.action,
+            "stage": pred.stage,
+            "error": pred.error,
+            "ok": hit,
+        })
 
     per_intent: dict[str, dict] = {}
     for intent in INTENTS:
         tp = confusion[intent][intent]
         fp = sum(confusion[t][intent] for t in INTENTS if t != intent)
-        fn = sum(confusion[intent][p] for p in INTENTS if p != intent)
-        support = sum(confusion[intent].values())
-        precision = round(tp / (tp + fp), 4) if (tp + fp) else None
-        recall = round(tp / (tp + fn), 4) if (tp + fn) else None
+        fn = sum(confusion[intent][p] for p in PREDICTED_LABELS if p != intent)
         per_intent[intent] = {
-            "precision": precision,
-            "recall": recall,
-            "support": support,
+            "precision": round(tp / (tp + fp), 4) if (tp + fp) else None,
+            "recall": round(tp / (tp + fn), 4) if (tp + fn) else None,
+            "support": sum(confusion[intent].values()),
         }
 
+    n_written = sum(n for _, n in written.values())
     return {
         "layer": "parser",
         "accuracy": round(correct / total, 4) if total else None,
         "n": total,
+        "per_split": {
+            s: {"accuracy": round(c / n, 4) if n else None, "n": n}
+            for s, (c, n) in sorted(split_totals.items())
+        },
         "per_intent": per_intent,
         "confusion_matrix": confusion,
-        "backend": os.environ.get("EVAL_PARSER_BACKEND", "fake"),
+        "auto_write": {
+            "n_written": n_written,
+            "precision": (round(sum(c for c, _ in written.values()) / n_written, 4)
+                          if n_written else None),
+            "per_decision_precision": {
+                d: (round(c / n, 4) if n else None) for d, (c, n) in written.items()
+            },
+        },
+        "confirmation_rate": round(confirmations / total, 4) if total else None,
+        "n_errors": sum(1 for c in cases if c["predicted"] == "error"),
+        "decided_by": dict(sorted(stages.items())),
+        "cases": cases,
+    }
+
+
+def threshold_breaches(result: dict) -> list[str]:
+    """FAILURE_THRESHOLDS.md contract, applied to a real-backend result.
+
+    * decision accuracy on the model-graded cases >= ACCURACY_MIN;
+    * per-decision precision >= PRECISION_MIN — a decision the path never lands
+      on has no precision: breach (the contract cannot be shown to hold);
+    * per-decision precision of AUTO-WRITTEN decisions >= PRECISION_MIN (a
+      decision never auto-written is safe: everything was confirmed);
+    * confirmation trigger: zero auto-writes on ``parser_confirmation`` cases.
+    """
+    breaches: list[str] = []
+    acc = result.get("accuracy")
+    if acc is None or acc < ACCURACY_MIN:
+        breaches.append(f"accuracy {acc} < {ACCURACY_MIN}")
+    for intent, m in result.get("per_intent", {}).items():
+        p = m.get("precision")
+        if p is None:
+            breaches.append(f"{intent}: never predicted (precision undefined)")
+        elif p < PRECISION_MIN:
+            breaches.append(f"{intent}: precision {p} < {PRECISION_MIN}")
+    for d, p in ((result.get("auto_write") or {}).get("per_decision_precision") or {}).items():
+        if p is not None and p < PRECISION_MIN:
+            breaches.append(f"{d}: auto-write precision {p} < {PRECISION_MIN}")
+    trig = result.get("confirmation_trigger") or {}
+    if trig.get("auto_written"):
+        breaches.append(
+            f"confirmation trigger: {trig['auto_written']} low-confidence case(s) written "
+            "without confirmation"
+        )
+    return breaches
+
+
+# ---------------------------------------------------------------------------
+# Production path
+# ---------------------------------------------------------------------------
+
+class _RecordingLLM:
+    """Pass-through wrapper: counts calls and records the sampling settings the
+    production code actually used. Never alters a request or a response."""
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self.calls = 0
+        self.temperatures: set[float] = set()
+        self.tiers: set[str] = set()
+
+    async def complete(self, messages, max_tokens=500, temperature=0.3, system=None, tier="reasoning"):
+        self.calls += 1
+        self.temperatures.add(temperature)
+        self.tiers.add(tier)
+        return await self._inner.complete(
+            messages=messages, max_tokens=max_tokens, temperature=temperature,
+            system=system, tier=tier,
+        )
+
+    @property
+    def model_id(self) -> str:
+        return getattr(self._inner, "model_id", "unknown")
+
+
+class _StubLLM:
+    """No-API stand-in used only to find which replies reach the model."""
+
+    model_id = "stub/no-call"
+
+    async def complete(self, *args, **kwargs) -> str:
+        raise RuntimeError("stub model — reachability probe only")
+
+
+async def _production_prediction(service, message: str) -> Prediction:
+    """The route's decision sequence (`api/routes/twilio_inbound.py`), in order:
+    exact keyword → bare ack / covers regex / model → `resolve_feedback`."""
+    from app.schemas.webhook import ActionType
+    from app.services.action_logger import parse_action
+    from app.services.manager_decision import match_keyword, resolve_keyword
+    from app.services.receipts import resolve_feedback
+
+    ctx = _eval_context()
+    action = parse_action(message)
+    if action != ActionType.unknown:
+        res = resolve_keyword(match_keyword(message), ctx)
+        stage = "keyword_ambiguous" if res.action == "confirm" else "keyword"
+        return Prediction(res.decision or "not_recorded", stage, action=res.action)
+
+    feedback = await service.parse_inbound(message)
+    if feedback.source in ("llm_error", "llm_unmappable"):
+        return Prediction("error", feedback.source, error=feedback.source, action="error")
+    res = resolve_feedback(feedback, ctx)
+    stage = {"ack_regex": "bare_ack"}.get(feedback.source, feedback.source)
+    if res.action == "none":
+        return Prediction("not_recorded", stage, action="none")
+    return Prediction(res.decision, stage, action=res.action)
+
+
+def _run_production(scenarios: list[dict], llm) -> list[Prediction]:
+    """Run the production path over the given scenarios' messages, in order."""
+    from app.services.receipts import ReceiptsService
+
+    service = ReceiptsService(db=None, llm=llm)  # parse_inbound never touches db
+    messages = [s.get("input", {}).get("message", "") for s in scenarios]
+
+    async def _all() -> list[Prediction]:
+        return [await _production_prediction(service, m) for m in messages]
+
+    return asyncio.run(_all())
+
+
+def _replay(predictions: list[Prediction]) -> PredictFn:
+    it = iter(predictions)
+    return lambda message, language="fr": next(it)
+
+
+def _quiet_stub_run(scenarios: list[dict]) -> list[Prediction]:
+    import logging
+
+    # The stub raising is expected; keep parse_inbound's exception log quiet.
+    receipts_logger = logging.getLogger("app.services.receipts")
+    previous = receipts_logger.level
+    receipts_logger.setLevel(logging.CRITICAL)
+    try:
+        return _run_production(scenarios, _StubLLM())
+    finally:
+        receipts_logger.setLevel(previous)
+
+
+def deterministic_block(scenarios: list[dict]) -> dict:
+    """Cases decided before the model (keyword, ambiguous keyword, bare ack,
+    covers regex), run on the production code with no API call. A code check:
+    each disagreement is a routing regression or a label to revisit."""
+    labelled = [s for s in scenarios if _is_labelled(s)]
+    preds = _quiet_stub_run(labelled)
+    rows = []
+    for sc, p in zip(labelled, preds):
+        if p.stage in _MODEL_STAGES:
+            continue
+        rows.append({"id": sc.get("id"), "expected": expected_decision(sc), "predicted": p.label,
+                     "action": p.action, "stage": p.stage,
+                     "expected_path": sc.get("expected", {}).get("path"),
+                     "ok": p.label == expected_decision(sc)})
+    by_stage: dict[str, int] = {}
+    for r in rows:
+        by_stage[r["stage"]] = by_stage.get(r["stage"], 0) + 1
+    return {
+        "n": len(rows),
+        "agree": sum(r["ok"] for r in rows),
+        "by_stage": dict(sorted(by_stage.items())),
+        "confirmations": sum(r["action"] == "confirm" for r in rows),
+        "disagreements": [r for r in rows if not r["ok"]],
+        "cases": rows,
+    }
+
+
+def model_graded_ids(scenarios: list[dict]) -> set[str]:
+    labelled = [s for s in scenarios if _is_labelled(s)]
+    preds = _quiet_stub_run(labelled)
+    return {sc.get("id") for sc, p in zip(labelled, preds) if p.stage in _MODEL_STAGES}
+
+
+def production_path_ceiling(scenarios: list[dict]) -> dict:
+    """Best accuracy reachable by the production path, whatever the model says.
+
+    Since §16 the model can land on any decision, so a reply that reaches it is
+    reachable; a reply decided before it has one possible outcome. No API call.
+    """
+    labelled = [s for s in scenarios if _is_labelled(s)]
+    preds = _quiet_stub_run(labelled)
+    reachable_hits = reaches_model = 0
+    per_intent_reachable = {i: 0 for i in INTENTS}
+    for sc, pred in zip(labelled, preds):
+        expected = expected_decision(sc)
+        if pred.stage in _MODEL_STAGES:
+            reaches_model += 1
+            ok = True
+        else:
+            ok = pred.label == expected
+        reachable_hits += ok
+        per_intent_reachable[expected] += ok
+    n = len(labelled)
+    return {
+        "max_accuracy": round(reachable_hits / n, 4) if n else None,
+        "n": n,
+        "reaches_model": reaches_model,
+        "decided_before_model": n - reaches_model,
+        "max_recall": {
+            i: (round(per_intent_reachable[i] / c, 4) if (c := sum(
+                1 for s in labelled if expected_decision(s) == i)) else None)
+            for i in INTENTS
+        },
+    }
+
+
+def confirmation_trigger(scenarios: list[dict], preds: list[Prediction]) -> dict:
+    """``parser_confirmation`` cases: a write without confirmation is a failure;
+    a confirmation or no decision passes."""
+    rows = []
+    for sc, p in zip(scenarios, preds):
+        rows.append({"id": sc.get("id"), "action": p.action, "predicted": p.label,
+                     "stage": p.stage, "ok": p.action != "record"})
+    return {
+        "n": len(rows),
+        "auto_written": sum(not r["ok"] for r in rows),
+        "confirmed_or_none": sum(r["ok"] for r in rows),
+        "cases": rows,
     }
 
 
@@ -121,52 +445,18 @@ def dataset_version(scenarios: list[dict]) -> str:
     change the key the baseline is stored under.
     """
     canonical = json.dumps(
-        sorted(scenarios, key=lambda s: s.get("id", "")),
-        sort_keys=True,
-        ensure_ascii=False,
+        sorted(scenarios, key=lambda s: s.get("id", "")), sort_keys=True, ensure_ascii=False
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
-class _CountingProvider:
-    """Wraps the pinned provider to count calls, so each case knows whether the
-    LLM was reached at all (parse_inbound does not say which pass decided)."""
-
-    def __init__(self, inner) -> None:
-        self._inner = inner
-        self.calls = 0
-
-    async def complete(self, **kwargs) -> str:
-        self.calls += 1
-        return await self._inner.complete(**kwargs)
-
-    @property
-    def model_id(self) -> str:
-        return self._inner.model_id
-
-
-class _FailureCounter(logging.Handler):
-    """Counts parse_inbound's own "classifier failed" log — it covers both an
-    API error and an unparseable answer, which parse_inbound swallows."""
-
-    def __init__(self) -> None:
-        super().__init__(level=logging.ERROR)
-        self.failures = 0
-
-    def emit(self, record: logging.LogRecord) -> None:
-        if "classifier failed" in record.getMessage():
-            self.failures += 1
-
-
 def _build_provider(provider: str, model: str):
-    if str(_BACKEND) not in sys.path:
-        sys.path.insert(0, str(_BACKEND))
-    key_env = {"claude": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}[provider]
-    key = os.environ.get(key_env, "")
+    """The pinned provider, both tiers on the exact model, called directly."""
+    key = os.environ.get(_KEY_ENV[provider], "")
     if not key:
-        raise SystemExit(f"[eval_parser] {key_env} not set — cannot run target {provider}:{model}")
-    # Both tiers pinned to the same exact model: whatever tier parse_inbound
-    # asks for, this run measures `model` and nothing else.
+        raise ParserEvalNotMeasured(
+            f"{_KEY_ENV[provider]} is not set — target {provider}:{model} was NOT MEASURED."
+        )
     if provider == "claude":
         from app.providers.claude_provider import ClaudeProvider
 
@@ -176,115 +466,123 @@ def _build_provider(provider: str, model: str):
     return GeminiProvider(api_key=key, model=model, fast_model=model)
 
 
-class RealClassifier:
-    """`parse_inbound` on one pinned provider, recording who decided each case."""
-
-    def __init__(self, target: str) -> None:
-        import asyncio
-
-        provider, model = parse_target(target)
-        self.target = f"{provider}:{model}"
-        self._provider = _CountingProvider(_build_provider(provider, model))
-
-        from app.services.receipts import ReceiptsService
-
-        self._service = ReceiptsService(db=None, llm=self._provider)  # parse_inbound never touches db
-        self._heuristic = FakeIntentClassifier()
-        self._failures = _FailureCounter()
-        logging.getLogger("app.services.receipts").addHandler(self._failures)
-        # One loop for the whole run: the SDK clients keep connections bound to it.
-        self._loop = asyncio.new_event_loop()
-        self.log: list[dict] = []
-
-    def __call__(self, message: str, language: str = "fr") -> str:
-        return self.classify(message, language)
-
-    def classify(self, message: str, language: str = "fr") -> str:
-        calls, failures = self._provider.calls, self._failures.failures
-        feedback = self._loop.run_until_complete(self._service.parse_inbound(message))
-        reached_llm = self._provider.calls > calls
-        failed = self._failures.failures > failures
-
-        if feedback.intent == "structured_correction":
-            predicted = "modified"
-        elif feedback.intent == "acknowledge":
-            predicted = "accepted"
-        else:
-            # free_form has no rejected/accepted distinction → the deterministic
-            # heuristic disambiguates.
-            predicted = self._heuristic.classify(message, language)
-
-        if not reached_llm:
-            source = SOURCE_REGEX
-        elif failed:
-            source = SOURCE_LLM_FAILED
-        elif feedback.intent == "free_form":
-            source = SOURCE_LLM_FREE_FORM
-        else:
-            source = SOURCE_LLM
-        self.log.append({"message": message, "source": source, "predicted": predicted})
-        return predicted
+def _real_llm(target: str | None = None):
+    """Fresh pinned provider per run (an SDK client is bound to the event loop of
+    the run that created it). Returns (recording wrapper, provider, target)."""
+    target = target or os.environ.get(TARGET_ENV, "")
+    if not target:
+        raise ParserEvalNotMeasured(
+            f"backend=real needs {TARGET_ENV}=<provider>:<exact model id> — NOT MEASURED."
+        )
+    provider, model = parse_target(target)
+    pinned = _build_provider(provider, model)
+    return _RecordingLLM(pinned), pinned, f"{provider}:{model}"
 
 
-def decision_breakdown(scenarios: list[dict], log: list[dict]) -> dict:
-    """Per-source counts and accuracy, joining the classifier log to ground truth.
+def target_breakdown(result: dict) -> dict:
+    """Per-target fields compared across providers (HOS-337).
 
-    `accuracy_llm_decided` is the comparable number between two providers: it
-    only covers cases where the LLM's own answer set the prediction.
-    `llm_failure_rate` is the other one: a failed call falls back to free_form,
-    the heuristic then answers, and accuracy does not move.
+    Every graded case reaches the model (the deterministic path is reported
+    apart), so ``accuracy_llm_decided`` is the decision accuracy itself. A model
+    error or unmappable answer is a miss here — nothing rescues it — and is also
+    read as its own rate, the portability signal a formatting gap shows up in.
     """
-    expected_by_message = {
-        sc.get("input", {}).get("message", ""): sc.get("expected", {}).get("intent")
-        for sc in scenarios
-        if sc.get("expected", {}).get("intent") in INTENTS
-    }
-    counts = {s: 0 for s in SOURCES}
-    correct = {s: 0 for s in SOURCES}
-    for entry in log:
-        src = entry["source"]
-        counts[src] += 1
-        if entry["predicted"] == expected_by_message.get(entry["message"]):
-            correct[src] += 1
-    llm_n = counts[SOURCE_LLM]
-    reached = counts[SOURCE_LLM] + counts[SOURCE_LLM_FREE_FORM] + counts[SOURCE_LLM_FAILED]
+    decided_by: dict[str, int] = {}
+    correct: dict[str, int] = {}
+    for c in result.get("cases", []):
+        decided_by[c["stage"]] = decided_by.get(c["stage"], 0) + 1
+        correct[c["stage"]] = correct.get(c["stage"], 0) + int(c["ok"])
+    n = result.get("n") or 0
+    failures = sum(decided_by.get(s, 0) for s in ("llm_error", "llm_unmappable"))
     return {
-        "decided_by": counts,
+        "decided_by": dict(sorted(decided_by.items())),
         "accuracy_by_source": {
-            s: round(correct[s] / counts[s], 4) if counts[s] else None for s in SOURCES
+            s: round(correct[s] / k, 4) if k else None for s, k in decided_by.items()
         },
-        "accuracy_llm_decided": round(correct[SOURCE_LLM] / llm_n, 4) if llm_n else None,
-        "llm_decided_n": llm_n,
-        # A failure is rescued by the heuristic, so it never lowers accuracy:
-        # it has to be read as a rate of its own.
-        "llm_failure_rate": round(counts[SOURCE_LLM_FAILED] / reached, 4) if reached else None,
+        "accuracy_llm_decided": result.get("accuracy"),
+        "llm_decided_n": n,
+        "llm_failure_rate": round(failures / n, 4) if n else None,
     }
 
 
-def get_classifier(backend: str | None = None, target: str | None = None) -> ClassifyFn:
-    backend = backend or os.environ.get("EVAL_PARSER_BACKEND", "fake")
-    if backend == "real":
-        target = target or os.environ.get(TARGET_ENV)
-        if not target:
-            raise SystemExit(
-                f"[eval_parser] backend=real needs {TARGET_ENV}=<provider>:<exact model id>"
-            )
-        return RealClassifier(target)
-    return FakeIntentClassifier()
+def run(dataset: Path = DEFAULT_DATASET, seed: int = 42, runs: int = 1) -> dict:
+    """Load parser scenarios and evaluate them with the selected backend.
 
-
-def run(dataset: Path = DEFAULT_DATASET, seed: int = 42) -> dict:
-    """Load parser_intent scenarios, classify, compute metrics."""
-    scenarios = [
-        s for s in load_scenarios(dataset, layer="parser")
-        if s.get("category") == "parser_intent"
-    ]
+    `runs` > 1 (real backend) repeats the whole evaluation to measure run-to-run
+    variance — the canary required before freezing a real baseline.
+    """
+    backend = os.environ.get("EVAL_PARSER_BACKEND", "fake")
+    all_parser = load_scenarios(dataset, layer="parser")
+    scenarios = [s for s in all_parser if s.get("category") == "parser_intent"]
+    trigger_set = [s for s in all_parser if s.get("category") == "parser_confirmation"]
     if not scenarios:
         raise SystemExit("[eval_parser] no parser_intent scenarios in dataset")
-    classifier = get_classifier()
-    result = compute_parser_metrics(scenarios, classifier)
-    if isinstance(classifier, RealClassifier):
-        result["target"] = classifier.target
-        result["dataset_version"] = dataset_version(scenarios)
-        result.update(decision_breakdown(scenarios, classifier.log))
+
+    ceiling = production_path_ceiling(scenarios)
+    deterministic = deterministic_block(scenarios)
+
+    if backend == "real":
+        graded_ids = model_graded_ids(scenarios)
+        graded = [s for s in scenarios if s.get("id") in graded_ids]
+        runs_out: list[dict] = []
+        meta: dict = {}
+        target = ""
+        for _ in range(max(1, runs)):
+            llm, primary, target = _real_llm()
+            preds = _run_production(graded + trigger_set, llm)
+            graded_preds, trigger_preds = preds[:len(graded)], preds[len(graded):]
+            r = compute_parser_metrics(graded, _replay(graded_preds))
+            r["confirmation_trigger"] = confirmation_trigger(trigger_set, trigger_preds)
+            runs_out.append(r)
+            meta = {
+                "provider": llm.model_id,
+                "fast_model": getattr(primary, "_fast_model", None),
+                "tiers": sorted(llm.tiers),
+                "temperatures": sorted(llm.temperatures),
+                "llm_calls": llm.calls,
+            }
+        result = runs_out[0]
+        accuracies = [r["accuracy"] for r in runs_out]
+        signatures = [
+            [(c["predicted"], c["action"]) for c in r["cases"]]
+            + [(c["predicted"], c["action"]) for c in r["confirmation_trigger"]["cases"]]
+            for r in runs_out
+        ]
+        result.update(target_breakdown(result))
+        result.update({
+            "backend": "real",
+            "target": target,
+            "dataset_version": dataset_version(all_parser),
+            "measures": "free_text_path_model_included",
+            "quality_signal": True,
+            "model": meta,
+            "canary": {
+                "runs": len(runs_out),
+                "accuracies": accuracies,
+                "variance_pp": round((max(accuracies) - min(accuracies)) * 100, 2)
+                if None not in accuracies else None,
+                "identical_predictions": all(s == signatures[0] for s in signatures),
+            },
+        })
+        result["thresholds"] = {
+            "accuracy_min": ACCURACY_MIN,
+            "precision_min": PRECISION_MIN,
+            "breaches": threshold_breaches(result),
+        }
+    elif backend == "fake":
+        fake = FakeIntentClassifier()
+        result = compute_parser_metrics(
+            scenarios, lambda m, lang="fr": Prediction(fake(m, lang), "fake_heuristic")
+        )
+        result.update({
+            "backend": "fake",
+            "measures": "pipeline_plumbing_only",
+            "quality_signal": False,
+        })
+    else:
+        raise ParserEvalNotMeasured(f"unknown EVAL_PARSER_BACKEND={backend!r}")
+
+    result["production_path_ceiling"] = ceiling
+    result["deterministic"] = {k: v for k, v in deterministic.items() if k != "cases"}
+    result["n_confirmation_trigger_cases"] = len(trigger_set)
     return result

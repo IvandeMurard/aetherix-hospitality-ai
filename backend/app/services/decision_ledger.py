@@ -82,6 +82,10 @@ class DecisionRecord:
     manager_response: Optional[str] = None
     manager_responded_at: Optional[datetime] = None
     manager_response_channel: Optional[str] = None   # dashboard | whatsapp
+    # Décision #38: how the decision was captured (manager_decision.DecisionSource)
+    # and with what confidence. None for rows written before 24/09/2026.
+    decision_source: Optional[str] = None
+    decision_confidence: Optional[float] = None
     feedback_memory_id: Optional[UUID] = None
     feedback_reflection: Optional[str] = None
 
@@ -241,7 +245,9 @@ class DecisionLedgerService:
         if rec.action is not None:
             manager_response = rec.action
             manager_responded_at = rec.actioned_at
-            channel: Optional[str] = "dashboard"
+            # Since Décision #38 every WhatsApp decision also lands on the column,
+            # with its source; a column value without a source is legacy/dashboard.
+            channel: Optional[str] = "whatsapp" if rec.decision_source else "dashboard"
         elif feedback is not None:
             manager_response = feedback.manager_feedback
             manager_responded_at = feedback.created_at
@@ -275,6 +281,8 @@ class DecisionLedgerService:
             manager_response=manager_response,
             manager_responded_at=manager_responded_at,
             manager_response_channel=channel,
+            decision_source=rec.decision_source,
+            decision_confidence=_as_float(rec.decision_confidence),
             feedback_memory_id=feedback.id if feedback else None,
             feedback_reflection=feedback.reflection if feedback else None,
             actual_covers=_as_float(rec.actual_covers),

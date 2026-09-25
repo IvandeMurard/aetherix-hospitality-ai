@@ -15,15 +15,24 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ActionType(str, Enum):
-    """Manager decision parsed from the inbound message body.
+    """Manager decision parsed from the inbound message body by the exact-keyword
+    fast path (``manager_decision.match_keyword``, ADR-0007 §16.3).
 
-    - accept  : body is exactly "accept" (case-insensitive)
-    - reject  : body is exactly "reject" (case-insensitive)
-    - unknown : anything else — triggers a help message, no DB write
+    - accept    : the whole reply is an explicit FR/EN acceptance ("oui", "validé", "✅")
+    - reject    : the whole reply is an explicit refusal ("non", "refusé", "❌")
+    - modify    : the whole reply is an explicit correction ("corriger", "✏️")
+    - decline   : "non merci", "on garde tel quel" — `rejected` when the
+                  recommendation proposes a change, else confirmation (ADR-0007 §17.8)
+    - ambiguous : a keyword form with two readings ("pas besoin", "bof") —
+                  confirmation is asked, nothing is written until confirmed
+    - unknown   : anything else — goes to the free-text path
     """
 
     accept = "accept"
     reject = "reject"
+    modify = "modify"
+    decline = "decline"
+    ambiguous = "ambiguous"
     unknown = "unknown"
 
 

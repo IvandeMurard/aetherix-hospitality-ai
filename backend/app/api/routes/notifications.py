@@ -19,7 +19,9 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.tenant_scope import require_superuser
 from app.core.exceptions import NotConfiguredError
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.integrations.sendgrid_client import SendGridClient
 from app.integrations.twilio_client import TwilioClient
@@ -35,6 +37,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
+async def _ops_only(current_user: dict = Depends(get_current_user)) -> dict:
+    """Both routes were public until 24/09/2026: /test sent a message to any
+    number on our Twilio/SendGrid account, /dispatch pushed every tenant's
+    pending recommendations. Ops (superuser) only now (ADR-0007 §17.7)."""
+    return await require_superuser(current_user)
+
+
 @router.post(
     "/test",
     response_model=TestNotificationResponse,
@@ -46,6 +55,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 )
 async def send_test_notification(
     body: TestNotificationRequest,
+    _ops: dict = Depends(_ops_only),
 ) -> TestNotificationResponse:
     """POST /api/v1/notifications/test
 
@@ -113,6 +123,7 @@ async def send_test_notification(
 async def trigger_dispatch(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    _ops: dict = Depends(_ops_only),
 ) -> dict:
     """POST /api/v1/notifications/dispatch
 

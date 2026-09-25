@@ -16,8 +16,6 @@ import json
 import sys
 from pathlib import Path
 
-from .eval_parser import SOURCE_LLM, SOURCES
-
 
 def _pct(x: float | None) -> str:
     return "n/a" if x is None else f"{x * 100:.1f}%"
@@ -29,38 +27,41 @@ def compare(results: list[dict]) -> str:
         raise SystemExit(
             f"[compare] runs span several dataset versions {sorted(versions)} — not comparable"
         )
+    stages = sorted({s for r in results for s in (r.get("decided_by") or {})})
     lines = [
         "# Parser — provider matrix",
         "",
         f"Dataset version `{versions.pop()}` · {len(results)} target(s)",
         "",
-        "| Target | end-to-end accuracy | LLM-decided accuracy | LLM-decided n | LLM failure rate | "
-        + " | ".join(SOURCES)
+        "| Target | decision accuracy (model-graded) | n | model failure rate | "
+        "auto-write precision | confirmation rate | "
+        + " | ".join(stages)
         + " |",
-        "|---|---|---|---|---|" + "---|" * len(SOURCES),
+        "|---|---|---|---|---|---|" + "---|" * len(stages),
     ]
     for r in results:
-        counts = r["decided_by"]
+        counts = r.get("decided_by") or {}
+        aw = r.get("auto_write") or {}
         lines.append(
-            f"| `{r['target']}` | {_pct(r['accuracy'])} | {_pct(r['accuracy_llm_decided'])} "
-            f"| {r['llm_decided_n']} | {_pct(r['llm_failure_rate'])} | "
-            + " | ".join(str(counts[s]) for s in SOURCES)
+            f"| `{r['target']}` | {_pct(r['accuracy_llm_decided'])} | {r['llm_decided_n']} "
+            f"| {_pct(r['llm_failure_rate'])} | {_pct(aw.get('precision'))} "
+            f"| {_pct(r.get('confirmation_rate'))} | "
+            + " | ".join(str(counts.get(s, 0)) for s in stages)
             + " |"
         )
     lines += [
         "",
-        f"Only the `{SOURCE_LLM}` column is decided by the model's own answer. `regex` and",
-        "`llm_free_form_heuristic` cases score identically on every provider, so end-to-end",
-        "accuracy understates any gap. A failed call (API error or unparseable output) is",
-        "rescued by the heuristic and does not lower accuracy at all: compare the failure",
-        "rate, not the accuracy. Part of it is formatting, which Décision #35 D2 (HOS-338)",
-        "removes — read this table again after HOS-338.",
+        "Every graded reply reaches the model: replies settled before it (keywords,",
+        "bare acknowledgement, covers pattern) are reported apart as the deterministic",
+        "block and score the same on every provider. A model error or an answer that",
+        "fails the schema is a miss, never rescued by a heuristic; the failure rate is",
+        "where a formatting gap between providers shows up.",
     ]
-    llm_ns = [r["llm_decided_n"] for r in results]
-    if min(llm_ns) < 5:
+    ns = [r["llm_decided_n"] for r in results]
+    if min(ns) < 5:
         lines += [
             "",
-            f"> ⚠️ Only {min(llm_ns)} case(s) decided by the LLM on at least one target: "
+            f"> ⚠️ Only {min(ns)} model-graded case(s) on at least one target: "
             "too few to conclude anything about the model.",
         ]
     return "\n".join(lines) + "\n"

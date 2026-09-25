@@ -55,19 +55,60 @@ def save_baseline_at(path: Path, result: dict) -> Path:
 
 
 def diff_parser(result: dict, baseline: dict | None) -> dict:
-    """Parser accuracy regression vs baseline (EVAL-4 — drop > 2pp = regression)."""
-    if not baseline:
-        return {"has_baseline": False, "regressed": False, "accuracy_delta_pp": None}
+    """Parser regression vs the real-model baseline (EVAL-4, ADR-0007 §15).
+
+    Only a real-backend result is compared, and only against a real-backend
+    baseline. The fake backend is a plumbing check: it has no baseline and can
+    never regress or pass on quality. A baseline that is not a real-model run is
+    ignored rather than trusted.
+    """
+    if result.get("backend") != "real":
+        return {
+            "has_baseline": False,
+            "regressed": False,
+            "accuracy_delta_pp": None,
+            "plumbing_only": True,
+        }
+    breaches = (result.get("thresholds") or {}).get("breaches") or []
+    if not baseline or baseline.get("backend") != "real":
+        return {
+            "has_baseline": False,
+            "regressed": False,
+            "accuracy_delta_pp": None,
+            "below_threshold": bool(breaches),
+        }
     cur = result.get("accuracy")
     base = baseline.get("accuracy")
     if cur is None or base is None:
-        return {"has_baseline": True, "regressed": False, "accuracy_delta_pp": None}
+        return {"has_baseline": True, "regressed": False, "accuracy_delta_pp": None,
+                "below_threshold": bool(breaches)}
     delta = cur - base
     return {
         "has_baseline": True,
         "regressed": delta < -PARSER_ACCURACY_DROP_PP,
         "accuracy_delta_pp": round(delta * 100, 2),
+        "below_threshold": bool(breaches),
     }
+
+
+def parser_baseline_freeze_refusal(result: dict) -> str | None:
+    """Why a parser result may NOT be frozen as baseline, or None if it may.
+
+    Canary rule (Décision #29, applied to the LLM): three runs at the production
+    temperature with identical per-case predictions (variance 0.00pp). A fake
+    result is never a baseline.
+    """
+    if result.get("backend") != "real":
+        return "fake backend is a plumbing check — it is never frozen as a parser baseline"
+    canary = result.get("canary") or {}
+    if canary.get("runs", 0) < 3:
+        return f"canary needs >= 3 runs, got {canary.get('runs', 0)} (use --runs 3)"
+    if not canary.get("identical_predictions") or canary.get("variance_pp") != 0:
+        return (
+            f"runs disagree (variance {canary.get('variance_pp')}pp, identical "
+            f"predictions={canary.get('identical_predictions')}) — not frozen"
+        )
+    return None
 
 
 def diff_guardrail(result: dict, baseline: dict | None) -> dict:

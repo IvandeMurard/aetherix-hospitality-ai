@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.db.session import AsyncSessionLocal
 from app.services.alert_dispatcher import AlertDispatcherService
+from app.services.inbound_decision import InboundDecisionService
 from app.workers.heartbeat import JOB_DISPATCH_WORKER, record_heartbeat
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,13 @@ async def _run_dispatch_job() -> None:
     try:
         async with AsyncSessionLocal() as db:
             await _service.run_pending(db)
+            # Décision #38: unanswered HITL confirmations past their window are
+            # recorded as unconfirmed (never as a decision). Cheap indexed sweep.
+            expired = await InboundDecisionService(db).expire_stale_prompts(
+                datetime.now(tz=timezone.utc)
+            )
+            if expired:
+                logger.info("dispatch_worker: expired %d manager prompt(s)", expired)
         logger.info("dispatch_worker: complete  job_id=%s", job_id)
         # AC2 — heartbeat marks a completed run for the dead-man's switch.
         await record_heartbeat(JOB_DISPATCH_WORKER)

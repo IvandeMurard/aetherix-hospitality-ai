@@ -22,6 +22,8 @@ _TOOL_RATE_LIMITS = {
     "submit_feedback_to_memory": 20,
     # v1 atomic tools
     "recall_memory": 60,
+    "get_decision_recap": 30,
+    "get_pending_recommendations": 30,
 }
 
 _TOOL_SCOPE = {
@@ -30,6 +32,10 @@ _TOOL_SCOPE = {
     "submit_feedback_to_memory": "feedback",
     # v1 atomic tools
     "recall_memory": "memory:read",
+    # ADR-0007 §17: same read scope as the Receipt drill-down and the KPIs
+    "get_decision_recap": "receipts:read",
+    # ADR-0007 §18.4: read-only, same scope as the recap.
+    "get_pending_recommendations": "receipts:read",
 }
 
 # Separate admin scope for destructive / model-mutating operations (HOS-149 AC4)
@@ -152,15 +158,60 @@ TOOLS_MANIFEST: list[dict[str, Any]] = [
     },
     {
         "name": "submit_feedback_to_memory",
-        "description": "Record manager outcome for a past recommendation (outcome-tracked operational history).",
+        "description": (
+            "Record the decision on a staffing recommendation of the authenticated "
+            "property, with who decided and why. `decided_by`: `human_via_host` when a "
+            "person decided in your tool and you relay it; `host_agent_autonomous` when "
+            "you decided alone — refused while the property's policy requires human "
+            "validation (the default). A reason is required from you, positive or "
+            "negative: `reason_code` from the enum; if the person gave none, send "
+            "`none_given` with `reason_source: human`; if you infer a reason yourself, "
+            "send `reason_source: agent_inferred` — never attribute a guess to the person. "
+            "`ignored` records no decision."
+        ),
         "inputSchema": {
             "type": "object",
-            "required": ["recommendation_id", "outcome"],
+            "required": [
+                "recommendation_id", "outcome", "decided_by", "reason_code", "reason_source",
+            ],
             "properties": {
                 "recommendation_id": {"type": "string", "format": "uuid"},
                 "outcome": {
                     "type": "string",
                     "enum": ["accepted", "rejected", "modified", "ignored"],
+                },
+                "decided_by": {
+                    "type": "string",
+                    "enum": ["human_via_host", "host_agent_autonomous"],
+                },
+                "reason_code": {
+                    "type": "string",
+                    "enum": [
+                        "agrees_with_drivers", "matches_own_plan", "forecast_too_high",
+                        "forecast_too_low", "event_not_in_forecast", "event_cancelled",
+                        "staffing_constraint", "budget", "policy", "data_issue",
+                        "already_handled", "none_given", "other",
+                    ],
+                },
+                "reason_detail": {"type": "string", "maxLength": 280},
+                "reason_source": {"type": "string", "enum": ["human", "agent_inferred"]},
+                "evidence": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "object",
+                        "required": ["source"],
+                        "properties": {
+                            "source": {
+                                "type": "string",
+                                "enum": [
+                                    "pms", "pos", "weather", "events", "rota",
+                                    "manager_message", "host_notes", "other",
+                                ],
+                            },
+                            "detail": {"type": "string", "maxLength": 200},
+                        },
+                    },
                 },
                 "actual_value": {"type": "number"},
                 "notes": {"type": "string", "maxLength": 1000},
@@ -169,6 +220,49 @@ TOOLS_MANIFEST: list[dict[str, Any]] = [
     },
 ]
 
+# ADR-0007 §17.3: the deterministic recap, read-only, for host agents. Same
+# content as the WhatsApp "recap" command; no model, no prose.
+DECISION_RECAP_TOOL: dict[str, Any] = {
+    "name": "get_decision_recap",
+    "description": (
+        "Deterministic recap of the authenticated property's recommendations and "
+        "decisions over a period: received, accepted, rejected, corrected, no reply, "
+        "awaiting confirmation, mean forecast error where actual covers exist (with "
+        "the number of days it covers), and who decided (human vs host agent). "
+        "No figure is estimated."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "period": {"type": "string", "enum": ["day", "week", "month"], "default": "week"},
+            "locale": {"type": "string", "enum": ["fr", "en"], "default": "fr"},
+        },
+    },
+}
+
+# ADR-0007 §18.4: undecided recommendations with their typed per-option
+# consequences, correction window and the rule that produced them. Also the
+# only way for a host agent to obtain a recommendation_id (§17.4 gap).
+PENDING_RECOMMENDATIONS_TOOL: dict[str, Any] = {
+    "name": "get_pending_recommendations",
+    "description": (
+        "Undecided staffing recommendations of the authenticated property, each with "
+        "recommendation_id, window, task class, recommended staff change, the rule "
+        "that produced it (newsvendor-v1 | deviation-scale-v1), the correction window "
+        "(commit point), and typed consequences per option (accept / refuse): extra "
+        "shifts and their cost only when the hotel configured costs, shortfall "
+        "probability only when the forecaster is calibrated (with the calibration's "
+        "provenance), otherwise a qualitative band."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "locale": {"type": "string", "enum": ["fr", "en"], "default": "fr"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20},
+        },
+    },
+}
+
 _TOOLS_BY_NAME: dict[str, dict[str, Any]] = {t["name"]: t for t in TOOLS_MANIFEST}
 
 # v1 manifest: get_recommendations_with_memory_context replaced by recall_memory
@@ -176,4 +270,6 @@ V1_TOOLS_MANIFEST: list[dict[str, Any]] = [
     _TOOLS_BY_NAME["get_operational_predictions"],
     RECALL_MEMORY_TOOL,
     _TOOLS_BY_NAME["submit_feedback_to_memory"],
+    DECISION_RECAP_TOOL,
+    PENDING_RECOMMENDATIONS_TOOL,
 ]

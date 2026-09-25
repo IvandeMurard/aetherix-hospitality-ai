@@ -22,6 +22,7 @@ class StaffingConfig(BaseModel):
     usual_sommeliers: int = 1
 
     # Daily budget; compare against total_shifts * avg_shift_cost for one service
+    # Field name kept (R6 test pins it); the amount is in config.CURRENCY.
     labor_budget_gbp_per_day: float = 1200.0
     avg_shift_cost: float = 80.0
 

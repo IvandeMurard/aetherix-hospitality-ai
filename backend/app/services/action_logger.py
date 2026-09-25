@@ -25,27 +25,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.pii import pseudonymise
 from app.db.models import RestaurantProfile, StaffingRecommendation
 from app.schemas.webhook import ActionType
+from app.services.manager_decision import DecisionSource, match_keyword
+from app.services.decision_policy import authorize_decision
+from app.services.decision_provenance import DecidedBy
 
 logger = logging.getLogger(__name__)
 
 
 def parse_action(body: str) -> ActionType:
-    """Case-insensitive parse of an inbound message body.
+    """Exact-keyword fast path over the whole reply (ADR-0007 §16.3).
 
-    Args:
-        body: Raw text sent by the manager (may have leading/trailing whitespace).
-
-    Returns:
-        ``ActionType.accept`` if the trimmed body is "accept" (any case),
-        ``ActionType.reject`` if it is "reject" (any case),
-        ``ActionType.unknown`` otherwise.
+    Delegates to ``manager_decision.match_keyword`` (FR/EN forms, each mapping
+    documented there). A bare acknowledgement ("ok", "👍") is ``unknown`` here:
+    it carries no decision and is resolved by rule (b) downstream.
     """
-    normalised = body.strip().lower()
-    if normalised == "accept":
-        return ActionType.accept
-    if normalised == "reject":
-        return ActionType.reject
-    return ActionType.unknown
+    match = match_keyword(body)
+    if match is None or match.kind == "bare_ack":
+        return ActionType.unknown
+    return {
+        "accept": ActionType.accept,
+        "reject": ActionType.reject,
+        "modify": ActionType.modify,
+        "decline": ActionType.decline,
+        "ambiguous": ActionType.ambiguous,
+    }[match.kind]
 
 
 class ActionLoggerService:
@@ -61,6 +64,7 @@ class ActionLoggerService:
         from_number: str,
         action: ActionType,
         session: AsyncSession,
+        source: DecisionSource = DecisionSource.keyword,
     ) -> dict[str, Any]:
         """Find the most recent dispatched recommendation and record the decision.
 
@@ -122,6 +126,12 @@ class ActionLoggerService:
         recommendation.status = new_status
         recommendation.action = new_status
         recommendation.actioned_at = datetime.now(tz=timezone.utc)
+        recommendation.decision_source = source.value
+        recommendation.decision_confidence = 1.0
+        recommendation.decided_by = DecidedBy.human_whatsapp.value
+        recommendation.decision_policy_version = authorize_decision(
+            profile.tenant_id, DecidedBy.human_whatsapp.value
+        ).version
 
         await session.commit()
 

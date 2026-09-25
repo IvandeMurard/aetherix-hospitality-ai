@@ -3,10 +3,11 @@
 Public endpoint: POST /webhooks/twilio/inbound
 
 Receives inbound SMS/WhatsApp messages forwarded by Twilio.
-- Accept / Reject → persisted immediately via ActionLoggerService.
-- Everything else  → P2-4 receipt feedback path (parse_inbound) first;
-                     falls back to QueryParserService / ExplainabilityService
-                     if no hotel profile found for the sender number.
+- Button payload / confirmation answer / exact keyword / bare acknowledgement
+  → decided synchronously, no model (InboundDecisionService, Décision #38).
+- Everything else  → P2-4 receipt feedback path (parse_inbound + resolve_feedback)
+                     in the background; falls back to QueryParserService /
+                     ExplainabilityService if no hotel profile matches the sender.
 
 Security model
 --------------
@@ -20,7 +21,7 @@ Response
 --------
 Always returns TwiML XML with Content-Type ``application/xml``.
 Twilio requires a response within 15 s; our target is < 200 ms for the
-synchronous path (action logging) and < 50 ms for the async query path
+synchronous path (deterministic decision capture) and < 50 ms for the async query path
 (background task).
 
 [Source: https://www.twilio.com/docs/usage/security#validating-signatures]
@@ -32,20 +33,27 @@ import hashlib
 import hmac
 import logging
 import os
+import uuid
+from datetime import datetime, timezone
 from typing import Annotated
+from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, Header, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import select
-
-from app.db.models import RestaurantProfile, StaffingRecommendation
 from app.db.session import AsyncSessionLocal, get_db
 from app.integrations.twilio_client import TwilioClient
+from app.core.pii import pseudonymise
 from app.schemas.webhook import ActionType, TwilioInboundPayload
-from app.services.action_logger import ActionLoggerService, parse_action
+from app.services.action_logger import parse_action
+from app.services.decision_messaging import (
+    buttons_available,
+    send_with_buttons,
+    text_fallback,
+)
 from app.services.explainability_service import ExplainabilityService
+from app.services.inbound_decision import InboundDecisionService, ReplyPlan
 from app.services.query_parser import QueryParserService
 from app.services.receipts import ReceiptsService
 
@@ -57,24 +65,6 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 # TwiML response templates
 # ---------------------------------------------------------------------------
 
-_TWIML_ACCEPT = (
-    "<?xml version='1.0' encoding='UTF-8'?>"
-    "<Response><Message>"
-    "\u2705 Staffing recommendation accepted. Good luck tonight!"
-    "</Message></Response>"
-)
-_TWIML_REJECT = (
-    "<?xml version='1.0' encoding='UTF-8'?>"
-    "<Response><Message>"
-    "\u274c Recommendation rejected. No action will be taken."
-    "</Message></Response>"
-)
-_TWIML_UNKNOWN = (
-    "<?xml version='1.0' encoding='UTF-8'?>"
-    "<Response><Message>"
-    "Reply ACCEPT or REJECT to action this recommendation."
-    "</Message></Response>"
-)
 
 # Story 5.1 (HOS-28): conversational query acknowledgements
 _TWIML_QUERY_ACK = (
@@ -91,35 +81,8 @@ _TWIML_QUERY_NO_CONTEXT = (
     "</Message></Response>"
 )
 
-# P2-4 (HOS-170): receipt feedback acknowledgements
-_TWIML_FEEDBACK_ACK = (
-    "<?xml version='1.0' encoding='UTF-8'?>"
-    "<Response><Message>"
-    "Noted. I've updated my records and will factor this into tomorrow's recommendations."
-    "</Message></Response>"
-)
-_TWIML_FEEDBACK_CONFIRM_REQUEST = (
-    "<?xml version='1.0' encoding='UTF-8'?>"
-    "<Response><Message>"
-    "I've recorded your note with medium confidence. "
-    "Reply with a thumbs-up to confirm, or ignore to discard."
-    "</Message></Response>"
-)
-_TWIML_FEEDBACK_ACKNOWLEDGE = (
-    "<?xml version='1.0' encoding='UTF-8'?>"
-    "<Response><Message>"
-    "Understood."
-    "</Message></Response>"
-)
-
 # Singleton Twilio client for outbound replies from background tasks
 _twilio_client = TwilioClient()
-
-_ACTION_TWIML: dict[ActionType, str] = {
-    ActionType.accept: _TWIML_ACCEPT,
-    ActionType.reject: _TWIML_REJECT,
-    ActionType.unknown: _TWIML_UNKNOWN,
-}
 
 
 def _xml_response(twiml: str, status_code: int = 200) -> Response:
@@ -192,6 +155,30 @@ def _validate_twilio_signature(
 # Route
 # ---------------------------------------------------------------------------
 
+def _now() -> datetime:
+    return datetime.now(tz=timezone.utc)
+
+
+def _twiml_message(text: str) -> str:
+    return (
+        "<?xml version='1.0' encoding='UTF-8'?>"
+        f"<Response><Message>{xml_escape(text)}</Message></Response>"
+    )
+
+
+_TWIML_EMPTY = "<?xml version='1.0' encoding='UTF-8'?><Response></Response>"
+
+
+async def _send_plan(to: str, plan: ReplyPlan) -> None:
+    """Send a reply out of band (REST), with quick replies when available."""
+    if not plan.text:
+        return
+    try:
+        await send_with_buttons(_twilio_client, to, plan.text, plan.buttons)
+    except Exception:
+        logger.warning("twilio_inbound: reply send failed for %s", pseudonymise(to))
+
+
 @router.post("/twilio/inbound")
 async def twilio_inbound_webhook(
     request: Request,
@@ -200,29 +187,28 @@ async def twilio_inbound_webhook(
     From: Annotated[str, Form()] = "",
     Body: Annotated[str, Form()] = "",
     To: Annotated[str, Form()] = "",
+    # WhatsApp quick-reply tap (Décision #38): the button's fixed id. Empty for
+    # a typed reply.
+    ButtonPayload: Annotated[str, Form()] = "",
     # Optional signature header — absent in test mode
     x_twilio_signature: Annotated[str | None, Header()] = None,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Receive an inbound SMS/WhatsApp message and route it appropriately.
 
-    Story 4.3 (HOS-26) — Accept / Reject path:
-    AC#1  — Parses "Accept" / "Reject" (case-insensitive).
-    AC#2  — Updates StaffingRecommendation status: accepted | rejected.
-    AC#3  — Sets actioned_at timestamp.
-    AC#4  — Returns help TwiML for unrecognised input (no error raised).
-    AC#5  — Async DB path ensures < 200 ms response time under normal load.
-    AC#6  — Returns TwiML XML; Content-Type: application/xml.
-    AC#7  — No get_current_user dependency (public Twilio callback).
-    AC#8  — Signature check skipped when TWILIO_SKIP_SIGNATURE_VALIDATION=true.
+    Décision #38 / ADR-0007 §16 — manager decision capture:
+      * Deterministic replies (button payload, answer to a pending confirmation,
+        exact FR/EN keyword, bare acknowledgement) are decided synchronously by
+        ``InboundDecisionService.handle_deterministic`` — no model. The reply is
+        TwiML text, or sent via REST with quick replies when enabled.
+      * Everything else (free text, reason after a reject/correction) goes to
+        the background task: covers regex → model → ``resolve_feedback``.
+      * A decision the system is unsure of is confirmed, never written.
 
-    Story 5.1 (HOS-28) — Conversational query path (FR13):
-    AC#1  — Non-action text kicks off a BackgroundTask.
-    AC#2  — BackgroundTask resolves tenant_id + recommendation from phone number.
-    AC#3  — Webhook immediately returns a TwiML acknowledgement (< 50 ms).
-    AC#4  — Query persisted in conversational_queries table.
-    AC#5  — No matching recommendation → polite TwiML response.
-    AC#6  — Idempotency: duplicate within 60 s is suppressed.
+    Story 4.3 (HOS-26) — AC#3 actioned_at set, AC#6 TwiML XML, AC#7 public,
+    AC#8 signature check skipped when TWILIO_SKIP_SIGNATURE_VALIDATION=true.
+    Story 5.1 (HOS-28) — non-decision text kicks off a BackgroundTask; unknown
+    sender falls back to the conversational query path.
     """
     skip_validation = (
         os.getenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "false").lower() == "true"
@@ -240,32 +226,37 @@ async def twilio_inbound_webhook(
             signature,
             auth_token,
         ):
-            logger.warning("twilio_inbound: invalid signature from %s", From)
-            return _xml_response(
-                "<?xml version='1.0' encoding='UTF-8'?><Response></Response>",
-                status_code=403,
-            )
+            logger.warning("twilio_inbound: invalid signature from %s", pseudonymise(From))
+            return _xml_response(_TWIML_EMPTY, status_code=403)
 
     payload = TwilioInboundPayload(From=From, Body=Body, To=To)
-    action = parse_action(payload.Body)
+    decisions = InboundDecisionService(db)
+    profile = await decisions.profile_for(payload.From_)
 
-    if action != ActionType.unknown:
-        # ---------------------------------------------------------------
-        # Story 4.3 — synchronous Accept/Reject logging
-        # ---------------------------------------------------------------
-        service = ActionLoggerService()
-        result = await service.log_action(payload.From_, action, db)
-        logger.info("twilio_inbound: action log result=%s", result)
-        return _xml_response(_ACTION_TWIML[action])
+    if profile is not None:
+        plan = await decisions.handle_deterministic(
+            profile, payload.Body, ButtonPayload.strip(), _now(), request_id=str(uuid.uuid4())
+        )
+        if plan is not None:
+            logger.info("twilio_inbound: deterministic result=%s decision=%s source=%s",
+                        plan.result, plan.decision, plan.source)
+            if not plan.text:
+                return _xml_response(_TWIML_EMPTY)
+            if buttons_available(plan.buttons):
+                background_tasks.add_task(_send_plan, payload.From_, plan)
+                return _xml_response(_TWIML_EMPTY)
+            return _xml_response(_twiml_message(text_fallback(plan.text, plan.buttons)))
+    elif ButtonPayload or parse_action(payload.Body) != ActionType.unknown:
+        # A decision with no known sender has nothing to attach to.
+        return _xml_response(_TWIML_QUERY_NO_CONTEXT)
 
     # -------------------------------------------------------------------
-    # P2-4 — receipt feedback path: parse intent, write to memory in bg
-    # Falls back to legacy conversational query (Story 5.1) if hotel not found.
+    # Free text: model path in the background. Falls back to the legacy
+    # conversational query (Story 5.1) if the sender has no hotel profile.
     # -------------------------------------------------------------------
     logger.info(
-        "twilio_inbound: inbound from=%s body=%r — scheduling receipt feedback bg task",
-        From,
-        Body,
+        "twilio_inbound: inbound from=%s — scheduling receipt feedback bg task",
+        pseudonymise(From),
     )
     background_tasks.add_task(
         _bg_receipt_feedback,
@@ -276,107 +267,69 @@ async def twilio_inbound_webhook(
 
 
 async def _bg_receipt_feedback(from_number: str, body: str) -> None:
-    """P2-4: classify inbound WhatsApp reply and write to operational_memory.
+    """Free-text reply (P2-4, ADR-0007 §16): reason or decision.
 
-    Routing:
-      1. Normalize phone number, look up RestaurantProfile.
-      2. If hotel not found → fall back to legacy _bg_parse_query path.
-      3. classify intent via ReceiptsService.parse_inbound.
-      4. acknowledge → send ack, no DB write.
-      5. structured_correction / free_form with confidence ≥ 0.6
-         → call tool_submit_feedback_to_memory, send confirmation.
-      6. free_form with confidence < 0.6
-         → write as outcome=modified, request thumbs-up confirmation.
+    1. Resolve the hotel from the phone number; unknown → legacy query path.
+    2. A pending reason request → the reply is the reason: routed (typed),
+       stored, never changes the recorded decision.
+    3. Otherwise ``parse_inbound`` (covers regex → model) → ``resolve_feedback``:
+       record (≥ threshold), confirm (< threshold, nothing written), or nothing.
+    4. A recorded decision with a note/figure → feedback memory + ground-truth
+       covers (HOS-250 guard first, HOS-270 tells the manager if rejected).
     """
-    import uuid as _uuid
-
-    normalised = from_number.replace("whatsapp:", "")
+    request_id = str(uuid.uuid4())
 
     async with AsyncSessionLocal() as db:
-        # Step 1: resolve hotel from phone number
-        profile_result = await db.execute(
-            select(RestaurantProfile).where(
-                RestaurantProfile.phone_number == normalised
-            )
-        )
-        profile: RestaurantProfile | None = profile_result.scalars().first()
+        decisions = InboundDecisionService(db)
+        profile = await decisions.profile_for(from_number)
 
         if profile is None:
             logger.info(
                 "_bg_receipt_feedback: no profile for %s — falling back to conversational query",
-                from_number,
+                pseudonymise(from_number),
             )
-            # Fall back to old path (Phase 1 conversational queries)
             await _bg_parse_query(from_number=from_number, body=body)
             return
 
         hotel_id: str = profile.tenant_id
-
-        # Step 2: find most recent recommendation for context (recommendation_id arg)
-        rec_result = await db.execute(
-            select(StaffingRecommendation)
-            .where(
-                StaffingRecommendation.property_id == _uuid.UUID(str(profile.id)),
-                StaffingRecommendation.status.in_(["dispatched", "accepted", "rejected"]),
-            )
-            .order_by(
-                StaffingRecommendation.dispatched_at.desc().nullslast(),
-                StaffingRecommendation.created_at.desc(),
-            )
-            .limit(1)
-        )
-        recommendation: StaffingRecommendation | None = rec_result.scalars().first()
-        recommendation_id: str = str(recommendation.id) if recommendation else ""
-
-        # Step 3: classify intent
         service = ReceiptsService(db)
-        feedback = await service.parse_inbound(body)
+        now = _now()
 
-        if feedback.intent == "acknowledge":
-            logger.info(
-                "_bg_receipt_feedback: acknowledge hotel_id=%s — no DB write", hotel_id
+        prompt = await decisions.open_prompt(profile, now)
+        if prompt is not None and prompt.kind == "reason_request":
+            route, route_conf = await service.route_reason(body)
+            plan = await decisions.handle_reason(
+                profile, prompt, body, route, route_conf, now, request_id
             )
-            try:
-                await _twilio_client.send_whatsapp(from_number, "Understood.")
-            except Exception:
-                logger.warning("_bg_receipt_feedback: ack reply failed for %s", from_number)
+            await _send_plan(from_number, plan)
             return
 
-        # HOS-270: track whether the manager's numeric correction was rejected by
-        # the G-3 plausibility guard, so Step 5 can tell them (not a silent drop).
-        # Defined at function scope so the reply branch sees it on every path.
+        feedback = await service.parse_inbound(body)
+        plan, resolution, recommendation = await decisions.handle_free_text(
+            profile, feedback, now, request_id
+        )
+
+        # HOS-270: whether the manager's numeric correction failed the G-3
+        # plausibility guard, so the reply can say so (not a silent drop).
         covers_rejected = False
 
-        # Step 4: write to operational_memory via tool_submit_feedback_to_memory
-        if recommendation_id:
+        if resolution.action == "record" and recommendation is not None:
             from app.mcp_server import tool_submit_feedback_to_memory
 
-            # Shared request_id links the feedback row and the P3-10 ground_truth
-            # row for the same inbound correction.
-            req_id = str(_uuid.uuid4())
-
             try:
-                # HOS-250: run the plausibility guard FIRST. persist_actual_covers
-                # bounds the value and returns None when it is rejected. The numeric
-                # must clear the guard before it is allowed into the (embedded,
-                # retrievable) feedback memory below — otherwise a rejected/aberrant
-                # value still poisons the model via the feedback path even though
-                # the ground-truth write was blocked.
+                # HOS-250: plausibility guard FIRST, before the number can reach
+                # the (embedded, retrievable) feedback memory.
                 if (
                     feedback.intent == "structured_correction"
                     and feedback.actual_value is not None
-                    and recommendation is not None
                 ):
                     persisted = await service.persist_actual_covers(
                         recommendation,
                         feedback.actual_value,
-                        request_id=req_id,
+                        request_id=request_id,
                     )
                     covers_rejected = persisted is None
 
-                # Only carry the numeric correction into feedback memory when it
-                # passed the guard. A rejected value still records the manager's
-                # qualitative note, minus the implausible number.
                 memory_actual = None if covers_rejected else feedback.actual_value
                 notes_text = feedback.notes
                 if memory_actual is not None:
@@ -384,14 +337,13 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
 
                 result = await tool_submit_feedback_to_memory(
                     hotel_id=hotel_id,
-                    recommendation_id=recommendation_id,
-                    outcome=feedback.outcome,
+                    recommendation_id=str(recommendation.id),
+                    outcome=resolution.decision,
                     db=db,
                     actual_value=memory_actual,
                     notes=notes_text,
-                    request_id=req_id,
+                    request_id=request_id,
                 )
-
                 await db.commit()
                 logger.info(
                     "_bg_receipt_feedback: memory written hotel_id=%s result=%s confidence=%.2f",
@@ -403,35 +355,20 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
                 logger.exception(
                     "_bg_receipt_feedback: memory write failed hotel_id=%s", hotel_id
                 )
-        else:
-            logger.warning(
-                "_bg_receipt_feedback: no recommendation found hotel_id=%s — skipping memory write",
-                hotel_id,
-            )
 
-    # Step 5: Twilio reply based on confidence
-    try:
         if covers_rejected:
-            # HOS-270: the figure failed the plausibility guard — never drop it
-            # silently. Tell the manager their note was kept but the number wasn't,
-            # and invite a correction.
-            reply = (
-                "I've kept your note, but that covers figure looked outside the usual "
-                "range for your venue, so I didn't record the number. If it's correct, "
-                "please reply with the figure again to confirm."
-            )
-        elif feedback.requires_confirmation:
-            reply = (
-                "I've recorded your note with medium confidence. "
-                "Reply with a thumbs-up to confirm, or ignore to discard."
-            )
-        else:
-            reply = "Noted. I've updated my records and will factor this into tomorrow's recommendations."
-        await _twilio_client.send_whatsapp(from_number, reply)
-    except Exception:
-        logger.warning(
-            "_bg_receipt_feedback: reply send failed for %s", from_number
-        )
+            # The reason prompt must not swallow the re-sent figure.
+            await decisions.cancel_reason_prompt(profile, now)
+            plan = ReplyPlan(text=_COVERS_REJECTED_REPLY)
+
+    await _send_plan(from_number, plan)
+
+
+_COVERS_REJECTED_REPLY = (
+    "I've kept your note, but that covers figure looked outside the usual "
+    "range for your venue, so I didn't record the number. If it's correct, "
+    "please reply with the figure again to confirm."
+)
 
 
 async def _bg_parse_query(

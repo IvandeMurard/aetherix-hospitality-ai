@@ -1,13 +1,21 @@
-"""Deterministic inbound-intent classifier for CI eval (HOS-208 / EVAL-4).
+"""Deterministic keyword heuristic for the parser eval's PLUMBING CHECK (HOS-208).
 
-Analogue of `FakeEmbeddingProvider` (ADR-0002 D11): a deterministic stand-in for
-the Haiku parser so the parser eval is reproducible in CI without hitting the
-Anthropic API (R4 mitigation). The real-quality signal comes from the nightly
-`EVAL_PARSER_BACKEND=real` run, not the PR gate.
+What this is: a stand-in that lets the parser eval pipeline (load → classify →
+metrics → report) run in CI with no API call. Its rules were written to resolve
+the original ``dev`` golden cases, so its agreement with those labels is
+circular by construction and measures nothing about the production parser or
+the model. It is never a quality signal and is never frozen as a baseline
+(ADR-0007 §15).
 
-Classifies a manager reply into the feedback-loop taxonomy
-``accepted | rejected | modified`` with simple, deterministic rules that resolve
-the curated golden scenarios correctly (so the pipeline runs green in CI).
+Where the real signal lives: ``EVAL_PARSER_BACKEND=real``, which grades the
+production path with the model in the loop — opt-in via
+``.github/workflows/eval-parser-real.yml``. Until that workflow has run with an
+API key, parser model quality is **not measured**.
+
+Frozen: do not tune these rules to the ``heldout`` cases. Doing so would only
+re-create the circularity on a larger set.
+
+Classifies a manager reply into ``accepted | rejected | modified``.
 
 Placed under `scripts/eval/` (not `backend/tests/`) because it is an
 eval-*runtime* component consumed by `eval_parser.py` in CI — not merely a unit

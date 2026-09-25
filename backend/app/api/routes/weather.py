@@ -18,6 +18,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.api.tenant_scope import require_user_owns_tenant
 from app.core.security import get_current_user
 from app.db.models import RestaurantProfile
 from app.db.session import AsyncSessionLocal, get_db
@@ -72,17 +73,8 @@ async def trigger_weather_sync(
             )
         property_id = profile.tenant_id
     else:
-        # Verify the property exists
-        result = await db.execute(
-            select(RestaurantProfile).where(
-                RestaurantProfile.tenant_id == property_id
-            )
-        )
-        if not result.scalars().first():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Property '{property_id}' not found.",
-            )
+        # An explicit property must be one the caller owns (ADR-0007 §17.7).
+        await require_user_owns_tenant(db, current_user, property_id)
 
     # Enqueue background task — returns 202 immediately
     background_tasks.add_task(_run_sync, property_id)

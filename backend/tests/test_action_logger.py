@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -208,9 +209,14 @@ async def _fake_db():
     yield session
 
 
+_PROFILE = SimpleNamespace(id=uuid.uuid4(), tenant_id="hotel_t", phone_number="+33600000001")
+
+
 @pytest.fixture(autouse=False)
 def webhook_client(monkeypatch):
-    """TestClient with TWILIO_SKIP_SIGNATURE_VALIDATION=true and no-op DB."""
+    """TestClient with TWILIO_SKIP_SIGNATURE_VALIDATION=true, no-op DB, a known
+    sender, and the decision service stubbed (its logic is covered in
+    tests/services/test_inbound_decision.py)."""
     monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
 
     from app.db.session import get_db
@@ -218,46 +224,49 @@ def webhook_client(monkeypatch):
     app = _make_webhook_app()
     app.dependency_overrides[get_db] = _fake_db
 
+    async def _deterministic(self, profile, body, button_payload, now, request_id=""):
+        from app.services.inbound_decision import ReplyPlan
+
+        action = parse_action(body)
+        if action == ActionType.accept:
+            return ReplyPlan(text="Validation enregistrée.", result="recorded", decision="accepted")
+        if action == ActionType.reject:
+            return ReplyPlan(text="Refus enregistré. Une raison ? (facultatif)",
+                             result="recorded", decision="rejected")
+        return None
+
     with patch(
-        "app.api.routes.twilio_inbound.ActionLoggerService.log_action",
-        new_callable=AsyncMock,
-        return_value={"status": "logged", "recommendation_id": str(uuid.uuid4()), "action": "accepted"},
+        "app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+        new_callable=AsyncMock, return_value=_PROFILE,
+    ), patch(
+        "app.api.routes.twilio_inbound.InboundDecisionService.handle_deterministic",
+        _deterministic,
     ):
         with TestClient(app) as client:
             yield client
 
 
-def test_webhook_accept_returns_twiml_accept_message(webhook_client):
-    """AC#6 + AC#1: Accept reply → TwiML with acceptance confirmation."""
+def test_webhook_accept_returns_twiml_recorded_message(webhook_client):
+    """AC#6 + AC#1: Accept reply → TwiML confirming the recorded decision."""
     resp = webhook_client.post(
         "/webhooks/twilio/inbound",
         data={"From": "+33600000001", "Body": "Accept", "To": "+14155238886"},
     )
     assert resp.status_code == 200
-    assert "Good luck tonight" in resp.text or "accepted" in resp.text.lower()
+    assert "Validation enregistrée" in resp.text
 
 
-def test_webhook_reject_returns_twiml_reject_message(webhook_client):
-    """AC#6 + AC#1: Reject reply → TwiML with rejection message."""
-    with patch(
-        "app.api.routes.twilio_inbound.ActionLoggerService.log_action",
-        new_callable=AsyncMock,
-        return_value={"status": "logged", "recommendation_id": str(uuid.uuid4()), "action": "rejected"},
-    ):
-        resp = webhook_client.post(
-            "/webhooks/twilio/inbound",
-            data={"From": "+33600000001", "Body": "REJECT", "To": "+14155238886"},
-        )
+def test_webhook_reject_returns_twiml_with_optional_reason(webhook_client):
+    resp = webhook_client.post(
+        "/webhooks/twilio/inbound",
+        data={"From": "+33600000001", "Body": "REJECT", "To": "+14155238886"},
+    )
     assert resp.status_code == 200
-    assert "No action will be taken" in resp.text or "rejected" in resp.text.lower()
+    assert "Refus enregistré" in resp.text and "facultatif" in resp.text
 
 
 def test_webhook_unknown_returns_query_ack(webhook_client):
-    """P2-4: Unknown input → receipt-feedback background task → query-ack TwiML.
-
-    The route returns TWIML_QUERY_ACK immediately. _bg_receipt_feedback is mocked
-    out so the test never touches a real DB connection.
-    """
+    """P2-4: free text → receipt-feedback background task → query-ack TwiML."""
     with patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock):
         resp = webhook_client.post(
             "/webhooks/twilio/inbound",
@@ -288,22 +297,23 @@ def test_webhook_response_is_valid_twiml(webhook_client):
     assert root.tag == "Response"
 
 
-def test_webhook_signature_validation_skipped_in_test_mode(monkeypatch):
-    """AC#8: When TWILIO_SKIP_SIGNATURE_VALIDATION=true, no X-Twilio-Signature required."""
+def _no_profile_client(monkeypatch):
     monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
-
     from app.db.session import get_db
 
     app = _make_webhook_app()
     app.dependency_overrides[get_db] = _fake_db
+    return app
 
+
+def test_webhook_signature_validation_skipped_in_test_mode(monkeypatch):
+    """AC#8: When TWILIO_SKIP_SIGNATURE_VALIDATION=true, no X-Twilio-Signature required."""
+    app = _no_profile_client(monkeypatch)
     with patch(
-        "app.api.routes.twilio_inbound.ActionLoggerService.log_action",
-        new_callable=AsyncMock,
-        return_value={"status": "not_found"},
+        "app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+        new_callable=AsyncMock, return_value=None,
     ):
         with TestClient(app) as client:
-            # No X-Twilio-Signature header — should still succeed
             resp = client.post(
                 "/webhooks/twilio/inbound",
                 data={"From": "+33600000001", "Body": "Accept", "To": "+14155238886"},
@@ -311,19 +321,34 @@ def test_webhook_signature_validation_skipped_in_test_mode(monkeypatch):
     assert resp.status_code == 200
 
 
-def test_webhook_unknown_does_not_call_log_action(monkeypatch):
-    """P2-4 + AC#4: Unknown action routes to receipt-feedback path; log_action NOT called."""
-    monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
+def test_webhook_keyword_from_unknown_sender_is_not_recorded(monkeypatch):
+    """A decision with no known sender has nothing to attach to — the old route
+    replied "accepted" even when nothing was found."""
+    app = _no_profile_client(monkeypatch)
+    with patch(
+        "app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+        new_callable=AsyncMock, return_value=None,
+    ), patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock) as bg:
+        with TestClient(app) as client:
+            resp = client.post(
+                "/webhooks/twilio/inbound",
+                data={"From": "+33600000009", "Body": "oui", "To": "+14155238886"},
+            )
+    assert "couldn't find an active recommendation" in resp.text
+    bg.assert_not_called()
 
-    from app.db.session import get_db
 
-    app = _make_webhook_app()
-    app.dependency_overrides[get_db] = _fake_db
-
-    mock_log = AsyncMock()
-
-    with patch("app.api.routes.twilio_inbound.ActionLoggerService.log_action", mock_log), \
-         patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock):
+def test_webhook_free_text_goes_to_background(monkeypatch):
+    """P2-4 + AC#4: free text routes to the receipt-feedback path, not the
+    deterministic one."""
+    app = _no_profile_client(monkeypatch)
+    with patch(
+        "app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+        new_callable=AsyncMock, return_value=_PROFILE,
+    ), patch(
+        "app.api.routes.twilio_inbound.InboundDecisionService.handle_deterministic",
+        new_callable=AsyncMock, return_value=None,
+    ), patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock) as bg:
         with TestClient(app) as client:
             resp = client.post(
                 "/webhooks/twilio/inbound",
@@ -331,4 +356,56 @@ def test_webhook_unknown_does_not_call_log_action(monkeypatch):
             )
 
     assert resp.status_code == 200
-    mock_log.assert_not_called()
+    bg.assert_called_once()
+
+
+def test_webhook_confirmation_with_buttons_sent_out_of_band(monkeypatch):
+    """With buttons enabled, a confirmation goes out via the Content API (REST)
+    and the TwiML response is empty — TwiML cannot carry quick replies."""
+    from app.core import config
+    from app.services.inbound_decision import ReplyPlan
+
+    monkeypatch.setattr(config, "WHATSAPP_DECISION_BUTTONS", True)
+    monkeypatch.setattr(config, "TWILIO_CONTENT_SID_CONFIRM_FR", "HXconfirm")
+    app = _no_profile_client(monkeypatch)
+    plan = ReplyPlan(text="Je note un refus, c'est bien ça ? Répondez OUI ou NON.",
+                     buttons="confirm", result="confirmation_requested", decision="rejected")
+    content = AsyncMock(return_value="SM1")
+    with patch(
+        "app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+        new_callable=AsyncMock, return_value=_PROFILE,
+    ), patch(
+        "app.api.routes.twilio_inbound.InboundDecisionService.handle_deterministic",
+        new_callable=AsyncMock, return_value=plan,
+    ), patch("app.api.routes.twilio_inbound._twilio_client.send_whatsapp_content", content):
+        with TestClient(app) as client:
+            resp = client.post(
+                "/webhooks/twilio/inbound",
+                data={"From": "+33600000001", "Body": "non merci", "To": "+14155238886"},
+            )
+    assert "<Message>" not in resp.text
+    content.assert_awaited_once()
+    assert content.await_args.args[1] == "HXconfirm"
+
+
+def test_webhook_passes_button_payload_to_decision_service(monkeypatch):
+    """Décision #38: a quick-reply tap reaches the deterministic path with its
+    fixed payload id; the typed Body is not what decides."""
+    from app.services.inbound_decision import ReplyPlan
+
+    app = _no_profile_client(monkeypatch)
+    handler = AsyncMock(return_value=ReplyPlan(text="Validation enregistrée.", result="recorded"))
+    with patch(
+        "app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+        new_callable=AsyncMock, return_value=_PROFILE,
+    ), patch(
+        "app.api.routes.twilio_inbound.InboundDecisionService.handle_deterministic", handler,
+    ):
+        with TestClient(app) as client:
+            resp = client.post(
+                "/webhooks/twilio/inbound",
+                data={"From": "+33600000001", "Body": "Accepter", "To": "+14155238886",
+                      "ButtonText": "Accepter", "ButtonPayload": "aetherix.decision.accept"},
+            )
+    assert "Validation enregistrée" in resp.text
+    assert handler.await_args.args[2] == "aetherix.decision.accept"

@@ -137,6 +137,9 @@ class OrchestratorAgent:
                 "is_mock": is_mock,
                 "range_min": forecast.lower,
                 "range_max": forecast.upper,
+                # ADR-0007 §18.2 — passed through untouched (no app.* import).
+                "interval_nominal_level": getattr(forecast, "nominal_level", None),
+                "calibrated_interval": getattr(forecast, "calibrated", None),
             },
             "reasoning": reasoning["summary"],
             "reasoning_detail": reasoning,
