@@ -73,6 +73,30 @@ def _render_guardrail_md(result: dict, diff: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _render_parser_target_md(result: dict) -> list[str]:
+    """Real run on a pinned target (HOS-337): the fields compared across providers."""
+    lines = [
+        "",
+        "## Target",
+        "",
+        f"- **Target**: `{result.get('target')}`  ·  dataset version `{result.get('dataset_version')}`",
+        f"- **Decision accuracy on the model-graded cases**: {_pct(result.get('accuracy_llm_decided'))}"
+        f"  ·  n={result.get('llm_decided_n')}  (comparable across providers: every one of"
+        " these replies reaches the model)",
+        f"- **Model failure rate** (API error or answer failing the schema): "
+        f"{_pct(result.get('llm_failure_rate'))}. A failure is a miss here, never rescued "
+        "by a heuristic; read the rate on its own too.",
+        "",
+        "## Which step settled each case",
+        "",
+        "| Step | n | accuracy |",
+        "|---|---|---|",
+    ]
+    for src, n in (result.get("decided_by") or {}).items():
+        lines.append(f"| {src} | {n} | {_pct((result.get('accuracy_by_source') or {}).get(src))} |")
+    return lines
+
+
 def _render_parser_md(result: dict, diff: dict) -> str:
     """Parser report (EVAL-4, ADR-0007 §15).
 
@@ -159,7 +183,10 @@ def _render_parser_md(result: dict, diff: dict) -> str:
         cm = result["confusion_matrix"]
         for t in INTENTS:
             lines.append(f"| {t} | " + " | ".join(str(cm[t][p]) for p in PREDICTED_LABELS) + " |")
-        lines += ["", f"Decided by: {result.get('decided_by')}"]
+        if result.get("target"):
+            lines += _render_parser_target_md(result)
+        else:
+            lines += ["", f"Decided by: {result.get('decided_by')}"]
 
         breaches = (result.get("thresholds") or {}).get("breaches") or []
         lines.append("")

@@ -76,6 +76,15 @@ def main() -> int:
             print(f"[eval] {layer}: NOT MEASURED — {exc}", file=sys.stderr)
             return 2
 
+        # A real-LLM parser run has its own baseline per (target, dataset
+        # version) — never the fake-backend path the PR gate uses (HOS-337).
+        if layer == "parser" and result.get("target"):
+            bpath = baselines.parser_target_baseline_path(
+                result["target"], result["dataset_version"]
+            )
+        else:
+            bpath = baselines.baseline_path(layer)
+
         if args.update_baseline:
             refusal = (
                 baselines.parser_baseline_freeze_refusal(result) if layer == "parser" else None
@@ -83,10 +92,10 @@ def main() -> int:
             if refusal:
                 print(f"[eval] {layer}: baseline NOT frozen — {refusal}", file=sys.stderr)
                 return 2
-            path = baselines.save_baseline(layer, result)
+            path = baselines.save_baseline_at(bpath, result)
             print(f"[eval] {layer}: baseline frozen -> {path}")
 
-        baseline = baselines.load_baseline(layer)
+        baseline = baselines.load_baseline_at(bpath)
         diff = _DIFFS[layer](result, baseline)
         paths = reporter.write_reports(result, diff, args.json_out, args.md_out)
 
@@ -114,7 +123,8 @@ def main() -> int:
                     f"auto-written {result['auto_write']['n_written']} · "
                     f"trigger auto-writes {result['confirmation_trigger']['auto_written']} · "
                     f"threshold breaches={len(result['thresholds']['breaches'])} · "
-                    f"regressed={diff['regressed']}"
+                    f"regressed={diff['regressed']} · target={result.get('target')} · "
+                    f"model failure rate {(result.get('llm_failure_rate') or 0) * 100:.1f}%"
                 )
             else:
                 summary = (

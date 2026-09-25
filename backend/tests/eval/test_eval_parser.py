@@ -292,6 +292,7 @@ def test_dataset_has_confirmation_trigger_cases():
 
 def test_real_backend_without_key_is_not_measured(monkeypatch):
     monkeypatch.setenv("EVAL_PARSER_BACKEND", "real")
+    monkeypatch.setenv("EVAL_PARSER_TARGET", "claude:claude-haiku-4-5-20251001")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(ParserEvalNotMeasured):
         run()
@@ -307,23 +308,22 @@ def test_run_all_exits_2_when_not_measured(monkeypatch, tmp_path):
 
 
 def _patch_provider(monkeypatch, llm):
-    class _Composite:
-        primary = llm
+    """The pinned target (HOS-337) resolves to the scripted model, never the failover."""
+    from scripts.eval import eval_parser
 
-    import app.providers.factory as factory
-
-    monkeypatch.setattr(factory, "get_llm_provider", lambda: _Composite())
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-not-used")
+    monkeypatch.setattr(eval_parser, "_build_provider", lambda provider, model: llm)
+    monkeypatch.setenv("EVAL_PARSER_TARGET", "claude:scripted-test-model")
     monkeypatch.setenv("EVAL_PARSER_BACKEND", "real")
 
 
-def test_real_backend_uses_primary_and_reports_canary(monkeypatch):
+def test_real_backend_uses_pinned_target_and_reports_canary(monkeypatch):
     llm = _ScriptedLLM({})  # every model reply → modified @ 0.9
     _patch_provider(monkeypatch, llm)
     r = run(runs=3)
     assert r["backend"] == "real" and r["quality_signal"] is True
     assert r["measures"] == "free_text_path_model_included"
     assert r["model"]["provider"] == "scripted/test"
+    assert r["target"] == "claude:scripted-test-model"
     assert r["model"]["temperatures"] == [0.0]  # the production temperature
     assert r["canary"]["runs"] == 3
     assert r["canary"]["identical_predictions"] is True

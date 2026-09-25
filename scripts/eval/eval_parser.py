@@ -17,12 +17,23 @@ Backends (env ``EVAL_PARSER_BACKEND``):
   (`FakeIntentClassifier`) whose rules were written against the ``dev`` cases.
   ``quality_signal: false``, no baseline compared. The deterministic block and the
   ceiling are still computed on the production code (no model involved).
-* ``real`` (opt-in: ``.github/workflows/eval-parser-real.yml``) — grades the
+* ``real`` (opt-in: ``.github/workflows/eval-parser-real.yml`` and the provider
+  matrix ``.github/workflows/eval-parser-matrix.yml``) — grades the
   **production path**, model included, no fallback:
   ``action_logger.parse_action`` → ``ReceiptsService.parse_inbound`` →
   ``receipts.resolve_feedback``, the same calls as ``api/routes/twilio_inbound.py``.
-  Primary provider only. A model error or a schema failure is a typed ``error``.
-  Without ``ANTHROPIC_API_KEY`` the run raises `ParserEvalNotMeasured` → exit 2.
+  A model error or a schema failure is a typed ``error``.
+
+  The model is ONE pinned target (HOS-337, Décision #35 D3):
+  ``EVAL_PARSER_TARGET=<provider>:<exact model id>``, e.g.
+  ``claude:claude-haiku-4-5-20251001`` or ``gemini:gemini-2.0-flash``. An exact
+  identifier, not a tier (a remapped tier would silently change what is measured),
+  called directly, never through ``FallbackLLMProvider`` (a failover mid-run would
+  mix two models into one score). Both tiers of the pinned provider point at that
+  model. No target, or no key for its provider → `ParserEvalNotMeasured` → exit 2.
+  Each run records ``target`` and ``dataset_version`` (content hash of the parser
+  cases); a real baseline is keyed by both, so a Gemini run is never compared to a
+  Claude baseline, nor a run to a baseline scored on other cases.
 
 Model-graded metrics (real backend, cases that reach the model):
 
@@ -43,6 +54,8 @@ records ``accepted`` for a bare acknowledgement; its other branches are unit-tes
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -70,6 +83,11 @@ PRECISION_MIN = 0.85
 _MODEL_STAGES = ("llm", "llm_error", "llm_unmappable")
 
 _NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
+
+# HOS-337 (Décision #35 D3): one pinned provider × exact model per real run.
+TARGET_ENV = "EVAL_PARSER_TARGET"
+PROVIDERS = ("claude", "gemini")
+_KEY_ENV = {"claude": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}
 
 
 def _eval_context():
@@ -408,21 +426,83 @@ def confirmation_trigger(scenarios: list[dict], preds: list[Prediction]) -> dict
     }
 
 
-def _real_llm():
-    key = os.environ.get("ANTHROPIC_API_KEY", "")
+def parse_target(spec: str) -> tuple[str, str]:
+    """`"claude:claude-haiku-4-5-20251001"` → `("claude", "claude-haiku-4-5-20251001")`."""
+    provider, sep, model = spec.strip().partition(":")
+    if not sep or provider not in PROVIDERS or not model:
+        raise SystemExit(
+            f"[eval_parser] invalid {TARGET_ENV}={spec!r} — expected "
+            f"<provider>:<exact model id> with provider in {PROVIDERS}"
+        )
+    return provider, model
+
+
+def dataset_version(scenarios: list[dict]) -> str:
+    """Content hash of the scenarios a run scored (12 hex chars).
+
+    Stand-in for the dataset content version of HOS-339: a baseline is only
+    comparable to a run over the exact same cases, so any edit to them must
+    change the key the baseline is stored under.
+    """
+    canonical = json.dumps(
+        sorted(scenarios, key=lambda s: s.get("id", "")), sort_keys=True, ensure_ascii=False
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
+
+
+def _build_provider(provider: str, model: str):
+    """The pinned provider, both tiers on the exact model, called directly."""
+    key = os.environ.get(_KEY_ENV[provider], "")
     if not key:
         raise ParserEvalNotMeasured(
-            "ANTHROPIC_API_KEY is not set — the real parser eval was NOT MEASURED."
+            f"{_KEY_ENV[provider]} is not set — target {provider}:{model} was NOT MEASURED."
         )
-    from app.providers.factory import get_llm_provider
+    if provider == "claude":
+        from app.providers.claude_provider import ClaudeProvider
 
-    # Fresh provider per run: the cached one holds an HTTP client bound to the
-    # event loop of the previous run. Primary only: a Gemini failover would
-    # silently change the model under test.
-    build = getattr(get_llm_provider, "__wrapped__", get_llm_provider)  # bypass lru_cache
-    provider = build()
-    primary = getattr(provider, "primary", provider)
-    return _RecordingLLM(primary), primary
+        return ClaudeProvider(api_key=key, model=model, fast_model=model)
+    from app.providers.gemini_provider import GeminiProvider
+
+    return GeminiProvider(api_key=key, model=model, fast_model=model)
+
+
+def _real_llm(target: str | None = None):
+    """Fresh pinned provider per run (an SDK client is bound to the event loop of
+    the run that created it). Returns (recording wrapper, provider, target)."""
+    target = target or os.environ.get(TARGET_ENV, "")
+    if not target:
+        raise ParserEvalNotMeasured(
+            f"backend=real needs {TARGET_ENV}=<provider>:<exact model id> — NOT MEASURED."
+        )
+    provider, model = parse_target(target)
+    pinned = _build_provider(provider, model)
+    return _RecordingLLM(pinned), pinned, f"{provider}:{model}"
+
+
+def target_breakdown(result: dict) -> dict:
+    """Per-target fields compared across providers (HOS-337).
+
+    Every graded case reaches the model (the deterministic path is reported
+    apart), so ``accuracy_llm_decided`` is the decision accuracy itself. A model
+    error or unmappable answer is a miss here — nothing rescues it — and is also
+    read as its own rate, the portability signal a formatting gap shows up in.
+    """
+    decided_by: dict[str, int] = {}
+    correct: dict[str, int] = {}
+    for c in result.get("cases", []):
+        decided_by[c["stage"]] = decided_by.get(c["stage"], 0) + 1
+        correct[c["stage"]] = correct.get(c["stage"], 0) + int(c["ok"])
+    n = result.get("n") or 0
+    failures = sum(decided_by.get(s, 0) for s in ("llm_error", "llm_unmappable"))
+    return {
+        "decided_by": dict(sorted(decided_by.items())),
+        "accuracy_by_source": {
+            s: round(correct[s] / k, 4) if k else None for s, k in decided_by.items()
+        },
+        "accuracy_llm_decided": result.get("accuracy"),
+        "llm_decided_n": n,
+        "llm_failure_rate": round(failures / n, 4) if n else None,
+    }
 
 
 def run(dataset: Path = DEFAULT_DATASET, seed: int = 42, runs: int = 1) -> dict:
@@ -446,8 +526,9 @@ def run(dataset: Path = DEFAULT_DATASET, seed: int = 42, runs: int = 1) -> dict:
         graded = [s for s in scenarios if s.get("id") in graded_ids]
         runs_out: list[dict] = []
         meta: dict = {}
+        target = ""
         for _ in range(max(1, runs)):
-            llm, primary = _real_llm()
+            llm, primary, target = _real_llm()
             preds = _run_production(graded + trigger_set, llm)
             graded_preds, trigger_preds = preds[:len(graded)], preds[len(graded):]
             r = compute_parser_metrics(graded, _replay(graded_preds))
@@ -467,8 +548,11 @@ def run(dataset: Path = DEFAULT_DATASET, seed: int = 42, runs: int = 1) -> dict:
             + [(c["predicted"], c["action"]) for c in r["confirmation_trigger"]["cases"]]
             for r in runs_out
         ]
+        result.update(target_breakdown(result))
         result.update({
             "backend": "real",
+            "target": target,
+            "dataset_version": dataset_version(all_parser),
             "measures": "free_text_path_model_included",
             "quality_signal": True,
             "model": meta,

@@ -1143,6 +1143,26 @@ being written silently.
 
 ---
 
+### 15.6 Merge with HOS-337 (25/09/2026)
+
+HOS-337 (Décision #35 D3, PR #264) landed on `main` in parallel: real parser runs
+against ONE pinned target (`EVAL_PARSER_TARGET=<provider>:<exact model id>`, called
+directly, never through the failover), baselines keyed by (target × dataset
+version), a provider matrix workflow and a comparison script. It measured the
+pre-§16 path, where a `free_form` answer was settled by the heuristic.
+
+Merged as follows: the graded path is this section's production path (§15.3,
+§16), and the model under test is HOS-337's pinned target. The real backend
+refuses to run without a target or without the key of the target's provider
+(exit 2, not measured). The per-target fields (`accuracy_llm_decided`,
+`llm_failure_rate`, `decided_by`) are kept, with §16 semantics: every graded reply
+reaches the model; a model error or an answer failing the schema is a miss and is
+also counted in the failure rate — no heuristic rescues it. The source labels of
+the old heuristic path are gone. `eval-parser-real.yml` pins
+`claude:claude-haiku-4-5-20251001`; `eval-parser-matrix.yml` runs Claude and Gemini.
+The structured output HOS-338 (D2) asks for is what §16's `ClassifierOutput`
+provides for the reply classifier.
+
 ## 16. Addendum — 2026-09-24 · Manager decision capture (PO decision on §15.2)
 
 > Trace: CLAUDE.md Décision #38. Resolves the open decision "Inbound reply →

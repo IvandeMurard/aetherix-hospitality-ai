@@ -64,6 +64,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       EVAL_PARSER_BACKEND: real
+      # HOS-337: one pinned provider × exact model id per run (never a tier, never
+      # the failover). The provider matrix (eval-parser-matrix.yml) runs Gemini too.
+      EVAL_PARSER_TARGET: claude:claude-haiku-4-5-20251001
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       RUNS: ${{ github.event.inputs.runs || '3' }}
     steps:

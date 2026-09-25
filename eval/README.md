@@ -153,6 +153,35 @@ milestone. Exit 0 = valid. Wired into CI (`eval-dataset` job).
 
 ---
 
+## Parser on real LLMs — provider matrix (HOS-337, Décision #35 D3)
+
+The PR gate scores the parser with the deterministic `FakeIntentClassifier`: it
+evaluates no LLM. The real-model run is separate, manual, and never blocks a merge.
+
+```bash
+EVAL_PARSER_BACKEND=real EVAL_PARSER_TARGET=claude:claude-haiku-4-5-20251001 \
+ANTHROPIC_API_KEY=... uv run --project backend python -m scripts.eval.run_all --layers parser \
+  --json-out out/claude.json --md-out out/claude.md
+python -m scripts.eval.compare_parser_targets out/claude.json out/gemini.json
+```
+
+Or run the **Eval — parser provider matrix** workflow (`workflow_dispatch`, needs
+the `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` secrets).
+
+- **Target = exact model id, never a tier**, and the provider is called directly,
+  never through the fallback: a failover mid-run would mix two models in one score.
+- **Baselines** live in `eval/baselines/parser/<target>__<dataset version>.json`.
+  The dataset version is a content hash of the scored cases (stand-in until HOS-339).
+- **How to read it.** The run grades the production reply path (ADR-0007 §15-§16).
+  Replies settled before the model (exact keywords, bare acknowledgement, covers
+  pattern) are reported apart as the deterministic block and score the same on every
+  provider; only the replies that reach the model are graded, so **decision accuracy
+  on the model-graded cases** is the number comparable across providers. The model
+  answers in a validated schema and there is no heuristic behind it: an API error or
+  an answer that fails the schema is a miss, and is also reported as the **model
+  failure rate**, where a formatting gap between providers shows up. (Merged
+  25/09/2026: HOS-337's pinned targets on the §15-§16 production path.)
+
 ## Roadmap (ADR-0007 §8)
 
 | Story | Adds |
