@@ -460,6 +460,16 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 - The model returns a stance (schema-validated) and is shown the proposal; the eval grades stance → decision per proposal kind (+25 cases).
 - Host agents (MCP) send decisions, unchanged. **Model stance quality not measured** (no API key).
 
+### 42 — Public status of Aetherix synced to the meta-repo from one curated file (25/09/2026)
+
+**Decision (scope approved by Ivan, PO):** the status of Aetherix shown in the public meta-repo README comes from one curated file, `public-status.yml`, and nowhere else. Applies ADR-0010 (public meta-repo, private nodes) and Décision #33 (honest labels). Guide: `docs/ops/public-status-sync.md`.
+
+- Only status and key elements are synced (name, status, one public sentence, live flag); the vision text stays hand-written. Evidence paths, ids and comments never leave the repo.
+- **`Built` here = merged on main and tested**, not deployed, not used; `deployed` is a separate flag (`true / false / unknown / n/a`) and "live" is shown only for `true`, set after checking the deployed version. Narrower than the taxonomy's wording: the rendered footnote says so.
+- Gate `scripts/ci/check_public_status.py`, blocking CI job on every PR: schema, statuses (taxonomy + `In progress`), every evidence path must exist for `Built`, `verified_on` staleness warning, leak denylist on every public string (ADR-0012 and the Signal Contract never migrate — Décision #31 —, ticket IDs, decision numbers, internal paths, private repo name, secrets, e-mails).
+- Deterministic renderer, no LLM; the Action (`public-status-sync.yml`) opens or updates a PR on the meta-repo (`sync/aetherix-status`), never pushes to its main; no token → "not synced", not a failure; idempotent.
+- The denylist is a net, not a proof: the PR review of the file stays the real control.
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).

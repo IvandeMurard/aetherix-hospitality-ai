@@ -1,0 +1,168 @@
+name: Public status sync
+
+# Pushes the Aetherix status block into the public meta-repo README (ADR-0010),
+# as a pull request there — never to its main. Guide: docs/ops/public-status-sync.md
+#
+#   validate → render → check out the meta-repo → replace the text between
+#   <!-- aetherix-status:start --> and <!-- aetherix-status:end --> → open or
+#   update a PR from `sync/aetherix-status`.
+#
+# Only name / status / description / live flag from public-status.yml ever
+# leave this repo; the renderer re-checks the block against the leak denylist.
+#
+# Missing META_REPO_TOKEN → the job says "NOT SYNCED" (warning + summary) and
+# succeeds: nothing else depends on it. Missing markers in the meta README →
+# the job fails, because that is a broken setup, not an absent one.
+# Idempotent: README already up to date → no PR (an obsolete sync PR is closed).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - public-status.yml
+      - scripts/ci/check_public_status.py
+      - scripts/ci/render_public_status.py
+      - .github/workflows/public-status-sync.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-status-sync
+  cancel-in-progress: false
+
+env:
+  META_REPO: IvandeMurard/Hospitality-Multi-agent-Architecture
+  SYNC_BRANCH: sync/aetherix-status
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install "pyyaml>=6.0,<7"
+
+      - name: Validate public-status.yml
+        run: python scripts/ci/check_public_status.py
+
+      - name: Render the status block
+        run: |
+          python scripts/ci/render_public_status.py --out "$RUNNER_TEMP/aetherix-status.md"
+          {
+            echo "### Rendered Aetherix status block"
+            echo
+            cat "$RUNNER_TEMP/aetherix-status.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Is META_REPO_TOKEN configured?
+        id: token
+        env:
+          META_REPO_TOKEN: ${{ secrets.META_REPO_TOKEN }}
+        run: |
+          if [ -z "$META_REPO_TOKEN" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Public status NOT SYNCED::Secret META_REPO_TOKEN is not set. The block was validated and rendered, but the meta-repo was not touched. See docs/ops/public-status-sync.md."
+            {
+              echo
+              echo "### ⚠️ NOT SYNCED"
+              echo
+              echo "Secret \`META_REPO_TOKEN\` is not set in this repository, so the meta-repo README was not updated."
+              echo "Create the fine-grained token described in \`docs/ops/public-status-sync.md\`, then re-run this workflow."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the meta-repo
+        if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.META_REPO }}
+          token: ${{ secrets.META_REPO_TOKEN }}
+          path: meta
+
+      - name: Replace the marked block
+        id: apply
+        if: steps.token.outputs.present == 'true'
+        run: |
+          set +e
+          result=$(python scripts/ci/render_public_status.py --apply meta/README.md)
+          rc=$?
+          set -e
+          if [ "$rc" -eq 3 ]; then
+            echo "::error title=Public status NOT SYNCED::The meta-repo README has no valid <!-- aetherix-status:start --> / <!-- aetherix-status:end --> pair. Add exactly one pair where the table should go."
+            exit 1
+          fi
+          [ "$rc" -eq 0 ] || exit "$rc"
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the pull request
+        if: steps.token.outputs.present == 'true'
+        working-directory: meta
+        env:
+          GH_TOKEN: ${{ secrets.META_REPO_TOKEN }}
+          RESULT: ${{ steps.apply.outputs.result }}
+        run: |
+          set -euo pipefail
+          base=$(git rev-parse --abbrev-ref HEAD)
+          open_pr=$(gh pr list --repo "$META_REPO" --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // empty')
+
+          if [ "$RESULT" = "unchanged" ]; then
+            echo "README on $base already matches public-status.yml — no PR."
+            if [ -n "$open_pr" ]; then
+              gh pr close "$open_pr" --repo "$META_REPO" --delete-branch \
+                --comment "Closed automatically: \`$base\` already carries this status block."
+              echo "Closed obsolete sync PR #$open_pr."
+            fi
+            echo "✅ Already in sync — nothing to do." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Skip the push when the sync branch already carries exactly this README
+          # (a re-run must not create a new commit, nor a second PR).
+          same=false
+          if git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null 2>&1; then
+            git fetch -q origin "$SYNC_BRANCH"
+            if git show "origin/$SYNC_BRANCH:README.md" | cmp -s - README.md; then
+              same=true
+            fi
+          fi
+
+          if [ "$same" = false ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -q -B "$SYNC_BRANCH"
+            git add README.md
+            git commit -q -m "docs: sync Aetherix status block"
+            # The sync branch belongs to this workflow and is rebuilt from $base
+            # on every run; manual commits on it are overwritten by design.
+            git push -q --force origin "$SYNC_BRANCH"
+          fi
+
+          body=$(cat <<'EOF'
+          Automated update of the Aetherix status table — only the text between
+          `<!-- aetherix-status:start -->` and `<!-- aetherix-status:end -->` changes.
+
+          Generated deterministically from the node's curated status file, after its
+          schema, evidence and leak checks passed. The vision text is not touched.
+
+          Review the diff, then merge. This workflow never pushes to the default branch.
+          EOF
+          )
+
+          if [ -z "$open_pr" ]; then
+            url=$(gh pr create --repo "$META_REPO" --base "$base" --head "$SYNC_BRANCH" \
+              --title "docs: sync Aetherix status" --body "$body")
+            echo "✅ Opened $url" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh pr edit "$open_pr" --repo "$META_REPO" --body "$body" >/dev/null
+            echo "✅ Updated sync PR #$open_pr" >> "$GITHUB_STEP_SUMMARY"
+          fi

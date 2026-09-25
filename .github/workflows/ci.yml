@@ -167,6 +167,32 @@ jobs:
         run: python scripts/eval/validate_dataset.py
 
   # ---------------------------------------------------------------------------
+  # Public status file (ADR-0010) — the only source of the Aetherix status block
+  # in the public meta-repo README. Schema, taxonomy, evidence on this branch,
+  # leak denylist. Blocking.
+  #
+  # Runs on every PR, not only those touching public-status.yml: a PR that
+  # renames or deletes an evidence file breaks a "Built" claim without touching
+  # the status file, and this is the PR that must see it. The check is instant.
+  # A stale `verified_on` is a warning, never a failure.
+  # ---------------------------------------------------------------------------
+  public-status:
+    name: public-status
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install "pyyaml>=6.0,<7"
+
+      - name: Validate public-status.yml
+        run: python scripts/ci/check_public_status.py
+
+  # ---------------------------------------------------------------------------
   # HOS-320 D1 — CLAUDE.md and AGENTS.md must stay twins.
   #
   # Blocking on every PR, unlike the other three detectors which stay on the
