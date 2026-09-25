@@ -287,7 +287,7 @@ class TestRecommendationFormatterAtomicity:
         from zoneinfo import ZoneInfo
 
         service._load_decision_context = AsyncMock(
-            return_value={"locale": None, "tz": ZoneInfo("UTC"), "commit_offsets": {}}
+            return_value={"locale": None, "tz": ZoneInfo("UTC"), "commit_offsets": {}, "rates_set": False}
         )
         result = await service._format_and_upsert(db, row)
 

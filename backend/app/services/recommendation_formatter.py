@@ -75,6 +75,7 @@ def format_message(
     window_start: datetime,
     window_end: datetime,
     factor: str,
+    show_money: bool = True,
 ) -> str:
     """Build the plain-text staffing directive.
 
@@ -82,6 +83,10 @@ def format_message(
         "Add {headcount} staff to capture an estimated {money(revenue)} in
         additional covers between {HH:MM}–{HH:MM}. Est. additional labour
         cost: {money(labor)}. Trigger: {factor}."  (currency: config.CURRENCY)
+
+    ``show_money=False`` (ADR-0007 §18.3): the hotel set no rates, so the ROI
+    amounts rest on placeholder defaults — they are not shown:
+        "Add {headcount} staff for {HH:MM}–{HH:MM}. Trigger: {factor}."
 
     For **lulls**:
         "Consider reducing staffing by {abs(headcount)} for the
@@ -91,6 +96,8 @@ def format_message(
     start_str = window_start.strftime("%H:%M")
     end_str = window_end.strftime("%H:%M")
 
+    if direction == "surge" and not show_money:
+        return f"Add {headcount} staff for {start_str}–{end_str}. Trigger: {factor}."
     if direction == "surge":
         return (
             f"Add {headcount} staff to capture an estimated "
@@ -294,6 +301,10 @@ class RecommendationFormatterService:
         ws = window_start if isinstance(window_start, datetime) else datetime.fromisoformat(str(window_start))
         we = window_end if isinstance(window_end, datetime) else datetime.fromisoformat(str(window_end))
 
+        # ADR-0007 §18.3: per-hotel context first — the message shows money only
+        # when the hotel set its own rates (the ROI defaults are placeholders).
+        ctx = await self._load_decision_context(db, tenant_id, property_id)
+
         message = format_message(
             direction=direction,
             headcount=headcount,
@@ -302,6 +313,7 @@ class RecommendationFormatterService:
             window_start=ws,
             window_end=we,
             factor=factor,
+            show_money=bool(ctx["rates_set"]),
         )
 
         now = datetime.now(tz=timezone.utc)
@@ -309,7 +321,6 @@ class RecommendationFormatterService:
         # ADR-0007 §18.1 — point of no return: the task class, its commit point
         # and the correction window left when the recommendation is issued. Shown
         # to the manager only when it matters (closing or passed); always stored.
-        ctx = await self._load_decision_context(db, tenant_id, property_id)
         task_class = task_classes.for_direction(direction)
         window = task_classes.correction_window(
             task_class, ws, now, offset_hours=ctx["commit_offsets"].get(task_class.value)
@@ -410,17 +421,34 @@ class RecommendationFormatterService:
         """
         from app.services.decision_recap import _tz
 
-        ctx: Dict[str, Any] = {"locale": None, "tz": _tz(), "commit_offsets": {}}
+        ctx: Dict[str, Any] = {
+            "locale": None, "tz": _tz(), "commit_offsets": {}, "rates_set": False,
+        }
         try:
             async with db.begin_nested():
                 row = (
                     await db.execute(
-                        text("SELECT manager_locale FROM restaurant_profiles WHERE id = :pid"),
+                        text(
+                            "SELECT manager_locale, avg_spend_per_cover, staff_hourly_rate "
+                            "FROM restaurant_profiles WHERE id = :pid"
+                        ),
                         {"pid": str(property_id)},
                     )
                 ).fetchone()
             if row is not None:
                 ctx["locale"] = row[0]
+                ctx["rates_set"] = row[1] is not None and row[2] is not None
         except Exception:  # noqa: BLE001 — degrade-open
             logger.debug("recommendation_formatter: locale lookup failed for %s", property_id)
+        # ADR-0007 §18.3: the hotel's own parameters (commit offsets, costs).
+        # Missing or unreadable → catalog defaults for offsets, no money.
+        from app.services import hotel_parameters
+
+        ctx["params"] = hotel_parameters.HotelParameters(tenant_id=str(tenant_id))
+        try:
+            async with db.begin_nested():
+                ctx["params"] = await hotel_parameters.load(db, str(tenant_id))
+            ctx["commit_offsets"] = ctx["params"].commit_offsets()
+        except Exception:  # noqa: BLE001 — degrade-open
+            logger.debug("recommendation_formatter: parameter lookup failed for %s", tenant_id)
         return ctx

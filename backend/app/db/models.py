@@ -391,6 +391,34 @@ class StaffingRecommendation(Base):
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class HotelDecisionParameter(Base):
+    """Per-hotel decision parameter — costs, labour constraints, commit offsets
+    (ADR-0007 §18.3, Décision #40). Append-only: the value in force is the
+    latest row per (tenant_id, parameter); a row with ``value`` NULL clears it.
+    Every row records who set it, through which surface, and when. Money
+    values carry the currency they were entered in; a value in another
+    currency than ``config.CURRENCY`` is never used (no conversion, no €).
+    Mirror of migration 20260925110000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "hotel_decision_parameters"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=False)
+    parameter = Column(String, nullable=False)
+    value = Column(Numeric(12, 2), nullable=True)
+    unit = Column(String, nullable=False)                 # money | covers | staff | hours
+    currency = Column(String, nullable=True)              # ISO 4217 for money values
+    set_by = Column(String, nullable=False)               # user id / email, or proposal:<id>
+    set_via = Column(String, nullable=False)              # dashboard_api | ops | proposal_approval
+    note = Column(Text, nullable=True)
+    set_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_hotel_decision_parameters_tenant_param", "tenant_id", "parameter", "set_at"),
+    )
+
+
 class ManagerPrompt(Base):
     """Pending HITL prompt sent to a manager (Décision #38, ADR-0007 §16).
 

@@ -1669,3 +1669,45 @@ step once realised covers exist.
   interval stored at issue time against realised covers, flagged
   `independent_actuals=false` while actuals are manager-declared (§16.6).
   Wired to data in §18.5; **not measured** — no realised covers exist.
+
+### 18.3 Costs configured per hotel, never invented
+
+`hotel_decision_parameters` (migration `20260925110000`, RLS service-role
+only) + `backend/app/services/hotel_parameters.py` + route
+`/api/v1/hotels/{tenant_id}/decision-parameters` (dashboard user, owner or
+superuser via `tenant_scope.require_user_owns_tenant`; `GET` values + catalog,
+`GET …/history`, `PUT …/{parameter}` with `value: null` to clear).
+
+| Parameter | Unit | Bounds | Read by |
+|---|---|---|---|
+| `extra_shift_cost` | money | ]0, 2000] | staffing (cost of adding one shift, saving of removing one) |
+| `lost_cover_value` | money | ]0, 1000] | staffing (value of a cover not served — margin or revenue, the hotel says which in the note) |
+| `food_cost_per_cover`, `stockout_cost_per_cover` | money | ]0, 500] / ]0, 1000] | food prep (catalogued, not recommended today) |
+| `covers_per_extra_staff` | covers | [1, 200] | staffing (labour constraint: covers one extra person serves in the window) |
+| `max_extra_staff`, `max_staff_reduction` | staff (whole) | [0, 50] | staffing caps |
+| `risk_display_min_gap` | money | [0, 100000] | interruption budget (§18.4) |
+| `commit_offset_hours.<task class>` | hours | [0, 720] | correction window (§18.1) |
+
+- **Missing → no money.** Nothing reads the legacy
+  `restaurant_profiles.staff_hourly_rate` / `avg_spend_per_cover` or the
+  `config.DEFAULT_*` placeholders for a risk statement: they carry no record of
+  who set them, and the defaults are simulator placeholders.
+- **Refused, never clamped**, when out of bounds (422); staff counts are whole.
+- **Provenance:** append-only; each row has `set_by` (user e-mail/id, or
+  `proposal:<id>`), `set_via` (`dashboard_api` | `ops` | `proposal_approval`),
+  `set_at`, optional note. The value in force is the latest row. The
+  parameters' `version()` (latest `set_at`) is stored with each risk
+  assessment (§18.4).
+- **Currency:** money rows record the currency entered (`config.CURRENCY`); if
+  the configured currency changes, those values are ignored (listed), never
+  converted.
+- **DSAR:** `set_by` is an e-mail → REVIEW step (audit trail, pseudonymise
+  rather than delete); table added to `PII_TABLES`.
+- **Existing message fixed:** the surge message showed "capture an estimated
+  €X … labour cost €Y" computed from the placeholder defaults whenever the
+  hotel had not set its rates. It now shows money only when the hotel set both
+  legacy rates; otherwise "Add N staff for HH:MM–HH:MM. Trigger: …". The ROI
+  gate that selects which anomalies become recommendations still uses the
+  defaults internally (unchanged, not shown).
+- The hotel's `commit_offset_hours.*` now replace the catalog defaults in the
+  correction window (§18.1), which then stops saying "default".

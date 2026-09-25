@@ -78,6 +78,8 @@ REQUIRED_TABLES: dict[str, str] = {
     # Décision #38 — manager decision capture (migration 20260924120000).
     "manager_prompts": "tenant_id",
     "inbound_reply_events": "tenant_id",
+    # Décision #40 — per-hotel decision parameters (migration 20260925110000).
+    "hotel_decision_parameters": "tenant_id",
 }
 
 # Tables that may exist but are not in scope for this audit (no tenant column,

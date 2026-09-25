@@ -78,6 +78,13 @@ CREATE TABLE IF NOT EXISTS demand_anomalies (
     recommendation_text TEXT
 );
 
+CREATE TABLE IF NOT EXISTS restaurant_profiles (
+    id TEXT PRIMARY KEY,
+    manager_locale TEXT,
+    avg_spend_per_cover REAL,
+    staff_hourly_rate REAL
+);
+
 CREATE TABLE IF NOT EXISTS staffing_recommendations (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -458,6 +465,11 @@ async def test_recommendation_includes_labor_cost(session: AsyncSession):
     aid = _anomaly_id()
     tid = _tenant_id()
     await _insert_anomaly(session, anomaly_id=aid, tenant_id=tid, roi_labor_cost=180.0)
+    # ADR-0007 §18.3: money is shown only when the hotel set its own rates.
+    await session.execute(text(
+        "INSERT INTO restaurant_profiles (id, avg_spend_per_cover, staff_hourly_rate) "
+        "VALUES ('prop-001', 38, 16)"
+    ))
 
     svc = RecommendationFormatterService()
     await svc.run_for_property(session, property_id="prop-001")
@@ -467,6 +479,25 @@ async def test_recommendation_includes_labor_cost(session: AsyncSession):
         {"aid": aid},
     )).fetchone()
     assert "180" in row[0]
+
+
+@pytest.mark.asyncio
+async def test_no_money_in_message_when_hotel_set_no_rates(session: AsyncSession):
+    """ADR-0007 §18.3: ROI amounts computed from placeholder defaults are not shown."""
+    aid = _anomaly_id()
+    await _insert_anomaly(session, anomaly_id=aid, tenant_id=_tenant_id(), roi_labor_cost=180.0)
+    await RecommendationFormatterService().run_for_property(session, property_id="prop-001")
+    msg = (await session.execute(
+        text("SELECT message_text FROM staffing_recommendations WHERE anomaly_id = :aid"),
+        {"aid": aid},
+    )).fetchone()[0]
+    assert "180" not in msg and "€" not in msg
+    assert msg.startswith("Add 1 staff for ") and "Trigger: Tech conference nearby." in msg
+
+
+def test_format_message_surge_without_money():
+    msg = format_message("surge", 2, 800.0, 180.0, _T0, _T1, "concert", show_money=False)
+    assert msg == "Add 2 staff for 18:00–21:00. Trigger: concert."
 
 
 @pytest.mark.asyncio

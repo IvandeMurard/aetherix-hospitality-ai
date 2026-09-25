@@ -264,6 +264,22 @@ def build_erasure_plan(subject: Subject) -> list[Step]:
         )
     )
 
+    order += 1
+    steps.append(
+        Step(
+            order=order,
+            table="hotel_decision_parameters",
+            action=Action.REVIEW,
+            target="set_by == email du sujet | balayage textuel sur note",
+            rationale=(
+                "ADR-0007 §18.3 : set_by est l'e-mail de l'utilisateur qui a réglé un "
+                "coût ou une contrainte ; la ligne est la trace d'audit de la valeur "
+                "(qui, quand), conservable au titre de l'art. 17(3)(b). Arbitrage "
+                "humain : pseudonymiser set_by plutôt que supprimer la valeur."
+            ),
+        )
+    )
+
     if subject.email:
         order += 1
         steps.append(
@@ -429,5 +445,7 @@ PII_TABLES: frozenset[str] = frozenset(
         "inbound_reply_events",
         # ADR-0007 §17.4 — reason_detail / reason_evidence (agent hôte, texte libre).
         "staffing_recommendations",
+        # ADR-0007 §18.3 — set_by (e-mail de qui a réglé la valeur) + note libre.
+        "hotel_decision_parameters",
     }
 )

@@ -24,6 +24,7 @@ from app.api.routes import (
     dashboard,
     demo,
     events,
+    hotel_parameters,
     mcp_v1,
     notifications,
     pms,
@@ -235,6 +236,8 @@ app.include_router(roi.router, prefix="/api/v1")
 app.include_router(receipts_route.router, prefix="/api/v1")
 # P3-3 Trust-KPI — recommendation_acceptance_rate timeseries (HOS-177)
 app.include_router(kpi_route.router, prefix="/api/v1")
+# ADR-0007 §18.3 — per-hotel decision parameters (dashboard user, owner-scoped)
+app.include_router(hotel_parameters.router, prefix="/api/v1")
 # Aetherix MCP Server v1 — atomic tools (ADR-0004). v0 (/mcp/v0/) retired
 # 2026-08-01 per its announced Sunset header (Décision #19, HOS-315).
 app.include_router(mcp_v1.router)
