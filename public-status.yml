@@ -1,0 +1,264 @@
+# Public status of the Aetherix node — the ONLY source of the status block in the
+# public meta-repo README (between the aetherix-status markers).
+#
+# Curated by hand, reviewed in PRs. A change to a public capability updates this file.
+# Guide: docs/ops/public-status-sync.md
+#
+# Rules (enforced by scripts/ci/check_public_status.py on every PR):
+#   - status is one of: Built | Shadow-mode | Synthetic PoC | In progress | Design | Research
+#     (status taxonomy: docs/context/status-taxonomy.md; "In progress" = partly merged,
+#     not usable yet).
+#   - "Built" here means MERGED on main and covered by tests. It does NOT mean deployed
+#     and does NOT mean used: this node has zero real users.
+#   - deployed: true | false | unknown | n/a. The public table says "Yes" (live) only for
+#     true, and true is set only after checking the deployed version, never by assumption.
+#     n/a = not a runtime service (a CI gate, an eval harness).
+#   - evidence: repo-relative paths that must exist on main for "Built". Evidence is
+#     never rendered or synced — only name, status, description and deployed are public.
+#   - name / description are published verbatim: no ticket IDs, no decision or ADR
+#     numbers, no internal paths, no private repo name, no e-mail, nothing secret-looking.
+#   - Design and Research describe what WOULD be done, not "the system does".
+#   - verified_on = the day someone last checked this entry against main. Older than
+#     max_age_days → warning.
+
+schema_version: 1
+max_age_days: 60
+
+entries:
+  - id: fnb-node
+    name: F&B execution node
+    status: Built
+    deployed: unknown
+    description: >-
+      Backend that turns covers, staffing and demand signals into recommendations for
+      an F&B manager; zero real users so far.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/main.py
+      - backend/app/services/prediction_engine.py
+
+  - id: covers-forecast
+    name: Covers forecast
+    status: Shadow-mode
+    deployed: unknown
+    description: >-
+      Benchmarked on real public restaurant data (ahead of a naive baseline on mean
+      error, level with it on the median); no manager decision has been delivered on it.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/prediction_engine.py
+      - docs/context/mape-benchmark.md
+
+  - id: daily-receipt
+    name: Daily receipt
+    status: Built
+    deployed: unknown
+    description: >-
+      Daily WhatsApp and e-mail digest of what was recommended, what was decided and
+      what happened.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/receipts.py
+      - backend/app/workers/receipts_dispatcher.py
+
+  - id: mcp-server
+    name: MCP server
+    status: Built
+    deployed: unknown
+    description: >-
+      Atomic, tenant-scoped MCP tools so a host agent can read recommendations and
+      record decisions; no external consumer yet.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/mcp_server.py
+
+  - id: operational-memory
+    name: Operational memory
+    status: Built
+    deployed: unknown
+    description: >-
+      Per-property vector memory of past services and outcomes; it has only ever held
+      synthetic data.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/memory_service.py
+      - backend/app/services/memory_recall_service.py
+
+  - id: runtime-guardrails
+    name: Runtime guardrails
+    status: Built
+    deployed: unknown
+    description: >-
+      Heartbeat, error-rate alerting, forecast circuit-breaker and output bounds, each
+      trip logged with a machine-readable reason; exercised in CI, not in a real incident.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/forecast_guardrail.py
+      - backend/app/services/output_sanity.py
+      - backend/app/workers/heartbeat.py
+
+  - id: eval-gate
+    name: Blocking eval gate
+    status: Built
+    deployed: n/a
+    description: >-
+      Offline evals on a golden dataset run in CI and block a merge on regression.
+    verified_on: 2026-09-25
+    evidence:
+      - .github/workflows/eval-gate.yml
+      - scripts/ci/check_eval_coverage.py
+      - eval/golden_dataset.jsonl
+
+  - id: decision-ledger
+    name: Decision ledger
+    status: Built
+    deployed: unknown
+    description: >-
+      Links each recommendation to the response it got and the outcome that followed,
+      in one auditable record.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/decision_ledger.py
+
+  - id: decision-capture
+    name: Decision capture with confirmation
+    status: Built
+    deployed: unknown
+    description: >-
+      A manager's reply is read as a stance on the proposal, deterministically first;
+      an uncertain reading is confirmed before anything is recorded. Model reading
+      quality not yet measured.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/manager_decision.py
+      - backend/app/services/inbound_decision.py
+      - backend/tests/services/test_manager_decision.py
+
+  - id: tap-to-answer
+    name: Tap-to-answer buttons
+    status: In progress
+    deployed: false
+    description: >-
+      Accept / reject buttons on the recommendation message; code is behind a flag,
+      waiting for messaging template approval.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/integrations/twilio_client.py
+
+  - id: decision-recap
+    name: Decision recap
+    status: Built
+    deployed: unknown
+    description: >-
+      Deterministic recap of recent recommendations, decisions and outcomes, on demand
+      in chat or through an MCP tool; no model, no estimated money.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/decision_recap.py
+      - backend/tests/services/test_decision_recap.py
+
+  - id: decision-provenance
+    name: Decision provenance and agent reasons
+    status: Built
+    deployed: unknown
+    description: >-
+      Every decision records who made it, and an agent caller must give a structured
+      reason; an agent's inference is never stored as a human decision.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/decision_provenance.py
+      - backend/app/services/decision_policy.py
+
+  - id: host-agent-autonomy
+    name: Host-agent autonomy
+    status: Design
+    deployed: false
+    description: >-
+      A host agent would decide on its own only under an explicit, reviewed policy;
+      today every decision requires human validation.
+    verified_on: 2026-09-25
+    evidence:
+      - docs/adr/0013-decision-autonomy-policy.md
+
+  - id: parser-eval
+    name: Reply-reading eval on a pinned model
+    status: Built
+    deployed: n/a
+    description: >-
+      Grades the production reply path against one pinned model version; no real-model
+      score exists yet.
+    verified_on: 2026-09-25
+    evidence:
+      - scripts/eval/eval_parser.py
+      - .github/workflows/eval-parser-real.yml
+
+  - id: correction-window
+    name: Point of no return per decision type
+    status: Built
+    deployed: unknown
+    description: >-
+      Each recommendation carries the last moment it can still be changed; the timings
+      are defaults until a hotel sets its own.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/task_classes.py
+
+  - id: calibrated-intervals
+    name: Calibrated forecast intervals
+    status: Synthetic PoC
+    deployed: false
+    description: >-
+      Forecast uncertainty intervals recalibrated on synthetic data only; not measured
+      on real covers.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/forecast_calibration.py
+      - eval/baselines/forecast_calibration_baseline.json
+
+  - id: hotel-parameters
+    name: Per-hotel costs and limits
+    status: Built
+    deployed: unknown
+    description: >-
+      Bounded, audited per-hotel costs and limits; while none is set, no amount of money
+      is ever shown. No hotel has set any.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/hotel_parameters.py
+
+  - id: risk-recommendations
+    name: Risk-bearing recommendations
+    status: Built
+    deployed: unknown
+    description: >-
+      Each recommendation states what follows if accepted and if refused; probabilities
+      and amounts only when calibrated and configured, otherwise qualitative.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/risk_assessment.py
+      - backend/tests/services/test_risk_assessment.py
+
+  - id: learning-loop
+    name: Learning loop with named approval
+    status: Built
+    deployed: unknown
+    description: >-
+      A weekly pass proposes recalibrations that apply only after a named person
+      approves, with rollback; tested on constructed data, nothing learned from real
+      outcomes yet.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/services/learning_loop.py
+      - backend/app/workers/learning_loop_worker.py
+      - backend/tests/services/test_learning_loop.py
+
+  - id: model-portability
+    name: Model portability
+    status: Design
+    deployed: false
+    description: >-
+      A second model provider would be admitted only after passing the same eval gate;
+      none has yet. Services already request a capability tier, never a model.
+    verified_on: 2026-09-25
+    evidence:
+      - backend/app/providers/base.py
