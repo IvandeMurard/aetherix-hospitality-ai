@@ -484,6 +484,18 @@ class RecommendationFormatterService:
             ctx["commit_offsets"] = ctx["params"].commit_offsets()
         except Exception:  # noqa: BLE001 — degrade-open
             logger.debug("recommendation_formatter: parameter lookup failed for %s", tenant_id)
+        # ADR-0007 §18.5: a realised-outcome calibration approved for this
+        # tenant (learning_items) takes precedence over a file-based one.
+        ctx["calibration"] = None
+        try:
+            from app.services import learning_store
+
+            async with db.begin_nested():
+                ctx["calibration"] = await learning_store.active_calibration(
+                    db, str(tenant_id), risk_assessment.ANOMALY_FORECASTER
+                )
+        except Exception:  # noqa: BLE001 — no calibration → qualitative, never a guess
+            logger.debug("recommendation_formatter: calibration lookup failed for %s", tenant_id)
         return ctx
 
     @staticmethod
@@ -505,10 +517,12 @@ class RecommendationFormatterService:
             c, c_source = float(ctx["covers_per_server"]), "profile_ratio"
         point = float(expected_demand) if expected_demand is not None else 0.0
         base = float(baseline_demand) if baseline_demand is not None else point
-        try:
-            calibration = load_active(risk_assessment.ANOMALY_FORECASTER)
-        except Exception:  # noqa: BLE001 — no calibration → qualitative, never a guess
-            calibration = None
+        calibration = ctx.get("calibration")
+        if calibration is None:
+            try:
+                calibration = load_active(risk_assessment.ANOMALY_FORECASTER)
+            except Exception:  # noqa: BLE001 — no calibration → qualitative, never a guess
+                calibration = None
         fallback = int(fallback_headcount) if direction == "surge" else -abs(int(fallback_headcount))
         assessment = risk_assessment.assess(risk_assessment.Inputs(
             task_class=task_classes.for_direction(direction),

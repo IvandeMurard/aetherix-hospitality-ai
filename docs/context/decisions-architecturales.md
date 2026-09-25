@@ -440,7 +440,14 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 ### 40 — Risk-bearing recommendations and the learning loop (25/09/2026)
 
-**Decision (scope approved by Ivan):** every recommendation carries its risk (if accepted / if refused) and the outcome loop changes the system under safeguards. Detail: **ADR-0007 §18**. Built so far: point of no return per task class (`task_classes.py`, catalog `task-classes-v1`; commit offsets are labelled defaults until a hotel sets its own), stored on every staffing recommendation, surfaced when the window is closing or passed, fed to ADR-0013 §2.4.5 as an input (ADR-0013 stays **proposed**).
+**Decision (scope approved by Ivan):** every recommendation carries its risk (if accepted / if refused) and the outcome loop changes the system under safeguards. Detail: **ADR-0007 §18**, one-page loop: `docs/context/learning-loop.md`.
+
+- §18.1 point of no return per task class (`task_classes.py`; offsets = labelled defaults until the hotel sets its own), stored on every recommendation, surfaced when closing/passed, input to ADR-0013 §2.4.5 (ADR-0013 stays **proposed**).
+- §18.2 calibration first: Prophet interval measured and recalibrated (split-conformal) — **synthetic only** (0.667 → 0.881 at nominal 80 %, n=126, 3 identical runs), blocking `--check` in the eval gate; a calibration is keyed on forecaster × training data; none exists for the anomaly forecaster.
+- §18.3 costs per hotel, never invented: bounded, append-only, who/when; missing → no money; the old message's € from placeholder defaults removed.
+- §18.4 newsvendor rule with recorded fallback; typed per-option consequences; interruption budget; recap + MCP `get_pending_recommendations`.
+- §18.5 learning loop: arm C risk-statement calibration + arm B alert, realised recalibration (canary, freeze rule, Ivan activates, rollback), cost proposals (hotel or Ivan approves), routed reasons to review, case-set → eval case after review; hygiene rules tested.
+- **Nothing measured on real data**; every real recommendation today uses the fallback rule with qualitative lines.
 
 ## Notes de maintenance
 

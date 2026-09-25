@@ -424,6 +424,45 @@ class HotelDecisionParameter(Base):
     )
 
 
+class LearningItem(Base):
+    """One thing the learning loop proposes — never applied without a named
+    approver (ADR-0007 §18.5, Décision #40).
+
+    kind: cost_parameter | calibration | eval_case | memory_note |
+          decision_rule_note | policy_note | upstream_filter_note
+    status: proposed → approved | rejected | superseded; applied (the change
+            took effect); retired (a calibration rolled back or replaced).
+    reviewer_role: hotel (owner or superuser may decide) | ivan (superuser only).
+    subject: what it is about (parameter name, forecaster id, route).
+    A calibration item with status ``applied`` IS the active realised
+    calibration of that tenant × forecaster; rollback retires it and
+    re-applies the previous one.
+    Mirror of migration 20260925130000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "learning_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=False)
+    kind = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="proposed")
+    reviewer_role = Column(String, nullable=False)
+    payload = Column(JSONB, nullable=False)
+    evidence = Column(JSONB, nullable=True)
+    independent_actuals = Column(Boolean, nullable=True)
+    source_ref = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    decided_by = Column(String, nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    decision_note = Column(Text, nullable=True)
+    applied_ref = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index("idx_learning_items_tenant_kind_status", "tenant_id", "kind", "status"),
+    )
+
+
 class ManagerPrompt(Base):
     """Pending HITL prompt sent to a manager (Décision #38, ADR-0007 §16).
 

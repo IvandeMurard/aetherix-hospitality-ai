@@ -1774,8 +1774,58 @@ is that Δ (so the §17.8 "proposes a change" test follows it), the task class
 follows its sign, and the message says "Add N staff …", "Consider reducing …"
 or "Keep the usual staffing … (risk-balanced)".
 
-**Seen, not changed:** a lull anomaly never becomes a recommendation (its ROI
-is 0 by construction, so it never reaches `roi_positive`), and its message
+**Seen, not changed:** a lull anomaly never becomes a recommendation
+(`calculate_for_anomaly` returns net ROI 0 for lulls and only net ROI > 0 is
+promoted to `roi_positive` — `roi_calculator.py`), and its message
 would read "reducing staffing by 0" (`recommended_headcount` returns 0 for
 lulls). Reduction recommendations therefore only exist through the newsvendor
 path once it runs.
+
+### 18.5 Learning continuously from what actually happened
+
+End to end, one page: **[`docs/context/learning-loop.md`](../context/learning-loop.md)**
+(what is learned, from which signal, how often, who approves, how it is
+evaluated, how it is rolled back). In short:
+
+- **Arm C, risk statements:** `learning_loop.risk_statement_calibration` —
+  for each decided recommendation with a realised actual, the option taken,
+  its stated shortfall probability (or band) and whether the shortfall
+  happened; per task class × decider × calibration version (before/after
+  split); Brier, reliability bins. **Arm B:** a miscalibrated group (n ≥ 30,
+  gap > max(10 pp, 2 SE)) → typed trip `risk_statement_miscalibrated` +
+  ops anomaly.
+- **Recalibration schedule:** weekly pass proposes a realised calibration per
+  tenant × forecaster (≥ 60 points, later third held out); canary (3
+  identical recomputations) and the §18.2 freeze rule, plus "closer to nominal
+  than the active one"; **activation by Ivan only**; rollback re-applies the
+  previous version (the calibration is rolled back, not the service). An
+  approved calibration of the anomaly forecaster is what finally lets the
+  newsvendor rule (§18.4) run on real recommendations.
+- **Cost parameters:** proposals only (`learning_items`), never applied
+  silently: `lost_cover_value` from the revealed critical ratio of human
+  decisions, `max_extra_staff` from constraint rejections; approval by the
+  hotel or Ivan writes the parameter with `set_via = proposal_approval` and
+  the proposal id in `set_by`.
+- **Overrides and reasons → destination:** each routed reason becomes a
+  review item (memory, decision rule, policy, case set, upstream filter);
+  a case-set item becomes an eval case only once Ivan writes its expected
+  output; `scripts/eval/export_case_candidates.py` appends it to the golden
+  dataset (dated zone) and re-validates the file.
+- **Hygiene** (tested): human vs agent separate; `agent_inferred` reasons
+  ignored; outcomes never relabel decisions; manager-declared actuals flagged
+  `independent_actuals = false`.
+- New table `learning_items` (migration `20260925130000`, RLS service role,
+  DSAR REVIEW step); weekly job `learning_loop` (Mon 03:40); review API
+  `/api/v1/hotels/{tenant}/learning/*`.
+
+### 18.6 What is and is not measured (25/09/2026)
+
+| Item | Status |
+|---|---|
+| Correction window per task class | Built, stored on every recommendation. Offsets are **defaults (assumptions)**; no hotel has set its own |
+| Prophet interval calibration | **Synthetic only**: 0.667 → 0.881 at nominal 80 %, n=126, 3 identical runs. Not measured on real covers |
+| Anomaly-forecaster calibration (the one that drives dispatched recommendations) | **Does not exist**: no realised covers |
+| Hotel costs | None configured → no amount shown anywhere |
+| Newsvendor rule | Built and tested with injected calibrations; **never ran on a real recommendation** (fallback everywhere) |
+| Risk-statement calibration, recalibration, cost proposals | Built and tested on constructed data; **no real outcome exists** |
+| Real-model quality (parser) | Unchanged: not measured |

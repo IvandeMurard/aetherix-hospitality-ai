@@ -25,6 +25,7 @@ from app.api.routes import (
     demo,
     events,
     hotel_parameters,
+    learning,
     mcp_v1,
     notifications,
     pms,
@@ -167,6 +168,11 @@ async def lifespan(app: FastAPI):
     register_error_rate_monitor_job(_scheduler)
     # HOS-209 (EVAL-5) — nightly latency SLO MV refresh + p95 breach alert.
     register_latency_slo_job(_scheduler)
+    # ADR-0007 §18.5 — weekly learning pass: arm C report, arm B alerts,
+    # proposals for review. Never applies anything.
+    from app.workers.learning_loop_worker import register_learning_loop_job
+
+    register_learning_loop_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler
@@ -238,6 +244,8 @@ app.include_router(receipts_route.router, prefix="/api/v1")
 app.include_router(kpi_route.router, prefix="/api/v1")
 # ADR-0007 §18.3 — per-hotel decision parameters (dashboard user, owner-scoped)
 app.include_router(hotel_parameters.router, prefix="/api/v1")
+# ADR-0007 §18.5 — learning loop review queue (nothing applied without approval)
+app.include_router(learning.router, prefix="/api/v1")
 # Aetherix MCP Server v1 — atomic tools (ADR-0004). v0 (/mcp/v0/) retired
 # 2026-08-01 per its announced Sunset header (Décision #19, HOS-315).
 app.include_router(mcp_v1.router)

@@ -268,6 +268,23 @@ def build_erasure_plan(subject: Subject) -> list[Step]:
     steps.append(
         Step(
             order=order,
+            table="learning_items",
+            action=Action.REVIEW,
+            target="balayage textuel sur payload | evidence | decision_note ; decided_by == email du sujet",
+            rationale=(
+                "ADR-0007 §18.5 : une raison routée (texte libre du manager) est recopiée "
+                "dans la file d'apprentissage pour revue, et decided_by est l'e-mail de "
+                "l'approbateur. Table clé par hôtel, pas par personne — même traitement "
+                "qu'inbound_reply_events. Un cas d'éval exporté vers le golden dataset "
+                "doit être revu dans le fichier aussi."
+            ),
+        )
+    )
+
+    order += 1
+    steps.append(
+        Step(
+            order=order,
             table="hotel_decision_parameters",
             action=Action.REVIEW,
             target="set_by == email du sujet | balayage textuel sur note",
@@ -447,5 +464,7 @@ PII_TABLES: frozenset[str] = frozenset(
         "staffing_recommendations",
         # ADR-0007 §18.3 — set_by (e-mail de qui a réglé la valeur) + note libre.
         "hotel_decision_parameters",
+        # ADR-0007 §18.5 — raisons routées recopiées + e-mail de l'approbateur.
+        "learning_items",
     }
 )
