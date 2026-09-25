@@ -81,6 +81,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - `context/anima-context-thesis.md` — **thèse Anima (03/08)** : contexte humain pertinent avant action, frontière Anima (compréhension) / Aetherix (exécution) ; **Research**, sans nouveau scope ni promesse produit
 - `context/moat.md` — **ce qui est défendable, testé contre la menace plateforme** (09/07) : 4 couches de moat + stress test "et si Apaleo/Mews shippent un forecast natif ?" + risque résiduel nommé
 - `context/data-conventions.md` — convention tenant_id/property_id/hotel_id + table des drifts (HOS-163)
+- `context/migration-replay-drift.md` — **fresh-replay drift on `demand_anomalies` (25/09)** : why the Supabase Preview replay failed on `decision_ledger` while production and the static gate passed · fix inside an applied migration (no-op on production) · `scripts/ci/replay_migrations.sh`
 - `context/memory-architecture.md` — Private + Hive Memory (Décision #2)
 - `context/learning-loop.md` — **learning loop (25/09, Décision #40, ADR-0007 §18.5)** : what is learned, from which signal, how often, who approves, how it is evaluated, how it is rolled back · hygiene rules · what is not measured
 - `context/decision-ledger.md` — **Decision Ledger (01/08, HOS-317)** : audit des 5 tables + l'unique arête manquante (`operational_memory.recommendation_id`, aucune table nouvelle) · schéma contexte→reco→réponse manager→outcome · requête bout-en-bout (service + vue `decision_ledger`) · §5 ce qui reste non fermé · vocabulaire *outcome-tracked* et non *self-improving*

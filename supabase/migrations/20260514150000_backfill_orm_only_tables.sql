@@ -27,6 +27,45 @@ CREATE TABLE IF NOT EXISTS demand_anomalies (
 CREATE INDEX IF NOT EXISTS ix_demand_anomalies_tenant_id ON demand_anomalies (tenant_id);
 CREATE INDEX IF NOT EXISTS ix_demand_anomalies_property_id ON demand_anomalies (property_id);
 
+-- Fresh-replay convergence (added 2026-09-25, docs/context/migration-replay-drift.md).
+-- On a fresh database 20260323000000 is skipped (no `tenants`/`properties`),
+-- 20260323120000 creates demand_anomalies with an older column set, and the
+-- CREATE TABLE IF NOT EXISTS above is then a no-op, so the columns the ORM and
+-- the decision_ledger view (20260801100000) read were never created. These
+-- statements bring a fresh replay to the ORM shape. This migration is already
+-- in production's history, so Supabase never re-executes it there: production
+-- is unchanged. Idempotent on any database that already has the columns.
+-- One ADD COLUMN per ALTER TABLE: scripts/ci/check_schema_drift.py registers a
+-- single ADD COLUMN per statement.
+ALTER TABLE demand_anomalies ADD COLUMN IF NOT EXISTS expected_demand NUMERIC(10, 2);
+ALTER TABLE demand_anomalies ADD COLUMN IF NOT EXISTS baseline_demand NUMERIC(10, 2);
+ALTER TABLE demand_anomalies ADD COLUMN IF NOT EXISTS direction TEXT;
+ALTER TABLE demand_anomalies ADD COLUMN IF NOT EXISTS triggering_factors JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE demand_anomalies ADD COLUMN IF NOT EXISTS roi_revenue_opp NUMERIC(10, 2);
+ALTER TABLE demand_anomalies ADD COLUMN IF NOT EXISTS recommendation_text TEXT;
+
+DO $$
+BEGIN
+    -- The ORM never writes the legacy `anomaly_type` column created by
+    -- 20260323120000; NOT NULL on it would reject every ORM insert.
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'demand_anomalies'
+           AND column_name = 'anomaly_type' AND is_nullable = 'NO'
+    ) THEN
+        ALTER TABLE demand_anomalies ALTER COLUMN anomaly_type DROP NOT NULL;
+    END IF;
+
+    -- NOT NULL as in the ORM, only when it cannot fail (no rows to backfill).
+    IF NOT EXISTS (SELECT 1 FROM demand_anomalies) THEN
+        ALTER TABLE demand_anomalies ALTER COLUMN expected_demand SET NOT NULL;
+        ALTER TABLE demand_anomalies ALTER COLUMN baseline_demand SET NOT NULL;
+        ALTER TABLE demand_anomalies ALTER COLUMN deviation_pct SET NOT NULL;
+        ALTER TABLE demand_anomalies ALTER COLUMN direction SET NOT NULL;
+        ALTER TABLE demand_anomalies ALTER COLUMN triggering_factors SET NOT NULL;
+    END IF;
+END $$;
+
 -- ============== staffing_recommendations ==============
 CREATE TABLE IF NOT EXISTS staffing_recommendations (
 	id UUID NOT NULL, 

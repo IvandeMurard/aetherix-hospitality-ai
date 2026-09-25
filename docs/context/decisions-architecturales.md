@@ -71,6 +71,8 @@ Channel = WhatsApp primary + email opt-in (SendGrid). Inbound classifier = Haiku
 
 Invariant **"ORM = miroir exact des migrations"**. Tout merge bloqué si une colonne du modèle SQLAlchemy n'existe pas en DB (ou inverse). Découvert via Epic 9 (HOS-148) : 3 bugs silencieux résolus. Implémentation : `scripts/ci/check_schema_drift.py` + `scripts/ci/schema_drift_ignore.json`. Convention IDs : `docs/context/data-conventions.md`.
 
+> **Amendment 25/09/2026 — the static gate does not see skipped migrations.** A conditional migration (DO block) skipped on a fresh database left `demand_anomalies` without the columns the `decision_ledger` view reads; the static gate passed, the Supabase Preview replay failed. Fix = idempotent `ADD COLUMN IF NOT EXISTS` inside the already-applied `20260514150000` (no-op on production, HOS-111 precedent). Dynamic check = `scripts/ci/replay_migrations.sh`. Detail → `docs/context/migration-replay-drift.md`.
+
 ### 17 — Hébergement Fly.io (14/05/2026)
 
 Backend déployé sur Fly.io, région `cdg` (Paris). 1 instance always-on (`min_machines_running=1`) — requis par APScheduler in-process. Image Docker Python 3.12 + uv multi-stage. Secrets via `flyctl secrets set` (jamais commités). Latence Paris ↔ Supabase Stockholm ~30ms (acceptable Phase 0). URL staging : `https://aetherix-backend.fly.dev`. Détail déploiement : `docs/SECURITY/secrets_handling.md`. Remplace l'ancienne contrainte *"local Windows / GitHub uniquement"*.
