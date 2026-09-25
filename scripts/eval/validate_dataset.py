@@ -68,6 +68,10 @@ CATEGORIES = {
     "guardrail_trip",
 }
 
+# What a staffing recommendation can propose (ADR-0007 §19). "unknown" is a
+# runtime state, not a dataset label: a golden case always states its proposal.
+PROPOSAL_KINDS = {"add", "reduce", "no_change"}
+
 LAYERS = {"forecast", "recommendation", "receipt", "parser", "drift", "latency", "guardrail"}
 
 # EVAL-0 AC0.1 "unblocking minimum" — unblocks EVAL-1 / EVAL-2 / EVAL-4.
@@ -138,6 +142,15 @@ def validate(dataset: Path, strict_full: bool = False) -> list[str]:
             errors.append(f"line {lineno}: 'input' must be an object")
         if not isinstance(row.get("expected"), dict):
             errors.append(f"line {lineno}: 'expected' must be an object")
+
+        # ADR-0007 §19: a reply's decision depends on what the recommendation
+        # proposed, so every graded reply says which proposal it answers.
+        if category in ("parser_intent", "parser_confirmation"):
+            proposal = (row.get("input") or {}).get("proposal")
+            if not isinstance(proposal, dict) or proposal.get("kind") not in PROPOSAL_KINDS:
+                errors.append(
+                    f"line {lineno}: {category} needs input.proposal.kind in {sorted(PROPOSAL_KINDS)}"
+                )
 
     required = FULL_MIN_COUNTS if strict_full else EVAL0_MIN_COUNTS
     milestone = "AC0.2 full coverage" if strict_full else "AC0.1 unblocking minimum"

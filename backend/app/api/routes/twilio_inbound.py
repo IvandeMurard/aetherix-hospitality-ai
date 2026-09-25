@@ -272,8 +272,10 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
     1. Resolve the hotel from the phone number; unknown → legacy query path.
     2. A pending reason request → the reply is the reason: routed (typed),
        stored, never changes the recorded decision.
-    3. Otherwise ``parse_inbound`` (covers regex → model) → ``resolve_feedback``:
-       record (≥ threshold), confirm (< threshold, nothing written), or nothing.
+    3. Otherwise ``parse_inbound`` (covers regex → model, shown the pending
+       recommendation's proposal) → ``resolve_feedback`` (stance × proposal):
+       record (≥ threshold), confirm (< threshold or two readings, nothing
+       written), or nothing.
     4. A recorded decision with a note/figure → feedback memory + ground-truth
        covers (HOS-250 guard first, HOS-270 tells the manager if rejected).
     """
@@ -304,7 +306,11 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
             await _send_plan(from_number, plan)
             return
 
-        feedback = await service.parse_inbound(body)
+        # ADR-0007 §19: the model is shown what the pending recommendation
+        # proposed; the decision is derived from its stance and that proposal.
+        pending = await decisions.pending_recommendations(profile)
+        proposal = decisions.proposal_of(pending[0] if pending else None)
+        feedback = await service.parse_inbound(body, proposal)
         plan, resolution, recommendation = await decisions.handle_free_text(
             profile, feedback, now, request_id
         )

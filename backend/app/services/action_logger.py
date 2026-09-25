@@ -33,22 +33,18 @@ logger = logging.getLogger(__name__)
 
 
 def parse_action(body: str) -> ActionType:
-    """Exact-keyword fast path over the whole reply (ADR-0007 §16.3).
+    """Is the whole reply a lexicon reply (ADR-0007 §16.3, §19)?
 
-    Delegates to ``manager_decision.match_keyword`` (FR/EN forms, each mapping
-    documented there). A bare acknowledgement ("ok", "👍") is ``unknown`` here:
-    it carries no decision and is resolved by rule (b) downstream.
+    Delegates to ``manager_decision.match_keyword``. The label is coarse and
+    proposal-independent (``KeywordMatch.summary``): the decision itself is
+    derived later from the stance and what the recommendation proposed. A bare
+    acknowledgement ("ok", "👍") is ``unknown`` here: it carries no decision and
+    is resolved by rule (b) downstream.
     """
     match = match_keyword(body)
     if match is None or match.kind == "bare_ack":
         return ActionType.unknown
-    return {
-        "accept": ActionType.accept,
-        "reject": ActionType.reject,
-        "modify": ActionType.modify,
-        "decline": ActionType.decline,
-        "ambiguous": ActionType.ambiguous,
-    }[match.kind]
+    return ActionType(match.summary())
 
 
 class ActionLoggerService:

@@ -1,7 +1,8 @@
-"""Décision #38 / ADR-0007 §16 — pure decision-capture rules.
+"""Décisions #38, #41 / ADR-0007 §16, §19 — pure decision-capture rules.
 
-Every keyword form is pinned here: a change to the fast path's vocabulary must
-change a test. Ambiguous forms must go to confirmation, never to a guess.
+Every lexicon form is pinned here against every proposal kind: a change to the
+fast path's vocabulary or to the stance → decision mapping must change a test.
+Forms with two readings must go to confirmation, never to a guess.
 """
 from __future__ import annotations
 
@@ -20,18 +21,22 @@ from app.services.manager_decision import (
     BUTTON_CONFIRMATIONS,
     BUTTON_DECISIONS,
     DECISION_CONFIDENCE_THRESHOLD,
+    PROPOSAL_KINDS,
     RESPONSE_WINDOW,
+    STANCES,
     ClassifierOutput,
     DecisionSource,
     PendingContext,
+    Proposal,
     compute_capture_metrics,
     confirmation_question,
     is_bare_ack,
     match_confirmation_answer,
+    decision_for_stance,
     match_keyword,
     parse_model_json,
+    proposal_from_recommendation,
     resolve_bare_ack,
-    proposes_change,
     resolve_keyword,
     resolve_model,
     routed_reason,
@@ -47,110 +52,183 @@ def _ctx(pending: int = 1, ago: timedelta = timedelta(hours=1)) -> PendingContex
 
 
 # ---------------------------------------------------------------------------
-# (c) keyword fast path — every documented form
+# (c) stance lexicon + stance → decision mapping (ADR-0007 §19)
 # ---------------------------------------------------------------------------
+# The decision is derived from the reply's stance AND what the recommendation
+# proposed. Every lexicon form is pinned against every proposal kind: a change
+# to the vocabulary or to the mapping must change a row here.
 
-ACCEPT_FORMS = [
-    "accept", "Accept", "ACCEPT", "  accept  ", "accepted", "accepter", "accepté",
-    "j'accepte", "J’accepte", "oui", "Oui !", "yes", "yep", "ouais",
-    "validé", "valide", "Validé 👌", "valider", "validated", "approved", "agreed", "go",
-    "✅", "✔️", "ok validé", "OK validé !", "je valide", "c'est validé", "ok pour moi",
-    "d'accord", "ok d'accord", "go for it", "agreed thx!!", "oui 👍", "yes thanks",
+KINDS = ("add", "reduce", "no_change", "unknown")
+
+R = ("record", "rejected")
+A = ("record", "accepted")
+M = ("record", "modified")
+CR = ("confirm", "rejected")
+CM = ("confirm", "modified")
+
+
+def _pctx(kind: str, pending: int = 1) -> PendingContext:
+    return PendingContext(pending, NOW - timedelta(hours=1), NOW, proposal=kind)
+
+
+# The mapping itself, as a table (docstring of `decision_for_stance`).
+STANCE_TABLE = {
+    #                    add         reduce      no_change   unknown
+    "adopt_proposal":   ("accepted", "accepted", "accepted", "accepted"),
+    "decline_proposal": ("rejected", "rejected", "rejected", "rejected"),
+    "keep_current":     ("rejected", "rejected", "accepted", None),
+    "counter_value":    ("modified", "modified", "modified", "modified"),
+    "unclear":          (None, None, None, None),
+    "none":             (None, None, None, None),
+}
+
+
+@pytest.mark.parametrize("stance", STANCES)
+def test_decision_for_stance_table(stance):
+    assert tuple(decision_for_stance(stance, k) for k in KINDS) == STANCE_TABLE[stance]
+
+
+def test_stance_table_covers_every_stance_and_kind():
+    assert set(STANCE_TABLE) == set(STANCES)
+    assert KINDS == PROPOSAL_KINDS
+
+
+# Reply × proposal kind → (action, decision). FR and EN, negations, politeness,
+# mixed tokens. Columns: add · reduce · no_change · unknown.
+REPLY_TABLE = [
+    # adopt forms: accepted whatever was proposed
+    ("oui", (A, A, A, A)),
+    ("Oui !", (A, A, A, A)),
+    ("yes", (A, A, A, A)),
+    ("J’accepte", (A, A, A, A)),
+    ("validé", (A, A, A, A)),
+    ("Validé 👌", (A, A, A, A)),
+    ("✅", (A, A, A, A)),
+    ("✔️", (A, A, A, A)),
+    ("ok validé", (A, A, A, A)),
+    ("je valide", (A, A, A, A)),
+    ("ok pour moi", (A, A, A, A)),
+    ("d'accord", (A, A, A, A)),
+    ("ok d'accord", (A, A, A, A)),
+    ("go for it", (A, A, A, A)),
+    ("agreed thx!!", (A, A, A, A)),
+    ("oui 👍", (A, A, A, A)),
+    ("yes thanks", (A, A, A, A)),
+    # decline forms: rejected whatever was proposed ("non" to "keep the usual
+    # staffing" asks for a change: still a refusal of the recommendation)
+    ("non", (R, R, R, R)),
+    ("Non.", (R, R, R, R)),
+    ("no", (R, R, R, R)),
+    ("nope", (R, R, R, R)),
+    ("refusé", (R, R, R, R)),
+    ("je refuse", (R, R, R, R)),
+    ("pas d'accord", (R, R, R, R)),
+    ("not ok", (R, R, R, R)),
+    ("non non", (R, R, R, R)),
+    ("❌", (R, R, R, R)),
+    ("👎 merci", (R, R, R, R)),        # politeness carries no stance
+    # counter forms: modified, then "what change?"
+    ("corriger", (M, M, M, M)),
+    ("CORRIGER", (M, M, M, M)),
+    ("✏️", (M, M, M, M)),
+    ("✏️ merci", (M, M, M, M)),
+    ("modify", (M, M, M, M)),
+    # keep-current forms (PO clarification §17.8): reject a change, accept "no change"
+    ("tel quel", (R, R, A, CR)),
+    ("on garde tel quel", (R, R, A, CR)),
+    ("on garde comme ça", (R, R, A, CR)),
+    ("keep as is", (R, R, A, CR)),
+    ("keep it as is", (R, R, A, CR)),
+    ("as is", (R, R, A, CR)),
+    # "no thanks": decline or keep current — same decision for a change, two
+    # readings for "no change"
+    ("non merci", (R, R, CR, CR)),
+    ("Non merci !", (R, R, CR, CR)),
+    ("nan merci", (R, R, CR, CR)),
+    ("no thanks", (R, R, CR, CR)),
+    ("no thank you", (R, R, CR, CR)),
+    ("non merci beaucoup", (R, R, CR, CR)),
+    # the sentence of §17.8, now composed from the lexicon, not listed
+    ("non merci on garde tel quel", (R, R, A, CR)),
+    ("no thanks, keep as is", (R, R, A, CR)),
+    # need negation (open decision closed by §19): rejects ADD, two readings for REDUCE
+    ("pas besoin", (R, CR, A, CR)),
+    ("no need", (R, CR, A, CR)),
+    ("pas nécessaire", (R, CR, A, CR)),
+    ("not needed", (R, CR, A, CR)),
+    ("pas besoin merci", (R, CR, A, CR)),
+    ("no need, thanks", (R, CR, A, CR)),
+    # parts that contradict each other → confirmation, refusal read first
+    ("non ok", (CR, CR, CR, CR)),
+    ("ok non", (CR, CR, CR, CR)),
+    ("no ok", (CR, CR, CR, CR)),
+    ("oui non", (CR, CR, CR, CR)),
+    ("non corriger", (CR, CR, CR, CR)),
+    ("oui corriger", (CM, CM, CM, CM)),    # a correction outranks a plain yes
+    ("ok on garde tel quel", (CR, CR, A, CR)),
+    # hesitation
+    ("bof", (CR, CR, CR, CR)),
+    # bare acknowledgement → rule (b): one pending, inside the window → accepted
+    ("ok", (A, A, A, A)),
+    ("merci", (A, A, A, A)),
+    ("👍", (A, A, A, A)),
+    ("parfait, merci beaucoup", (A, A, A, A)),
 ]
-REJECT_FORMS = [
-    "reject", "REJECT", " reject ", "rejected", "rejeter", "rejeté", "refuse", "refusé",
-    "refuser", "je refuse", "refused", "decline", "declined", "non", "Non.", "no", "NO",
-    "nope", "nan", "❌", "👎", "pas d'accord", "not ok", "non non",
+
+
+@pytest.mark.parametrize("body,expected", REPLY_TABLE, ids=[r[0] for r in REPLY_TABLE])
+def test_reply_by_proposal_kind(body, expected):
+    m = match_keyword(body)
+    assert m is not None, body
+    got = tuple((r.action, r.decision) for r in (resolve_keyword(m, _pctx(k)) for k in KINDS))
+    assert got == expected
+
+
+@pytest.mark.parametrize("body,expected", REPLY_TABLE, ids=[r[0] for r in REPLY_TABLE])
+def test_lexicon_decisions_carry_their_source(body, expected):
+    for kind, (action, _) in zip(KINDS, expected):
+        res = resolve_keyword(match_keyword(body), _pctx(kind))
+        if action == "record":
+            assert res.source in (DecisionSource.keyword, DecisionSource.bare_ack_rule)
+        else:
+            assert res.source is None and res.origin == "keyword_ambiguous" and res.why
+
+
+def test_confirmation_whys_are_typed():
+    assert resolve_keyword(match_keyword("tel quel"), _pctx("unknown")).why == "proposal_unknown"
+    assert resolve_keyword(match_keyword("pas besoin"), _pctx("reduce")).why == "two_readings"
+    assert resolve_keyword(match_keyword("non merci"), _pctx("no_change")).why == "two_readings"
+    assert resolve_keyword(match_keyword("non ok"), _pctx("add")).why == "readings_conflict"
+
+
+# Replies the lexicon must NOT decide: longer sentences, questions, and replies
+# that mention another day — they go to the model, which is shown the
+# recommendation's day (and answers `unclear` for another one).
+NOT_KEYWORD_FORMS = [
+    "", "   ", "maybe", "acc", "oui mais 3 serveurs", "ok mais plutôt 40", "no, make it 120 instead",
+    "yes, let's go with that", "no problem, we'll follow it", "nope, ignore that",
+    "non, pas d'accord avec ça", "d'accord sur le principe, mais 3 serveurs au lieu de 4",
+    "ok pour moi, merci pour le brief de 19h", "je", "covers: 80",
+    "on garde", "keep it", "comme ça",           # "keep" what? not a keep-current form
+    "pas besoin demain", "non pas ce soir", "oui pour samedi", "no need tomorrow",
+    "keep as is on friday", "non merci, mais oui pour demain",
+    # a question is never a keyword
+    "ok?", "oui ?", "non?", "hmm ok?", "pas besoin ?",
 ]
-MODIFY_FORMS = ["corriger", "CORRIGER", "correct", "modifier", "modify", "✏️", "✏️ merci", "ajuster"]
-# "Decline / keep as is" (PO clarification 24/09/2026, ADR-0007 §17.8): rejected
-# when the recommendation proposes a change; confirmation otherwise.
-DECLINE_FORMS = [
-    "non merci", "Non merci !", "no thanks", "no thank you", "nan merci", "non merci beaucoup",
-    "non merci on garde tel quel", "on garde tel quel", "tel quel", "on garde comme ça",
-    "keep as is", "keep it as is", "as is",
-]
-AMBIGUOUS_FORMS = [
-    # "pas besoin": we don't need the extra staff | no need to change anything
-    "pas besoin", "no need", "pas nécessaire",
-    # a refusal token next to an acceptance / ack token
-    "non ok", "ok non", "oui non", "no ok", "👎 merci", "bof", "non corriger",
-]
+
+
+@pytest.mark.parametrize("body", NOT_KEYWORD_FORMS)
+def test_longer_replies_are_not_keywords(body):
+    assert match_keyword(body) is None
+    assert parse_action(body) == ActionType.unknown
+
+
 BARE_ACK_FORMS = [
     "ok", "OK", "okay", "ok merci", "ok thanks", "merci", "thanks", "thank you", "thx",
     "parfait", "perfect", "parfait, merci beaucoup", "great", "super", "top", "cool",
     "noted", "noté", "compris", "understood", "got it", "bien reçu", "👍", "👍👍 merci",
     "👌", "🙏", "👍🏽",
 ]
-NOT_KEYWORD_FORMS = [
-    "", "   ", "maybe", "acc", "oui mais 3 serveurs", "ok mais plutôt 40", "no, make it 120 instead",
-    "yes, let's go with that", "no problem, we'll follow it", "nope, ignore that",
-    "non, pas d'accord avec ça", "d'accord sur le principe, mais 3 serveurs au lieu de 4",
-    "ok pour moi, merci pour le brief de 19h", "je", "covers: 80",
-    # a question is never a keyword
-    "ok?", "oui ?", "non?", "hmm ok?",
-]
-
-
-@pytest.mark.parametrize("body", ACCEPT_FORMS)
-def test_accept_forms(body):
-    assert match_keyword(body).kind == "accept"
-    assert parse_action(body) == ActionType.accept
-
-
-@pytest.mark.parametrize("body", REJECT_FORMS)
-def test_reject_forms(body):
-    assert match_keyword(body).kind == "reject"
-    assert parse_action(body) == ActionType.reject
-
-
-@pytest.mark.parametrize("body", MODIFY_FORMS)
-def test_modify_forms(body):
-    # What the text fallback asks for ("Répondez … CORRIGER") and the Receipt's ✏️.
-    assert match_keyword(body).kind == "modify"
-    assert parse_action(body) == ActionType.modify
-    res = resolve_keyword(match_keyword(body), _ctx())
-    assert (res.action, res.decision, res.source) == ("record", "modified", DecisionSource.keyword)
-
-
-def test_accept_plus_modify_is_ambiguous_proposing_modified():
-    m = match_keyword("oui corriger")
-    assert (m.kind, m.proposed) == ("ambiguous", "modified")
-
-
-@pytest.mark.parametrize("body", AMBIGUOUS_FORMS)
-def test_ambiguous_forms_go_to_confirmation(body):
-    m = match_keyword(body)
-    assert m.kind == "ambiguous"
-    assert parse_action(body) == ActionType.ambiguous
-    res = resolve_keyword(m, _ctx())
-    assert res.action == "confirm" and res.origin == "keyword_ambiguous"
-    assert res.decision == "rejected"  # the reading proposed; the manager has the last word
-
-
-@pytest.mark.parametrize("body", DECLINE_FORMS)
-def test_decline_forms_reject_a_recommendation_that_proposes_a_change(body):
-    m = match_keyword(body)
-    assert m.kind == "decline"
-    assert parse_action(body) == ActionType.decline
-    ctx = PendingContext(1, NOW - timedelta(hours=1), NOW, latest_proposes_change=True)
-    res = resolve_keyword(m, ctx)
-    assert (res.action, res.decision, res.source) == ("record", "rejected", DecisionSource.keyword)
-
-
-@pytest.mark.parametrize("proposes,reading,why", [
-    (False, "accepted", "no_change_proposed"),   # "keep as is" of a no-change recommendation
-    (None, "rejected", "change_unknown"),        # cannot be told → ask, never guess
-])
-def test_decline_forms_confirm_otherwise(proposes, reading, why):
-    ctx = PendingContext(1, NOW - timedelta(hours=1), NOW, latest_proposes_change=proposes)
-    res = resolve_keyword(match_keyword("non merci on garde tel quel"), ctx)
-    assert (res.action, res.decision, res.origin, res.why) == ("confirm", reading, "keyword_ambiguous", why)
-
-
-@pytest.mark.parametrize("headcount,expected", [(2, True), (-1, True), (0, False), (None, None)])
-def test_proposes_change(headcount, expected):
-    assert proposes_change(headcount) is expected
 
 
 @pytest.mark.parametrize("body", BARE_ACK_FORMS)
@@ -161,16 +239,34 @@ def test_bare_ack_forms(body):
     assert parse_action(body) == ActionType.unknown
 
 
-@pytest.mark.parametrize("body", NOT_KEYWORD_FORMS)
-def test_longer_replies_are_not_keywords(body):
-    assert match_keyword(body) is None
-    assert parse_action(body) == ActionType.unknown
+@pytest.mark.parametrize("body,label", [
+    ("oui", ActionType.accept), ("✅", ActionType.accept), ("ok d'accord", ActionType.accept),
+    ("non", ActionType.reject), ("👎 merci", ActionType.reject),
+    ("corriger", ActionType.modify), ("✏️ merci", ActionType.modify),
+    ("non merci", ActionType.decline), ("on garde tel quel", ActionType.decline),
+    ("pas besoin", ActionType.decline), ("non merci on garde tel quel", ActionType.decline),
+    ("bof", ActionType.ambiguous), ("non ok", ActionType.ambiguous),
+    ("oui corriger", ActionType.ambiguous), ("ok on garde tel quel", ActionType.ambiguous),
+])
+def test_parse_action_is_a_coarse_proposal_independent_label(body, label):
+    assert parse_action(body) == label
 
 
-def test_thumbs_up_is_ack_but_check_mark_is_accept():
+def test_thumbs_up_is_ack_but_check_mark_is_adopt():
     # Documented choice: 👍 may answer the Receipt (rule b), ✅ answers "validate?".
     assert match_keyword("👍").kind == "bare_ack"
-    assert match_keyword("✅").kind == "accept"
+    assert match_keyword("✅").units == ("adopt",)
+
+
+def test_lexicons_hold_stances_not_single_sentences():
+    """PO: "fix the logic, not the example". No lexicon entry is a whole
+    sentence patched in for one case; the §17.8 sentence is composed."""
+    from app.services import manager_decision as md
+
+    assert not hasattr(md, "DECLINE_KEEP_PHRASES") and not hasattr(md, "AMBIGUOUS_PHRASES")
+    assert "non merci on garde tel quel" not in md._PHRASES.values()
+    assert all(len(p) <= 4 for p in md._PHRASES)  # forms, not sentences
+    assert match_keyword("non merci on garde tel quel").units == ("polite_decline", "keep")
 
 
 def test_tokenisation():
@@ -179,9 +275,48 @@ def test_tokenisation():
     assert tokens("👍🏽") == ["👍"]
 
 
-def test_keyword_resolution_sources():
-    assert resolve_keyword(match_keyword("oui"), _ctx()).source == DecisionSource.keyword
-    assert resolve_keyword(match_keyword("non"), _ctx()).decision == "rejected"
+# ---------------------------------------------------------------------------
+# Proposal derived from the stored recommendation, never from the reply
+# ---------------------------------------------------------------------------
+
+NV = "newsvendor"
+FB = "fallback_roi_scale"
+
+
+@pytest.mark.parametrize("headcount,task_class,ra,kind,magnitude", [
+    # risk assessment stored (§18.4): its signed delta is authoritative
+    (2, "staffing.add", {"recommended_delta_staff": 2, "decision_rule": NV}, "add", 2),
+    (-1, "staffing.reduce", {"recommended_delta_staff": -1, "decision_rule": NV}, "reduce", 1),
+    (0, "staffing.add", {"recommended_delta_staff": 0, "decision_rule": NV}, "no_change", None),
+    # 0 from the ROI scale is not a "keep" message ("reduce by 0") → unknown
+    (0, "staffing.reduce", {"recommended_delta_staff": 0, "decision_rule": FB}, "unknown", None),
+    (3, "staffing.add", {"recommended_delta_staff": 3, "decision_rule": FB}, "add", 3),
+    # stored as text by some drivers
+    (2, None, '{"recommended_delta_staff": -2, "decision_rule": "newsvendor"}', "reduce", 2),
+    # legacy rows: signed headcount
+    (2, None, None, "add", 2),
+    (-2, None, None, "reduce", 2),
+    (0, None, None, "unknown", None),
+    (None, None, None, "unknown", None),
+    # contradictions → unknown, never a guess
+    (2, "staffing.reduce", None, "unknown", None),
+    (-2, "staffing.add", None, "unknown", None),
+    (None, None, "not json", "unknown", None),
+])
+def test_proposal_from_recommendation(headcount, task_class, ra, kind, magnitude):
+    p = proposal_from_recommendation(headcount, task_class, ra)
+    assert (p.kind, p.magnitude) == (kind, magnitude)
+
+
+def test_proposal_description_for_the_model():
+    ws = datetime(2026, 9, 25, 19, 0, tzinfo=timezone.utc)
+    we = datetime(2026, 9, 25, 22, 0, tzinfo=timezone.utc)
+    p = proposal_from_recommendation(2, "staffing.add", None, ws, we)
+    assert p.describe() == "ADD 2 staff for Friday 25/09 19:00–22:00 (task class staffing.add)"
+    assert proposal_from_recommendation(-1, None, None).describe() == "REDUCE staffing by 1"
+    keep = proposal_from_recommendation(0, None, {"recommended_delta_staff": 0, "decision_rule": NV})
+    assert keep.describe() == "NO CHANGE (keep the usual staffing)"
+    assert "not recorded" in Proposal().describe()
 
 
 # ---------------------------------------------------------------------------
@@ -219,38 +354,52 @@ def test_bare_ack_dispatched_in_the_future_is_not_in_window():
 
 
 # ---------------------------------------------------------------------------
-# Model resolution (HITL threshold)
+# Model stance → decision (same mapping, HITL threshold)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("decision", ["accepted", "rejected", "modified"])
-def test_model_at_threshold_records(decision):
-    res = resolve_model(decision, DECISION_CONFIDENCE_THRESHOLD)
-    assert (res.action, res.source) == ("record", DecisionSource.model_auto)
+@pytest.mark.parametrize("stance", ["adopt_proposal", "decline_proposal", "keep_current", "counter_value"])
+@pytest.mark.parametrize("kind", ["add", "reduce", "no_change"])
+def test_model_stance_at_threshold_records_the_mapped_decision(stance, kind):
+    res = resolve_model(stance, DECISION_CONFIDENCE_THRESHOLD, kind)
+    assert (res.action, res.decision, res.source) == (
+        "record", decision_for_stance(stance, kind), DecisionSource.model_auto)
 
 
-@pytest.mark.parametrize("decision", ["accepted", "rejected", "modified"])
-def test_model_below_threshold_confirms(decision):
-    res = resolve_model(decision, DECISION_CONFIDENCE_THRESHOLD - 0.01)
-    assert (res.action, res.decision, res.origin) == ("confirm", decision, "model")
+@pytest.mark.parametrize("stance", ["adopt_proposal", "decline_proposal", "keep_current", "counter_value"])
+def test_model_stance_below_threshold_confirms(stance):
+    res = resolve_model(stance, DECISION_CONFIDENCE_THRESHOLD - 0.01, "add")
+    assert (res.action, res.decision, res.origin, res.why) == (
+        "confirm", decision_for_stance(stance, "add"), "model", "below_confidence_threshold")
 
 
-@pytest.mark.parametrize("decision", ["none", None, "maybe"])
-def test_model_without_decision_records_nothing(decision):
-    assert resolve_model(decision, 0.99).action == "none"
+def test_model_keep_current_with_unknown_direction_confirms_even_when_sure():
+    res = resolve_model("keep_current", 0.99, "unknown")
+    assert (res.action, res.decision, res.why) == ("confirm", "rejected", "proposal_unknown")
 
 
-def test_classifier_schema_rejects_out_of_taxonomy():
-    ok = parse_model_json('{"decision":"accepted","confidence":0.9}', ClassifierOutput)
-    assert ok.decision == "accepted" and ok.intent == "free_form"
-    for bad in ('{"decision":"yes","confidence":0.9}', '{"decision":"accepted","confidence":2}',
-                '{"confidence":0.9}', "not json"):
+def test_model_unclear_asks_for_the_decision_and_writes_nothing():
+    res = resolve_model("unclear", 0.99, "add")
+    assert (res.action, res.why) == ("none", "stance_unclear")
+
+
+@pytest.mark.parametrize("stance", ["none", None, "maybe", "accepted"])
+def test_model_without_stance_records_nothing(stance):
+    res = resolve_model(stance, 0.99, "add")
+    assert (res.action, res.why) == ("none", "no_stance")
+
+
+def test_classifier_schema_takes_a_stance_not_a_decision():
+    ok = parse_model_json('{"stance":"keep_current","confidence":0.9}', ClassifierOutput)
+    assert ok.stance == "keep_current" and ok.intent == "free_form"
+    for bad in ('{"stance":"yes","confidence":0.9}', '{"stance":"adopt_proposal","confidence":2}',
+                '{"confidence":0.9}', '{"decision":"accepted","confidence":0.9}', "not json"):
         with pytest.raises(ValueError):
             parse_model_json(bad, ClassifierOutput)
 
 
 def test_markdown_fence_is_stripped():
-    out = parse_model_json('```json\n{"decision":"none","confidence":0.3}\n```', ClassifierOutput)
-    assert out.decision == "none"
+    out = parse_model_json('```json\n{"stance":"none","confidence":0.3}\n```', ClassifierOutput)
+    assert out.stance == "none"
 
 
 # ---------------------------------------------------------------------------

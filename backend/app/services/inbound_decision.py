@@ -9,8 +9,8 @@ Order in which a reply is read (first match wins):
 
 1. quick-reply button payload (fixed IDs, no model);
 2. answer to a pending confirmation ("oui" / "non" / buttons);
-3. exact keyword (``match_keyword``): explicit → record, ambiguous → confirm,
-   bare acknowledgement → rule (b);
+3. stance lexicon (``match_keyword``): stance × proposal → record, two
+   readings → confirm, bare acknowledgement → rule (b);
 4. answer to a pending reason request (never changes the decision);
 5. free text: covers regex, then the model (``ReceiptsService.parse_inbound``),
    then ``resolve_feedback`` (threshold → record or confirm).
@@ -47,6 +47,7 @@ from app.services.manager_decision import (
     CaptureMetrics,
     DecisionSource,
     PendingContext,
+    Proposal,
     RecapCommand,
     Resolution,
     RevisionCommand,
@@ -57,7 +58,7 @@ from app.services.manager_decision import (
     match_keyword,
     match_recap_command,
     match_revision_command,
-    proposes_change,
+    proposal_from_recommendation,
     recorded_message,
     resolve_keyword,
     routed_reason,
@@ -140,11 +141,22 @@ class InboundDecisionService:
         return result.scalars().first()
 
     @staticmethod
-    def pending_context(recs: list[StaffingRecommendation], now: datetime) -> PendingContext:
+    def proposal_of(rec: Optional[StaffingRecommendation]) -> Proposal:
+        """What a stored recommendation proposed (ADR-0007 §19). Read from the
+        recommendation, never from the reply."""
+        if rec is None:
+            return Proposal()
+        return proposal_from_recommendation(
+            rec.recommended_headcount, rec.task_class, rec.risk_assessment,
+            window_start=_utc(rec.window_start), window_end=_utc(rec.window_end),
+        )
+
+    @classmethod
+    def pending_context(cls, recs: list[StaffingRecommendation], now: datetime) -> PendingContext:
         latest = _utc(recs[0].dispatched_at) if recs else None
         return PendingContext(
             pending_count=len(recs), latest_dispatched_at=latest, now=now,
-            latest_proposes_change=proposes_change(recs[0].recommended_headcount) if recs else None,
+            proposal=cls.proposal_of(recs[0] if recs else None).kind,
         )
 
     async def open_prompt(self, profile: RestaurantProfile, now: datetime) -> Optional[ManagerPrompt]:
@@ -366,10 +378,10 @@ class InboundDecisionService:
             )
         # none
         why = res.why or "no_decision"
-        if why == "no_pending_recommendation" or why == "model_decision_none":
+        if why in ("no_pending_recommendation", "no_stance"):
             reply = text_for("ack", self.locale)
             buttons = None
-        else:  # model error / schema failure: ask for an explicit decision
+        else:  # unclear stance, model error / schema failure: ask for an explicit decision
             reply = text_for("not_understood", self.locale)
             buttons = "decision"
         rec_id = recs[0].id if recs else None

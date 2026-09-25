@@ -46,8 +46,13 @@ Model-graded metrics (real backend, cases that reach the model):
   replies): any auto-write is a breach; a confirmation or no decision passes.
 
 Evaluation context: every case is graded as a reply to exactly one pending
-recommendation, inside the response window (``EVAL_CONTEXT``). Rule (b) then
-records ``accepted`` for a bare acknowledgement; its other branches are unit-tested.
+recommendation, inside the response window, that proposed what the case's
+``input.proposal`` says (``add | reduce | no_change``, magnitude, task class,
+optional window) — ADR-0007 §19. The model is shown that proposal, as in
+production, and returns a stance; the decision graded is the one the stance ×
+proposal mapping lands on. Rule (b) records ``accepted`` for a bare
+acknowledgement; its other branches are unit-tested. ``per_proposal`` breaks the
+accuracy down by proposal kind.
 
 `compute_parser_metrics` is pure and unit-tested deterministically.
 """
@@ -90,14 +95,28 @@ PROVIDERS = ("claude", "gemini")
 _KEY_ENV = {"claude": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}
 
 
-def _eval_context():
+def case_proposal(scenario: dict):
+    """The recommendation a golden reply answers (``input.proposal``). A case
+    without one is graded against an ``unknown`` direction — never assumed."""
+    from app.services.manager_decision import PROPOSAL_KINDS, Proposal
+
+    p = (scenario.get("input") or {}).get("proposal") or {}
+    kind = p.get("kind") if p.get("kind") in PROPOSAL_KINDS else "unknown"
+
+    def _dt(v):
+        return datetime.fromisoformat(v) if v else None
+
+    return Proposal(kind, p.get("magnitude"), p.get("task_class"),
+                    _dt(p.get("window_start")), _dt(p.get("window_end")))
+
+
+def _eval_context(kind: str = "unknown"):
     from app.services.manager_decision import PendingContext
 
     # One pending recommendation, dispatched an hour ago (inside the window),
-    # proposing a change (add/remove staff — the usual case). The golden
-    # replies answer such a recommendation (ADR-0007 §17.8).
+    # proposing what the case says (ADR-0007 §19).
     return PendingContext(pending_count=1, latest_dispatched_at=_NOW - timedelta(hours=1), now=_NOW,
-                          latest_proposes_change=True)
+                          proposal=kind)
 
 
 class ParserEvalNotMeasured(RuntimeError):
@@ -132,14 +151,16 @@ def compute_parser_metrics(
     scenarios: list[dict], predict: Callable[[str, str], Prediction | str]
 ) -> dict:
     """Pure metrics: accuracy, per-decision precision/recall/support, confusion
-    matrix (rows = expected decision, cols = PREDICTED_LABELS), per-split accuracy,
-    auto-write precision and confirmation rate, and per-case detail.
+    matrix (rows = expected decision, cols = PREDICTED_LABELS), per-split and
+    per-proposal-kind accuracy, auto-write precision and confirmation rate, and
+    per-case detail.
 
     `predict` may return a bare label (legacy classifiers) or a `Prediction`.
     An unknown label is recorded as ``error`` — never coerced to a decision.
     """
     confusion: dict[str, dict[str, int]] = {t: {p: 0 for p in PREDICTED_LABELS} for t in INTENTS}
     split_totals: dict[str, list[int]] = {}
+    proposal_totals: dict[str, list[int]] = {}
     stages: dict[str, int] = {}
     cases: list[dict] = []
     correct = total = 0
@@ -171,10 +192,15 @@ def compute_parser_metrics(
         split_totals.setdefault(split, [0, 0])
         split_totals[split][0] += hit
         split_totals[split][1] += 1
+        kind = case_proposal(sc).kind
+        proposal_totals.setdefault(kind, [0, 0])
+        proposal_totals[kind][0] += hit
+        proposal_totals[kind][1] += 1
         stages[pred.stage] = stages.get(pred.stage, 0) + 1
         cases.append({
             "id": sc.get("id"),
             "split": split,
+            "proposal": kind,
             "expected": expected,
             "predicted": pred.label,
             "action": pred.action,
@@ -202,6 +228,10 @@ def compute_parser_metrics(
         "per_split": {
             s: {"accuracy": round(c / n, 4) if n else None, "n": n}
             for s, (c, n) in sorted(split_totals.items())
+        },
+        "per_proposal": {
+            k: {"accuracy": round(c / n, 4) if n else None, "n": n}
+            for k, (c, n) in sorted(proposal_totals.items())
         },
         "per_intent": per_intent,
         "confusion_matrix": confusion,
@@ -289,22 +319,23 @@ class _StubLLM:
         raise RuntimeError("stub model — reachability probe only")
 
 
-async def _production_prediction(service, message: str) -> Prediction:
+async def _production_prediction(service, message: str, proposal) -> Prediction:
     """The route's decision sequence (`api/routes/twilio_inbound.py`), in order:
-    exact keyword → bare ack / covers regex / model → `resolve_feedback`."""
+    stance lexicon → bare ack / covers regex / model (shown the proposal) →
+    `resolve_feedback` (stance × proposal)."""
     from app.schemas.webhook import ActionType
     from app.services.action_logger import parse_action
     from app.services.manager_decision import match_keyword, resolve_keyword
     from app.services.receipts import resolve_feedback
 
-    ctx = _eval_context()
+    ctx = _eval_context(proposal.kind)
     action = parse_action(message)
     if action != ActionType.unknown:
         res = resolve_keyword(match_keyword(message), ctx)
         stage = "keyword_ambiguous" if res.action == "confirm" else "keyword"
         return Prediction(res.decision or "not_recorded", stage, action=res.action)
 
-    feedback = await service.parse_inbound(message)
+    feedback = await service.parse_inbound(message, proposal)
     if feedback.source in ("llm_error", "llm_unmappable"):
         return Prediction("error", feedback.source, error=feedback.source, action="error")
     res = resolve_feedback(feedback, ctx)
@@ -315,14 +346,15 @@ async def _production_prediction(service, message: str) -> Prediction:
 
 
 def _run_production(scenarios: list[dict], llm) -> list[Prediction]:
-    """Run the production path over the given scenarios' messages, in order."""
+    """Run the production path over the given scenarios, in order, each as a
+    reply to the recommendation its ``input.proposal`` describes."""
     from app.services.receipts import ReceiptsService
 
     service = ReceiptsService(db=None, llm=llm)  # parse_inbound never touches db
-    messages = [s.get("input", {}).get("message", "") for s in scenarios]
+    replies = [(s.get("input", {}).get("message", ""), case_proposal(s)) for s in scenarios]
 
     async def _all() -> list[Prediction]:
-        return [await _production_prediction(service, m) for m in messages]
+        return [await _production_prediction(service, m, p) for m, p in replies]
 
     return asyncio.run(_all())
 

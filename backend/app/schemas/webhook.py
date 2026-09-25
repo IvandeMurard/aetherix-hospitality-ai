@@ -15,16 +15,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class ActionType(str, Enum):
-    """Manager decision parsed from the inbound message body by the exact-keyword
-    fast path (``manager_decision.match_keyword``, ADR-0007 §16.3).
+    """Coarse label of a whole-reply lexicon match (``manager_decision.match_keyword``,
+    ADR-0007 §16.3, §19). Production only uses it to tell a lexicon reply from
+    free text; the decision is derived from the stance and the recommendation's
+    proposal (``decision_for_stance``), not from this label.
 
-    - accept    : the whole reply is an explicit FR/EN acceptance ("oui", "validé", "✅")
-    - reject    : the whole reply is an explicit refusal ("non", "refusé", "❌")
-    - modify    : the whole reply is an explicit correction ("corriger", "✏️")
-    - decline   : "non merci", "on garde tel quel" — `rejected` when the
-                  recommendation proposes a change, else confirmation (ADR-0007 §17.8)
-    - ambiguous : a keyword form with two readings ("pas besoin", "bof") —
-                  confirmation is asked, nothing is written until confirmed
+    - accept    : adopt forms only ("oui", "validé", "✅", "ok d'accord")
+    - reject    : decline forms only ("non", "refusé", "❌")
+    - modify    : counter forms only ("corriger", "✏️")
+    - decline   : keep-current / "no thanks" / need-negation forms — the decision
+                  depends on what the recommendation proposed
+    - ambiguous : forms with conflicting or two readings ("bof", "non ok", "oui corriger")
     - unknown   : anything else — goes to the free-text path
     """
 

@@ -1215,6 +1215,9 @@ on `staffing_recommendations.status/action` (it was only in memory before).
 
 ### 16.3 Keyword mapping choices (every form unit-tested, `tests/services/test_manager_decision.py`)
 
+> **Superseded 25/09/2026 by §19:** the forms below are now stance lexicons; the
+> decision depends on what the recommendation proposed. Kept as history.
+
 - **Whole reply only.** "oui" is a keyword; "oui mais 3 serveurs" goes to the model.
 - **Accept:** accept(ed), accepter/accepté, j'accepte, oui, yes, yep, ouais,
   validé/valide/valider, validated, approve(d), agreed, go, ✅, ✔, "ok validé",
@@ -1563,6 +1566,10 @@ and `GET /anomalies` would 500 for a slug tenant.
 
 ### 17.8 "Non merci, on garde tel quel" (PO clarification)
 
+> **Generalised 25/09/2026 by §19** (stance × proposal). The phrase list this
+> section introduced is removed; the rule below is what §19 derives for `add` /
+> `reduce` / `unknown`, except a no-change recommendation, now `accepted`.
+
 A decline ("non merci", "no thanks", "tel quel", "on garde tel quel", "keep as
 is") answering a recommendation that **proposes a change**
 (`recommended_headcount` ≠ 0, the usual case) is recorded as `rejected`,
@@ -1849,3 +1856,142 @@ evaluated, how it is rolled back). In short:
 | Newsvendor rule | Built and tested with injected calibrations; **never ran on a real recommendation** (fallback everywhere) |
 | Risk-statement calibration, recalibration, cost proposals | Built and tested on constructed data; **no real outcome exists** |
 | Real-model quality (parser) | Unchanged: not measured |
+
+## 19. Addendum — 2026-09-25 · A reply is a stance; the decision follows from the proposal
+
+> Trace: CLAUDE.md Décision #41. Scope approved by Ivan (PO): "Fix the logic,
+> not the example." Supersedes the decision-level keyword lists of §16.3, the
+> decline rule of §17.8 and the `decision` field of §16.2 step 6. Closes the
+> open decision "Pas besoin / no need mapping" (`open-decisions.md`, §Resolved).
+
+### 19.1 What was wrong
+
+§17.8 fixed "non merci on garde tel quel" by listing that sentence (and a few
+neighbours) in `DECLINE_KEEP_PHRASES`, and the model was asked for the
+decision directly without being told what the recommendation proposed. Both
+map a reply straight to `accepted | rejected`, which is only right when the
+recommendation proposes a change. "On garde tel quel" answering "keep the
+usual staffing" is an acceptance; answering "add 2 staff" it is a refusal.
+The reply alone does not carry the decision; the reply **and** the proposal do.
+
+### 19.2 The rule
+
+A reply expresses a **stance** toward the recommendation. The decision is
+derived deterministically by one function, `manager_decision.decision_for_stance`:
+
+| stance | add | reduce | no_change | unknown |
+|---|---|---|---|---|
+| `adopt_proposal` | accepted | accepted | accepted | accepted |
+| `decline_proposal` | rejected | rejected | rejected | rejected |
+| `keep_current` | rejected | rejected | accepted | — (confirm) |
+| `counter_value` | modified | modified | modified | modified |
+| `unclear` | — (ask) | — (ask) | — (ask) | — (ask) |
+| `none` | nothing | nothing | nothing | nothing |
+
+- `decline_proposal` is one stance more than the four in the brief: a plain
+  "non" to "keep the usual staffing" asks for a change, so it cannot be
+  `keep_current` (which would map to accepted).
+- `unclear` → nothing written; the manager is asked for the decision itself
+  ("Je n'ai pas compris. Répondez ACCEPTER, REFUSER ou CORRIGER."), since there
+  is no reading to confirm. Typed `why = stance_unclear`.
+- Anything the code cannot tell → confirmation (Décision #6), never a guess.
+
+### 19.3 The proposal, derived from the recommendation
+
+`proposal_from_recommendation` reads the stored row, never the reply:
+
+1. `risk_assessment.recommended_delta_staff` (signed, §18.4) when stored: > 0 add,
+   < 0 reduce. 0 is `no_change` only under the newsvendor rule, whose message
+   says "Keep the usual staffing". A 0 from the ROI scale is `unknown`: that path
+   never computes a reduction magnitude (lulls read "reducing staffing by 0",
+   open decision "ROI gate and reductions").
+2. Otherwise the signed `recommended_headcount` (legacy rows): > 0 add, < 0 reduce,
+   0 or missing → `unknown` (no legacy message said "keep").
+3. `task_class` contradicting the sign → `unknown`.
+
+Behaviour change: a legacy recommendation with `recommended_headcount = 0` was
+read as "no change proposed" by §17.8; it is now `unknown` (confirmation when the
+decision depends on the direction).
+
+### 19.4 One path for the lexicon and the model
+
+- **Lexicon** (deterministic, whole reply only). The phrase lists are now stance
+  lexicons, composed over the reply: adopt, decline, counter, keep-current
+  ("tel quel", "on garde tel quel", "on garde comme ça", "keep (it) as is", "as
+  is" — the forms of the §17.8 clarification, no new ones), "no thanks" (decline
+  or keep current), need negation ("pas besoin", "no need", "pas nécessaire",
+  "not necessary", "not needed"), hesitation ("bof"), acknowledgement (reads as
+  adopt next to a stance, rule (b) alone), politeness (no stance). Each part of
+  the reply narrows the decisions it can mean; the reply means what every part
+  allows. One decision → recorded (`keyword`); several → confirmation
+  (`two_readings` / `readings_conflict`), proposing rejected > modified >
+  accepted; a direction needed but unknown → confirmation (`proposal_unknown`).
+  "Non merci on garde tel quel" is composed ("non merci" + "on garde tel quel"),
+  no longer listed; the sentence-level entries are removed.
+- **Model.** `ClassifierOutput.stance` replaces `decision` (schema-validated; an
+  answer in the §16 `decision` schema now fails the schema, typed
+  `llm_unmappable`). The user message carries the proposal line first
+  ("Recommendation: ADD 2 staff for Friday 25/09 19:00–22:00 (task class
+  staffing.add)"), then the reply. The prompt asks for `unclear` when the reply
+  is about another day or service, and for a low confidence when a reply reads
+  two ways for this proposal. Below 0.85 → confirmation, as before.
+- `resolve_stances` is the only place stances become a `Resolution`; the route,
+  the background task and the eval call it through `resolve_keyword` /
+  `receipts.resolve_feedback`.
+
+### 19.5 Resulting table for the lexicon (pinned in `tests/services/test_manager_decision.py`)
+
+| reply | add | reduce | no_change | unknown |
+|---|---|---|---|---|
+| oui, validé, ✅, d'accord, ok d'accord | accepted | accepted | accepted | accepted |
+| non, refusé, ❌, pas d'accord, 👎 merci | rejected | rejected | rejected | rejected |
+| corriger, ✏️ | modified | modified | modified | modified |
+| tel quel, on garde tel quel, keep as is | rejected | rejected | accepted | confirm |
+| non merci, no thanks | rejected | rejected | confirm | confirm |
+| non merci on garde tel quel | rejected | rejected | accepted | confirm |
+| pas besoin, no need | rejected | confirm | accepted | confirm |
+| non ok, oui non, non corriger, bof | confirm (rejected) | confirm (rejected) | confirm (rejected) | confirm (rejected) |
+| oui corriger | confirm (modified) | confirm (modified) | confirm (modified) | confirm (modified) |
+| ok, 👍, merci (bare ack) | rule (b) | rule (b) | rule (b) | rule (b) |
+
+Changes against §16.3 / §17.8, each stated: "👎 merci" was ambiguous, now
+rejected (politeness carries no stance, like "non merci" to a change); "pas
+besoin" was always a confirmation, now rejected for ADD and accepted for no
+change; "keep as is" / "on garde tel quel" to a no-change recommendation were a
+confirmation, now accepted; "non merci" to a no-change recommendation stays a
+confirmation. Replies longer than the lexicon (including any reply naming a day,
+"pas besoin demain", "oui pour samedi") go to the model.
+
+### 19.6 MCP and host agents
+
+Nothing changes for host agents: `submit_feedback_to_memory` takes an explicit
+`outcome` (plus `decided_by` and the §17.4 reason contract), which is a decision,
+not a reply. The stance rule applies only to free-text manager replies
+(WhatsApp). A host agent relaying a manager's free text should relay the
+decision the manager took, not the text.
+
+### 19.7 Eval (EVAL-4)
+
+- Every parser golden case now carries `input.proposal` (kind, magnitude, task
+  class, optional window); `validate_dataset` requires it. The 57 existing cases
+  answer `add` (the previous eval context: "one recommendation proposing a
+  change"); labels unchanged.
+- 25 new cases (`parser-stance-*`, split `heldout`, written after the fake was
+  frozen): add / reduce / no_change, FR and EN, keyword and model paths, two
+  deterministic confirmations per two-reading form, two replies about another
+  day than the recommendation's (Friday) that must not be written.
+- The eval shows the model the case's proposal, grades the stance → decision
+  path, and reports `per_proposal` accuracy. `parser_confirmation` cases now
+  carry `expected.path`: the deterministic ones are checked with no model call.
+- Fake backend unchanged (plumbing only). Deterministic block: 19/19 land on
+  their label. Pinned-target real runs (HOS-337) keep working.
+- **Real-model quality: not measured.** No API key in this session;
+  `eval-parser-real.yml` has not run on the stance schema.
+
+### 19.8 What is and is not measured (25/09/2026)
+
+| Item | Status |
+|---|---|
+| Stance → decision mapping, lexicon, proposal derivation | Built, unit-tested (tables), route-tested on SQLite with a scripted model |
+| Model stance quality | **Not measured** (no API key) |
+| Manager replies to reduce / no-change recommendations | **None exist**: the ROI path never emits a reduction and the newsvendor path has not run on a real recommendation (§18.6) |

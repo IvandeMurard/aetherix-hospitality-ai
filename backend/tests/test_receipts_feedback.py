@@ -8,12 +8,12 @@ Covered:
   3.  Structured correction — pax / guests patterns
   4.  Structured correction — numeric value extracted correctly
   5.  Haiku classifier called when no regex matches
-  6.  Haiku returns free_form intent + decision → forwarded
+  6.  Haiku returns free_form intent + stance → forwarded (ADR-0007 §19)
   7.  Haiku returns structured_correction → forwarded
-  8.  Haiku answer outside the schema → llm_unmappable, no decision (never coerced)
-  9.  Haiku non-JSON answer → llm_unmappable, no decision
-  10. Haiku exception → llm_error, no decision
-  11. requires_confirmation True when a model decision is below 0.85 (ADR-0007 §16)
+  8.  Haiku answer outside the schema → llm_unmappable, no stance (never coerced)
+  9.  Haiku non-JSON answer → llm_unmappable, no stance
+  10. Haiku exception → llm_error, no stance
+  11. requires_confirmation True when a model stance is below 0.85 (ADR-0007 §16)
   12. requires_confirmation False at / above the threshold
   13. French acknowledge patterns (merci, compris)
 """
@@ -51,15 +51,15 @@ def _service(llm_response: str | None = None, llm_raises: bool = False) -> Recei
     elif llm_response is not None:
         mock_llm.complete = AsyncMock(return_value=llm_response)
     else:
-        mock_llm.complete = AsyncMock(return_value=_model_json("modified", 0.9))
+        mock_llm.complete = AsyncMock(return_value=_model_json("counter_value", 0.9))
     return ReceiptsService(db, llm=mock_llm)
 
 
-def _model_json(decision: str, confidence: float, **extra) -> str:
-    """A classifier answer in the ADR-0007 §16 schema."""
+def _model_json(stance: str, confidence: float, **extra) -> str:
+    """A classifier answer in the ADR-0007 §19 schema (a stance, not a decision)."""
     import json
 
-    return json.dumps({"decision": decision, "confidence": confidence, **extra})
+    return json.dumps({"stance": stance, "confidence": confidence, **extra})
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +176,7 @@ class TestHaikuClassifier:
         llm_json = _model_json("none", 0.85, intent="free_form", notes="private event tomorrow")
         result = await _service(llm_response=llm_json).parse_inbound("private event tomorrow")
         assert result.intent == "free_form"
-        assert result.decision == "none"
+        assert result.stance == "none"
         assert result.confidence == pytest.approx(0.85)
         assert result.notes == "private event tomorrow"
 
@@ -184,7 +184,7 @@ class TestHaikuClassifier:
     async def test_classifier_routed_to_fast_tier(self):
         """HOS-283 AC3 + Décision #35: Pass-3 classifier asks for the "fast" tier
         (Haiku on Claude) and never names a vendor model ID."""
-        svc = _service(llm_response=_model_json("modified", 0.8))
+        svc = _service(llm_response=_model_json("counter_value", 0.8))
         await svc.parse_inbound("some free-form manager note")
 
         svc._llm.complete.assert_awaited_once()
@@ -195,51 +195,52 @@ class TestHaikuClassifier:
 
     @pytest.mark.asyncio
     async def test_structured_correction_from_llm(self):
-        llm_json = _model_json("modified", 0.92, intent="structured_correction",
+        llm_json = _model_json("counter_value", 0.92, intent="structured_correction",
                                corrected_value=95.0, notes="95 covers")
         result = await _service(llm_response=llm_json).parse_inbound("we expect about 95 tomorrow")
         assert result.intent == "structured_correction"
-        assert result.decision == "modified"
+        assert result.stance == "counter_value"
         assert result.actual_value == pytest.approx(95.0)
 
     @pytest.mark.asyncio
     async def test_reason_and_route_forwarded(self):
-        llm_json = _model_json("rejected", 0.9, reason="wedding cancelled",
+        llm_json = _model_json("decline_proposal", 0.9, reason="wedding cancelled",
                                reason_route="upstream_filter", reason_route_confidence=0.8)
         result = await _service(llm_response=llm_json).parse_inbound("non, le mariage est annulé")
-        assert result.decision == "rejected"
+        assert result.stance == "decline_proposal"
         assert result.reason == "wedding cancelled"
         assert result.reason_route == "upstream_filter"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("answer", [
-        '{"intent":"unknown_garbage","confidence":0.7}',          # old schema, no decision
-        '{"decision":"maybe","confidence":0.7}',                  # decision out of taxonomy
-        '{"decision":"accepted","confidence":1.7}',               # confidence out of range
-        '{"decision":"accepted"}',                                # confidence missing
-        '{"decision":"rejected","confidence":0.9,"reason_route":"somewhere"}',
+        '{"intent":"unknown_garbage","confidence":0.7}',          # no stance
+        '{"decision":"accepted","confidence":0.9}',               # §16 schema: a decision, not a stance
+        '{"stance":"maybe","confidence":0.7}',                    # stance out of taxonomy
+        '{"stance":"adopt_proposal","confidence":1.7}',           # confidence out of range
+        '{"stance":"adopt_proposal"}',                            # confidence missing
+        '{"stance":"decline_proposal","confidence":0.9,"reason_route":"somewhere"}',
     ])
     async def test_schema_failure_is_typed_never_coerced(self, answer):
         result = await _service(llm_response=answer).parse_inbound("some unusual message")
         assert result.source == "llm_unmappable"
-        assert result.decision is None
-        assert result.requires_confirmation is False  # nothing to confirm: no decision
+        assert result.stance is None
+        assert result.requires_confirmation is False  # nothing to confirm: no stance
 
     @pytest.mark.asyncio
     async def test_json_parse_failure_has_no_decision(self):
         result = await _service(llm_response="not json at all").parse_inbound("some message")
         assert result.source == "llm_unmappable"
-        assert result.decision is None
+        assert result.stance is None
 
     @pytest.mark.asyncio
     async def test_llm_exception_has_no_decision(self):
         result = await _service(llm_raises=True).parse_inbound("some message")
         assert result.source == "llm_error"
-        assert result.decision is None
+        assert result.stance is None
 
     @pytest.mark.asyncio
     async def test_markdown_fence_stripped_before_json_parse(self):
-        llm_json = "```json\n" + _model_json("modified", 0.75) + "\n```"
+        llm_json = "```json\n" + _model_json("counter_value", 0.75) + "\n```"
         result = await _service(llm_response=llm_json).parse_inbound("some message")
         assert result.source == "llm"
         assert result.confidence == pytest.approx(0.75)
@@ -252,16 +253,16 @@ class TestHaikuClassifier:
 class TestConfidenceThreshold:
     @pytest.mark.asyncio
     async def test_requires_confirmation_below_threshold(self):
-        result = await _service(llm_response=_model_json("rejected", 0.84)).parse_inbound("hmm")
+        result = await _service(llm_response=_model_json("decline_proposal", 0.84)).parse_inbound("hmm")
         assert result.requires_confirmation is True
 
     @pytest.mark.asyncio
     async def test_no_confirmation_at_threshold(self):
-        result = await _service(llm_response=_model_json("rejected", 0.85)).parse_inbound("hmm")
+        result = await _service(llm_response=_model_json("decline_proposal", 0.85)).parse_inbound("hmm")
         assert result.requires_confirmation is False
 
     @pytest.mark.asyncio
-    async def test_decision_none_never_needs_confirmation(self):
+    async def test_stance_none_never_needs_confirmation(self):
         result = await _service(llm_response=_model_json("none", 0.2)).parse_inbound("hmm")
         assert result.requires_confirmation is False
 
@@ -270,13 +271,14 @@ class TestConfidenceThreshold:
 # ADR-0007 §16 — resolution shared with the parser eval
 # ---------------------------------------------------------------------------
 
-def _ctx(pending: int = 1, hours_ago: float = 1.0):
+def _ctx(pending: int = 1, hours_ago: float = 1.0, proposal: str = "add"):
     from datetime import timedelta
 
     from app.services.manager_decision import PendingContext
 
     now = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
-    return PendingContext(pending, now - timedelta(hours=hours_ago) if pending else None, now)
+    return PendingContext(pending, now - timedelta(hours=hours_ago) if pending else None, now,
+                          proposal=proposal)
 
 
 class TestSourceAndRecordedOutcome:
@@ -287,7 +289,7 @@ class TestSourceAndRecordedOutcome:
             ("ok", {}, "ack_regex"),
             ("covers: 80", {}, "covers_regex"),
             ("private event tomorrow", {}, "llm"),
-            ("x", {"llm_response": '{"intent":"rejected","confidence":0.9}'}, "llm_unmappable"),
+            ("x", {"llm_response": '{"decision":"rejected","confidence":0.9}'}, "llm_unmappable"),
             ("x", {"llm_response": "not json"}, "llm_unmappable"),
             ("x", {"llm_raises": True}, "llm_error"),
         ],
@@ -307,23 +309,70 @@ class TestSourceAndRecordedOutcome:
         assert outcome_for_feedback(fb, _ctx(1, 13.0)) is None     # outside window → confirmation
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("decision", ["accepted", "rejected", "modified"])
-    async def test_model_decision_written_at_or_above_threshold(self, decision):
+    @pytest.mark.parametrize("stance,decision", [
+        ("adopt_proposal", "accepted"), ("decline_proposal", "rejected"),
+        ("keep_current", "rejected"), ("counter_value", "modified"),
+    ])
+    async def test_model_stance_written_at_or_above_threshold(self, stance, decision):
         from app.services.receipts import outcome_for_feedback, resolve_feedback
 
-        fb = await _service(llm_response=_model_json(decision, 0.9)).parse_inbound("free text")
-        assert outcome_for_feedback(fb, _ctx()) == decision
+        fb = await _service(llm_response=_model_json(stance, 0.9)).parse_inbound("free text")
+        assert outcome_for_feedback(fb, _ctx()) == decision        # proposal: add staff
         assert resolve_feedback(fb, _ctx()).source.value == "model_auto"
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("decision", ["accepted", "rejected", "modified"])
-    async def test_low_confidence_model_decision_is_confirmed_not_written(self, decision):
+    @pytest.mark.parametrize("proposal,expected", [
+        ("add", "rejected"), ("reduce", "rejected"), ("no_change", "accepted"), ("unknown", None),
+    ])
+    async def test_same_stance_different_proposal_different_decision(self, proposal, expected):
+        """ADR-0007 §19: "keep the current plan" rejects a change, accepts "no
+        change", and cannot be written when the direction is unknown."""
         from app.services.receipts import outcome_for_feedback, resolve_feedback
 
-        fb = await _service(llm_response=_model_json(decision, 0.6)).parse_inbound("free text")
+        fb = await _service(llm_response=_model_json("keep_current", 0.95)).parse_inbound(
+            "on reste sur le planning prévu")
+        assert outcome_for_feedback(fb, _ctx(proposal=proposal)) == expected
+        if expected is None:
+            assert resolve_feedback(fb, _ctx(proposal=proposal)).action == "confirm"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("stance,decision", [
+        ("adopt_proposal", "accepted"), ("decline_proposal", "rejected"), ("counter_value", "modified"),
+    ])
+    async def test_low_confidence_model_stance_is_confirmed_not_written(self, stance, decision):
+        from app.services.receipts import outcome_for_feedback, resolve_feedback
+
+        fb = await _service(llm_response=_model_json(stance, 0.6)).parse_inbound("free text")
         res = resolve_feedback(fb, _ctx())
         assert res.action == "confirm" and res.decision == decision and res.origin == "model"
         assert outcome_for_feedback(fb, _ctx()) is None
+
+    @pytest.mark.asyncio
+    async def test_unclear_stance_asks_for_the_decision(self):
+        from app.services.receipts import resolve_feedback
+
+        fb = await _service(llm_response=_model_json("unclear", 0.9)).parse_inbound("on verra")
+        res = resolve_feedback(fb, _ctx())
+        assert (res.action, res.why) == ("none", "stance_unclear")
+
+    @pytest.mark.asyncio
+    async def test_model_is_shown_the_proposal_and_the_reply_last(self):
+        from app.services.manager_decision import Proposal
+
+        svc = _service(llm_response=_model_json("keep_current", 0.9))
+        ws = datetime(2026, 9, 25, 19, 0, tzinfo=timezone.utc)
+        await svc.parse_inbound("pas besoin", Proposal("add", 2, "staffing.add", ws))
+        content = svc._llm.complete.await_args.kwargs["messages"][0]["content"]
+        assert content.startswith("Recommendation: ADD 2 staff for Friday 25/09 19:00")
+        assert content.endswith("\nManager reply: pas besoin")
+        assert "stance" in svc._llm.complete.await_args.kwargs["system"]
+
+    @pytest.mark.asyncio
+    async def test_model_without_proposal_is_told_the_direction_is_unknown(self):
+        svc = _service(llm_response=_model_json("keep_current", 0.9))
+        await svc.parse_inbound("on reste comme prévu")
+        content = svc._llm.complete.await_args.kwargs["messages"][0]["content"]
+        assert "direction is not recorded" in content
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("kwargs", [{"llm_raises": True}, {"llm_response": "garbage"}])

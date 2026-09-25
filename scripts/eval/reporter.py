@@ -170,6 +170,10 @@ def _render_parser_md(result: dict, diff: dict) -> str:
         lines += ["", "## Per split", "", "| split | accuracy | n |", "|---|---|---|"]
         for s, v in (result.get("per_split") or {}).items():
             lines.append(f"| {s} | {_pct(v['accuracy'])} | {v['n']} |")
+        lines += ["", "## Per proposal kind (ADR-0007 §19)", "",
+                  "| proposal | accuracy | n |", "|---|---|---|"]
+        for k, v in (result.get("per_proposal") or {}).items():
+            lines.append(f"| {k} | {_pct(v['accuracy'])} | {v['n']} |")
         lines += ["", "## Per intent", "", "| Intent | precision | recall | support |",
                   "|---|---|---|---|"]
         for intent in INTENTS:

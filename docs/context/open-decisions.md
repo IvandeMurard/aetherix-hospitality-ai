@@ -16,10 +16,6 @@
 
 **Status:** Open — for Ivan. **Found** (ADR-0007 §17.2): the Phase 2 weekly digest (`receipts_dispatcher`, Sundays, Décision #15 scope) pushes an **LLM-composed** narrative to every active hotel, **without opt-in**, as a free-form WhatsApp message that WhatsApp refuses outside the 24 h window. Its numbers are measured, but it is prose and ignores the interruption budget. **Proposal:** retire it in favour of the deterministic recap push (opt-in, template or in-session, §17.3). Not changed without a decision because Décision #15 locked the Phase 2 scope.
 
-### "Pas besoin" / "no need" mapping (24/09/2026)
-
-**Status:** Open — for Ivan. The clarification of 24/09 covers "non merci / on garde tel quel" (rejected when the recommendation proposes a change, ADR-0007 §17.8). "Pas besoin" / "no need" answering "add 2 servers" reads the same way ("we don't need the extra staff"), but it was not part of the clarification, so it still goes to confirmation. Extend the rule to it?
-
 ### Risk-bearing recommendations — values to fix before any data (25/09/2026)
 
 **Status:** Open — for Ivan. Built with defaults (Décision #40, ADR-0007 §18); each is a parameter, none was tuned on data. **To confirm or change, before real outcomes exist (HOS-316 spirit):** (a) commit-offset defaults 24 h (add staff) / 72 h (reduce staff) / 4 h (prep) — or require each hotel to set its own before the correction window is shown; (b) interruption budget `RISK_DISPLAY_MIN_GAP_DEFAULT` 50 € and `RISK_DISPLAY_MIN_PROB_GAP` 0.20; (c) newsvendor cap ±4 staff when the hotel set none; (d) learning thresholds — miscalibration alert from n ≥ 30 and gap > max(10 pp, 2 SE); realised recalibration from ≥ 60 points, later third held out, ≤ 5 pp under-coverage; cost proposal from ≥ 10 decisions and ≥ 25 % change; constraint proposal from ≥ 3 rejections; (e) the synthetic Prophet recalibration over-covers (0.881 at nominal 0.80) — accepted as conservative; a rolling calibration is the alternative.
@@ -276,6 +272,12 @@ Réponse binaire sur 4 sources publiques : **Trace Agent ne couvre ni F&B, ni co
 ---
 
 ## Resolved (archive)
+
+### [x] "Pas besoin" / "no need" mapping — RESOLVED 25/09/2026 → ADR-0007 §19 (Décision #41)
+
+**Opened** 24/09/2026: the §17.8 clarification covered "non merci / on garde tel quel", not "pas besoin" / "no need", which still went to confirmation.
+
+**Resolved** by Ivan's clarification, generalised (not a new PO ruling on this phrase): a reply is a stance, the decision follows from the stance and what the recommendation proposed. "Pas besoin" / "no need" denies a need for staff, so its stance depends on the direction: to a proposal to **add** staff it is keep-current → `rejected`; to a proposal to **reduce** it reads two ways (no need to cut → keep current | no need for them → adopt the cut) → confirmation; to a **no-change** proposal → `accepted`; direction unknown → confirmation. Same function as every other reply (`decision_for_stance`), unit-tested as a table.
 
 ### [x] Inbound reply → recorded outcome: free text cannot record accepted/rejected — RESOLVED 24/09/2026 → ADR-0007 §16 (Décision #38)
 
