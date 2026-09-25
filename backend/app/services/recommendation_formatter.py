@@ -29,6 +29,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.money import format_money
+from app.services import task_classes
 from app.services.roi_calculator import ROICalculatorService
 
 logger = logging.getLogger(__name__)
@@ -303,8 +304,20 @@ class RecommendationFormatterService:
             factor=factor,
         )
 
-        rec_id = str(uuid.uuid4())
         now = datetime.now(tz=timezone.utc)
+
+        # ADR-0007 §18.1 — point of no return: the task class, its commit point
+        # and the correction window left when the recommendation is issued. Shown
+        # to the manager only when it matters (closing or passed); always stored.
+        ctx = await self._load_decision_context(db, tenant_id, property_id)
+        task_class = task_classes.for_direction(direction)
+        window = task_classes.correction_window(
+            task_class, ws, now, offset_hours=ctx["commit_offsets"].get(task_class.value)
+        )
+        if task_classes.should_surface(window):
+            message = f"{message}\n{task_classes.render_window(window, ctx['tz'], ctx['locale'])}"
+
+        rec_id = str(uuid.uuid4())
 
         # Atomically INSERT recommendation + UPDATE anomaly status in one transaction.
         # ON CONFLICT DO UPDATE ensures crash-recovery self-healing: if the recommendation
@@ -319,17 +332,22 @@ class RecommendationFormatterService:
                          message_text, triggering_factor, recommended_headcount,
                          window_start, window_end,
                          roi_net, roi_labor_cost, predicted_covers,
+                         task_class, commit_at, correction_window,
                          status, created_at, updated_at)
                     VALUES
                         (:id, :tenant_id, :property_id, :anomaly_id,
                          :message_text, :triggering_factor, :recommended_headcount,
                          :window_start, :window_end,
                          :roi_net, :roi_labor_cost, :predicted_covers,
+                         :task_class, :commit_at, :correction_window,
                          'ready_to_push', :now, :now)
                     ON CONFLICT (anomaly_id) DO UPDATE SET
                         status = 'ready_to_push',
                         message_text = EXCLUDED.message_text,
                         predicted_covers = EXCLUDED.predicted_covers,
+                        task_class = EXCLUDED.task_class,
+                        commit_at = EXCLUDED.commit_at,
+                        correction_window = EXCLUDED.correction_window,
                         updated_at = EXCLUDED.updated_at
                     """
                 ),
@@ -346,6 +364,9 @@ class RecommendationFormatterService:
                     "roi_net": roi_net_f,
                     "roi_labor_cost": labor_cost_f,
                     "predicted_covers": predicted_covers_f,
+                    "task_class": task_class.value,
+                    "commit_at": window.commit_at,
+                    "correction_window": json.dumps(window.as_dict()),
                     "now": now.isoformat(),
                 },
             )
@@ -372,3 +393,34 @@ class RecommendationFormatterService:
             headcount,
         )
         return True
+
+    # ------------------------------------------------------------------
+    # Per-hotel decision context
+    # ------------------------------------------------------------------
+
+    async def _load_decision_context(
+        self, db: AsyncSession, tenant_id: Any, property_id: Any
+    ) -> Dict[str, Any]:
+        """Manager locale, display timezone and the hotel's own commit offsets.
+
+        Degrade-open: a lookup failure never blocks a recommendation; it falls
+        back to catalog defaults, which the rendered line labels as defaults.
+        Each lookup runs in a savepoint so a failed SELECT cannot abort the
+        caller's Postgres transaction.
+        """
+        from app.services.decision_recap import _tz
+
+        ctx: Dict[str, Any] = {"locale": None, "tz": _tz(), "commit_offsets": {}}
+        try:
+            async with db.begin_nested():
+                row = (
+                    await db.execute(
+                        text("SELECT manager_locale FROM restaurant_profiles WHERE id = :pid"),
+                        {"pid": str(property_id)},
+                    )
+                ).fetchone()
+            if row is not None:
+                ctx["locale"] = row[0]
+        except Exception:  # noqa: BLE001 — degrade-open
+            logger.debug("recommendation_formatter: locale lookup failed for %s", property_id)
+        return ctx

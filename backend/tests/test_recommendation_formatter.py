@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS staffing_recommendations (
     actual_covers REAL,
     actual_covers_source TEXT,
     actual_covers_at TEXT,
+    task_class TEXT,
+    commit_at TEXT,
+    correction_window TEXT,
     status TEXT NOT NULL DEFAULT 'ready_to_push',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -659,3 +662,52 @@ async def test_format_route_idempotent_double_call(session: AsyncSession):
 
     assert r1.status_code == 202
     assert r2.status_code == 202
+
+
+# ---------------------------------------------------------------------------
+# ADR-0007 §18.1 — point of no return stored on every recommendation
+# ---------------------------------------------------------------------------
+
+
+async def _stored_window(session, anomaly_id):
+    row = (
+        await session.execute(
+            text(
+                "SELECT task_class, commit_at, correction_window, message_text "
+                "FROM staffing_recommendations WHERE anomaly_id = :a"
+            ),
+            {"a": anomaly_id},
+        )
+    ).fetchone()
+    return row[0], row[1], json.loads(row[2]), row[3]
+
+
+@pytest.mark.asyncio
+async def test_correction_window_stored_and_surfaced_when_passed(session: AsyncSession):
+    aid = _anomaly_id()
+    await _insert_anomaly(session, anomaly_id=aid, tenant_id=_tenant_id())  # _T0 is in the past
+    await RecommendationFormatterService().run_for_property(session, "prop-001")
+    task_class, commit_at, window, message = await _stored_window(session, aid)
+    assert task_class == "staffing.add"
+    assert window["commit_point"] == "extra_shift_confirmed"
+    assert window["status"] == "passed"
+    assert window["offset_basis"] == "default_assumption"
+    assert commit_at is not None
+    assert "Point de non-retour habituel dépassé" in message
+
+
+@pytest.mark.asyncio
+async def test_correction_window_not_surfaced_when_far(session: AsyncSession):
+    from datetime import timedelta
+
+    aid = _anomaly_id()
+    start = datetime.now(tz=timezone.utc) + timedelta(days=10)
+    await _insert_anomaly(
+        session, anomaly_id=aid, tenant_id=_tenant_id(), direction="lull",
+        window_start=start, window_end=start + timedelta(hours=4),
+    )
+    await RecommendationFormatterService().run_for_property(session, "prop-001")
+    task_class, _, window, message = await _stored_window(session, aid)
+    assert task_class == "staffing.reduce"
+    assert window["status"] == "open"
+    assert "Modifiable" not in message and "non-retour" not in message

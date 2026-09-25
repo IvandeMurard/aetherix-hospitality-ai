@@ -438,6 +438,10 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 ---
 
+### 40 — Risk-bearing recommendations and the learning loop (25/09/2026)
+
+**Decision (scope approved by Ivan):** every recommendation carries its risk (if accepted / if refused) and the outcome loop changes the system under safeguards. Detail: **ADR-0007 §18**. Built so far: point of no return per task class (`task_classes.py`, catalog `task-classes-v1`; commit offsets are labelled defaults until a hotel sets its own), stored on every staffing recommendation, surfaced when the window is closing or passed, fed to ADR-0013 §2.4.5 as an input (ADR-0013 stays **proposed**).
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).

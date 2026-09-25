@@ -92,6 +92,22 @@ A scope may carry `autonomous_within_bounds` only if:
 3. **Arm B** — the runtime guardrails for the scope exist (ADR-0009 pattern:
    bounds, caps, circuit-breaker) and trip with typed reasons.
 4. The client asks for it, in writing, with a named approver.
+5. **Point of no return (input, added 25/09/2026, ADR-0007 §18.1).** Each task
+   class has a commit point relative to service start and a list of corrective
+   actions still possible before it (`backend/app/services/task_classes.py`,
+   `autonomy_eligibility_facts`). A scope is a **better** candidate when it has
+   a correction window (a commit point before service, with corrective actions
+   before it) **or** a bounded downside (the worst case of a wrong decision has
+   a known ceiling). This is an input to the ranking of candidates, not a gate:
+   it never makes a scope eligible on its own, and conditions 1–4 still apply.
+   Commit offsets are catalog **defaults (assumptions)** until the hotel sets
+   its own. Facts today: `staffing.add` (commit = extra shift confirmed,
+   default 24 h before service) and `staffing.reduce` (commit = staff notified,
+   default 72 h) have a correction window and a bounded downside, but are not
+   reversible after commit — consistent with §2.1 keeping staffing at L0;
+   `food_prep.batch` (commit = prep starts, default 4 h) has both and is the
+   natural L1 candidate, but the product does not recommend it (food-waste
+   tracking is an open decision).
 
 The gate makes a scope *eligible*; enabling it stays a human act on both sides.
 

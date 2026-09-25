@@ -1564,3 +1564,43 @@ add" rule is Design, not yet applied to the dataset).
 | Parser model quality | **Not measured** (no API key; unchanged from §16.7) |
 | Acceptance rate | Definition fixed; **no real decision exists** to compute it on |
 | Informativeness of agent reasons | Computed by a pure function; no caller exists |
+
+## 18. Addendum — 2026-09-25 · Risk-bearing recommendations and the learning loop
+
+> Trace: CLAUDE.md Décision #40. Scope approved by Ivan (PO). Goal: every
+> recommendation carries its risk — what happens if it is accepted, what
+> happens if it is refused — and the outcome loop changes the system, under
+> safeguards. Built in slices; each subsection says what is built and what is
+> measured.
+
+### 18.1 Point of no return per task class
+
+A hotel cannot undo a service. What exists is a **correction window** before
+the action commits. `backend/app/services/task_classes.py` is the single
+catalog (`task-classes-v1`):
+
+| Task class | Recommended today | Commit point | Default offset before service | Corrective before commit | After commit | Downside bounded |
+|---|---|---|---|---|---|---|
+| `staffing.add` (surge) | yes | extra shift confirmed to a person or agency | 24 h | don't call in, call in fewer, standby | cancel with cost, reassign | yes (extra shifts' cost / covers not served, capped by capacity) |
+| `staffing.reduce` (lull) | yes | staff notified not to come | 72 h | keep the shift, reduce fewer, move to another outlet | call back if available | yes, not reversible |
+| `food_prep.batch` | **no** (food-waste tracking is an open decision) | prep starts | 4 h | adjust / split batch, cook to order | repurpose, staff meal, 86 the item | yes |
+
+- **Offsets are assumptions**, labelled `offset_basis = default_assumption`,
+  until the hotel sets its own (`commit_offset_hours`, part 3, bounded
+  0 h–30 days). The real notice period depends on staff contracts, agency terms
+  and the collective agreement; no legal claim is made here.
+- **Stored** on every staffing recommendation (migration `20260925100000`):
+  `task_class`, `commit_at`, `correction_window` (typed: commit point, offset,
+  basis, status at issue time, catalog version).
+- **Surfaced** in the manager's message only when it matters: the commit point
+  is within 48 h of issue (`closing`) or already passed (`passed`) — one
+  deterministic line, FR default / EN, and it says when the offset is a
+  default. Farther away (`open`) it stays in the record, recap and MCP.
+- **ADR-0013 (still proposed)**: `autonomy_eligibility_facts` feeds §2.4.5 as
+  an input (correction window, bounded downside, reversibility). Facts, not a
+  gate; staffing stays L0 in §2.1.
+- Seen, not verified: the formatter's pre-existing insert passes `window_start`
+  / `window_end` as ISO strings to `timestamptz` columns through asyncpg, which
+  normally requires `datetime` objects. The new `commit_at` is passed as a
+  `datetime`. The existing columns were left as they were (tests run on SQLite;
+  no Postgres run in this session).

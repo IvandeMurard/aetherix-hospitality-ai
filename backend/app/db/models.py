@@ -378,6 +378,15 @@ class StaffingRecommendation(Base):
     reason_evidence = Column(JSONB, nullable=True)
     decision_policy_version = Column(String, nullable=True)
 
+    # ADR-0007 §18.1: point of no return. task_class = task_classes.TaskClassKey
+    # (staffing.add | staffing.reduce); commit_at = when the action commits
+    # (service start − commit offset); correction_window = the full typed window
+    # (commit point, offset and whether it is a default or the hotel's own,
+    # catalog version). Mirror of migration 20260925100000 (Décision #16).
+    task_class = Column(String, nullable=True)
+    commit_at = Column(DateTime(timezone=True), nullable=True)
+    correction_window = Column(JSONB, nullable=True)
+
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
