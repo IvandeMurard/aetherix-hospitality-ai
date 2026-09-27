@@ -1359,6 +1359,9 @@ def render_report(result: Result, today: str) -> str:
         f"date: {today}",
         "story: HOS-320",
         f"drift_count: {len(result.drift)}",
+        # Machine-readable for the cron workflow: exit 0 means "no drift", not
+        # "every detector looked". Comma-separated codes, empty when none.
+        f"skipped_detectors: {','.join(result.skipped_detectors)}",
         "---",
         "",
         f"# Rapport d'hygiène architecturale — {today}",

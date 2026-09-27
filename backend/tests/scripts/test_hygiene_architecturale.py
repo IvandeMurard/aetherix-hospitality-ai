@@ -568,6 +568,7 @@ def test_report_states_clean_when_no_drift():
 
     assert "✅ **Aucun drift détecté.**" in report
     assert "drift_count: 0" in report
+    assert "skipped_detectors: \n" in report
 
 
 def test_report_lists_every_detector_and_counts_drift():
@@ -611,6 +612,8 @@ def test_report_headline_is_not_clean_when_a_detector_was_skipped():
     report = hygiene.render_report(result, "2026-07-26")
 
     assert "✅ **Aucun drift détecté.**" not in report
+    # The cron workflow reads this line, not the prose (hygiene-architecturale.yml).
+    assert "skipped_detectors: D9,D11\n" in report
     assert "❔ **Aucun drift détecté, mais non concluant** — 2 détecteur(s) sans verdict complet : D9, D11" in report
 
     result.findings.append(hygiene.Finding("D2", "chemin cassé", "detail"))

@@ -10,10 +10,16 @@
 # `eval/golden_dataset.jsonl` is what gates merges (Décision #29), so an agent
 # that could write to it would be able to unlock its own changes.
 #
-# Secrets: none configured. D1-D8 are static (no network, no runtime). D9 alone
-# reads the forge — branch and PR state exists nowhere else — using the built-in
-# GITHUB_TOKEN, read-only, and it records a skip rather than reporting clean when
-# that token is absent. See HOS-324.
+# Secrets: none configured. D1-D8 are static (no network, no runtime). D9-D11
+# read the forge through the built-in GITHUB_TOKEN, read-only — branch, PR and
+# workflow-run state exists nowhere else: D9 branches and PRs (HOS-324), D10
+# this workflow's own last run, D11 the CI on main. Each records a skip rather
+# than reporting clean when the token cannot read what it needs.
+#
+# A skip is not drift: the script still exits 0. The job reads the report's
+# `skipped_detectors:` line, prints "non concluant" and raises a warning instead
+# of "no drift". The scheduled run of 2026-09-21 skipped D10 and D11 (token
+# without `actions: read`, added 2026-09-27) while its report said "✅ clean".
 #
 # Manual run:
 #   Actions → Hygiène architecturale → Run workflow
@@ -33,9 +39,12 @@ on:
         required: false
         default: "false"
 
+# Scopes not listed here are "none". D10 and D11 read workflow runs: without
+# `actions: read` the API refuses them in a private repo and they skip.
 permissions:
   contents: write
   pull-requests: write
+  actions: read
 
 jobs:
   detect:
@@ -54,9 +63,10 @@ jobs:
           python-version: "3.12"
 
       # No dependencies to install — the detectors are stdlib only.
-      # GH_TOKEN is for D9 only: it reads branches and PRs across the watched
-      # repos (HOS-324). Read-only, and the detector degrades to a recorded skip
-      # without it rather than reporting a clean forge it never looked at.
+      # GH_TOKEN is for D9-D11: branches and PRs across the watched repos
+      # (HOS-324), then workflow runs for D10/D11. Read-only, and each detector
+      # degrades to a recorded skip rather than reporting a forge it never
+      # looked at as clean.
       - name: Run hygiene detectors
         id: detect
         env:
@@ -73,18 +83,51 @@ jobs:
           set -e
 
           case "$CODE" in
-            0) echo "✅ Aucun drift détecté."; echo "drift=false" >> "$GITHUB_OUTPUT" ;;
-            1) echo "⚠️  Drift détecté.";       echo "drift=true"  >> "$GITHUB_OUTPUT" ;;
+            0|1) ;;
             *) echo "❌ Erreur du détecteur (exit $CODE)."; exit "$CODE" ;;
           esac
+
+          # Exit 0 means "no drift found", not "every detector looked". The
+          # report's frontmatter names the detectors that could not; an empty
+          # value is the only clean verdict.
+          SKIPPED=$(sed -n 's/^skipped_detectors: *//p' "$REPORT" | head -n 1)
+          echo "skipped=$SKIPPED" >> "$GITHUB_OUTPUT"
+          if [ -n "$SKIPPED" ]; then
+            echo "::warning title=Hygiène non concluante::Détecteur(s) sans verdict : $SKIPPED. Voir « Détecteurs ignorés » dans le rapport."
+            {
+              echo "### ❔ Détecteur(s) sans verdict : $SKIPPED"
+              echo
+              echo "Ils n'ont pas pu regarder — ce n'est pas « clean ». Raisons dans la section"
+              echo "« Détecteurs ignorés » du rapport (étape *Print report*)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$CODE" -eq 1 ]; then
+            echo "⚠️  Drift détecté."
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$SKIPPED" ]; then
+            echo "❔ Aucun drift détecté, mais non concluant : $SKIPPED sans verdict."
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "✅ Aucun drift détecté."
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Print report
         run: cat "${{ steps.detect.outputs.report }}"
 
-      # AC6 — a clean run produces nothing. No empty PR, no noise.
+      # AC6 — a run without drift opens no PR. A skip is not drift, so it does
+      # not open one either: it is surfaced as a warning by the step above.
       - name: No drift — stop here
         if: steps.detect.outputs.drift == 'false'
-        run: echo "ℹ️  Rien à signaler, aucune PR ouverte."
+        env:
+          SKIPPED: ${{ steps.detect.outputs.skipped }}
+        run: |
+          if [ -n "$SKIPPED" ]; then
+            echo "❔ Aucune PR ouverte — mais $SKIPPED sans verdict : ce n'est pas « rien à signaler »."
+          else
+            echo "ℹ️  Rien à signaler, aucune PR ouverte."
+          fi
 
       - name: Stage report
         if: steps.detect.outputs.drift == 'true'
@@ -156,7 +199,7 @@ jobs:
             echo "**Cette PR n'applique aucune correction** — elle ajoute le rapport de drift."
             echo "Les corrections sont à faire à la main dans cette branche, après lecture."
             echo
-            echo "- Détecteurs statiques uniquement : pas de réseau, pas de secret, pas d'accès runtime."
+            echo "- D1-D8 statiques ; D9-D11 lisent la forge (branches, PRs, runs) en lecture seule via \`GITHUB_TOKEN\`. Pas de secret, pas d'accès runtime."
             echo "- Aucune écriture dans \`eval/golden_dataset.jsonl\` : le dataset garde le merge"
             echo "  (Décision #29), l'agent ne doit pas pouvoir le modifier."
             echo "- Périmètre du diff verrouillé par le garde-fou du workflow : \`docs/**\`, \`CLAUDE.md\`, \`AGENTS.md\`."
