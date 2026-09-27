@@ -7,6 +7,15 @@ name: Eval — parser provider matrix
 #
 # Secrets: ANTHROPIC_API_KEY and GEMINI_API_KEY. A missing key fails that job
 # loudly rather than skipping — a matrix with a silent hole compares nothing.
+#
+# Inputs `runs` and `update_baseline` (HOS-342):
+#   - runs >= 3 measures run-to-run variance; it is also the floor for freezing.
+#   - update_baseline freezes one baseline per target, keyed (target, dataset
+#     version). The freeze is refused unless the runs agree (canary rule,
+#     Décision #29) — the job then fails red, it never silently skips.
+#   - This workflow does NOT commit (contents: read). A frozen baseline is uploaded
+#     as the `parser-baseline-<provider>` artifact and lands on main through a PR,
+#     like every other baseline.
 
 on:
   workflow_dispatch:
@@ -19,6 +28,15 @@ on:
         description: "Exact Gemini model id (not a tier)"
         required: false
         default: "gemini-2.0-flash"
+      runs:
+        description: "Runs per target (>= 3 measures variance; required to freeze)"
+        type: choice
+        options: ["1", "3", "5"]
+        default: "3"
+      update_baseline:
+        description: "Freeze the real baseline per target (needs runs >= 3); uploaded as an artifact, committed via PR"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -53,18 +71,45 @@ jobs:
         run: uv sync --group dev
 
       - name: Run parser eval on the pinned target
+        env:
+          RUNS: ${{ inputs.runs }}
+          UPDATE_BASELINE: ${{ inputs.update_baseline }}
+          PROVIDER: ${{ matrix.provider }}
         run: |
+          extra=()
+          if [ "$UPDATE_BASELINE" = "true" ]; then
+            if [ "$RUNS" -lt 3 ]; then
+              echo "::error::update_baseline needs runs >= 3 (canary rule, Décision #29); got $RUNS. Nothing was frozen."
+              exit 1
+            fi
+            extra+=(--update-baseline)
+          fi
           uv run --project backend python -m scripts.eval.run_all \
-            --layers parser \
-            --json-out out/${{ matrix.provider }}.json \
-            --md-out out/${{ matrix.provider }}.md
-          cat out/${{ matrix.provider }}.md >> "$GITHUB_STEP_SUMMARY"
+            --layers parser --runs "$RUNS" "${extra[@]}" \
+            --json-out "out/$PROVIDER.json" \
+            --md-out "out/$PROVIDER.md"
+          cat "out/$PROVIDER.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$UPDATE_BASELINE" = "true" ]; then
+            {
+              echo
+              echo "**Baseline frozen for \`$EVAL_PARSER_TARGET\`** — artifact \`parser-baseline-$PROVIDER\`."
+              echo "Not committed by this workflow: land it on main through a PR."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: parser-${{ matrix.provider }}
           path: out/
+
+      - name: Upload frozen baseline
+        if: inputs.update_baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: parser-baseline-${{ matrix.provider }}
+          path: eval/baselines/parser/
+          if-no-files-found: error
 
   compare:
     name: compare
