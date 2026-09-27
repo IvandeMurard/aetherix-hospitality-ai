@@ -1,6 +1,6 @@
 # Audit des silences — erreurs avalées sans signal (24/09/2026)
 
-> **Statut : audit, pas décision.** Il prépare la règle qui deviendra la Décision #37 (portée : toute l'architecture, demande PM du 24/09/2026). Aucun code n'est modifié ici.
+> **Statut : audit, pas décision.** Il prépare une future décision architecturale (portée : toute l'architecture, demande PM du 24/09/2026). Son numéro sera attribué au moment de la rédaction : annoncé d'avance, il a été pris deux fois par des sessions parallèles (#37, puis #40). Aucun code n'est modifié ici.
 > **Principe audité :** une erreur doit être *entendue* (un événement typé), puis *analysée* (classée par criticité), puis *remontée ou non* selon cette criticité. Un log que rien ne lit n'est pas une écoute.
 
 ## Méthode
@@ -22,7 +22,7 @@
 
 - **Les `except` étroits ne sont pas couverts.** Un `except ValueError: return 0` déguise une erreur tout aussi bien. Le nombre réel de silences est donc **plus élevé**.
 - **La détection des signaux se fait par motif textuel.** Un signal émis par une fonction intermédiaire peut être manqué. Exemple : `apaleo_adapter.py:274` a été reclassé à la main en S.
-- **La criticité est un jugement**, fait sans données d'exploitation (aucun pilote réel). Le PM doit la relire avant la Décision #37.
+- **La criticité est un jugement**, fait sans données d'exploitation (aucun pilote réel). Le PM doit la relire avant la décision.
 - **Les scripts sont hors périmètre (45 cas).**
   - Les gates de CI signalent par leur code de sortie, sauf deux `pass` légitimes : l'échauffement de `smoke_test_e2e.py:139` et le chargeur d'environnement optionnel de `audit_rls_policies.py:50`.
   - Les scripts `scripts/ops` sont lancés par un humain qui lit leur sortie.
@@ -87,7 +87,7 @@ Ces cas contredisent l'invariant de la Décision #27 : « tout déclenchement de
 
 La règle à venir devrait **généraliser ces motifs**, pas en inventer un nouveau.
 
-## Proposition pour la Décision #37 (à trancher, non décidée)
+## Proposition pour la future décision (à trancher, non décidée)
 
 1. **Jamais d'erreur avalée sans événement typé.** Un gestionnaire large doit faire l'une de ces trois choses :
    - relancer ;
@@ -104,7 +104,7 @@ La règle à venir devrait **généraliser ces motifs**, pas en inventer un nouv
 
 - **Lot P1** (33 cas) : correctifs par catégorie, F et G d'abord.
   - Les 7 cas P1 de Tacet sont à arbitrer à part : Tacet est en pause et en maintenance depuis juillet 2026.
-- **Décision #37** rédigée **après** relecture de cette criticité par le PM.
+- **La décision** est rédigée **après** relecture de cette criticité par le PM ; elle prend le prochain numéro libre à cette date.
 - **Détecteur d'hygiène** (règle 5) livré avec la décision, pour que la règle soit vérifiable dès le premier jour.
 
 ## Tableau complet (93 cas, triés par criticité puis catégorie)

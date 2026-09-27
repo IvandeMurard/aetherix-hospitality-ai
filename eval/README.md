@@ -167,6 +167,10 @@ python -m scripts.eval.compare_parser_targets out/claude.json out/gemini.json
 
 Or run the **Eval — parser provider matrix** workflow (`workflow_dispatch`, needs
 the `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` secrets).
+Inputs: `runs` (1, 3 or 5; default 3) and `update_baseline`. Freezing needs
+`runs` ≥ 3 and runs that agree (canary rule, Décision #29), otherwise the job
+fails red. The workflow never commits: the frozen file is uploaded as the
+`parser-baseline-<provider>` artifact and lands on main through a PR (HOS-342).
 
 - **Target = exact model id, never a tier**, and the provider is called directly,
   never through the fallback: a failover mid-run would mix two models in one score.
