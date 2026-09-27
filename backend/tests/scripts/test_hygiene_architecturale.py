@@ -583,6 +583,26 @@ def test_report_lists_every_detector_and_counts_drift():
     assert "chemin cassé" in report
 
 
+def test_report_header_does_not_say_clean_for_a_skipped_detector():
+    """A detector that could not look must not read as clean in its header.
+
+    The headers are what a reader skims; D9–D11 without `gh` used to print
+    "✅ clean" with the only caveat at the bottom of the report.
+    """
+    result = hygiene.Result()
+    result.skipped.append("D10: état du cron illisible — aucun verdict rendu.")
+
+    report = hygiene.render_report(result, "2026-07-26")
+
+    assert "## D10 · Cron d'hygiène en vie — ❔ non concluant" in report
+    assert "> Non vérifié — état du cron illisible" in report
+    # "D1" is a prefix of "D10": D1 must stay clean.
+    assert "## D1 · Drift harness — ✅ clean" in report
+    # Drift still takes precedence over a partial skip.
+    result.findings.append(hygiene.Finding("D10", "cron mort", "detail"))
+    assert "## D10 · Cron d'hygiène en vie — ⚠️ 1" in hygiene.render_report(result, "2026-07-26")
+
+
 # ─── D9 · Branches et PRs orphelines ──────────────────────────────────────────
 #
 # `_gh` is monkeypatched in every case: the suite must never touch the network,

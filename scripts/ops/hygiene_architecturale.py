@@ -1367,10 +1367,24 @@ def render_report(result: Result, today: str) -> str:
     for code, label, _ in DETECTORS:
         findings = [f for f in result.findings if f.detector == code]
         drift_n = sum(1 for f in findings if f.severity == "drift")
-        status = "✅ clean" if drift_n == 0 else f"⚠️ {drift_n}"
+        # Skip entries are prefixed "Dn:". Match on the colon: "D1" must not
+        # claim D10's or D11's skips.
+        skips = [s for s in result.skipped if s.startswith(f"{code}:")]
+        # A detector that could not look is not clean: the header is what a
+        # reader skims, so it must not say "clean" while the verdict is missing.
+        if drift_n:
+            status = f"⚠️ {drift_n}"
+        elif skips:
+            status = "❔ non concluant"
+        else:
+            status = "✅ clean"
         lines += [f"## {code} · {label} — {status}", ""]
+        if skips:
+            lines += [f"> Non vérifié — {s.removeprefix(f'{code}:').strip()}" for s in skips]
+            lines += [""]
         if not findings:
-            lines += ["Rien à signaler.", ""]
+            if not skips:
+                lines += ["Rien à signaler.", ""]
             continue
         for finding in findings:
             marker = "ℹ️" if finding.severity == "info" else "⚠️"
