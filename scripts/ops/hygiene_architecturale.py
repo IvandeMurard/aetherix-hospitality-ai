@@ -460,6 +460,16 @@ class Result:
     def info(self) -> list[Finding]:
         return [f for f in self.findings if f.severity == "info"]
 
+    # Skip entries are prefixed "Dn:". Split on the colon rather than testing a
+    # prefix: "D1" must not claim D10's or D11's skips.
+    def skips_for(self, code: str) -> list[str]:
+        return [s for s in self.skipped if s.split(":", 1)[0] == code]
+
+    @property
+    def skipped_detectors(self) -> list[str]:
+        """Detectors with at least one skip, once each — D9 logs one skip per repo."""
+        return list(dict.fromkeys(s.split(":", 1)[0] for s in self.skipped))
+
 
 def _read(rel: str) -> str | None:
     path = _ROOT / rel
@@ -1359,17 +1369,27 @@ def render_report(result: Result, today: str) -> str:
         "",
     ]
 
-    if not result.drift:
-        lines += ["✅ **Aucun drift détecté.**", ""]
+    # Same rule as the per-detector headers below: "no drift" is only a clean
+    # verdict if every detector could look.
+    blind = result.skipped_detectors
+    blind_note = (
+        f"{len(blind)} détecteur(s) sans verdict complet : {', '.join(blind)} "
+        "(voir « Détecteurs ignorés »)."
+        if blind
+        else ""
+    )
+    if result.drift:
+        headline = f"⚠️ **{len(result.drift)} drift(s) détecté(s).**"
+        lines += [f"{headline} {blind_note}".rstrip(), ""]
+    elif blind:
+        lines += [f"❔ **Aucun drift détecté, mais non concluant** — {blind_note}", ""]
     else:
-        lines += [f"⚠️ **{len(result.drift)} drift(s) détecté(s).**", ""]
+        lines += ["✅ **Aucun drift détecté.**", ""]
 
     for code, label, _ in DETECTORS:
         findings = [f for f in result.findings if f.detector == code]
         drift_n = sum(1 for f in findings if f.severity == "drift")
-        # Skip entries are prefixed "Dn:". Match on the colon: "D1" must not
-        # claim D10's or D11's skips.
-        skips = [s for s in result.skipped if s.startswith(f"{code}:")]
+        skips = result.skips_for(code)
         # A detector that could not look is not clean: the header is what a
         # reader skims, so it must not say "clean" while the verdict is missing.
         if drift_n:
@@ -1496,9 +1516,13 @@ def main() -> int:
 
     for finding in result.drift:
         print(f"⚠️  [{finding.detector}] {finding.title}", file=sys.stderr)
+    blind = result.skipped_detectors
+    icon = "⚠️" if result.drift else "❔" if blind else "✅"
     print(
-        f"\n{'⚠️' if result.drift else '✅'} {len(result.drift)} drift(s), "
-        f"{len(result.info)} info, {len(result.skipped)} détecteur(s) ignoré(s).",
+        f"\n{icon} {len(result.drift)} drift(s), "
+        f"{len(result.info)} info, {len(blind)} détecteur(s) ignoré(s)"
+        + (f" ({', '.join(blind)})" if blind else "")
+        + ".",
         file=sys.stderr,
     )
 

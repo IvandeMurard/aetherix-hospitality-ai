@@ -566,7 +566,7 @@ def test_unknown_detector_code_is_an_error_not_a_silent_pass(monkeypatch):
 def test_report_states_clean_when_no_drift():
     report = hygiene.render_report(hygiene.Result(), "2026-07-26")
 
-    assert "Aucun drift détecté" in report
+    assert "✅ **Aucun drift détecté.**" in report
     assert "drift_count: 0" in report
 
 
@@ -601,6 +601,36 @@ def test_report_header_does_not_say_clean_for_a_skipped_detector():
     # Drift still takes precedence over a partial skip.
     result.findings.append(hygiene.Finding("D10", "cron mort", "detail"))
     assert "## D10 · Cron d'hygiène en vie — ⚠️ 1" in hygiene.render_report(result, "2026-07-26")
+
+
+def test_report_headline_is_not_clean_when_a_detector_was_skipped():
+    """Zero drift with a blind detector is "non concluant", not "✅ Aucun drift"."""
+    result = hygiene.Result()
+    result.skipped += ["D9: `a/b` inaccessible", "D9: `c/d` inaccessible", "D11: CI illisible"]
+
+    report = hygiene.render_report(result, "2026-07-26")
+
+    assert "✅ **Aucun drift détecté.**" not in report
+    assert "❔ **Aucun drift détecté, mais non concluant** — 2 détecteur(s) sans verdict complet : D9, D11" in report
+
+    result.findings.append(hygiene.Finding("D2", "chemin cassé", "detail"))
+    report = hygiene.render_report(result, "2026-07-26")
+    assert "⚠️ **1 drift(s) détecté(s).** 2 détecteur(s) sans verdict complet : D9, D11" in report
+
+
+def test_summary_counts_skipped_detectors_not_skip_entries(monkeypatch, capsys):
+    """D9 logs one skip per unreachable repo: two entries are still one detector."""
+
+    def blind_d9(result):
+        result.skipped += ["D9: `a/b` inaccessible", "D9: `c/d` inaccessible"]
+
+    monkeypatch.setattr(hygiene, "DETECTORS", (("D9", "Branches et PRs orphelines", blind_d9),))
+    monkeypatch.setattr(sys, "argv", ["hygiene", "--json"])
+
+    assert hygiene.main() == 0  # a skip is not drift: the exit code is unchanged
+
+    summary = capsys.readouterr().err.strip().splitlines()[-1]
+    assert summary == "❔ 0 drift(s), 0 info, 1 détecteur(s) ignoré(s) (D9)."
 
 
 # ─── D9 · Branches et PRs orphelines ──────────────────────────────────────────
