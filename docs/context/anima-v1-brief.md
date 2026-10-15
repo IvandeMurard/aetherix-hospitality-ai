@@ -2,6 +2,7 @@
 
 > **Statut : Design** (taxonomie [`status-taxonomy.md`](status-taxonomy.md), Décision #33). Brief de reprise pour une session Claude Code : ce n'est ni une spécification, ni une décision. Date : 15/10/2026.
 > **Ce que ce brief fait** : poser l'intention, le cadre, ce qui existe et ce qui manque, les données disponibles sur le partage volontaire (avec leurs réserves), et les questions qui restent à Ivan. **Ce qu'il ne fait pas** : définir le périmètre de « livré » — c'est §6, à trancher par Ivan.
+> **⚠️ Emplacement du dépôt (15/10/2026)** : le dépôt vit dans `C:\Users\ivand\aetherix-hospitality-ai`. L'ancien dossier `C:\Users\ivand\OneDrive\Documents\aetherix-hospitality-ai` **n'est plus le dépôt** : il ne contient qu'une note orpheline (`docs/context/session-memory-anima-cognition.md`). Une session qui ne trouve pas ce brief ou `docs/context/` complet est rattachée à l'ancien dossier : la rattacher au nouveau (ou la lancer depuis celui-ci).
 
 ---
 
