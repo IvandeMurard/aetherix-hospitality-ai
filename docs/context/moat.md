@@ -76,7 +76,7 @@ Ils restent vrais et nécessaires — ils ne séparent plus.
 |---|---|---|
 | « Système de mémoire opérationnelle » | Mem0, Zep, Letta, Oracle — catégorie d'infrastructure financée, plusieurs implémentations de niveau production dont des gratuites | **Prérequis.** À qualifier systématiquement : ce qui compte est le corpus, pas la capacité |
 | « MCP-native, appelable par leur écosystème » (Décision #21) | Le serveur MCP Apaleo est passé en disponibilité générale, public et documenté, en juillet 2026 | **Prérequis.** Ne plus le présenter comme un avantage : c'est le ticket d'entrée |
-| Human-in-the-loop explicite (Décision #6) | Trois occurrences indépendantes en trois semaines : FinSuite AI (20/07), Zaplar et BE-A (10/08), toutes avec approbation avant action | **Norme de catégorie.** À garder comme prérequis correctement implémenté, pas comme séparateur |
+| Human-in-the-loop explicite (Décision #6) | Trois occurrences indépendantes confirmées en six semaines : FinSuite AI (20/07), BE-A (10/08), BCG × NYU / cas Marriott (31/08), avec approbation ou autorité d'override humaine avant action. *Corrigé le 15/10/2026 : l'entrée du 10/08 comptait Zaplar, dont la formulation est ambiguë (deux lectures coexistent sur leur site) et n'est pas citable comme cas confirmé ; au 10/08 le compte confirmé était de deux, la troisième est arrivée le 31/08.* | **Norme de catégorie.** À garder comme prérequis correctement implémenté, pas comme séparateur |
 
 **Conséquence de discipline** : ne jamais ouvrir un pitch, un case study ou un entretien sur l'un
 de ces trois. Ils se mentionnent en second rideau, comme hygiène acquise.
