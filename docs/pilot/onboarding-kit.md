@@ -166,7 +166,7 @@ Dérouler la checklist §4 ci-dessous, cocher en direct.
 
 À cocher pendant le call (32-42 min). *Checklist Apaleo-only — TODO Phase 4 : gagner un item "PMS/POS confirmés = adapter existant (T1/T2) ou à scoper (T3/inconnu)" dès qu'un design partner hors Apaleo entre en pipeline (cf. note §3).*
 
-- [ ] **Apaleo account** avec API access activé (vérifier le tier — l'OAuth2 client doit être créable dans le Developer Portal du prospect).
+- [ ] **Apaleo account** avec API access activé (vérifier le tier — l'OAuth2 client doit être créable dans le Developer Portal du prospect). *Note FGA (15/10/2026) : sous le nouveau modèle Fine-Grained API d'Apaleo, l'hôtel choisit les propriétés à la connexion et le rôle de l'utilisateur doit couvrir les permissions de l'app ; le flux exact pour un client `client_credentials` est en attente d'Apaleo — cf. `credentials-sop.md` §2 Étape 1.*
 - [ ] **Numéro WhatsApp Business** configuré et joignable (le prospect doit savoir qui contrôle ce numéro côté hôtel).
 - [ ] **F&B Manager nommé** disponible 2 min/jour pour lire le Receipt et répondre.
 - [ ] **Accord RGPD opérationnel** — données covers/occupancy/staffing uniquement. Pas de PII guest. Stockage EU (Supabase Stockholm, Fly.io Paris).
