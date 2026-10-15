@@ -33,6 +33,12 @@ Côté partner (instructions à inclure dans le mail post-discovery call) :
 5. Générer `client_id` + `client_secret`. **Le secret n'est affiché qu'une fois** — copier immédiatement.
 6. Envoyer les credentials à Ivan via **1Password share** (lien expirant 24h) ou **Bitwarden Send**. Pas d'email, pas de Slack public, pas de message IA.
 
+> **⚠️ À mettre à jour — Apaleo Fine-Grained API (FGA)** (annonce du forum développeurs Apaleo reçue le 15/10/2026 ; guide `apaleo.dev/guides/api/scopes.html`). Un nouveau modèle d'accès s'applique aux **nouvelles apps** : type choisi **une seule fois à l'enregistrement, définitif** ; permissions au format `service.resource.action` (ex. `core.reservations.read`) à la place des scopes `resource.action` ; propriétés autorisées par l'hôtel **à la connexion** (modifiables ensuite, effet immédiat) ; rôle de l'utilisateur qui a connecté l'app vérifié à chaque appel. Les apps existantes restent en scopes. Apaleo recommande FGA.
+>
+> **Non appliqué ici tant qu'Apaleo n'a pas répondu** : les étapes 3 et 4 ci-dessus décrivent le modèle par scopes (property cochée à la création de l'app). Avant d'envoyer ces instructions à un partner : (1) enregistrer l'app en FGA d'emblée — le type ne peut pas être changé après coup ; (2) lever les inconnues — comment un client `client_credentials` FGA est restreint par propriété ; si la règle « rôle de l'utilisateur qui a connecté l'app » s'applique à ce flux (risque de coupure silencieuse de l'agent quotidien si ce rôle change — à traiter par un guardrail typé 403/400 + alerte, Epic 12) ; quelle granularité sur les données guest (la doc est muette sur la PII). Aucun changement de principe : la **Décision #7 (read-only)** et la règle « une seule property » restent.
+>
+> **Point de code à lever avant HOS-176** : `ApaleoPMSAdapter` (chemin `apaleo_raw` de `/pms/sync`, utilisé quand ni mock ni MCP) demande en dur le scope `offline_access openid profile read:occupancy read:revenue write:schedules` (`backend/app/services/apaleo_adapter.py:66`). Il contient un scope `write:` alors que cette SOP exige du read-only (le garde-fou `APALEO_READONLY` n'agit que côté code, pas sur le jeton), et ces noms ne suivent pas le format documenté par Apaleo (`ressource.action`). `ApaleoMCPAdapter` n'envoie aucun scope au token endpoint. **Non testé contre l'API** : comportement face à un client read-only inconnu.
+
 ### Étape 2 — Ivan reçoit et stocke (hors Claude, hors session IA)
 
 ```powershell
