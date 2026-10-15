@@ -581,3 +581,46 @@ M-16 ne bloque pas le gate isolément (absorbée par C3/C4, §11) mais doit êtr
 ### 13.5 Références
 
 Conversation Ivan 22/09/2026 · §5.3 (Décision #6, portée action) · §7 (Rectification, M-5) · §8 (R4) · Décision #36 (gel Epic 16 levé, contexte de cette reprise d'analyse)
+
+---
+
+## 14. Addendum 2026-10-15 — Claims déclarées vs inférées : piste de conception pour la couche Semantic
+
+> **Trigger** : veille Odessia (agent de voyage IA grand public, politique de confidentialité lue le 15/10/2026) et question d'Ivan — *« miroir côté voyageur : rien à reprendre ? comment gèrent-ils le RGPD ? »*. Détail : vault Obsidian `Veille/Veille_Distribution_Discovery.md` §OCT 15, 2026.
+> **Statut : Design / hypothèse** (taxonomie [`status-taxonomy.md`](status-taxonomy.md), Décision #33). Ne modifie ni le verdict du gate (§11) ni les mesures M-1 à M-16 ; aucune décision n'est prise ; ce n'est pas une spécification.
+
+### 14.1 Observation : pourquoi un produit côté voyageur n'a pas le blocage d'Anima
+
+Odessia n'est pas moins bloqué par habileté juridique mais **par structure** : la personne concernée est le client, elle active elle-même l'accès (e-mail, calendrier), voit ce qui est collecté et peut le supprimer. Chez Anima, le guest n'interagit jamais avec le système, ne l'a pas choisi, et n'est informé que par l'hôtel (§7 Information, mur W3, M-4).
+
+Leur politique n'est **pas** un benchmark de conformité : société du Delaware, traitement aux États-Unis, données analytiques conservées jusqu'à 7 ans, fournisseurs LLM conservant les entrées jusqu'à 30 jours, entraînement futur sur les conversations réservé « où la loi le permet » — une barre plus basse que M-9 (rétention zéro et non-entraînement contractuels). Une politique n'est pas non plus une preuve de pratique : leur page marketing parle d'accès « read-only » à Gmail/Calendar alors que la politique décrit un accès Calendar en lecture, ajout, modification et suppression.
+
+### 14.2 Piste : deux origines de claims dans la couche Semantic
+
+Aujourd'hui toute claim Semantic est traitée comme une inférence (`confidence`, `evidence_count`, `last_confirmed`, `decay_rate` — ADR-0011 D2). Hypothèse : distinguer l'**origine** d'une claim.
+
+| | `declared` (fournie par le guest) | `inferred` (déduite d'observations) |
+|---|---|---|
+| Base légale (§4) | Consentement ou contrat — plus naturelle qu'un intérêt légitime fragile | Intérêt légitime, jugée fragile pour un profil durable (§4) |
+| Rectification (§7, M-5) | Faite par la personne elle-même, source d'autorité | Chemin de contestation requis (M-5) |
+| Provenance (§13, M-16) | Triviale : la source est le guest | Pointeur vers l'observation source requis (M-16) |
+| Risque R4 (inférence erronée durable) | Réduit : la claim est écrite par la personne | Inchangé |
+| Art. 9 (§5.2) | Inchangé pour les préférences alimentaires ; le consentement explicite 9(2)(a) devient plus naturel | Inchangé |
+
+Règle de précédence **à tester** : une claim `inferred` ne peut pas écraser une claim `declared` sans confirmation du guest ou du manager.
+
+### 14.3 Ce que ça ne règle pas
+
+- L'hôtel reste **responsable de traitement** de ce qu'il stocke (§2) ; l'origine déclarée ne change pas le rôle d'Aetherix.
+- Le consentement doit rester **découplé de la réservation** (W3) ; une préférence « déclarée » obtenue sous condition de réserver n'est pas libre.
+- Les durées du §6 s'appliquent : une claim déclarée reste datée et soumise à `decay_rate` et à la rétention bornée.
+- Le gros de la valeur d'Anima est d'inférer pour des guests qui n'ont rien déclaré (premier séjour, couche Segment) : cette piste **réduit la part de Semantic reposant sur de l'inférence**, elle ne la supprime pas.
+- L'adoption dépend d'un canal où le guest déclare (pré-arrivée géré par l'hôtel). Je ne connais pas de protocole standard de remise d'un agent voyageur vers l'hôtel — **à vérifier avant toute hypothèse produit**.
+
+### 14.4 Suite possible (non engagée)
+
+Si la piste est retenue : un champ `origin: declared | inferred` dans le schéma de claim (amendement d'ADR-0011 D2), à concevoir avec M-4, M-5 et M-16. Le champ est testable sur données synthétiques, ce qui est compatible avec la reprise du développement (Décision #36). Aucun travail n'est lancé par cet addendum.
+
+### 14.5 Références
+
+§1 (critère surveillance systématique), §2, §4, §5.2, §6, §7, §11, §13 · mur W3 (§11 bis) · ADR-0011 D2 · Décision #33 (statut) · Décision #36 · vault Obsidian `Veille/Veille_Distribution_Discovery.md` §OCT 15, 2026
