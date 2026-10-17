@@ -65,6 +65,8 @@ HOTEL_TABLES: dict[str, TableRule] = {
     "learning_items": TableRule("tenant_id", 31, "What the learning loop proposed from this hotel's decisions and outcomes, approved or not."),
     "hotel_decision_parameters": TableRule("tenant_id", 32, "The hotel's rules and costs, with who set each value, how and when."),
     "hive_consents": TableRule("tenant_id", 33, "The hotel's Hive opt-in history."),
+    "hotel_data_requests": TableRule("tenant_id", 38, "Deletion and Hive opt-in requests made by the hotel's agent (codes are stored hashed and never exported).",
+                                     omit=("code_hash",)),
     "kpi_daily": TableRule("tenant_id", 34, "Daily KPIs."),
     "fb_patterns": TableRule("tenant_id", 35, "Patterns private to this hotel. Global patterns (tenant_id NULL) hold nothing of the hotel and stay.",
                              omit=("embedding",)),

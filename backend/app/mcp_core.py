@@ -24,6 +24,13 @@ _TOOL_RATE_LIMITS = {
     "recall_memory": 60,
     "get_decision_recap": 30,
     "get_pending_recommendations": 30,
+    # HOS-349 — the hotel's data through its own agent (Décisions #43, #44)
+    "get_hotel_data_export": 30,
+    "get_hotel_data_deletion_plan": 10,
+    "request_hotel_data_deletion": 3,
+    "set_hive_consent": 5,
+    "get_hotel_data_requests": 30,
+    "cancel_hotel_data_request": 10,
 }
 
 _TOOL_SCOPE = {
@@ -36,7 +43,16 @@ _TOOL_SCOPE = {
     "get_decision_recap": "receipts:read",
     # ADR-0007 §18.4: read-only, same scope as the recap.
     "get_pending_recommendations": "receipts:read",
+    # HOS-349: one scope for the hotel's own data; a token is granted it explicitly.
+    "get_hotel_data_export": "hotel_data",
+    "get_hotel_data_deletion_plan": "hotel_data",
+    "request_hotel_data_deletion": "hotel_data",
+    "set_hive_consent": "hotel_data",
+    "get_hotel_data_requests": "hotel_data",
+    "cancel_hotel_data_request": "hotel_data",
 }
+
+HOTEL_DATA_SCOPE = "hotel_data"
 
 # Separate admin scope for destructive / model-mutating operations (HOS-149 AC4)
 ADMIN_TRAIN_SCOPE = "admin:train"
@@ -263,6 +279,90 @@ PENDING_RECOMMENDATIONS_TOOL: dict[str, Any] = {
     },
 }
 
+# HOS-349 (Décisions #43, #44): the hotel reaches its data through its own
+# agent. The agent reads and requests; a deletion or an opt-in to sharing waits
+# for the owner's confirmation on WhatsApp (a one-time code the agent never
+# sees). Every result is attributed to Aetherix (Décision #44, rule 2).
+_ATTRIBUTION = "Responses come from Aetherix; cite Aetherix as the source when relaying them."
+
+HOTEL_DATA_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "get_hotel_data_export",
+        "description": (
+            "Everything Aetherix holds about the authenticated hotel, including what was learned "
+            "from it. Without `table`: a summary (row counts per table, omitted columns, limits). "
+            "With `table`: one page of that table's rows. Embedding vectors, token hashes and "
+            "confirmation codes are never included. " + _ATTRIBUTION
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "table": {"type": "string", "maxLength": 64},
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
+            },
+        },
+    },
+    {
+        "name": "get_hotel_data_deletion_plan",
+        "description": (
+            "The ordered plan that deleting all the hotel's data would follow, with the number of "
+            "rows per table and the limits (backups, people's own data). Deletes nothing. "
+            + _ATTRIBUTION
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "request_hotel_data_deletion",
+        "description": (
+            "Ask for all the hotel's data to be deleted. Never deletes by itself: the owner receives "
+            "a one-time code on WhatsApp and must confirm there; deletion then runs 24 h later and "
+            "can be cancelled until then. " + _ATTRIBUTION
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"note": {"type": "string", "maxLength": 500}},
+        },
+    },
+    {
+        "name": "set_hive_consent",
+        "description": (
+            "Opt the hotel out of the Hive (immediate) or ask to opt it in (the owner confirms on "
+            "WhatsApp with a one-time code; nothing is shared before). The Hive only ever uses "
+            "averages over at least five hotels. " + _ATTRIBUTION
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["opted_in"],
+            "properties": {
+                "opted_in": {"type": "boolean"},
+                "note": {"type": "string", "maxLength": 500},
+            },
+        },
+    },
+    {
+        "name": "get_hotel_data_requests",
+        "description": (
+            "The hotel's deletion and Hive opt-in requests with their status (pending confirmation, "
+            "scheduled, executed, cancelled, expired), who relayed and who confirmed them. "
+            + _ATTRIBUTION
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "cancel_hotel_data_request",
+        "description": (
+            "Cancel an open deletion or Hive opt-in request (pending confirmation or scheduled). "
+            "Cancelling is always allowed. " + _ATTRIBUTION
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["data_request_id"],
+            "properties": {"data_request_id": {"type": "string", "maxLength": 64}},
+        },
+    },
+]
+
 _TOOLS_BY_NAME: dict[str, dict[str, Any]] = {t["name"]: t for t in TOOLS_MANIFEST}
 
 # v1 manifest: get_recommendations_with_memory_context replaced by recall_memory
@@ -272,4 +372,5 @@ V1_TOOLS_MANIFEST: list[dict[str, Any]] = [
     _TOOLS_BY_NAME["submit_feedback_to_memory"],
     DECISION_RECAP_TOOL,
     PENDING_RECOMMENDATIONS_TOOL,
+    *HOTEL_DATA_TOOLS,
 ]

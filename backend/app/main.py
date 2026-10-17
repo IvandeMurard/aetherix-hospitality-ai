@@ -174,6 +174,11 @@ async def lifespan(app: FastAPI):
     from app.workers.learning_loop_worker import register_learning_loop_job
 
     register_learning_loop_job(_scheduler)
+    # HOS-349 — expire unused confirmation codes, run owner-confirmed
+    # deletions once their 24 h delay has passed.
+    from app.workers.hotel_data_worker import register_hotel_data_job
+
+    register_hotel_data_job(_scheduler)
     _scheduler.start()
     logger.info("APScheduler started with %d jobs", len(_scheduler.get_jobs()))
     app.state.scheduler = _scheduler

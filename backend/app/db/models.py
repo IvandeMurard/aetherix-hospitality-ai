@@ -437,12 +437,45 @@ class HiveConsent(Base):
     tenant_id = Column(String, nullable=False)
     opted_in = Column(Boolean, nullable=False)
     set_by = Column(String, nullable=False)               # user id / email
-    set_via = Column(String, nullable=False)              # dashboard_api | ops
+    set_via = Column(String, nullable=False)              # dashboard_api | ops | mcp | whatsapp
     note = Column(Text, nullable=True)
     set_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
         Index("idx_hive_consents_tenant", "tenant_id", "set_at"),
+    )
+
+
+class HotelDataRequest(Base):
+    """What the hotel's agent asked over MCP that only a human may confirm:
+    deleting all the hotel's data, or opting in to the Hive (HOS-349,
+    Décisions #43, #44). The owner confirms on WhatsApp with a one-time code
+    the agent never sees (only its sha256 is stored).
+    Mirror of migration 20261017120000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "hotel_data_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=False)
+    kind = Column(String, nullable=False)                 # deletion | hive_opt_in
+    status = Column(String, nullable=False, default="pending_confirmation")
+    # pending_confirmation | scheduled | executing | confirmed | executed | cancelled | expired
+    requested_by = Column(String, nullable=False)         # MCP token label (the relaying agent)
+    requested_via = Column(String, nullable=False)        # mcp
+    code_hash = Column(String, nullable=False)
+    confirm_expires_at = Column(DateTime(timezone=True), nullable=False)
+    execute_after = Column(DateTime(timezone=True), nullable=True)
+    confirmed_by = Column(String, nullable=True)
+    confirmed_at = Column(DateTime(timezone=True), nullable=True)
+    cancelled_by = Column(String, nullable=True)
+    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    executed_at = Column(DateTime(timezone=True), nullable=True)
+    note = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_hotel_data_requests_tenant_status", "tenant_id", "status"),
     )
 
 

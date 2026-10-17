@@ -503,6 +503,107 @@ async def tool_get_pending_recommendations(
 
 
 # ---------------------------------------------------------------------------
+# HOS-349 — the hotel's data through its own agent (Décisions #43, #44).
+# The agent reads and requests; a deletion or an opt-in waits for the owner.
+# ---------------------------------------------------------------------------
+
+_SOURCE = "Aetherix"
+_REQUEST_ERROR_STATUS = {"invalid_input": 400, "not_found": 404, "already_open": 409,
+                         "no_verified_channel": 409, "not_open": 409}
+
+
+def _request_error(exc) -> MCPAuthError:
+    return MCPAuthError(_REQUEST_ERROR_STATUS.get(exc.reason, 400), exc.reason, exc.detail)
+
+
+async def tool_get_hotel_data_export(
+    hotel_id: str, db: AsyncSession, table: Optional[str] = None, offset: int = 0, limit: int = 50,
+) -> dict[str, Any]:
+    from app.services import hotel_data
+
+    export = await hotel_data.export_hotel_data(db, hotel_id)
+    if table is None:
+        return {"source": _SOURCE, "hotel_id": hotel_id, "generated_at": export["generated_at"],
+                "row_counts": export["row_counts"], "omitted_columns": export["omitted_columns"],
+                "caveats": export["caveats"]}
+    if table not in hotel_data.HOTEL_TABLES:
+        raise MCPAuthError(400, "invalid_input", f"unknown table: {table}")
+    try:
+        offset, limit = int(offset), int(limit)
+    except (TypeError, ValueError):
+        raise MCPAuthError(400, "invalid_input", "offset and limit must be integers") from None
+    if offset < 0 or not 1 <= limit <= 200:
+        raise MCPAuthError(400, "invalid_input", "offset >= 0 and limit within [1, 200]")
+    rows = export["records"][table]
+    return {"source": _SOURCE, "hotel_id": hotel_id, "table": table, "total": len(rows),
+            "offset": offset, "rows": rows[offset:offset + limit],
+            "omitted_columns": export["omitted_columns"].get(table, [])}
+
+
+async def tool_get_hotel_data_deletion_plan(hotel_id: str, db: AsyncSession) -> dict[str, Any]:
+    from app.services import hotel_data
+    from app.services.hotel_data_requests import _profile
+
+    profile = await _profile(db, hotel_id)
+    steps = hotel_data.build_deletion_plan(hotel_id, getattr(profile, "pms_property_id", None))
+    preview = await hotel_data.execute_deletion(db, hotel_id, dry_run=True)
+    return {"source": _SOURCE, "hotel_id": hotel_id,
+            "steps": [{"order": s.order, "table": s.table, "rationale": s.rationale} for s in steps],
+            "rows_that_would_be_deleted": preview.rows, "caveats": list(hotel_data.CAVEATS)}
+
+
+async def tool_request_hotel_data_deletion(
+    hotel_id: str, db: AsyncSession, caller: str, note: Optional[str] = None,
+) -> dict[str, Any]:
+    from app.services import hotel_data_requests as hdr
+
+    try:
+        out = await hdr.create_request(db, hotel_id, "deletion", requested_by=caller, note=note)
+    except hdr.RequestError as exc:
+        raise _request_error(exc) from None
+    return {"source": _SOURCE, **out}
+
+
+async def tool_set_hive_consent(
+    hotel_id: str, db: AsyncSession, caller: str, opted_in: Any = None, note: Optional[str] = None,
+) -> dict[str, Any]:
+    from app.services import hive_gate
+    from app.services import hotel_data_requests as hdr
+
+    if not isinstance(opted_in, bool):
+        raise MCPAuthError(400, "invalid_input", "opted_in must be true or false")
+    if not opted_in:
+        row = await hive_gate.set_consent(db, hotel_id, False, set_by=f"agent:{caller}", set_via="mcp", note=note)
+        return {"source": _SOURCE, "status": "opted_out", **row}
+    try:
+        out = await hdr.create_request(db, hotel_id, "hive_opt_in", requested_by=caller, note=note)
+    except hdr.RequestError as exc:
+        raise _request_error(exc) from None
+    return {"source": _SOURCE, **out}
+
+
+async def tool_get_hotel_data_requests(hotel_id: str, db: AsyncSession) -> dict[str, Any]:
+    from app.services import hive_gate
+    from app.services import hotel_data_requests as hdr
+
+    consent = await hive_gate.consent_for(db, hotel_id)
+    return {"source": _SOURCE, "hotel_id": hotel_id, "requests": await hdr.list_requests(db, hotel_id),
+            "hive_opted_in": consent["opted_in"]}
+
+
+async def tool_cancel_hotel_data_request(
+    hotel_id: str, db: AsyncSession, caller: str, data_request_id: Any = None,
+) -> dict[str, Any]:
+    from app.services import hotel_data_requests as hdr
+
+    try:
+        out = await hdr.cancel_request(db, hotel_id, str(data_request_id or ""), by=f"agent:{caller}")
+    except hdr.RequestError as exc:
+        raise _request_error(exc) from None
+    return {"source": _SOURCE, **out}
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher — used by the HTTP shim and integration tests
 # ---------------------------------------------------------------------------
 
@@ -592,6 +693,21 @@ async def dispatch_tool(
                 result = await tool_get_decision_recap(tok.hotel_id, db=db, **args)
             elif tool_name == "get_pending_recommendations":
                 result = await tool_get_pending_recommendations(tok.hotel_id, db=db, **args)
+            elif tool_name == "get_hotel_data_export":
+                result = await tool_get_hotel_data_export(tok.hotel_id, db=db, **args)
+            elif tool_name == "get_hotel_data_deletion_plan":
+                result = await tool_get_hotel_data_deletion_plan(tok.hotel_id, db=db)
+            elif tool_name in ("request_hotel_data_deletion", "set_hive_consent",
+                               "cancel_hotel_data_request", "get_hotel_data_requests"):
+                caller = tok.label or tok.token_prefix or str(tok.id)
+                if tool_name == "request_hotel_data_deletion":
+                    result = await tool_request_hotel_data_deletion(tok.hotel_id, db=db, caller=caller, **args)
+                elif tool_name == "set_hive_consent":
+                    result = await tool_set_hive_consent(tok.hotel_id, db=db, caller=caller, **args)
+                elif tool_name == "cancel_hotel_data_request":
+                    result = await tool_cancel_hotel_data_request(tok.hotel_id, db=db, caller=caller, **args)
+                else:
+                    result = await tool_get_hotel_data_requests(tok.hotel_id, db=db)
             else:
                 raise MCPAuthError(500, "internal_error", "Dispatcher inconsistency")
         except MCPAuthError as exc:

@@ -126,6 +126,16 @@ _AGENT_MANIFEST = {
     },
 }
 
+# HOS-349: the hotel-data tools are listed from their MCP definitions, so the
+# discovery manifest cannot drift from what the server actually serves.
+from app.mcp_core import HOTEL_DATA_TOOLS  # noqa: E402 — leaf module, no cycle
+
+_AGENT_MANIFEST["tools"] += [
+    {"name": t["name"], "description": t["description"], "endpoint": "/mcp/v1/",
+     "method": "POST", "x-mcp-tool": True, "scope": "hotel_data"}
+    for t in HOTEL_DATA_TOOLS
+]
+
 
 @router.get(
     "/.well-known/agent.json",
