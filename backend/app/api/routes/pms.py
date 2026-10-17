@@ -23,14 +23,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/pms", tags=["pms"])
 
 
-async def _sync_task(service: PMSSyncService, property_id: str, sync_date: date) -> None:
+async def _sync_task(service: PMSSyncService, target, sync_date: date) -> None:
     """Background task wrapper that catches ApaleoSyncError and logs without DB write."""
     try:
-        await service.sync_daily_data(property_id, sync_date)
+        await service.sync_daily_data(target, sync_date)
     except ApaleoSyncError as exc:
         logger.error(
-            "PMS sync failed for property %s on %s — Apaleo error: %s",
-            property_id,
+            "PMS sync failed for tenant %s (PMS property %s) on %s — Apaleo error: %s",
+            target.tenant_id,
+            target.pms_property_id,
             sync_date,
             exc,
         )
@@ -160,17 +161,25 @@ async def trigger_pms_sync(
     if not profile:
         raise HTTPException(status_code=404, detail="No restaurant profile linked to this user.")
 
-    # Use the linked property ID
-    property_id = profile.tenant_id
+    # HOS-347: the PMS is called with the hotel's PMS property id, everything
+    # stored uses its tenant id. An unlinked hotel cannot sync (except mock).
+    from app.services.pms_identity import PmsIdentityError, target_from_profile
+
+    try:
+        target = target_from_profile(profile, allow_unlinked_mock=use_mock)
+    except PmsIdentityError as exc:
+        raise HTTPException(status_code=409, detail=exc.detail) from None
 
     service = PMSSyncService(adapter)
 
     # Run sync in background (includes DB persistence)
-    background_tasks.add_task(_sync_task, service, property_id, sync_date)
+    background_tasks.add_task(_sync_task, service, target, sync_date)
 
     return {
         "message": "PMS sync triggered successfully in background",
-        "property_id": property_id,
+        "tenant_id": target.tenant_id,
+        "pms_property_id": target.pms_property_id,
+        "property_id": target.tenant_id,  # kept for existing callers; = tenant_id
         "property_name": profile.property_name,
         "date": sync_date.isoformat(),
         "adapter": adapter_label,

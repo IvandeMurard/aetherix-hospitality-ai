@@ -101,15 +101,27 @@ class PMSSyncService:
         self.adapter = adapter
         self.stripper = PIIStripper()
 
-    async def sync_daily_data(self, property_id: str, target_date: date):
-        """Orchestrate the sync and storage of data for a specific day."""
-        occupancy = await self.adapter.get_occupancy(property_id, target_date)
-        revenue = await self.adapter.get_revenue(property_id, target_date, category="F&B")
+    async def sync_daily_data(self, target, target_date: date):
+        """Orchestrate the sync and storage of data for a specific day.
+
+        ``target`` is a ``pms_identity.PmsTarget`` (HOS-347): the PMS is called
+        with ``target.pms_property_id``; everything stored or logged uses
+        ``target.tenant_id``. A bare string is refused: it cannot say which of
+        the two ids it is.
+        """
+        from app.services.pms_identity import PmsTarget
+
+        if not isinstance(target, PmsTarget):
+            raise TypeError("sync_daily_data needs a PmsTarget (pms_identity.resolve_by_tenant)")
+        pms_id, tenant_id = target.pms_property_id, target.tenant_id
+        occupancy = await self.adapter.get_occupancy(pms_id, target_date)
+        revenue = await self.adapter.get_revenue(pms_id, target_date, category="F&B")
+        property_id = tenant_id  # everything below is Aetherix-side
 
         # Story 2.2: Persist sync result to Supabase
         async with AsyncSessionLocal() as session:
             sync_log = PMSSyncLog(
-                tenant_id=property_id,
+                tenant_id=tenant_id,
                 sync_date=target_date,
                 occupancy=occupancy,
                 fb_revenue=revenue,
