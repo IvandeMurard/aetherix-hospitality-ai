@@ -470,6 +470,18 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 - Deterministic renderer, no LLM; the Action (`public-status-sync.yml`) opens or updates a PR on the meta-repo (`sync/aetherix-status`), never pushes to its main; no token → "not synced", not a failure; idempotent.
 - The denylist is a net, not a proof: the PR review of the file stays the real control.
 
+### 43 — Agents adapt to each hotel, and the hotel owns its data (17/10/2026)
+
+**Decision (Ivan, PO):** every agent of the Mesh follows the rules and habits of *this* hotel and keeps adapting to its context, internal and external; the hotel stays the owner of its data; the Hive comes on top, on opt-in, and is always anonymized. Trigger: the closed-loop demo showed a generic headcount ("6 front of house · 3 kitchen") as if it were the hotel's, and the staffing service read no hotel rule at all (HOS-343).
+
+1. **Idiosyncratic.** An output rests on the hotel's own rules where they exist (`hotel_parameters`, Décision #40). A system default is allowed only labelled as a default, never presented as the hotel's rule. Public copy may say "follows your hotel's rules" only where the code reads them.
+2. **Adaptive, under the hotel's control.** Rules change with what happens (manager decisions, outcomes) and with context (type of service, event night, season, holidays). Changes are weekly proposals with their evidence, approved by the hotel (or Ivan), recorded and reversible (learning loop, Décision #40). Nothing adjusts itself silently (Décision #6); bounded autonomy stays ADR-0013 (proposed). Stories HOS-344 (learned rules), HOS-345 (context and seasonality).
+3. **The hotel owns its data.** Its own systems, or what it entered, are the source of truth; Aetherix holds a copy that records where each value came from (`set_by` / `set_via`). The hotel can see, export and delete everything about it, including what the learning loop derived from it (proposals, calibrations, learned parameters). Per-hotel export and deletion: HOS-346 (same plan / dry-run discipline as `dsar.py`, which covers individuals).
+4. **Hive: opt-in, always anonymized.** A hotel contributes only if it opts in. What leaves its tenant is an aggregate: never a single hotel's value, never a hotel identifier, and only above a floor of contributing hotels (to set in HOS-346, distinct from the k = 20 guests of HOS-323). The rule is enforced and tested in code; below the floor nothing is shared. Anonymity itself stays **not claimed** publicly (Décisions #2, #33) until a re-identification analysis exists: the gate makes the property checkable, it does not prove it.
+5. **When a hotel leaves.** Its data is exported to it, then deleted. Anonymized aggregates already computed cannot be separated and stay; later ones exclude it. This replaces the "asymmetric portability" idea of `vision-future.md` (hotel leaves with its data, learned priors stay): anything specific to the hotel, learned or not, leaves with it.
+
+**Consequences:** the aggregated benchmark of `vision-future.md` becomes opt-in, not opt-out. The data moat narrows to anonymized aggregates from hotels that opted in. Tenant identity must be one key per hotel on every path (HOS-347: `pms_sync` wrote the Apaleo property id as `tenant_id`).
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).

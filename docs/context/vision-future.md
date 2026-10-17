@@ -172,9 +172,9 @@ rien, tout repart avec l'hôtel. Ce qui devient possible seulement à ce titre :
 
 | Idée | Ce qu'elle exploite | Réserve |
 |---|---|---|
-| **Benchmark cross-propriétés vendable** — « votre capture rate F&B / no-show vs propriétés comparables » | Dataset agrégé propriété d'Aetherix, pas de l'hôtel | Conditionné au plancher de k-anonymat (décision ouverte) + opt-out hôtel |
+| **Benchmark cross-propriétés vendable** — « votre capture rate F&B / no-show vs propriétés comparables » | Dataset agrégé propriété d'Aetherix, pas de l'hôtel | Conditionné au plancher de k-anonymat (décision ouverte) + **opt-in** hôtel (Décision #43, 17/10/2026 ; était opt-out) |
 | **Cold-start packagé comme valeur d'onboarding** — « jour 1, vous avez déjà un prior » | Hive prior d'ADR-0011 D3, vendu comme bénéfice contractuel et non comme mécanique interne | Ne tient que si le prior bat réellement une heuristique — à prouver, cf. protocole de preuve |
-| **Portabilité asymétrique** — l'hôtel part avec ses données, les priors appris restent | La distinction données / policy apprise d'ADR-0011 D4 | Exige que la policy soit démontrablement non-personnelle (§10.2 DPIA, claim contestée) |
+| ~~**Portabilité asymétrique** — l'hôtel part avec ses données, les priors appris restent~~ **Remplacée par la Décision #43 (17/10/2026)** : tout ce qui est propre à l'hôtel, appris ou non, part avec lui ; seuls restent les agrégats anonymisés déjà calculés à partir d'hôtels ayant opté pour le Hive | ~~La distinction données / policy apprise d'ADR-0011 D4~~ | ~~Exige que la policy soit démontrablement non-personnelle (§10.2 DPIA, claim contestée)~~ |
 | **Rapport sectoriel annuel** de données agrégées | Actif marketing gratuit une fois la couche existante | Même plancher k ; et publier des agrégats est un traitement, pas une communication |
 | **Agent de conformité (art. 30 / DSAR / registre)** — voir ci-dessous | La position d'Aetherix comme responsable *et* comme fournisseur d'outillage | La plus séduisante et la plus piégeuse |
 
