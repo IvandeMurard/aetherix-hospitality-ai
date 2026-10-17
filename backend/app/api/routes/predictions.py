@@ -420,7 +420,7 @@ def _load_demo_dataframe() -> pd.DataFrame:
 async def _load_mcp_dataframe(
     property_id: str, start_date: date, end_date: date
 ) -> pd.DataFrame:
-    from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
+    from app.providers.pms.apaleo_mcp_adapter import ApaleoMCPAdapter
     from app.services.data_transformer import DataTransformer
 
     adapter = ApaleoMCPAdapter()
