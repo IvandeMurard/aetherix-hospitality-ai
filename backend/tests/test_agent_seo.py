@@ -173,10 +173,14 @@ class TestAgentManifest:
         assert required.issubset(_manifest.keys())
 
     @_skip_manifest
-    def test_exactly_five_tools(self):
+    def test_manifest_lists_exactly_the_served_v1_tools(self):
         # get_decision_recap added 24/09/2026 (ADR-0007 §17.2);
-        # get_pending_recommendations 25/09/2026 (ADR-0007 §18.4)
-        assert len(_manifest["tools"]) == 5
+        # get_pending_recommendations 25/09/2026 (ADR-0007 §18.4);
+        # six hotel-data tools 17/10/2026 (HOS-349), listed from mcp_core.
+        from app.mcp_core import V1_TOOLS_MANIFEST
+
+        assert {t["name"] for t in _manifest["tools"]} == {t["name"] for t in V1_TOOLS_MANIFEST}
+        assert len(_manifest["tools"]) == 11
 
     @_skip_manifest
     def test_tool_names_match_mcp_core(self):
@@ -251,4 +255,4 @@ class TestWellKnownHTTP:
     def test_agent_json_has_tools(self):
         resp = _client.get("/.well-known/agent.json")
         body = resp.json()
-        assert len(body["tools"]) == 5
+        assert len(body["tools"]) == 11

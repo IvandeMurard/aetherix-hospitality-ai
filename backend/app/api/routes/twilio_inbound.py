@@ -234,6 +234,18 @@ async def twilio_inbound_webhook(
     profile = await decisions.profile_for(payload.From_)
 
     if profile is not None:
+        # HOS-349 (Décisions #43, #44): the owner confirms or cancels what the
+        # hotel's agent requested (deletion, Hive opt-in) with a one-time code.
+        # Exact whole-message commands, checked first, no model; only for the
+        # hotel this verified number belongs to.
+        from app.services import hotel_data_requests as hdr
+
+        data_cmd = hdr.match_command(payload.Body)
+        if data_cmd is not None:
+            reply = await hdr.handle_command(db, profile, data_cmd, now=_now())
+            logger.info("twilio_inbound: hotel data command action=%s", data_cmd.action)
+            return _xml_response(_twiml_message(reply))
+
         plan = await decisions.handle_deterministic(
             profile, payload.Body, ButtonPayload.strip(), _now(), request_id=str(uuid.uuid4())
         )

@@ -279,11 +279,14 @@ entries:
 
   - id: hotel-data-via-agent
     name: Hotel data through the hotel's own agent
-    status: Design
-    deployed: false
+    status: Built
+    deployed: unknown
     description: >-
-      The hotel's own agent would fetch its export and deletion plan over MCP; a deletion
-      or an opt-in to sharing would wait for a human to confirm. Not built yet.
+      The hotel's own agent reads its data export and deletion plan over MCP. A deletion
+      or an opt-in to sharing waits for the owner to confirm on WhatsApp; deletion runs a
+      day later and can be cancelled.
     verified_on: 2026-10-17
     evidence:
-      - backend/app/services/hotel_data.py
+      - backend/app/services/hotel_data_requests.py
+      - backend/app/mcp_server.py
+      - backend/tests/services/test_hotel_data_mcp.py

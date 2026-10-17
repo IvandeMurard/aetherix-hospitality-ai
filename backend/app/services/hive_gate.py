@@ -42,7 +42,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 MIN_HOTELS = 5
 MAX_SHARE = 0.25
-CONSENT_SET_VIA = ("dashboard_api", "ops")
+# mcp: an opt-out by the hotel's agent (immediate); whatsapp: an opt-in the
+# owner confirmed with a one-time code (HOS-349). An agent never opts in alone.
+CONSENT_SET_VIA = ("dashboard_api", "ops", "mcp", "whatsapp")
 
 
 class HiveRefused(Exception):
