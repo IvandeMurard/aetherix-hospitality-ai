@@ -233,7 +233,13 @@ class DataSource(str, Enum):
 
 
 class TrainRequest(BaseModel):
-    property_id: str = Field("demo_hotel", description="Apaleo property ID.")
+    property_id: Optional[str] = Field(
+        None,
+        description=(
+            "Deprecated (HOS-347): the PMS property is resolved from the token's hotel. "
+            "If given, it must equal that hotel's PMS property id."
+        ),
+    )
     start_date: date = Field(
         default_factory=lambda: date.today() - timedelta(days=365),
         description="Historical window start (live MCP modes only).",
@@ -290,8 +296,34 @@ async def train_prophet(
     t0 = time.monotonic()
     training_id = str(uuid.uuid4())
 
+    # HOS-347: the hotel is the token's (tenant id, used for everything stored);
+    # its PMS property id is resolved from its profile and only used to call
+    # the PMS. Synthetic training needs no PMS.
+    tenant_id = tok.hotel_id
+    pms_property_id: Optional[str] = None
+    if body.data_source != DataSource.synthetic:
+        from app.services.pms_identity import PmsIdentityError, resolve_by_tenant
+
+        try:
+            target = await resolve_by_tenant(db, tenant_id)
+        except PmsIdentityError as exc:
+            raise HTTPException(status_code=409, detail=exc.detail) from None
+        if target.pms_type != "apaleo":
+            # The PMS-backed loader is Apaleo's (MCP); other PMSs need their
+            # adapter first (Décision #28). Never load through another vendor.
+            raise HTTPException(
+                status_code=409,
+                detail=f"no training data loader yet for this hotel's PMS ({target.pms_type})",
+            )
+        if body.property_id and body.property_id != target.pms_property_id:
+            raise HTTPException(
+                status_code=422,
+                detail="property_id does not match this hotel's PMS property id",
+            )
+        pms_property_id = target.pms_property_id
+
     try:
-        df = await _build_training_dataframe(body)
+        df = await _build_training_dataframe(body, pms_property_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Data loading failed: {exc}") from exc
 
@@ -311,7 +343,7 @@ async def train_prophet(
         )
 
     # Apply per-property captation rate calibration when available
-    df = await _apply_captation_calibration(df, body.property_id, db)
+    df = await _apply_captation_calibration(df, tenant_id, db)
 
     try:
         await engine.forecaster.train(
@@ -333,7 +365,7 @@ async def train_prophet(
     try:
         run = TrainingRun(
             id=uuid.UUID(training_id),
-            property_id=body.property_id,
+            property_id=tenant_id,  # column holds the tenant id since HOS-347
             source=body.data_source.value,
             records_count=len(df),
             mape_training=mape_training,
@@ -347,7 +379,7 @@ async def train_prophet(
 
     logger.info(
         "Prophet trained: id=%s property=%s source=%s rows=%d mape=%.2f%% duration=%dms",
-        training_id, body.property_id, body.data_source.value,
+        training_id, tenant_id, body.data_source.value,
         len(df), (mape_training or 0) * 100, duration_ms,
     )
 
@@ -399,14 +431,18 @@ async def _load_mcp_dataframe(
     return df
 
 
-async def _build_training_dataframe(body: "TrainRequest") -> pd.DataFrame:
+async def _build_training_dataframe(body: "TrainRequest", pms_property_id: Optional[str] = None) -> pd.DataFrame:
+    """``pms_property_id``: the hotel's PMS id, resolved by the caller (HOS-347)."""
     if body.data_source == DataSource.synthetic:
         return _load_demo_dataframe()
+    pms_id = pms_property_id or body.property_id
+    if not pms_id:
+        raise ValueError("a PMS property id is required for PMS-backed training")
     if body.data_source == DataSource.mcp_sandbox:
-        return await _load_mcp_dataframe(body.property_id, body.start_date, body.end_date)
+        return await _load_mcp_dataframe(pms_id, body.start_date, body.end_date)
     # hybrid: merge both, prefer MCP where dates overlap
     df_synthetic = _load_demo_dataframe()
-    df_mcp = await _load_mcp_dataframe(body.property_id, body.start_date, body.end_date)
+    df_mcp = await _load_mcp_dataframe(pms_id, body.start_date, body.end_date)
     if df_mcp.empty:
         logger.warning("hybrid mode: MCP returned no data, falling back to synthetic only")
         return df_synthetic

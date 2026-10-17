@@ -276,6 +276,7 @@ class TestPMSSyncAutoRecalculation:
     @pytest.mark.asyncio
     async def test_sync_daily_data_triggers_recalculation(self):
         """After a successful sync _trigger_captation_recalculation is called."""
+        from app.services.pms_identity import PmsTarget
         from app.services.pms_sync import MockPMSAdapter, PMSSyncService
 
         adapter = MockPMSAdapter()
@@ -295,13 +296,14 @@ class TestPMSSyncAutoRecalculation:
             mock_session.__aexit__ = AsyncMock(return_value=False)
             mock_session_cls.return_value = mock_session
 
-            await service.sync_daily_data("pilot_hotel", date(2025, 6, 15))
+            await service.sync_daily_data(PmsTarget("pilot_hotel", "apaleo", "PAR"), date(2025, 6, 15))
 
         mock_trigger.assert_awaited_once_with("pilot_hotel")
 
     @pytest.mark.asyncio
     async def test_captation_error_does_not_break_sync(self):
         """A captation calculation failure must not propagate to the caller."""
+        from app.services.pms_identity import PmsTarget
         from app.services.pms_sync import MockPMSAdapter, PMSSyncService
 
         adapter = MockPMSAdapter()
@@ -324,6 +326,6 @@ class TestPMSSyncAutoRecalculation:
             # _trigger_captation_recalculation itself; the point of the test is
             # to confirm that design intent — errors are swallowed there.
             try:
-                await service.sync_daily_data("pilot_hotel", date(2025, 6, 15))
+                await service.sync_daily_data(PmsTarget("pilot_hotel", "apaleo", "PAR"), date(2025, 6, 15))
             except RuntimeError:
                 pass  # Acceptable — external mock bypassed the internal guard
