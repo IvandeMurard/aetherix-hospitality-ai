@@ -393,6 +393,12 @@ class StaffingRecommendation(Base):
     # consequences (risk_assessment.SCHEMA). Mirror of migration 20260925120000.
     decision_rule = Column(String, nullable=True)
     risk_assessment = Column(JSONB, nullable=True)
+    # HOS-350: at most one reminder before commit_at, through the hotel's
+    # channel. reminder_status NULL = not yet due; never records a decision.
+    # Mirror of migration 20261017150000.
+    reminder_status = Column(String, nullable=True)     # sent | skipped_answered | disabled | no_compliant_channel | failed | missed
+    reminder_sent_at = Column(DateTime(timezone=True), nullable=True)
+    reminder_channel = Column(String, nullable=True)    # whatsapp | email | sms
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

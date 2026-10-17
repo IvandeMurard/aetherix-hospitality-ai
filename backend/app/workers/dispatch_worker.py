@@ -48,6 +48,16 @@ async def _run_dispatch_job() -> None:
             )
             if expired:
                 logger.info("dispatch_worker: expired %d manager prompt(s)", expired)
+            # HOS-350: one reminder before the point of no return, through the
+            # hotel's channel. A failure here never blocks dispatch.
+            try:
+                from app.services.recommendation_reminders import run_due
+
+                reminders = await run_due(db)
+                if reminders:
+                    logger.info("dispatch_worker: reminders %s", reminders)
+            except Exception:  # noqa: BLE001
+                logger.exception("dispatch_worker: reminder pass failed")
         logger.info("dispatch_worker: complete  job_id=%s", job_id)
         # AC2 — heartbeat marks a completed run for the dead-man's switch.
         await record_heartbeat(JOB_DISPATCH_WORKER)

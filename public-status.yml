@@ -290,3 +290,15 @@ entries:
       - backend/app/services/hotel_data_requests.py
       - backend/app/mcp_server.py
       - backend/tests/services/test_hotel_data_mcp.py
+
+  - id: one-reminder
+    name: One reminder before the point of no return
+    status: Built
+    deployed: unknown
+    description: >-
+      An unanswered recommendation gets one reminder, at a time the hotel sets, on its own
+      channel and within WhatsApp's rules. Silence stays "no reply", never a decision.
+    verified_on: 2026-10-17
+    evidence:
+      - backend/app/services/recommendation_reminders.py
+      - backend/tests/services/test_recommendation_reminders.py
