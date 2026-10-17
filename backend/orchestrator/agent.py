@@ -124,8 +124,8 @@ class OrchestratorAgent:
             system_prompt=system_prompt,
         )
 
-        # 6. Staffing
-        staffing = await self._staffer.calculate_recommendation(predicted_covers)
+        # 6. Staffing — on this hotel's own rules (HOS-343)
+        staffing = await self._staffer.calculate_recommendation(predicted_covers, tenant_id=tenant_id)
 
         return {
             "tenant_id": tenant_id,

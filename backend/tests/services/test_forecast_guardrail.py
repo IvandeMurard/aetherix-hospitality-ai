@@ -165,7 +165,7 @@ async def test_engine_tier2_swaps_baseline_and_recomputes_staffing():
     assert out["prediction"]["covers"] == 50
     assert out["prediction"]["baseline_used"] is True
     assert out["staffing_recommendation"] == {"servers": 3}
-    staffer.calculate_recommendation.assert_awaited_once_with(50)
+    staffer.calculate_recommendation.assert_awaited_once_with(50, tenant_id="hotel_x")
 
 
 async def test_engine_guardrail_failure_is_non_fatal():

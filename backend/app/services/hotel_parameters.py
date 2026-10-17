@@ -10,6 +10,10 @@ from here and nowhere else:
   ``staff_hourly_rate`` / ``avg_spend_per_cover`` and the system defaults in
   ``config`` are **not** read: they carry no record of who set them, and the
   defaults are placeholders (ROI simulator), not the hotel's costs.
+* **Staffing rules (HOS-343).** Ratios and the usual team per role. Missing →
+  the staffing service uses its system default for that role and labels it
+  ``default``. The legacy ``restaurant_profiles.covers_per_*`` columns are not
+  read either, for the same reason as the legacy costs.
 * **Bounded.** Every parameter has a unit and hard bounds (``CATALOG``); an
   out-of-bounds value is refused, never clamped.
 * **Provenance.** Append-only rows (``hotel_decision_parameters``): who set
@@ -72,6 +76,20 @@ CATALOG: dict[str, ParamSpec] = {
                "recommended by the product today)."),
         ParamSpec("covers_per_extra_staff", "covers", 1.0, 200.0, True, _STAFFING,
                   "Covers one additional staff member can serve in the window."),
+        # HOS-343: the hotel's own staffing rules. Unset -> StaffingService
+        # uses its system default for that role and labels it "default".
+        *(
+            ParamSpec(f"covers_per_{role}", "covers", 1.0, 200.0, True, _STAFFING,
+                      f"Covers one {label} handles in a service (the hotel's own ratio).")
+            for role, label in (("server", "server"), ("host", "host"),
+                                ("runner", "runner"), ("kitchen_staff", "kitchen staff member"))
+        ),
+        *(
+            ParamSpec(f"usual_{role}", "staff", 0.0, 50.0, True, _STAFFING,
+                      f"{label} on a usual service, the team the recommendation is compared to.")
+            for role, label in (("servers", "Servers"), ("hosts", "Hosts"),
+                                ("runners", "Runners"), ("kitchen_staff", "Kitchen staff"))
+        ),
         ParamSpec("max_extra_staff", "staff", 0.0, 50.0, True, _STAFFING,
                   "Most extra staff the hotel can call in for one window."),
         ParamSpec("max_staff_reduction", "staff", 0.0, 50.0, True, _STAFFING,
