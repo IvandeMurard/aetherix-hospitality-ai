@@ -186,6 +186,8 @@ async def test_golden_hotel_rules_scenarios(scenario):
     r = await StaffingService().calculate_recommendation(inp["covers_predicted"], rules=rules)
     assert {role: r[role] for role in exp["headcount"]} == exp["headcount"]
     assert {role: r["rules"][role]["covers_per_source"] for role in exp["sources"]} == exp["sources"]
+    for flag in exp.get("flags_absent", []):
+        assert flag not in r["sanity"]["flags"]
 
 
 @pytest.mark.parametrize("name,value", [
