@@ -482,6 +482,19 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Consequences:** the aggregated benchmark of `vision-future.md` becomes opt-in, not opt-out. The data moat narrows to anonymized aggregates from hotels that opted in. Tenant identity must be one key per hotel on every path (HOS-347: `pms_sync` wrote the Apaleo property id as `tenant_id`).
 
+### 44 — Deliver through the hotel's own tools, keep the record and the name (17/10/2026)
+
+**Decision (Ivan, PO):** Aetherix delivers its work (recommendations, reminders, recaps, data access) into tools the hotel already uses: its own agent over MCP, its preferred channel (WhatsApp, e-mail, SMS), later its scheduling tool or PMS. No dashboard to adopt (Décision #8). Trigger: a WhatsApp thread sinks under other conversations, and hotel data access was first built as HTTP routes only a frontend would call (HOS-346); Ivan chose MCP for it (HOS-349) and the reminder goes through the hotel's channel (HOS-350).
+
+1. **The tool first, a screen last.** A new capability names the hotel tool or channel that delivers it before any interface is considered.
+2. **Every delivered item carries its provenance.** Source (Aetherix), recommendation id, the rules used and whose they are (Décision #43), the point of no return. A host may render it as it likes; the data keeps its attribution.
+3. **One record, whatever the surface.** The reply comes back to Aetherix's decision ledger, with who decided (Décision #39). A surface that cannot return the decision is a notification channel, not a decision channel, and is labelled as such.
+4. **Integrations read and propose.** Anything irreversible, or any sharing of hotel data, waits for a human (Décisions #39, #43). Withdrawing consent stays immediate.
+5. **The name travels with the work.** Branding lives where Aetherix controls it: the MCP server identity (name, display title, icons where the protocol and host support them), tool descriptions that ask the host to cite the source, attribution fields in every payload, the WhatsApp business profile, the e-mail sender, marketplace listings, and the weekly recap, which stays an Aetherix document. No visual control over a host's interface is claimed: the host decides what it shows.
+6. **Reconciled with Décision #34.** Aetherix integrates through contracts it defines (its MCP tools, its own channels). Vendor agent platforms (Apaleo Copilot, A2A, Agent Hub) stay wait-and-see under #34's triggers; joining one requires rules 2 and 3 to hold there, so that the daily receipt and the decision record do not dissolve into another vendor's interface.
+
+**Consequences:** HOS-349 and HOS-350 apply it. The weekly recap is the artifact that keeps the work visible when delivery happens elsewhere. Scheduling-tool and PMS write-back (ADR-0006, Phase 5+) inherit rules 2 to 4.
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).
