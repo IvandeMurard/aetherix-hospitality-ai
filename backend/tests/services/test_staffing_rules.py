@@ -19,7 +19,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.models import Base
 from app.services import hotel_parameters as hp
-from app.services.staffing_service import StaffingRules, StaffingService
+from app.services.staffing_service import StaffingConfig, StaffingRules, StaffingService
 
 T0 = datetime(2026, 10, 17, 8, 0, tzinfo=timezone.utc)
 
@@ -146,6 +146,26 @@ async def test_explicit_rules_win_over_a_tenant_lookup():
     lookup.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_no_budget_alert_without_a_budget_anyone_set():
+    """HOS-348: the old 1200/day placeholder fired on any night above 15 shifts."""
+    from app.services import output_sanity
+
+    with patch.object(output_sanity, "record_sanity_trip", new_callable=AsyncMock) as trip:
+        r = await StaffingService().calculate_recommendation(300)
+    assert "labor_budget_exceeded" not in r["sanity"]["flags"]
+    assert not any("budget" in w.lower() for w in r["warnings"])
+    for call in trip.await_args_list:
+        assert "labor_budget_exceeded" not in [f for f, _ in call.args[1].flags]
+
+
+@pytest.mark.asyncio
+async def test_an_explicit_budget_is_still_checked():
+    r = await StaffingService().calculate_recommendation(
+        101, StaffingConfig(labor_budget_gbp_per_day=500.0))
+    assert "labor_budget_exceeded" in r["sanity"]["flags"]
+
+
 _GOLDEN = Path(__file__).resolve().parents[3] / "eval" / "golden_dataset.jsonl"
 _SCENARIOS = [
     json.loads(line) for line in _GOLDEN.read_text(encoding="utf-8").splitlines()
@@ -166,6 +186,8 @@ async def test_golden_hotel_rules_scenarios(scenario):
     r = await StaffingService().calculate_recommendation(inp["covers_predicted"], rules=rules)
     assert {role: r[role] for role in exp["headcount"]} == exp["headcount"]
     assert {role: r["rules"][role]["covers_per_source"] for role in exp["sources"]} == exp["sources"]
+    for flag in exp.get("flags_absent", []):
+        assert flag not in r["sanity"]["flags"]
 
 
 @pytest.mark.parametrize("name,value", [
