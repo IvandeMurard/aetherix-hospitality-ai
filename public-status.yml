@@ -276,3 +276,14 @@ entries:
       - backend/app/services/hotel_data.py
       - backend/app/services/hive_gate.py
       - backend/tests/services/test_hotel_data.py
+
+  - id: hotel-data-via-agent
+    name: Hotel data through the hotel's own agent
+    status: Design
+    deployed: false
+    description: >-
+      The hotel's own agent would fetch its export and deletion plan over MCP; a deletion
+      or an opt-in to sharing would wait for a human to confirm. Not built yet.
+    verified_on: 2026-10-17
+    evidence:
+      - backend/app/services/hotel_data.py
