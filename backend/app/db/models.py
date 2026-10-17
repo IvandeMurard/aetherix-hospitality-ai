@@ -415,12 +415,34 @@ class HotelDecisionParameter(Base):
     unit = Column(String, nullable=False)                 # money | covers | staff | hours
     currency = Column(String, nullable=True)              # ISO 4217 for money values
     set_by = Column(String, nullable=False)               # user id / email, or proposal:<id>
-    set_via = Column(String, nullable=False)              # dashboard_api | ops | proposal_approval
+    set_via = Column(String, nullable=False)              # dashboard_api | ops | proposal_approval | hotel_system
     note = Column(Text, nullable=True)
     set_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
         Index("idx_hotel_decision_parameters_tenant_param", "tenant_id", "parameter", "set_at"),
+    )
+
+
+class HiveConsent(Base):
+    """A hotel's explicit opt-in to the Hive (HOS-346, Décision #43).
+    Append-only: the consent in force is the latest row per tenant_id; no row
+    means not opted in. Read only by ``app/services/hive_gate.py``.
+    Mirror of migration 20261017100000 (schema drift gate — Décision #16).
+    """
+
+    __tablename__ = "hive_consents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(String, nullable=False)
+    opted_in = Column(Boolean, nullable=False)
+    set_by = Column(String, nullable=False)               # user id / email
+    set_via = Column(String, nullable=False)              # dashboard_api | ops
+    note = Column(Text, nullable=True)
+    set_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("idx_hive_consents_tenant", "tenant_id", "set_at"),
     )
 
 

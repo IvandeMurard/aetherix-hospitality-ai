@@ -38,7 +38,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.money import currency_code
 from app.services import task_classes
 
-SET_VIA = ("dashboard_api", "ops", "proposal_approval")
+# hotel_system (HOS-346, Décision #43): a value read from the hotel's own system
+# (scheduling tool, SOP); set_by names the system.
+SET_VIA = ("dashboard_api", "ops", "proposal_approval", "hotel_system")
 
 
 @dataclass(frozen=True)
