@@ -135,7 +135,7 @@ class AetherixEngine:
                 prediction["covers"] = verdict.effective_covers
                 prediction["baseline_used"] = True
                 result["staffing_recommendation"] = await self._staffer.calculate_recommendation(
-                    verdict.effective_covers
+                    verdict.effective_covers, tenant_id=tenant_id
                 )
 
             # Surface the manager-facing caveat alongside the delivered number.
