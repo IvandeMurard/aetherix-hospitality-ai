@@ -115,9 +115,9 @@ Trigger : fin des 4 semaines pilot, ou résiliation à l'initiative du partner /
    ```powershell
    flyctl secrets unset APALEO_PARTNER_CLIENT_ID APALEO_PARTNER_CLIENT_SECRET APALEO_PARTNER_PROPERTY_ID --app aetherix-backend
    ```
-3. **Ivan** purge les données opérationnelles du partner dans Supabase (RLS HOS-111 isole par `property_id` — `DELETE FROM operational_memory WHERE property_id = '<id>'` + tables forecast).
+3. **Données de l'hôtel** (Décision #43, HOS-346) : d'abord l'export remis au partner, `GET /api/v1/hotels/<tenant_id>/data/export` ; puis la suppression, `GET …/data/deletion-plan` (plan + nombre de lignes, rien n'est touché) et `POST …/data/deletion` avec `{"confirm_tenant_id": "<tenant_id>", "dry_run": false}`. Le plan couvre toutes les tables de l'hôtel (inventaire testé dans `app/services/hotel_data.py`) ; les personnes (compte du manager) suivent la DSAR (`dsar.py`). Joindre au partner les limites du rapport (sauvegardes Supabase).
 4. **Logger** dans `credentials-log.md` : `<date> | revoked | <property_name> | <ivan>` + raison.
-5. **Confirmer au partner par email** : credentials révoqués, données purgées, attestation RGPD article 17 (droit à l'effacement) si demandée.
+5. **Confirmer au partner par email** : credentials révoqués, export remis, données supprimées (rapport de suppression joint), attestation RGPD article 17 (droit à l'effacement) si demandée.
 
 ---
 

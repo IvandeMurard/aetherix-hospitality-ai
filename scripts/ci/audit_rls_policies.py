@@ -82,6 +82,8 @@ REQUIRED_TABLES: dict[str, str] = {
     "hotel_decision_parameters": "tenant_id",
     # Décision #40 — learning loop review queue (migration 20260925130000).
     "learning_items": "tenant_id",
+    # Décision #43 — Hive opt-in per hotel (migration 20261017100000).
+    "hive_consents": "tenant_id",
 }
 
 # Tables that may exist but are not in scope for this audit (no tenant column,
