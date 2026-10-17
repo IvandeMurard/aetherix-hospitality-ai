@@ -23,6 +23,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/pms", tags=["pms"])
 
 
+def adapter_for(target, *, use_mock: bool = False, use_mcp: bool = False):
+    """The adapter of the hotel's own PMS (HOS-347). Adding a PMS = adding an
+    entry here once its adapter exists (Décision #28); until then, refused."""
+    from app.services.pms_identity import PmsIdentityError
+
+    if use_mock:
+        return MockPMSAdapter(), "mock"
+    if target.pms_type == "apaleo":
+        return (ApaleoMCPAdapter(), "apaleo_mcp") if use_mcp else (ApaleoPMSAdapter(), "apaleo_raw")
+    if use_mcp:
+        raise PmsIdentityError("pms_not_supported", "use_mcp applies to Apaleo only")
+    raise PmsIdentityError("pms_not_supported",
+                           f"no adapter yet for this hotel's PMS ({target.pms_type}); nothing was synced")
+
+
 async def _sync_task(service: PMSSyncService, target, sync_date: date) -> None:
     """Background task wrapper that catches ApaleoSyncError and logs without DB write."""
     try:
@@ -129,28 +144,19 @@ async def trigger_pms_sync(
     background_tasks: BackgroundTasks,
     target_date: Optional[date] = None,
     use_mock: bool = Query(True, description="Whether to use the Mock adapter for pilot verification"),
-    use_mcp: bool = Query(False, description="Use Apaleo MCP Server instead of raw REST API (HOS-101)"),
+    use_mcp: bool = Query(False, description="Apaleo only: use its MCP server instead of its REST API (HOS-101)"),
     current_user: Dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Triggers a data sync from the PMS for a specific property and date.
+    Triggers a data sync from the hotel's own PMS for a date.
     Guarded by 'get_current_user' to ensure tenant-only access.
 
-    Adapter priority: mock > mcp > raw API.
+    PMS-agnostic (HOS-347, Décision #28): the adapter follows the hotel's
+    ``pms_type``; a PMS without an adapter yet is refused (409), never synced
+    through another vendor's adapter. ``use_mock`` overrides for pilot checks.
     """
     sync_date = target_date or date.today()
-
-    # Initialize appropriate adapter
-    if use_mock:
-        adapter = MockPMSAdapter()
-        adapter_label = "mock"
-    elif use_mcp:
-        adapter = ApaleoMCPAdapter()
-        adapter_label = "apaleo_mcp"
-    else:
-        adapter = ApaleoPMSAdapter()
-        adapter_label = "apaleo_raw"
 
     # Fetch property for this user
     result = await db.execute(
@@ -167,6 +173,7 @@ async def trigger_pms_sync(
 
     try:
         target = target_from_profile(profile, allow_unlinked_mock=use_mock)
+        adapter, adapter_label = adapter_for(target, use_mock=use_mock, use_mcp=use_mcp)
     except PmsIdentityError as exc:
         raise HTTPException(status_code=409, detail=exc.detail) from None
 

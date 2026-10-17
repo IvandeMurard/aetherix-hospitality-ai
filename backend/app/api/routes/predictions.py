@@ -308,6 +308,13 @@ async def train_prophet(
             target = await resolve_by_tenant(db, tenant_id)
         except PmsIdentityError as exc:
             raise HTTPException(status_code=409, detail=exc.detail) from None
+        if target.pms_type != "apaleo":
+            # The PMS-backed loader is Apaleo's (MCP); other PMSs need their
+            # adapter first (Décision #28). Never load through another vendor.
+            raise HTTPException(
+                status_code=409,
+                detail=f"no training data loader yet for this hotel's PMS ({target.pms_type})",
+            )
         if body.property_id and body.property_id != target.pms_property_id:
             raise HTTPException(
                 status_code=422,

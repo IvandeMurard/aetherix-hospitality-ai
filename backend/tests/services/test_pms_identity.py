@@ -48,7 +48,7 @@ async def test_known_hotel_resolves_both_ids_separately(db):
     await _hotel(db, "tenant_sandbox", pms="PAR")
     t = await resolve_by_tenant(db, "tenant_sandbox")
     assert (t.tenant_id, t.pms_property_id, t.pms_type) == ("tenant_sandbox", "PAR", "apaleo")
-    back = await resolve_by_pms_property(db, "PAR")
+    back = await resolve_by_pms_property(db, "apaleo", "PAR")
     assert back.tenant_id == "tenant_sandbox"
 
 
@@ -58,7 +58,7 @@ async def test_unknown_hotel_or_property_is_a_typed_error(db):
         await resolve_by_tenant(db, "nope")
     assert e.value.reason == "unknown_tenant"
     with pytest.raises(PmsIdentityError) as e:
-        await resolve_by_pms_property(db, "XYZ")
+        await resolve_by_pms_property(db, "apaleo", "XYZ")
     assert e.value.reason == "unknown_pms_property"
 
 
@@ -77,9 +77,9 @@ async def test_two_hotels_two_properties_and_pms_type_is_respected(db):
     await _hotel(db, "h1", pms="PAR")
     await _hotel(db, "h2", pms="LON")
     await _hotel(db, "h3", pms="PAR", pms_type="mews")
-    assert (await resolve_by_pms_property(db, "LON")).tenant_id == "h2"
-    assert (await resolve_by_pms_property(db, "PAR", "apaleo")).tenant_id == "h1"
-    assert (await resolve_by_pms_property(db, "PAR", "mews")).tenant_id == "h3"
+    assert (await resolve_by_pms_property(db, "apaleo", "LON")).tenant_id == "h2"
+    assert (await resolve_by_pms_property(db, "apaleo", "PAR")).tenant_id == "h1"
+    assert (await resolve_by_pms_property(db, "mews", "PAR")).tenant_id == "h3"
 
 
 # --- sync: PMS id outward, tenant id inward ----------------------------------------
@@ -146,3 +146,35 @@ def test_target_from_profile_keeps_ids_apart():
 
     t = target_from_profile(P())
     assert t.tenant_id == "h1" and t.pms_property_id == "PAR"
+
+
+# --- PMS-agnostic: no vendor is ever assumed ----------------------------------------
+
+@pytest.mark.asyncio
+async def test_a_hotel_without_a_pms_type_is_not_assumed_to_be_apaleo(db):
+    await _hotel(db, "h1", pms="PAR", pms_type=None)
+    with pytest.raises(PmsIdentityError) as e:
+        await resolve_by_tenant(db, "h1")
+    assert e.value.reason == "pms_not_linked"
+    assert "apaleo" not in e.value.detail.lower()
+
+
+@pytest.mark.parametrize("pms_type,use_mock,use_mcp,expected", [
+    ("apaleo", False, False, "apaleo_raw"),
+    ("apaleo", False, True, "apaleo_mcp"),
+    ("mews", True, False, "mock"),
+])
+def test_adapter_follows_the_hotels_own_pms(pms_type, use_mock, use_mcp, expected):
+    from app.api.routes.pms import adapter_for
+
+    _, label = adapter_for(PmsTarget("h1", pms_type, "P1"), use_mock=use_mock, use_mcp=use_mcp)
+    assert label == expected
+
+
+@pytest.mark.parametrize("use_mcp", [False, True])
+def test_a_pms_without_an_adapter_is_refused_never_routed_to_another_vendor(use_mcp):
+    from app.api.routes.pms import adapter_for
+
+    with pytest.raises(PmsIdentityError) as e:
+        adapter_for(PmsTarget("h1", "mews", "M1"), use_mcp=use_mcp)
+    assert e.value.reason == "pms_not_supported"

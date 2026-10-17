@@ -103,7 +103,9 @@ class RestaurantProfile(Base):
     covers_per_kitchen = Column(Integer, default=30)
     
     # PMS Configuration (Aetherix extensions)
-    pms_type = Column(String, default="apaleo")
+    # No default (HOS-347): which PMS a hotel uses is a fact it provides,
+    # never assumed. Missing type or property id = no PMS connected.
+    pms_type = Column(String, nullable=True)
     pms_property_id = Column(String)
     
     # Location for semantic engine
