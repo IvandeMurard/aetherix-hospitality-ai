@@ -262,3 +262,17 @@ entries:
     verified_on: 2026-09-25
     evidence:
       - backend/app/providers/base.py
+
+  - id: hotel-owned-data
+    name: Hotel-owned data
+    status: Built
+    deployed: unknown
+    description: >-
+      A hotel can export or delete all its data, learned parts included, after seeing the
+      plan. Cross-hotel learning is opt-in, averages over five or more hotels; none exists
+      yet. Anonymity is not claimed.
+    verified_on: 2026-10-17
+    evidence:
+      - backend/app/services/hotel_data.py
+      - backend/app/services/hive_gate.py
+      - backend/tests/services/test_hotel_data.py
