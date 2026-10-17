@@ -86,6 +86,8 @@ class RecRow:
     awaiting_confirmation: bool = False
     # ADR-0007 §18.4: typed per-option consequences stored at issue time.
     risk_assessment: Optional[dict] = None
+    # HOS-350: when the one reminder went out (None = no reminder sent).
+    reminder_sent_at: Optional[datetime] = None
 
 
 def acceptance_rate(accepted: int, decided: int) -> Optional[float]:
@@ -116,6 +118,9 @@ class RecapSummary:
     corrected: int = 0
     no_reply: int = 0
     awaiting_confirmation: int = 0
+    # HOS-350: reminders sent, and decisions recorded after one.
+    reminders_sent: int = 0
+    answered_after_reminder: int = 0
     forecast_error_pct: Optional[float] = None
     forecast_error_days: int = 0
     forecast_error_observations: int = 0
@@ -164,6 +169,10 @@ def summarize(rows: Iterable[RecRow], period: str, start: date, end: date,
     s = RecapSummary(period=period, start=start, end=end, received=len(rows))
     decided: list[RecRow] = []
     for r in rows:
+        if r.reminder_sent_at is not None:
+            s.reminders_sent += 1
+            if r.status in DECIDED_STATUSES and r.actioned_at is not None and r.actioned_at >= r.reminder_sent_at:
+                s.answered_after_reminder += 1
         if r.status in DECIDED_STATUSES:
             decided.append(r)
             if r.status == "accepted":
@@ -246,6 +255,7 @@ _T = {
         "received": "Recommandations reçues : {n}",
         "decisions": "Validées {a} · Refusées {r} · Corrigées {c}",
         "pending": "Sans réponse {n} · À confirmer {p}",
+        "reminders": "Relances {n} · répondu après relance {m}",
         "error": "Écart moyen prévision/réel : {e} % ({d} jour{s} mesuré{s})",
         "error_none": "Écart prévision/réel : aucun couvert réel saisi sur la période.",
         "sources": "Décidé via : {items}",
@@ -263,6 +273,7 @@ _T = {
         "received": "Recommendations received: {n}",
         "decisions": "Accepted {a} · Rejected {r} · Corrected {c}",
         "pending": "No reply {n} · Awaiting confirmation {p}",
+        "reminders": "Reminders {n} · answered after a reminder {m}",
         "error": "Mean forecast error: {e}% ({d} measured day{s})",
         "error_none": "Forecast error: no actual covers entered in this period.",
         "sources": "Decided via: {items}",
@@ -297,6 +308,8 @@ def render_text(s: RecapSummary, locale: Optional[str] = "fr") -> str:
         t["decisions"].format(a=s.accepted, r=s.rejected, c=s.corrected),
         t["pending"].format(n=s.no_reply, p=s.awaiting_confirmation),
     ]
+    if s.reminders_sent:
+        lines.append(t["reminders"].format(n=s.reminders_sent, m=s.answered_after_reminder))
     if s.forecast_error_pct is None:
         lines.append(t["error_none"])
     else:
@@ -360,6 +373,7 @@ async def load_rows(db: AsyncSession, tenant_id: str, lo: datetime, hi: datetime
             predicted_covers=float(r.predicted_covers) if r.predicted_covers is not None else None,
             actual_covers=float(r.actual_covers) if r.actual_covers is not None else None,
             risk_assessment=r.risk_assessment if isinstance(r.risk_assessment, dict) else None,
+            reminder_sent_at=_utc(getattr(r, "reminder_sent_at", None)),
         ))
     if not rows:
         return rows

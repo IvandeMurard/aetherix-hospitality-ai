@@ -69,6 +69,12 @@ TWILIO_CONTENT_SID_CONFIRM_EN: str = _os.getenv("TWILIO_CONTENT_SID_CONFIRM_EN",
 # push is sent only inside the 24 h session window, otherwise not sent.
 TWILIO_CONTENT_SID_RECAP_FR: str = _os.getenv("TWILIO_CONTENT_SID_RECAP_FR", "")
 TWILIO_CONTENT_SID_RECAP_EN: str = _os.getenv("TWILIO_CONTENT_SID_RECAP_EN", "")
+# HOS-350: approved Content template for the one reminder before a
+# recommendation's point of no return ({{1}} = service window, {{2}} = commit
+# time). Empty → WhatsApp only inside the 24 h window, otherwise the next
+# channel of the hotel (e-mail, SMS); never a non-compliant send.
+TWILIO_CONTENT_SID_REMINDER_FR: str = _os.getenv("TWILIO_CONTENT_SID_REMINDER_FR", "")
+TWILIO_CONTENT_SID_REMINDER_EN: str = _os.getenv("TWILIO_CONTENT_SID_REMINDER_EN", "")
 
 # ─── Phase 2 Receipts (P2-3) ─────────────────────────────────────────────────
 # Hour (0–23) at which the daily Receipt is dispatched, in RECEIPT_TIMEZONE.

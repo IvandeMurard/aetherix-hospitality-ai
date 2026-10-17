@@ -108,6 +108,14 @@ CATALOG: dict[str, ParamSpec] = {
                       f"({task_classes.spec(k).commit_point}).")
             for k in task_classes.TaskClassKey
         ),
+        # HOS-350: when the one reminder goes out, in hours before the point
+        # of no return; 0 = no reminder for this decision type.
+        *(
+            ParamSpec(f"reminder_offset_hours.{k.value}", "hours", 0.0, 48.0, True, (k.value,),
+                      f"Hours before the point of no return of {k.value} at which an unanswered "
+                      "recommendation gets its one reminder (0 = no reminder).")
+            for k in task_classes.TaskClassKey
+        ),
     )
 }
 
