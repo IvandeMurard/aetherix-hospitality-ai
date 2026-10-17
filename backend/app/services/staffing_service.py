@@ -31,7 +31,10 @@ class StaffingConfig(BaseModel):
 
     # Daily budget; compare against total_shifts * avg_shift_cost for one service
     # Field name kept (R6 test pins it); the amount is in config.CURRENCY.
-    labor_budget_gbp_per_day: float = 1200.0
+    # HOS-348: no default. A budget nobody set must not raise an alert
+    # (Décision #40: missing cost -> no money; #43: no default posing as the
+    # hotel's constraint). None -> no budget check.
+    labor_budget_gbp_per_day: Optional[float] = None
     avg_shift_cost: float = 80.0
 
 
