@@ -1,13 +1,15 @@
 import asyncio
 import logging
 import math
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, Union
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Any, Dict, Mapping, Optional, Union
 
 from pydantic import BaseModel
 
 from app.core.demo_events import demo_emit
 from app.i18n.abstention_messages import localized_message
+from app.services import staffing_context
 from app.services.abstention import AgentAbstention
 
 logger = logging.getLogger(__name__)
@@ -49,17 +51,31 @@ _ROLE_PARAMS = {
 _SOMMELIER_RULE = "1, or 2 above 160 covers"
 
 
+def _label(source: str, context_class: Optional[str]) -> str:
+    """``hotel · event night`` (HOS-345, AC4); ``hotel`` / ``default`` when flat."""
+    if context_class is None:
+        return source
+    return f"{source} · {staffing_context.CLASS_LABELS['en'][context_class]}"
+
+
 @dataclass(frozen=True)
 class RoleRule:
     covers_per: Optional[float]  # None -> role not staffed
     covers_per_source: str       # "hotel" | "default" | "none"
     usual: int
     usual_source: str            # "hotel" | "default"
+    # HOS-345: the context class whose hotel rule served (None = flat rule).
+    covers_per_context: Optional[str] = None
+    usual_context: Optional[str] = None
 
     def as_dict(self) -> dict:
         return {
             "covers_per": self.covers_per, "covers_per_source": self.covers_per_source,
+            "covers_per_context": self.covers_per_context,
+            "covers_per_label": _label(self.covers_per_source, self.covers_per_context),
             "usual": self.usual, "usual_source": self.usual_source,
+            "usual_context": self.usual_context,
+            "usual_label": _label(self.usual_source, self.usual_context),
         }
 
 
@@ -69,6 +85,8 @@ class StaffingRules:
 
     roles: Dict[str, RoleRule]
     version: Optional[str] = None  # HotelParameters.version() when read from the hotel
+    # HOS-345: the context classes that applied to this service, and why.
+    context: staffing_context.ContextResolution = field(default_factory=staffing_context.ContextResolution)
 
     @classmethod
     def defaults(cls, cfg: Optional[StaffingConfig] = None) -> "StaffingRules":
@@ -87,21 +105,38 @@ class StaffingRules:
         })
 
     @classmethod
-    def from_parameters(cls, params: Any, cfg: Optional[StaffingConfig] = None) -> "StaffingRules":
+    def from_parameters(
+        cls, params: Any, cfg: Optional[StaffingConfig] = None,
+        context: Optional[staffing_context.ContextResolution] = None,
+    ) -> "StaffingRules":
         """Hotel values where set, system defaults elsewhere. ``params`` is a
-        ``hotel_parameters.HotelParameters`` (anything with ``get``/``version``)."""
+        ``hotel_parameters.HotelParameters`` (anything with ``get``/``version``).
+
+        HOS-345: for each rule, the first applicable context class (priority
+        order) with a hotel value wins, then the hotel's flat value, then the
+        system default."""
         base = cls.defaults(cfg)
+        context = context or staffing_context.ContextResolution()
+
+        def pick(name: str) -> tuple[Any, Optional[str]]:
+            for c in context.classes:
+                v = params.get(f"{name}.{c}")
+                if v is not None:
+                    return v, c
+            return params.get(name), None
+
         roles = {}
         for role, (ratio_name, usual_name) in _ROLE_PARAMS.items():
             d = base.roles[role]
-            ratio, usual = params.get(ratio_name), params.get(usual_name)
+            (ratio, ratio_cls), (usual, usual_cls) = pick(ratio_name), pick(usual_name)
             roles[role] = RoleRule(
                 covers_per=ratio if ratio is not None else d.covers_per,
                 covers_per_source="hotel" if ratio is not None else d.covers_per_source,
                 usual=int(usual) if usual is not None else d.usual,
                 usual_source="hotel" if usual is not None else d.usual_source,
+                covers_per_context=ratio_cls, usual_context=usual_cls,
             )
-        return cls(roles=roles, version=params.version())
+        return cls(roles=roles, version=params.version(), context=context)
 
     def staffed(self) -> list[str]:
         return [r for r, rule in self.roles.items() if rule.covers_per is not None]
@@ -122,8 +157,13 @@ class StaffingService:
         sommeliers = 2 if covers > 160 else 1
         return counts, sommeliers
 
-    async def rules_for(self, tenant_id: str, cfg: Optional[StaffingConfig] = None) -> StaffingRules:
-        """The hotel's rules in force. Degrade-open: a read failure falls back
+    async def rules_for(
+        self, tenant_id: str, cfg: Optional[StaffingConfig] = None, *,
+        target_date: Optional[date] = None, service_type: Optional[str] = None,
+        context: Optional[Mapping] = None,
+    ) -> StaffingRules:
+        """The hotel's rules in force for this service (HOS-345: per context
+        class when the hotel set one). Degrade-open: a read failure falls back
         to system defaults, labelled ``default``, and never blocks."""
         try:
             from app.db.session import AsyncSessionLocal
@@ -131,7 +171,8 @@ class StaffingService:
 
             async with AsyncSessionLocal() as db:
                 params = await hotel_parameters.load(db, str(tenant_id))
-            return StaffingRules.from_parameters(params, cfg)
+            resolution = staffing_context.resolve(target_date, service_type, context, params)
+            return StaffingRules.from_parameters(params, cfg, resolution)
         except Exception:  # noqa: BLE001 — degrade-open
             logger.warning("staffing: hotel rules unreadable for %s, using defaults", tenant_id)
             return StaffingRules.defaults(cfg)
@@ -147,6 +188,9 @@ class StaffingService:
         hotel_id: Optional[str] = None,
         total_seats: Optional[float] = None,
         turns_sum: Optional[float] = None,
+        target_date: Optional[date] = None,
+        service_type: Optional[str] = None,
+        context: Optional[Mapping] = None,
     ) -> Union[Dict, AgentAbstention]:
         # ADR-0007 §D6 — graceful degradation: when the upstream forecast is too
         # uncertain, abstain rather than emit a confident-looking staffing number.
@@ -167,7 +211,11 @@ class StaffingService:
         # HOS-343: the hotel's own rules when we know the hotel; explicit
         # `rules` win (demo, tests); otherwise system defaults, labelled so.
         if rules is None:
-            rules = await self.rules_for(tenant_id, cfg) if tenant_id else StaffingRules.defaults(cfg)
+            rules = (
+                await self.rules_for(tenant_id, cfg, target_date=target_date,
+                                     service_type=service_type, context=context)
+                if tenant_id else StaffingRules.defaults(cfg)
+            )
 
         counts, sommeliers = self._staff_for(predicted_covers, rules)
         total_shifts = sum(counts.values()) + sommeliers
@@ -206,6 +254,12 @@ class StaffingService:
         basis = ("the hotel's own ratios" if sources == {"hotel"}
                  else "default ratios" if sources == {"default"}
                  else "the hotel's ratios where set, defaults elsewhere")
+        served = [c for c in staffing_context.CONTEXT_CLASSES
+                  if any(rules.roles[r].covers_per_context == c or rules.roles[r].usual_context == c
+                         for r in rules.roles)]
+        if served:
+            labels = ", ".join(staffing_context.CLASS_LABELS["en"][c] for c in served)
+            basis += f" ({labels} rules)"
         result = {
             "servers": counts.get("servers", 0),
             "hosts": counts.get("hosts", 0),
@@ -217,6 +271,7 @@ class StaffingService:
             },
             "rules": rules.as_dict(),
             "rules_version": rules.version,
+            "context": rules.context.as_dict(),
             "warnings": verdict.warnings,
             "sanity": {
                 "within_bounds": verdict.within_bounds,

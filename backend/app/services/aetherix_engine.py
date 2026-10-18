@@ -18,6 +18,16 @@ from orchestrator.agent import OrchestratorAgent
 
 logger = logging.getLogger(__name__)
 
+
+def _as_date(value: Any) -> Optional[date]:
+    """The orchestrator's ISO ``date`` back to a date (HOS-345 context classes)."""
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10]) if value else None
+    except ValueError:
+        return None
+
 # Persisted Prophet model (written by POST /api/v1/predictions/train). Kept in sync
 # with predictions.py::_MODEL_PATH — both resolve to backend/data/demo/prophet_model.json.
 _DEMO_MODEL_PATH = str(Path(__file__).resolve().parents[2] / "data" / "demo" / "prophet_model.json")
@@ -135,7 +145,9 @@ class AetherixEngine:
                 prediction["covers"] = verdict.effective_covers
                 prediction["baseline_used"] = True
                 result["staffing_recommendation"] = await self._staffer.calculate_recommendation(
-                    verdict.effective_covers, tenant_id=tenant_id
+                    verdict.effective_covers, tenant_id=tenant_id,
+                    target_date=_as_date(result.get("date")),
+                    service_type=result.get("service_type"), context=context,
                 )
 
             # Surface the manager-facing caveat alongside the delivered number.

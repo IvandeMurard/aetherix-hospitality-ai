@@ -13,7 +13,9 @@ from here and nowhere else:
 * **Staffing rules (HOS-343).** Ratios and the usual team per role. Missing →
   the staffing service uses its system default for that role and labels it
   ``default``. The legacy ``restaurant_profiles.covers_per_*`` columns are not
-  read either, for the same reason as the legacy costs.
+  read either, for the same reason as the legacy costs. Each rule can also be
+  set per context class (``covers_per_server.event_night``, HOS-345,
+  ``staffing_context``), with the hotel's high-season months.
 * **Bounded.** Every parameter has a unit and hard bounds (``CATALOG``); an
   out-of-bounds value is refused, never clamped.
 * **Provenance.** Append-only rows (``hotel_decision_parameters``): who set
@@ -36,7 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.money import currency_code
-from app.services import task_classes
+from app.services import staffing_context, task_classes
 
 # hotel_system (HOS-346, Décision #43): a value read from the hotel's own system
 # (scheduling tool, SOP); set_by names the system.
@@ -46,7 +48,7 @@ SET_VIA = ("dashboard_api", "ops", "proposal_approval", "hotel_system")
 @dataclass(frozen=True)
 class ParamSpec:
     name: str
-    unit: str                 # money | covers | staff | hours
+    unit: str                 # money | covers | staff | hours | month
     minimum: float
     maximum: float
     min_inclusive: bool
@@ -120,6 +122,32 @@ CATALOG: dict[str, ParamSpec] = {
 }
 
 
+# HOS-345: the same staffing rules per context class, ``<rule>.<class>``
+# (classes: staffing_context.CONTEXT_CLASSES, closed list), and the hotel's
+# own high season. A class without a value falls back to the flat rule.
+_ROLE_RULES = tuple(
+    n for n in CATALOG if n.startswith(("covers_per_", "usual_")) and n != "covers_per_extra_staff"
+)
+CATALOG.update({
+    p.name: p
+    for p in (
+        *(
+            ParamSpec(f"{rule}.{cls}", CATALOG[rule].unit, CATALOG[rule].minimum, CATALOG[rule].maximum,
+                      CATALOG[rule].min_inclusive, _STAFFING,
+                      f"{CATALOG[rule].description} Applies on {staffing_context.CLASS_LABELS['en'][cls]} "
+                      "services; unset = the flat rule.")
+            for rule in _ROLE_RULES for cls in staffing_context.CONTEXT_CLASSES
+        ),
+        ParamSpec("high_season_start_month", "month", 1.0, 12.0, True, _STAFFING,
+                  "First month of the hotel's high season (1-12); with the end month, "
+                  "enables the high_season staffing rules."),
+        ParamSpec("high_season_end_month", "month", 1.0, 12.0, True, _STAFFING,
+                  "Last month of the hotel's high season (1-12, may be before the start "
+                  "month to wrap over the new year)."),
+    )
+})
+
+
 class ParameterError(ValueError):
     """Typed refusal (→ 422)."""
 
@@ -143,6 +171,8 @@ def validate(name: str, value: Optional[float]) -> Optional[float]:
         raise ParameterError(f"{name} must be within {bracket}{spec.minimum:g}, {spec.maximum:g}]")
     if spec.unit == "staff" and v != int(v):
         raise ParameterError(f"{name}: a whole number of staff")
+    if spec.unit == "month" and v != int(v):
+        raise ParameterError(f"{name}: a month number, 1 to 12")
     return round(v, 2)
 
 

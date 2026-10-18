@@ -89,7 +89,9 @@ async def test_hotel_rules_apply_role_by_role_with_their_source():
     assert (r["hosts"], r["kitchen"]) == (2, 3)             # defaults 70 / 50
     assert r["deltas"]["servers"] == 1 and r["deltas"]["runners"] == 1
     assert r["rules"]["servers"] == {"covers_per": 16, "covers_per_source": "hotel",
-                                     "usual": 6, "usual_source": "hotel"}
+                                     "covers_per_context": None, "covers_per_label": "hotel",
+                                     "usual": 6, "usual_source": "hotel",
+                                     "usual_context": None, "usual_label": "hotel"}
     assert r["rules"]["hosts"]["covers_per_source"] == "default"
     assert r["rules_version"] == "2026-10-17T08:00:00+00:00"
     assert "where set, defaults elsewhere" in r["rationale"]

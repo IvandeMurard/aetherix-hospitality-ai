@@ -440,7 +440,7 @@ class HotelDecisionParameter(Base):
     tenant_id = Column(String, nullable=False)
     parameter = Column(String, nullable=False)
     value = Column(Numeric(12, 2), nullable=True)
-    unit = Column(String, nullable=False)                 # money | covers | staff | hours
+    unit = Column(String, nullable=False)                 # money | covers | staff | hours | month (HOS-345)
     currency = Column(String, nullable=True)              # ISO 4217 for money values
     set_by = Column(String, nullable=False)               # user id / email, or proposal:<id>
     set_via = Column(String, nullable=False)              # dashboard_api | ops | proposal_approval | hotel_system
