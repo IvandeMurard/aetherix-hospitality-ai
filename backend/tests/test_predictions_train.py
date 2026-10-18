@@ -19,6 +19,14 @@ import pytest
 # Tier 1 — Pure unit tests (no app import chain)
 # ---------------------------------------------------------------------------
 
+def _canonical(records):
+    """HOS-281: raw Apaleo records go through the adapter's own mapping; the
+    transformer only ever sees canonical reservations."""
+    from app.providers.pms.apaleo_adapter import map_stay_record
+
+    return [map_stay_record(r) for r in records]
+
+
 class TestDataTransformer:
     """DataTransformer is a standalone class with no external deps."""
 
@@ -28,7 +36,7 @@ class TestDataTransformer:
 
     def test_empty_records_returns_empty_df(self):
         DataTransformer = self._get_transformer()
-        df = DataTransformer.stay_records_to_prophet([])
+        df = DataTransformer.reservations_to_prophet([])
         assert df.empty
         assert list(df.columns) == ["ds", "y"]
 
@@ -39,7 +47,7 @@ class TestDataTransformer:
             {"arrival": "2025-06-15T18:00:00Z", "adults": 1, "children": 1},
             {"arrival": "2025-06-16T10:00:00Z", "adults": 3, "children": 0},
         ]
-        df = DataTransformer.stay_records_to_prophet(records)
+        df = DataTransformer.reservations_to_prophet(_canonical(records))
         assert len(df) == 2
         june_15 = df[df["ds"].dt.date == date(2025, 6, 15)]["y"].iloc[0]
         assert june_15 == 4  # 2+0 + 1+1
@@ -50,20 +58,20 @@ class TestDataTransformer:
             {"arrival": "", "adults": 2, "children": 0},
             {"arrival": "2025-07-01T00:00:00Z", "adults": 3, "children": 0},
         ]
-        df = DataTransformer.stay_records_to_prophet(records)
+        df = DataTransformer.reservations_to_prophet(_canonical(records))
         assert len(df) == 1
 
     def test_single_record_single_row(self):
         DataTransformer = self._get_transformer()
         records = [{"arrival": "2025-08-01T12:00:00Z", "adults": 4, "children": 2}]
-        df = DataTransformer.stay_records_to_prophet(records)
+        df = DataTransformer.reservations_to_prophet(_canonical(records))
         assert len(df) == 1
         assert df.iloc[0]["y"] == 6
 
     def test_missing_adults_defaults_to_zero(self):
         DataTransformer = self._get_transformer()
         records = [{"arrival": "2025-09-01T00:00:00Z"}]
-        df = DataTransformer.stay_records_to_prophet(records)
+        df = DataTransformer.reservations_to_prophet(_canonical(records))
         assert len(df) == 1
         assert df.iloc[0]["y"] == 0
 
@@ -209,3 +217,48 @@ class TestHybridMerge:
                 assert jan_1["y"].iloc[0] == 99
         finally:
             _pred_mod._DEMO_DATA = original
+
+
+# ---------------------------------------------------------------------------
+# HOS-281 — non-regression: canonical path == pre-HOS-281 raw path
+# ---------------------------------------------------------------------------
+
+def _legacy_stay_records_to_prophet(records):
+    """Frozen copy of DataTransformer.stay_records_to_prophet before HOS-281,
+    kept only as the reference for the non-regression test below."""
+    if not records:
+        return pd.DataFrame(columns=["ds", "y"])
+    data = []
+    for rec in records:
+        arrival = rec.get("arrival", "")
+        if arrival:
+            data.append({"ds": arrival[:10], "y": rec.get("adults", 0) + rec.get("children", 0)})
+    df = pd.DataFrame(data)
+    if df.empty:
+        return pd.DataFrame(columns=["ds", "y"])
+    df["ds"] = pd.to_datetime(df["ds"])
+    return df.groupby("ds")["y"].sum().reset_index()
+
+
+def test_canonical_path_produces_the_same_training_frame_as_before():
+    from app.services.data_transformer import DataTransformer
+
+    records = [
+        {"id": "R1", "arrival": "2026-03-01T14:00:00Z", "adults": 2, "children": 1, "status": "Confirmed"},
+        {"id": "R2", "arrival": "2026-03-01T19:30:00+01:00", "adults": 1, "children": 0},
+        {"id": "R3", "arrival": "2026-03-02", "adults": 4},
+        {"id": "R4", "arrival": "", "adults": 3, "children": 0},
+        {"id": "R5", "arrival": "2026-03-05T08:00:00Z", "adults": 0, "children": 2},
+        {"id": "R6", "adults": 2, "children": 2},
+    ]
+    expected = _legacy_stay_records_to_prophet(records)
+    got = DataTransformer.reservations_to_prophet(_canonical(records))
+    pd.testing.assert_frame_equal(got.reset_index(drop=True), expected.reset_index(drop=True), check_dtype=False)
+
+
+def test_transformer_names_no_native_pms_field():
+    from pathlib import Path as _P
+
+    src = (_P(__file__).resolve().parents[1] / "app" / "services" / "data_transformer.py").read_text(encoding="utf-8")
+    for field in ('"arrival"', '"adults"', '"children"', "stayRecords", "soldCount", "grossAmount"):
+        assert field not in src, field

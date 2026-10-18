@@ -1,41 +1,34 @@
-from typing import Any, Dict, List
+"""PMS data to ML-ready frames — HOS-281 (Décision #28, ADR-0006 §9).
+
+Reads the vendor-neutral PMS layer only (``providers/pms/base.py``). No field
+of any PMS's native payload appears here: each adapter maps its own format to
+``NormalizedReservation``, so a new PMS feeds the forecast without a change to
+this file.
+"""
+from typing import Dict, Iterable
 
 import pandas as pd
 
+from app.providers.pms.base import NormalizedReservation
+
 
 class DataTransformer:
-    """
-    Utility to transform PMS raw data into ML-ready formats.
-    Focus: Apaleo Stay Records to Prophet (ds, y).
-    """
-    
+    """Utility to transform canonical PMS data into ML-ready formats (Prophet ds, y)."""
+
     @staticmethod
-    def stay_records_to_prophet(records: List[Dict[str, Any]]) -> pd.DataFrame:
+    def reservations_to_prophet(reservations: Iterable[NormalizedReservation]) -> pd.DataFrame:
+        """Daily guest totals by arrival date, a proxy for covers.
+
+        Same rule as before HOS-281: reservations without an arrival date are
+        skipped; guests = adults + children; one row per arrival day.
         """
-        Aggregates guest counts by date for Prophet training.
-        """
-        if not records:
+        data = [{"ds": r.arrival.isoformat(), "y": r.guests} for r in reservations if r.arrival is not None]
+        if not data:
             return pd.DataFrame(columns=['ds', 'y'])
-            
-        data = []
-        for rec in records:
-            arrival = rec.get("arrival", "")
-            # Arrival usually comes as ISO string
-            if arrival:
-                ds = arrival[:10] # Extract YYYY-MM-DD
-                # Summing up total guests (adults + children) as a proxy for covers
-                total_guests = rec.get("adults", 0) + rec.get("children", 0)
-                data.append({"ds": ds, "y": total_guests})
-                
+
         df = pd.DataFrame(data)
-        if df.empty:
-            return pd.DataFrame(columns=['ds', 'y'])
-            
-        # Group by date to get daily totals
         df['ds'] = pd.to_datetime(df['ds'])
-        daily_df = df.groupby('ds')['y'].sum().reset_index()
-        
-        return daily_df
+        return df.groupby('ds')['y'].sum().reset_index()
 
     @staticmethod
     def add_external_features(df: pd.DataFrame, weather_data: Dict[str, float]) -> pd.DataFrame:
