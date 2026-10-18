@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.security import get_current_user
-from app.db.models import CaptationBaseline, MCPApiToken, RestaurantProfile, TrainingRun
+from app.db.models import MCPApiToken, RestaurantProfile, TrainingRun
 from app.db.session import get_db
 from app.mcp_core import ADMIN_TRAIN_SCOPE, MCPAuthError
 from app.mcp_server import verify_bearer
@@ -342,8 +342,10 @@ async def train_prophet(
             detail=f"Insufficient data: {len(df)} days found, minimum 60 required for reliable training.",
         )
 
-    # Apply per-property captation rate calibration when available
-    df = await _apply_captation_calibration(df, tenant_id, db)
+    # HOS-352: no "captation calibration" here any more. It multiplied the
+    # daily guest counts (y) by the captation baseline, a € per room sold
+    # figure, so a 20 €/room hotel trained on 20× its real guests. The
+    # baseline stays where its unit fits: anomaly detection (€ vs €).
 
     try:
         await engine.forecaster.train(
@@ -456,28 +458,6 @@ async def _build_training_dataframe(body: "TrainRequest", pms_property_id: Optio
     return df_merged
 
 
-async def _apply_captation_calibration(
-    df: pd.DataFrame, property_id: str, db: AsyncSession
-) -> pd.DataFrame:
-    """Scale 'y' values by per-property captation baseline when available."""
-    try:
-        result = await db.execute(
-            select(CaptationBaseline)
-            .where(CaptationBaseline.tenant_id == property_id)
-            .order_by(CaptationBaseline.computed_at.desc())
-            .limit(1)
-        )
-        baseline = result.scalars().first()
-        if baseline and baseline.avg_fb_revenue_per_room and baseline.avg_fb_revenue_per_room > 0:
-            scale = float(baseline.avg_fb_revenue_per_room)
-            df = df.copy()
-            df["y"] = (df["y"] * scale).round().astype(int)
-            logger.info("Captation calibration applied: property=%s scale=%.3f", property_id, scale)
-        else:
-            logger.debug("No captation baseline for property=%s, using raw values", property_id)
-    except Exception as exc:
-        logger.warning("Captation calibration failed (non-blocking): %s", exc)
-    return df
 
 
 def _compute_in_sample_mape(forecaster: Any, df: pd.DataFrame) -> Optional[float]:

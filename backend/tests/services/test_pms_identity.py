@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from app.db.models import Base, RestaurantProfile
+from app.providers.pms.base import PMSProviderName
 from app.services.pms_identity import (
     PmsIdentityError, PmsTarget, resolve_by_pms_property, resolve_by_tenant, target_from_profile,
 )
@@ -85,21 +86,23 @@ async def test_two_hotels_two_properties_and_pms_type_is_respected(db):
 # --- sync: PMS id outward, tenant id inward ----------------------------------------
 
 class _RecordingAdapter:
+    provider_name = PMSProviderName.APALEO
+
     def __init__(self):
         self.calls = []
 
     async def fetch_occupancy(self, property_id, target_date):
-        from app.providers.pms.base import NormalizedOccupancy, OccupancyUnit, PMSProviderName
+        from app.providers.pms.base import NormalizedOccupancy, PMSDataStatus, PMSProviderName
 
         self.calls.append(property_id)
-        return NormalizedOccupancy(property_id, target_date, 70, OccupancyUnit.PERCENT, PMSProviderName.APALEO)
+        return NormalizedOccupancy(property_id, target_date, PMSProviderName.APALEO, PMSDataStatus.OK,
+                                   rooms_sold=70, rooms_available=100)
 
-    async def fetch_revenue(self, property_id, target_date, category="Total"):
-        from app.providers.pms.base import NormalizedRevenue, PMSProviderName, RevenueScope
+    async def fetch_fb_revenue(self, property_id, target_date):
+        from app.providers.pms.base import NormalizedRevenue, PMSDataStatus, PMSProviderName
 
         self.calls.append(property_id)
-        return NormalizedRevenue(property_id, target_date, 1200.0, category, RevenueScope.CATEGORY,
-                                 PMSProviderName.APALEO)
+        return NormalizedRevenue(property_id, target_date, PMSProviderName.APALEO, PMSDataStatus.OK, amount=1200.0)
 
 
 @pytest.mark.asyncio

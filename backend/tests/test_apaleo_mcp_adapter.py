@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
+from app.providers.pms.base import PMSDataStatus
 from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
 
 # ---------------------------------------------------------------------------
@@ -99,77 +100,82 @@ class TestApaleoMCPClientCallTool:
 
 
 # ---------------------------------------------------------------------------
-# ApaleoMCPAdapter — get_occupancy
+# ApaleoMCPAdapter — occupancy and F&B revenue (HOS-352: true or absent)
 # ---------------------------------------------------------------------------
 
-class TestGetOccupancy:
-    async def test_returns_value_from_mcp(
+PERFORMANCE = {"data": {
+    "houseCount": 100, "soldCount": 75, "outOfOrderCount": 0,
+    "netFoodAndBeveragesRevenue": {"amount": 5200.0, "currency": "EUR"},
+    "netAccommodationRevenue": {"amount": 12000.0, "currency": "EUR"},
+}}
+
+
+class TestFetchOccupancy:
+    async def test_returns_rooms_from_mcp(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
-        mock_mcp_client.call_tool.return_value = {"data": {"houseCount": 100, "soldCount": 75}}
-        result = await adapter.get_occupancy("MUC", date(2026, 3, 29))
-        assert result == 75
+        mock_mcp_client.call_tool.return_value = PERFORMANCE
+        occ = await adapter.fetch_occupancy("MUC", date(2026, 3, 29))
+        assert (occ.status, occ.rooms_sold, occ.rooms_available, occ.rate) == (PMSDataStatus.OK, 75, 100, 0.75)
         mock_mcp_client.call_tool.assert_awaited_once_with(
             "ListPropertyPerformanceReport",
             {"property_id": "MUC", "from_": "2026-03-29", "to": "2026-03-29"},
         )
 
-    async def test_falls_back_on_mcp_error(
+    async def test_mcp_error_is_absent_not_80(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
         mock_mcp_client.call_tool.side_effect = RuntimeError("MCP unreachable")
-        result = await adapter.get_occupancy("MUC", date(2026, 3, 29))
-        assert result == 80  # safe default
+        occ = await adapter.fetch_occupancy("MUC", date(2026, 3, 29))
+        assert occ.status == PMSDataStatus.PMS_ERROR and occ.rooms_sold is None
 
-    async def test_returns_mock_when_not_configured(
+    async def test_http_error_payload_is_a_pms_error(
+        self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
+    ) -> None:
+        """The MCP server returns Apaleo's HTTP errors as a payload (seen: 422)."""
+        mock_mcp_client.call_tool.return_value = {"message": "To must be greater than From", "status_code": 422}
+        occ = await adapter.fetch_occupancy("MUC", date(2026, 3, 29))
+        assert occ.status == PMSDataStatus.PMS_ERROR and "422" in occ.detail
+
+    async def test_not_configured_is_absent(
         self, unconfigured_adapter: ApaleoMCPAdapter
     ) -> None:
-        result = await unconfigured_adapter.get_occupancy("MUC", date(2026, 3, 29))
-        assert result == 80
+        occ = await unconfigured_adapter.fetch_occupancy("MUC", date(2026, 3, 29))
+        assert occ.status == PMSDataStatus.NOT_CONFIGURED and occ.rooms_sold is None
 
-
-# ---------------------------------------------------------------------------
-# ApaleoMCPAdapter — get_revenue
-# ---------------------------------------------------------------------------
-
-class TestGetRevenue:
-    async def test_returns_gross_amount(
+    async def test_empty_house_is_no_data(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
-        mock_mcp_client.call_tool.return_value = {
-            "data": {"grossAmount": {"amount": 5200.0, "currency": "EUR"}}
-        }
-        result = await adapter.get_revenue("MUC", date(2026, 3, 29))
-        assert result == 5200.0
+        mock_mcp_client.call_tool.return_value = {"data": {"houseCount": 0, "soldCount": 0}}
+        occ = await adapter.fetch_occupancy("MUC", date(2026, 3, 29))
+        assert occ.status == PMSDataStatus.NO_DATA
 
-    async def test_sums_list_response(
+
+class TestFetchFbRevenue:
+    async def test_returns_net_fb_revenue(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
-        mock_mcp_client.call_tool.return_value = {
-            "data": [
-                {"grossAmount": {"amount": 3000.0, "currency": "EUR"}},
-                {"grossAmount": {"amount": 500.0, "currency": "EUR"}},
-            ]
-        }
-        result = await adapter.get_revenue("MUC", date(2026, 3, 29))
-        assert result == 3500.0
+        mock_mcp_client.call_tool.return_value = PERFORMANCE
+        rev = await adapter.fetch_fb_revenue("MUC", date(2026, 3, 29))
+        assert (rev.status, rev.amount, rev.currency) == (PMSDataStatus.OK, 5200.0, "EUR")
 
-    async def test_uses_nested_data_key(
+    async def test_never_falls_back_to_another_revenue_line(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
-        mock_mcp_client.call_tool.return_value = {
-            "data": {"grossAmount": {"amount": 9999.0, "currency": "EUR"}}
-        }
-        result = await adapter.get_revenue("MUC", date(2026, 3, 29))
-        assert result == 9999.0
+        mock_mcp_client.call_tool.return_value = {"data": {
+            "houseCount": 100, "soldCount": 75,
+            "netAccommodationRevenue": {"amount": 12000.0, "currency": "EUR"},
+            "grossAmount": {"amount": 20000.0, "currency": "EUR"},
+        }}
+        rev = await adapter.fetch_fb_revenue("MUC", date(2026, 3, 29))
+        assert rev.status == PMSDataStatus.NO_DATA and rev.amount is None
 
-    async def test_returns_zero_on_error(
+    async def test_error_is_absent_not_zero(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
         mock_mcp_client.call_tool.side_effect = Exception("timeout")
-        result = await adapter.get_revenue("MUC", date(2026, 3, 29))
-        assert result == 0.0
-
+        rev = await adapter.fetch_fb_revenue("MUC", date(2026, 3, 29))
+        assert rev.status == PMSDataStatus.PMS_ERROR and rev.amount is None
 
 # ---------------------------------------------------------------------------
 # ApaleoMCPAdapter — get_historical_data

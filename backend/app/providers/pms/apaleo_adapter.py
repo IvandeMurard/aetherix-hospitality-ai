@@ -1,12 +1,15 @@
 """Apaleo PMS adapter over the REST API — Story 2.1, moved to the vendor-neutral
-PMS layer by HOS-280 (Décision #28).
+PMS layer by HOS-280 (Décision #28), true-or-absent figures since HOS-352.
 
-Only this module knows Apaleo's native REST payloads. Callers read the
-``fetch_*`` methods (``providers/pms/base.py`` dataclasses). The ``get_*``
-methods are kept for existing callers and return exactly the same values as
-before (``fetch_*().value`` / ``.amount``); ``get_historical_data`` still
-returns raw stay records until the forecast pipeline reads
-``fetch_reservations`` (HOS-281).
+Only this module knows Apaleo's native payloads. Occupancy and F&B revenue
+both come from the property-performance report, the same payload the MCP
+transport reads (``ListPropertyPerformanceReport``), mapped once by
+``map_performance_report``: the two transports cannot disagree on a day.
+
+Before HOS-352 this adapter called ``/booking/v1/metrics/occupancy`` and
+``/finance/v1/metrics/revenue``. Probed against the sandbox on 18/10/2026,
+both return 404, and the token request with their custom scopes returns 400:
+the REST path never returned a real figure.
 """
 import logging
 import os
@@ -31,9 +34,8 @@ from app.providers.pms.base import (
     NormalizedOccupancy,
     NormalizedReservation,
     NormalizedRevenue,
-    OccupancyUnit,
+    PMSDataStatus,
     PMSProviderName,
-    RevenueScope,
     parse_day,
 )
 
@@ -60,13 +62,44 @@ def map_stay_record(rec: Dict[str, Any]) -> NormalizedReservation:
     )
 
 
-def revenue_from_items(items: List[Dict[str, Any]], category: str) -> tuple[float, RevenueScope]:
-    """The REST adapter's rule, unchanged: the category's sum, or the total
-    when the category sums to zero (now labelled ``total_fallback``)."""
-    in_category = sum(i.get("amount", 0.0) for i in items if category.lower() in i.get("category", "").lower())
-    if in_category > 0:
-        return in_category, RevenueScope.CATEGORY
-    return sum(i.get("amount", 0.0) for i in items), RevenueScope.TOTAL_FALLBACK
+def _count(report: Dict[str, Any], key: str) -> Optional[int]:
+    value = report.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def map_performance_report(
+    report: Any, pms_property_id: str, day: date
+) -> tuple[NormalizedOccupancy, NormalizedRevenue]:
+    """Apaleo property-performance report (REST or MCP) → canonical figures.
+
+    * occupancy: ``soldCount`` rooms sold out of ``houseCount`` minus
+      ``outOfOrderCount`` (a room out of order cannot be sold). No sellable
+      room reported → absent (``no_data``), never a default.
+    * revenue: ``netFoodAndBeveragesRevenue`` (F&B, net of tax). Missing →
+      absent; the report's other revenue lines are never used in its place.
+    """
+    report = report if isinstance(report, dict) else {}
+    apaleo = PMSProviderName.APALEO
+    sold, house = _count(report, "soldCount"), _count(report, "houseCount")
+    available = None if house is None else house - (_count(report, "outOfOrderCount") or 0)
+    if sold is None or available is None or available <= 0:
+        occupancy = NormalizedOccupancy.absent(pms_property_id, day, apaleo, PMSDataStatus.NO_DATA,
+                                               "no sellable rooms in the performance report")
+    else:
+        occupancy = NormalizedOccupancy(pms_property_id=pms_property_id, day=day, provider=apaleo,
+                                        status=PMSDataStatus.OK, rooms_sold=sold, rooms_available=available)
+
+    money = report.get("netFoodAndBeveragesRevenue")
+    amount = money.get("amount") if isinstance(money, dict) else None
+    if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+        revenue = NormalizedRevenue.absent(pms_property_id, day, apaleo, PMSDataStatus.NO_DATA,
+                                           "no net F&B revenue in the performance report")
+    else:
+        revenue = NormalizedRevenue(pms_property_id=pms_property_id, day=day, provider=apaleo,
+                                    status=PMSDataStatus.OK, amount=float(amount), currency=money.get("currency"))
+    return occupancy, revenue
 
 
 class ApaleoPMSAdapter:
@@ -111,11 +144,13 @@ class ApaleoPMSAdapter:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 token_url,
+                # No custom scope: "read:occupancy read:revenue write:schedules"
+                # is rejected by Apaleo identity (400, HOS-352). The client's
+                # granted scopes apply, as for the MCP client.
                 data={
                     "grant_type": "client_credentials",
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
-                    "scope": "offline_access openid profile read:occupancy read:revenue write:schedules"
                 }
             )
             response.raise_for_status()
@@ -126,98 +161,43 @@ class ApaleoPMSAdapter:
         self.token_expiry = time.time() + expires_in
         logger.info("Successfully authenticated with Apaleo")
 
-    async def get_occupancy(self, property_id: str, target_date: date) -> int:
-        """Legacy: the figure stored by the sync (= ``fetch_occupancy().value``)."""
-        return (await self.fetch_occupancy(property_id, target_date)).value
-
-    async def get_revenue(self, property_id: str, target_date: date, category: str = "Total") -> float:
-        """Legacy: the figure stored by the sync (= ``fetch_revenue().amount``)."""
-        return (await self.fetch_revenue(property_id, target_date, category)).amount
-
     async def fetch_reservations(self, pms_property_id: str, start: date, end: date) -> List[NormalizedReservation]:
         return [map_stay_record(r) for r in await self.get_historical_data(pms_property_id, start, end)]
 
-    async def fetch_occupancy(self, property_id: str, target_date: date) -> NormalizedOccupancy:
-        """
-        Fetches occupancy metrics for a given date.
-        Raises ApaleoSyncError on non-200 responses.
-        """
-        if not self.access_token:
-            await self._authenticate()
+    async def _performance(self, property_id: str, target_date: date) -> tuple[NormalizedOccupancy, NormalizedRevenue]:
+        """One day of the property-performance report, or both figures absent
+        with the reason. Never raises for a PMS-side problem."""
+        apaleo = PMSProviderName.APALEO
+        if not self.is_configured:
+            return (NormalizedOccupancy.absent(property_id, target_date, apaleo, PMSDataStatus.NOT_CONFIGURED),
+                    NormalizedRevenue.absent(property_id, target_date, apaleo, PMSDataStatus.NOT_CONFIGURED))
 
-        tool = "REST_GET_OCCUPANCY"
-        params = {"date": target_date.isoformat(), "propertyId": property_id}
-        headers = {"Authorization": f"Bearer {self.access_token}"}
-        url = f"{self.api_base_url}/booking/v1/metrics/occupancy"
+        tool = "REST_GET_PROPERTY_PERFORMANCE"
+        params = {"propertyId": property_id, "from": target_date.isoformat(), "to": target_date.isoformat()}
+        url = f"{self.api_base_url}/reports/v1/reports/property-performance"
         t0 = time.monotonic()
-
         try:
+            await self._authenticate()
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, headers=headers)
-                duration_ms = (time.monotonic() - t0) * 1000
-                if response.status_code == 200:
-                    data = response.json()
-                    result = int(data.get("occupancy") or 0)
-                    _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
-                                      result_summary=str(result))
-                    return NormalizedOccupancy(
-                        pms_property_id=property_id, day=target_date, value=result,
-                        unit=OccupancyUnit.AS_REPORTED, provider=PMSProviderName.APALEO,
-                    )
-                else:
-                    _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
-                                      error=f"HTTP {response.status_code}")
-                    raise ApaleoSyncError(f"HTTP {response.status_code}")
-        except ApaleoSyncError:
-            raise
-        except Exception as e:
+                response = await client.get(url, params=params, headers={"Authorization": f"Bearer {self.access_token}"})
             duration_ms = (time.monotonic() - t0) * 1000
-            logger.error(f"Apaleo API error: {str(e)}")
-            _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(e))
-            raise
-
-    async def fetch_revenue(self, property_id: str, target_date: date, category: str = "Total") -> NormalizedRevenue:
-        """
-        Fetches revenue metrics.
-        Raises ApaleoSyncError on non-200 responses.
-        """
-        if not self.access_token:
-            await self._authenticate()
-
-        tool = "REST_GET_REVENUE"
-        params = {
-            "from": target_date.isoformat(),
-            "to": target_date.isoformat(),
-            "propertyId": property_id,
-            "category": category,
-        }
-        url = f"{self.api_base_url}/finance/v1/metrics/revenue"
-        headers = {"Authorization": f"Bearer {self.access_token}"}
-        t0 = time.monotonic()
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, params=params, headers=headers)
-                duration_ms = (time.monotonic() - t0) * 1000
-                if response.status_code == 200:
-                    data = response.json()
-                    revenue_list = data.get("revenue", [])
-                    result, scope = revenue_from_items(revenue_list, category)
-                    _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
-                                      result_summary=str(result))
-                    return NormalizedRevenue(
-                        pms_property_id=property_id, day=target_date, amount=result, category=category,
-                        scope=scope, provider=PMSProviderName.APALEO,
-                    )
-                _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms,
-                                  error=f"HTTP {response.status_code}")
+            if response.status_code != 200:
                 raise ApaleoSyncError(f"HTTP {response.status_code}")
-        except ApaleoSyncError:
-            raise
-        except Exception as e:
+            _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, result_summary="performance report")
+            return map_performance_report(response.json(), property_id, target_date)
+        except Exception as exc:  # noqa: BLE001 — any failure is a pms_error, never a made-up figure
             duration_ms = (time.monotonic() - t0) * 1000
-            _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(e))
-            raise
+            logger.error("Apaleo property-performance failed for %s on %s: %s", property_id, target_date, exc)
+            _agent_logger.log(tool, params, mode="read", duration_ms=duration_ms, error=str(exc))
+            detail = str(exc)[:200]
+            return (NormalizedOccupancy.absent(property_id, target_date, apaleo, PMSDataStatus.PMS_ERROR, detail),
+                    NormalizedRevenue.absent(property_id, target_date, apaleo, PMSDataStatus.PMS_ERROR, detail))
+
+    async def fetch_occupancy(self, property_id: str, target_date: date) -> NormalizedOccupancy:
+        return (await self._performance(property_id, target_date))[0]
+
+    async def fetch_fb_revenue(self, property_id: str, target_date: date) -> NormalizedRevenue:
+        return (await self._performance(property_id, target_date))[1]
 
     async def get_historical_data(self, property_id: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         """
