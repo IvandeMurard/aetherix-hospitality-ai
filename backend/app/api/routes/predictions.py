@@ -420,12 +420,13 @@ def _load_demo_dataframe() -> pd.DataFrame:
 async def _load_mcp_dataframe(
     property_id: str, start_date: date, end_date: date
 ) -> pd.DataFrame:
-    from app.providers.pms.apaleo_mcp_adapter import ApaleoMCPAdapter
+    from app.providers.pms.factory import get_pms_provider
     from app.services.data_transformer import DataTransformer
 
-    adapter = ApaleoMCPAdapter()
-    records = await adapter.get_historical_data(property_id, start_date, end_date)
-    df = DataTransformer.stay_records_to_prophet(records)
+    # HOS-281: canonical reservations only; the adapter alone knows Apaleo's format.
+    adapter = get_pms_provider("apaleo", "mcp")
+    reservations = await adapter.fetch_reservations(property_id, start_date, end_date)
+    df = DataTransformer.reservations_to_prophet(reservations)
     if not df.empty:
         df["_source"] = "mcp_sandbox"
     return df
