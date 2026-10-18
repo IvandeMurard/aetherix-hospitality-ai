@@ -148,19 +148,34 @@ class PMSSyncLog(Base):
     """
     History of occupancy and revenue data synced from the PMS.
     Story 2.2: Data persistence for historical baseline.
+
+    Units (HOS-352). A figure is what the PMS reported, or NULL with its
+    status saying why (providers/pms/base.py PMSDataStatus):
+      rooms_sold / rooms_available  room counts for the day; occupancy rate =
+                                    rooms_sold / rooms_available, computed
+      fb_revenue                    F&B revenue only, net of tax, in
+                                    fb_revenue_currency; never total revenue
+      occupancy                     legacy, mixed units before HOS-352 (raw
+                                    REST figure or percent); no longer written
+                                    or read
     """
     __tablename__ = "pms_sync_logs"
 
     id = Column(Integer, primary_key=True)
     tenant_id = Column(String, ForeignKey("restaurant_profiles.tenant_id"), index=True, nullable=False)
     sync_date = Column(Date, index=True, nullable=False)
-    
-    occupancy = Column(Integer)
+
+    occupancy = Column(Integer)  # legacy, see docstring
     fb_revenue = Column(Float)
-    
+    rooms_sold = Column(Integer)
+    rooms_available = Column(Integer)
+    occupancy_status = Column(String)    # ok, fixture, not_configured, pms_error, no_data
+    fb_revenue_currency = Column(String)
+    fb_revenue_status = Column(String)   # same values
+
     # Metadata for back-channel safety/auditing
     raw_payload_summary = Column(JSON)
-    status = Column(String) # success, failed
+    status = Column(String) # success, incomplete (a figure absent), failed
     error_message = Column(String)
     
     created_at = Column(DateTime, default=datetime.utcnow)

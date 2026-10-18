@@ -10,5 +10,5 @@ from app.providers.pms.apaleo_adapter import (  # noqa: F401
     ApaleoPMSAdapter,
     ApaleoSyncError,
     map_stay_record,
-    revenue_from_items,
+    map_performance_report,
 )

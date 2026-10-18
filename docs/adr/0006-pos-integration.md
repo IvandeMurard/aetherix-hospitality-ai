@@ -755,6 +755,39 @@ Faire la normalisation *au moment* d'écrire l'adapter Mews mélangerait deux ri
 1. **Factory par PMS de l'hôtel, pas par variable d'environnement.** Le POS de §D6-bis choisit un fournisseur global via `POS_BACKEND`. Pour le PMS, HOS-347 a fait du `pms_type` un fait propre à chaque hôtel : `get_pms_provider(pms_type, transport)` garde une instance par (PMS, transport) (esprit Décision #10) et refuse un PMS sans adaptateur (`pms_not_supported`), jamais de repli vers un autre éditeur.
 2. **Valeurs étiquetées, pas corrigées.** Le schéma canonique dit ce qu'est chaque valeur : `unit` (REST : figure du endpoint, unité non vérifiée ; MCP : pourcentage de chambres vendues), `scope` (REST retombe sur le total si la catégorie vaut 0 ; MCP ignore la catégorie), `is_placeholder` (MCP renvoyait occupation 80 et revenu 0.0 hors configuration ou en erreur, comme si le PMS l'avait dit). Les valeurs stockées par `PMSSyncLog` restent identiques (AC3) ; la sync journalise un placeholder. Corriger ces écarts change des chiffres : story dédiée.
 
+### 9.8 HOS-352 (18/10/2026) — une donnée PMS est vraie ou absente
+
+Ce que §9.7 étiquetait est corrigé. Principe (Décisions #33, #43) : aucun adaptateur ne fabrique une valeur « pour ne pas bloquer le pipeline » ; c'est le pipeline qui gère l'absence.
+
+**Constat sur la sandbox Apaleo (sondage lecture seule, 18/10/2026).**
+
+| Chemin | Avant | Réalité sondée |
+|---|---|---|
+| REST occupation | `/booking/v1/metrics/occupancy` | **404** : l'endpoint n'existe pas |
+| REST revenu | `/finance/v1/metrics/revenue` | **404** : l'endpoint n'existe pas |
+| REST jeton | scopes `read:occupancy read:revenue write:schedules` | **400** : scopes refusés |
+| MCP revenu | `ListRevenuesReport` (`from = to`) | **422** ; avec `to = from + 1`, renvoie le total du compte « Revenues », pas le F&B |
+| REST + MCP | `property-performance` / `ListPropertyPerformanceReport` | **200**, même payload : `soldCount`, `houseCount`, `outOfOrderCount`, `netFoodAndBeveragesRevenue` |
+
+Le chemin REST n'a donc jamais rendu de chiffre réel, et le revenu MCP était soit le 0.0 inventé (422), soit le revenu total.
+
+**Décisions.**
+
+1. **Une seule source, une seule fonction.** REST et MCP lisent le rapport property-performance, mappé une fois par `map_performance_report`. Vérifié en direct : 9 jours × 3 propriétés sandbox, figures identiques sur les deux transports.
+2. **Un statut typé** (`PMSDataStatus`) : `ok`, `fixture` (adaptateur mock, jamais une donnée d'hôtel), `not_configured`, `pms_error`, `no_data`. Valeur présente si et seulement si le statut est `ok` ou `fixture`, contrôlé par les dataclasses.
+3. **Occupation = deux comptes** : chambres vendues et chambres vendables (`houseCount − outOfOrderCount`, une chambre hors service ne se vend pas). Le taux se calcule, il n'est jamais stocké. 0 vendue sur 103 est une donnée vraie (cas de la sandbox), pas un trou.
+4. **Revenu = F&B net de taxe** (`netFoodAndBeveragesRevenue`), avec sa devise. Ligne absente → revenu absent ; aucune autre ligne de revenu ne la remplace.
+5. **`PMSSyncLog`** : colonnes `rooms_sold`, `rooms_available`, `occupancy_status`, `fb_revenue_currency`, `fb_revenue_status` (migration `20261018170000`). La ligne est écrite même quand une figure manque (`status = incomplete`) : le trou est consigné. La colonne `occupancy` (unités mélangées) n'est plus écrite ni lue.
+6. **Captation** : ne lit que les lignes dont les deux figures sont `ok` avec au moins une chambre vendue. Taux = revenu F&B net / chambres vendues.
+7. **`/predictions/train` : calibration captation retirée.** Elle multipliait les couverts journaliers (`y`) par le baseline captation, un montant en € par chambre : un hôtel à 20 €/chambre entraînait le modèle sur 20 fois ses couverts réels. Le baseline reste là où son unité a un sens : la détection d'anomalies (€ comparé à des €).
+8. **`get_occupancy` / `get_revenue` supprimés** de l'ABC et des adaptateurs : ils rendaient un nombre nu dont ni l'unité ni l'origine ne se lisaient. Le protocole devient `fetch_occupancy` / `fetch_fb_revenue`.
+
+**Lignes historiques (AC5).** Toutes sandbox / démo à cette date.
+- Les lignes `pms_sync_logs` d'avant HOS-352 sont **conservées** : plus rien ne les lit (captation filtre sur le statut, le dashboard dérive l'occupation des comptes), et les commentaires de colonnes de la migration les signalent. Les supprimer effacerait l'historique sans rien corriger.
+- Un `captation_baselines` est **supprimé** quand le tenant a moins de `MIN_DATA_POINTS` jours rapportés par le PMS (il ne peut venir que de lignes d'avant HOS-352). Sinon, il est **recalculé**. Plan en dry-run : `scripts/ops/pms_history_hos352.py` ; écriture avec `--apply --confirm`, après la migration.
+
+**Hors périmètre, à suivre.** Le F&B vu par le PMS n'est que ce qui y est posté. Un hôtel dont le restaurant encaisse au POS sans reporter au PMS aura un F&B PMS vrai mais incomplet. La vérité terrain F&B reste le POS (§D1) ou `ListOrderedServicesReport` (cf. `docs/competitive/apaleo-mcp-mapping.md` BZ-1).
+
 ---
 
 ## 10. Amendment 2026-07-31 — §D4 différé : le socle `hotel_cohort_features` n'existe pas

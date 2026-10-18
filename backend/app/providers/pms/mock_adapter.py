@@ -1,7 +1,7 @@
 """Mock PMS adapter for development and pilot verification (moved by HOS-280).
 
-Values are fixed fixtures, never a hotel's data: every canonical value is
-flagged ``is_placeholder=True``. Legacy ``get_*`` values are unchanged.
+Values are fixed fixtures, never a hotel's data: every canonical value has
+status ``fixture`` (HOS-352), so nothing downstream learns from it.
 """
 from __future__ import annotations
 
@@ -12,9 +12,8 @@ from app.providers.pms.base import (
     NormalizedOccupancy,
     NormalizedReservation,
     NormalizedRevenue,
-    OccupancyUnit,
+    PMSDataStatus,
     PMSProviderName,
-    RevenueScope,
 )
 
 
@@ -29,36 +28,33 @@ class MockPMSAdapter:
         # Mocking some baseline data
         self.mock_data = {
             "pilot_hotel": {
-                "base_occupancy": 100,
-                "base_fb_revenue": 2500.0,
+                "rooms_sold": 100,
+                "rooms_available": 120,
+                "fb_revenue": 2500.0,
             }
         }
+
+    def _fixture(self, property_id: str) -> Dict[str, Any]:
+        return self.mock_data.get(property_id, {"rooms_sold": 50, "rooms_available": 80, "fb_revenue": 1000.0})
 
     async def aclose(self) -> None:
         return None
 
     async def fetch_occupancy(self, property_id: str, target_date: date) -> NormalizedOccupancy:
+        f = self._fixture(property_id)
         return NormalizedOccupancy(
-            pms_property_id=property_id, day=target_date,
-            value=int(self.mock_data.get(property_id, {}).get("base_occupancy", 50)),
-            unit=OccupancyUnit.AS_REPORTED, provider=PMSProviderName.MOCK, is_placeholder=True,
+            pms_property_id=property_id, day=target_date, provider=PMSProviderName.MOCK,
+            status=PMSDataStatus.FIXTURE, rooms_sold=f["rooms_sold"], rooms_available=f["rooms_available"],
         )
 
-    async def fetch_revenue(self, property_id: str, target_date: date, category: str = "Total") -> NormalizedRevenue:
+    async def fetch_fb_revenue(self, property_id: str, target_date: date) -> NormalizedRevenue:
         return NormalizedRevenue(
-            pms_property_id=property_id, day=target_date,
-            amount=self.mock_data.get(property_id, {}).get("base_fb_revenue", 1000.0),
-            category=category, scope=RevenueScope.CATEGORY, provider=PMSProviderName.MOCK, is_placeholder=True,
+            pms_property_id=property_id, day=target_date, provider=PMSProviderName.MOCK,
+            status=PMSDataStatus.FIXTURE, amount=self._fixture(property_id)["fb_revenue"], currency="EUR",
         )
 
     async def fetch_reservations(self, property_id: str, start: date, end: date) -> List[NormalizedReservation]:
         return []
-
-    async def get_occupancy(self, property_id: str, target_date: date) -> int:
-        return (await self.fetch_occupancy(property_id, target_date)).value
-
-    async def get_revenue(self, property_id: str, target_date: date, category: str = "Total") -> float:
-        return (await self.fetch_revenue(property_id, target_date, category)).amount
 
     async def get_historical_data(self, property_id: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
         return [

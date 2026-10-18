@@ -1,21 +1,24 @@
 """
 Apaleo PMS adapter backed by Apaleo's MCP Server (direct, bearer mode).
 
-Drop-in replacement for ``ApaleoPMSAdapter`` — same interface via MCP tool
-calls instead of raw REST. Decision HOS-101: MCP > API raw. Moved to the
-vendor-neutral PMS layer by HOS-280 (Décision #28).
+Same canonical interface as ``ApaleoPMSAdapter``, via MCP tool calls instead
+of raw REST. Decision HOS-101: MCP > API raw. Moved to the vendor-neutral PMS
+layer by HOS-280 (Décision #28).
 
 Requires APALEO_MCP_SERVER_URL to be set (provided by Apaleo on alpha access).
-Falls back to placeholder values when not configured or on error, so the
-pipeline is never blocked. Since HOS-280 those values are **flagged**
-(``is_placeholder=True``): occupancy 80 and revenue 0.0 never came from the PMS.
-The values themselves are unchanged by this story.
+Since HOS-352 a figure is true or absent: not configured, on error, or with
+nothing usable in the report, the adapter returns an absent value with its
+status. It used to return occupancy 80 and revenue 0.0 as if the PMS had
+said so.
 
 MCP tool mapping (Apaleo native PascalCase naming):
-    fetch_occupancy      → ListPropertyPerformanceReport  (soldCount/houseCount → percent)
-    fetch_revenue        → ListRevenuesReport              (grossAmount.amount, all revenue)
+    fetch_occupancy      → ListPropertyPerformanceReport  (soldCount / houseCount − outOfOrderCount)
+    fetch_fb_revenue     → ListPropertyPerformanceReport  (netFoodAndBeveragesRevenue)
     fetch_reservations   → ListReservations                (reservations[])
     update_staffing      → not available in Apaleo MCP     (returns False)
+
+``ListRevenuesReport`` is no longer used: probed on 18/10/2026 it returns the
+"Revenues" account total (not F&B), and 422 when ``to`` equals ``from``.
 """
 
 from __future__ import annotations
@@ -25,20 +28,16 @@ from datetime import date
 from typing import Any
 
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
-from app.providers.pms.apaleo_adapter import map_stay_record
+from app.providers.pms.apaleo_adapter import map_performance_report, map_stay_record
 from app.providers.pms.base import (
     NormalizedOccupancy,
     NormalizedReservation,
     NormalizedRevenue,
-    OccupancyUnit,
+    PMSDataStatus,
     PMSProviderName,
-    RevenueScope,
 )
 
 logger = logging.getLogger(__name__)
-
-PLACEHOLDER_OCCUPANCY = 80
-PLACEHOLDER_REVENUE = 0.0
 
 
 class ApaleoMCPAdapter:
@@ -65,90 +64,49 @@ class ApaleoMCPAdapter:
 
     # --- canonical (providers/pms/base.py) -----------------------------------------
 
-    def _placeholder_occupancy(self, property_id: str, day: date) -> NormalizedOccupancy:
-        return NormalizedOccupancy(
-            pms_property_id=property_id, day=day, value=PLACEHOLDER_OCCUPANCY,
-            unit=OccupancyUnit.PERCENT, provider=PMSProviderName.APALEO, is_placeholder=True,
-        )
+    async def _performance(self, property_id: str, target_date: date) -> tuple[NormalizedOccupancy, NormalizedRevenue]:
+        apaleo = PMSProviderName.APALEO
 
-    async def fetch_occupancy(self, property_id: str, target_date: date) -> NormalizedOccupancy:
+        def absent(status: PMSDataStatus, detail: str | None = None):
+            return (NormalizedOccupancy.absent(property_id, target_date, apaleo, status, detail),
+                    NormalizedRevenue.absent(property_id, target_date, apaleo, status, detail))
+
         if not self._client.is_configured:
-            logger.warning("ApaleoMCPAdapter: not configured — placeholder occupancy (80)")
-            return self._placeholder_occupancy(property_id, target_date)
+            logger.warning("ApaleoMCPAdapter: not configured — occupancy and F&B revenue absent")
+            return absent(PMSDataStatus.NOT_CONFIGURED)
         try:
             data = await self._client.call_tool(
                 "ListPropertyPerformanceReport",
                 {"property_id": property_id, "from_": target_date.isoformat(), "to": target_date.isoformat()},
             )
-            report = data.get("data", {}) if isinstance(data, dict) else {}
-            house = int(report.get("houseCount", 0))
-            sold = int(report.get("soldCount", 0))
-            if house > 0:
-                return NormalizedOccupancy(
-                    pms_property_id=property_id, day=target_date, value=round(sold / house * 100),
-                    unit=OccupancyUnit.PERCENT, provider=PMSProviderName.APALEO,
-                    rooms_sold=sold, rooms_available=house,
-                )
-            return self._placeholder_occupancy(property_id, target_date)
-        except Exception as exc:
-            logger.error("ApaleoMCPAdapter.fetch_occupancy failed: %s", exc)
-            return self._placeholder_occupancy(property_id, target_date)
+        except Exception as exc:  # noqa: BLE001 — any failure is a pms_error, never a made-up figure
+            logger.error("ApaleoMCPAdapter: performance report failed: %s", exc)
+            return absent(PMSDataStatus.PMS_ERROR, str(exc)[:200])
+        # The MCP server returns Apaleo's HTTP errors as a payload, not an exception.
+        if isinstance(data, dict) and int(data.get("status_code") or 200) >= 400:
+            logger.error("ApaleoMCPAdapter: performance report HTTP %s", data.get("status_code"))
+            return absent(PMSDataStatus.PMS_ERROR, f"HTTP {data.get('status_code')}: {str(data.get('message'))[:160]}")
+        report = data.get("data", {}) if isinstance(data, dict) else {}
+        return map_performance_report(report, property_id, target_date)
 
-    async def fetch_revenue(
-        self, property_id: str, target_date: date, category: str = "Total"
-    ) -> NormalizedRevenue:
-        def placeholder() -> NormalizedRevenue:
-            return NormalizedRevenue(
-                pms_property_id=property_id, day=target_date, amount=PLACEHOLDER_REVENUE, category=category,
-                scope=RevenueScope.ALL_REVENUE, provider=PMSProviderName.APALEO, is_placeholder=True,
-            )
+    async def fetch_occupancy(self, property_id: str, target_date: date) -> NormalizedOccupancy:
+        return (await self._performance(property_id, target_date))[0]
 
-        if not self._client.is_configured:
-            logger.warning("ApaleoMCPAdapter: not configured — placeholder revenue (0.0)")
-            return placeholder()
-        try:
-            data = await self._client.call_tool(
-                "ListRevenuesReport",
-                {
-                    "property_id": property_id,
-                    "from_": target_date.isoformat(),
-                    "to": target_date.isoformat(),
-                },
-            )
-            report = data.get("data", data) if isinstance(data, dict) else {}
-            if isinstance(report, list):
-                amount = sum(float(r.get("grossAmount", {}).get("amount", 0.0)) for r in report)
-            else:
-                amount = float(report.get("grossAmount", {}).get("amount", 0.0))
-            # The MCP report ignores the category: labelled, not fixed here.
-            return NormalizedRevenue(
-                pms_property_id=property_id, day=target_date, amount=amount, category=category,
-                scope=RevenueScope.ALL_REVENUE, provider=PMSProviderName.APALEO,
-            )
-        except Exception as exc:
-            logger.error("ApaleoMCPAdapter.fetch_revenue failed: %s", exc)
-            return placeholder()
+    async def fetch_fb_revenue(self, property_id: str, target_date: date) -> NormalizedRevenue:
+        return (await self._performance(property_id, target_date))[1]
 
     async def fetch_reservations(
         self, property_id: str, start_date: date, end_date: date
     ) -> list[NormalizedReservation]:
         return [map_stay_record(r) for r in await self.get_historical_data(property_id, start_date, end_date)]
 
-    # --- legacy interface (values identical to before HOS-280) ------------------------
-
-    async def get_occupancy(self, property_id: str, target_date: date) -> int:
-        return (await self.fetch_occupancy(property_id, target_date)).value
-
-    async def get_revenue(
-        self, property_id: str, target_date: date, category: str = "Total"
-    ) -> float:
-        return (await self.fetch_revenue(property_id, target_date, category)).amount
+    # --- legacy interface ------------------------------------------------------------
 
     async def get_historical_data(
         self, property_id: str, start_date: date, end_date: date
     ) -> list[dict[str, Any]]:
-        """Raw reservations, for the forecast pipeline until it reads
-        ``fetch_reservations`` (HOS-281)."""
+        """Raw reservations; ``fetch_reservations`` maps them to the canonical
+        schema (HOS-281)."""
         if not self._client.is_configured:
             logger.warning("ApaleoMCPAdapter: not configured — returning empty history")
             return []

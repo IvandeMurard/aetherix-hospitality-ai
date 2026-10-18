@@ -72,7 +72,10 @@ CATEGORIES = {
 # runtime state, not a dataset label: a golden case always states its proposal.
 PROPOSAL_KINDS = {"add", "reduce", "no_change"}
 
-LAYERS = {"forecast", "recommendation", "receipt", "parser", "drift", "latency", "guardrail"}
+# HOS-352 — "pms_input": what the PMS layer hands to the forecast and the
+# captation baseline (true figure or absent, never invented). No eval runner;
+# graded by backend/tests/test_pms_provider.py, like the recommendation rows.
+LAYERS = {"forecast", "recommendation", "receipt", "parser", "drift", "latency", "guardrail", "pms_input"}
 
 # EVAL-0 AC0.1 "unblocking minimum" — unblocks EVAL-1 / EVAL-2 / EVAL-4.
 EVAL0_MIN_COUNTS = {

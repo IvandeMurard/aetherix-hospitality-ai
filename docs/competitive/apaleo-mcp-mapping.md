@@ -13,6 +13,7 @@
 
 - Apaleo expose **235 tools MCP natifs** (PascalCase, OAuth2, réponses `{"data": {...}}`) — comptage vérifié en live le 2026-06-03 via `scripts/list_apaleo_tools.py`.
 - Aetherix en **consomme 5** : 3 en production (`ListPropertyPerformanceReport`, `ListRevenuesReport`, `ListReservations`) + 2 au probe/validation (`GetProperty`, `ListProperties`). `update_staffing` **n'existe pas** côté Apaleo (Décision #21).
+  - *Mise à jour 18/10/2026 (HOS-352)* : `ListRevenuesReport` n'est plus consommé (il rend le total du compte « Revenues », pas le F&B). Occupation **et** revenu F&B net viennent de `ListPropertyPerformanceReport` (`soldCount`, `houseCount`, `outOfOrderCount`, `netFoodAndBeveragesRevenue`). Voir ADR-0006 §9.8.
 - **44 tools** constituent la *border zone* F&B : ce qu'Apaleo Copilot pourrait composer pour fabriquer un concurrent F&B interne (services F&B, ordered-services / arrivals reports, occupancy granulaire, time-slices, market segments, group/banquet demand).
 - **186 tools** sont *inutilisés* par Aetherix et hors menace F&B (folios, paiements, factures, comptabilité, inventaire, rate plans, policies, admin).
 - **Le différenciateur Aetherix n'est pas l'accès aux données — c'est la couche d'intelligence par-dessus** (capture-rate appris, pgvector RAG sur patterns F&B, Prophet + regressors, cold-start meta-learner, mémoire propriétaire). Apaleo expose la *donnée brute* ; Apaleo n'expose **aucune** primitive de forecast covers, de capture-rate, ni de staffing.

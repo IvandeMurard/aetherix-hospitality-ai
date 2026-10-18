@@ -2,10 +2,13 @@
 
 Story 2.4 — Calculate Baseline Captation Rates (FR3).
 
-Captation rate = F&B revenue per occupied room.
+Captation rate = F&B revenue (net of tax) per room sold.
 
 The service:
-1. Loads all PMSSyncLog rows for a tenant where occupancy > 0.
+1. Loads the PMSSyncLog rows of a tenant whose two figures were reported by
+   the PMS (status ``ok``) with at least one room sold. Since HOS-352 that
+   excludes absent figures, mock fixtures, and every row written before the
+   two room counts existed (``occupancy`` mixed units, see PMSSyncLog).
 2. Computes the overall average captation rate.
 3. Computes day-of-week adjustment factors (ratio of each DoW's average
    to the overall average).
@@ -32,7 +35,7 @@ MIN_DATA_POINTS = 7
 
 
 class InsufficientDataError(ValueError):
-    """Raised when there are not enough non-zero occupancy records."""
+    """Raised when there are not enough PMS-reported days with rooms sold."""
 
 
 class CaptationService:
@@ -47,7 +50,7 @@ class CaptationService:
     ) -> CaptationBaseline:
         """Calculate (or recalculate) the captation baseline for *tenant_id*.
 
-        Fetches all PMSSyncLog rows with occupancy > 0, runs the stats, then
+        Fetches the PMS-reported PMSSyncLog rows with rooms sold, runs the stats, then
         upserts a single ``CaptationBaseline`` row for the tenant.
 
         Raises:
@@ -107,12 +110,14 @@ class CaptationService:
     async def _load_sync_logs(
         self, tenant_id: str, db: AsyncSession
     ) -> list[PMSSyncLog]:
-        """Fetch all PMSSyncLog rows for the tenant that have occupancy > 0."""
+        """Rows whose rooms sold and F&B revenue both came from the PMS (HOS-352)."""
         result = await db.execute(
             select(PMSSyncLog)
             .where(
                 PMSSyncLog.tenant_id == tenant_id,
-                PMSSyncLog.occupancy > 0,
+                PMSSyncLog.occupancy_status == "ok",
+                PMSSyncLog.fb_revenue_status == "ok",
+                PMSSyncLog.rooms_sold > 0,
                 PMSSyncLog.fb_revenue.isnot(None),
             )
             .order_by(PMSSyncLog.sync_date)
@@ -124,14 +129,14 @@ class CaptationService:
         data = [
             {
                 "sync_date": pd.Timestamp(row.sync_date),
-                "occupancy": row.occupancy,
+                "rooms_sold": row.rooms_sold,
                 "fb_revenue": row.fb_revenue,
             }
             for row in rows
         ]
         df = pd.DataFrame(data)
         # Core metric per record
-        df["captation_rate"] = df["fb_revenue"] / df["occupancy"]
+        df["captation_rate"] = df["fb_revenue"] / df["rooms_sold"]
         # Calendar helpers
         df["dow"] = df["sync_date"].dt.dayofweek  # 0=Monday … 6=Sunday
         df["month"] = df["sync_date"].dt.month     # 1–12

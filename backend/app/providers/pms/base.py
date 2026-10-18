@@ -1,23 +1,20 @@
-"""Vendor-neutral PMS layer — HOS-280 (Décision #28, ADR-0006 §9).
+"""Vendor-neutral PMS layer — HOS-280 / HOS-352 (Décisions #28, #33, #43, ADR-0006 §9).
 
 Only an adapter knows its PMS's native format. Everything else in Aetherix
 reads these dataclasses, so adding a PMS means writing its adapter, not
 touching the forecast or the sync. Mirrors the POS provider design of
 ADR-0006 §D6 (Protocol + frozen dataclasses + read-only).
 
-Every value says what it is (``unit``, ``scope``) and whether it is real
-(``is_placeholder``): a canonical layer that hid a made-up number behind a
-clean type would be worse than the raw payload. Behaviour is unchanged by
-this story (values identical to before); the flags make the existing gaps
-visible, they do not fix them:
+A PMS figure is true or absent, never invented (HOS-352):
 
-* ``ApaleoMCPAdapter`` returned occupancy 80 and revenue 0.0 when not
-  configured or on error → ``is_placeholder=True``.
-* the two Apaleo transports do not measure occupancy the same way (REST:
-  the metrics endpoint's own figure, unit not verified; MCP: a percentage of
-  rooms sold) → ``unit``.
-* REST falls back to total revenue when the category sums to zero; MCP
-  ignores the category → ``scope``.
+* a value is either what the PMS reported, or absent with a ``status`` that
+  says why (``not_configured``, ``pms_error``, ``no_data``). No adapter returns
+  a default "so the pipeline is never blocked": the pipeline handles absence.
+* occupancy has one unit everywhere: rooms sold + rooms available, both
+  counts. The rate is computed (``rate``), never stored as a third figure in
+  an unverified unit.
+* revenue is F&B revenue only, net of tax, in the PMS's currency. A source
+  that cannot isolate F&B gives no figure, never the total instead.
 """
 from __future__ import annotations
 
@@ -32,40 +29,66 @@ class PMSProviderName(str, Enum):
     APALEO = "apaleo"
 
 
-class OccupancyUnit(str, Enum):
-    PERCENT = "percent"            # rooms sold / rooms available × 100
-    ROOMS = "rooms"                # rooms sold
-    AS_REPORTED = "as_reported"    # the PMS's own figure, unit not verified
+class PMSDataStatus(str, Enum):
+    OK = "ok"                          # reported by the hotel's PMS
+    FIXTURE = "fixture"                # dev / demo fixture (mock adapter), never a hotel's data
+    NOT_CONFIGURED = "not_configured"  # no credentials / server for this PMS
+    PMS_ERROR = "pms_error"            # the PMS call failed
+    NO_DATA = "no_data"                # the PMS answered with nothing usable for that day
 
-
-class RevenueScope(str, Enum):
-    CATEGORY = "category"                  # revenue of the requested category
-    TOTAL_FALLBACK = "total_fallback"      # category summed to 0 → total returned instead
-    ALL_REVENUE = "all_revenue"            # the source ignores the category
+    @property
+    def has_value(self) -> bool:
+        return self in (PMSDataStatus.OK, PMSDataStatus.FIXTURE)
 
 
 @dataclass(slots=True, frozen=True)
 class NormalizedOccupancy:
     pms_property_id: str
     day: date
-    value: int                         # the figure stored by the sync (unchanged)
-    unit: OccupancyUnit
     provider: PMSProviderName
+    status: PMSDataStatus
     rooms_sold: Optional[int] = None
-    rooms_available: Optional[int] = None
-    is_placeholder: bool = False       # True = not from the PMS (unconfigured / error)
+    rooms_available: Optional[int] = None   # sellable rooms that day (out of order excluded)
+    detail: Optional[str] = None            # why it is absent, for logs
+
+    def __post_init__(self):
+        present = self.rooms_sold is not None and self.rooms_available is not None
+        if present != self.status.has_value:
+            raise ValueError(f"occupancy status {self.status.value} does not match its values")
+
+    @property
+    def rate(self) -> Optional[float]:
+        """Rooms sold / rooms available, 0–1. None when absent."""
+        if self.rooms_sold is None or not self.rooms_available:
+            return None
+        return self.rooms_sold / self.rooms_available
+
+    @classmethod
+    def absent(cls, pms_property_id: str, day: date, provider: PMSProviderName,
+               status: PMSDataStatus, detail: Optional[str] = None) -> "NormalizedOccupancy":
+        return cls(pms_property_id=pms_property_id, day=day, provider=provider, status=status, detail=detail)
 
 
 @dataclass(slots=True, frozen=True)
 class NormalizedRevenue:
+    """F&B revenue of one day, net of tax."""
+
     pms_property_id: str
     day: date
-    amount: float
-    category: str
-    scope: RevenueScope
     provider: PMSProviderName
+    status: PMSDataStatus
+    amount: Optional[float] = None
     currency: Optional[str] = None
-    is_placeholder: bool = False
+    detail: Optional[str] = None
+
+    def __post_init__(self):
+        if (self.amount is not None) != self.status.has_value:
+            raise ValueError(f"revenue status {self.status.value} does not match its value")
+
+    @classmethod
+    def absent(cls, pms_property_id: str, day: date, provider: PMSProviderName,
+               status: PMSDataStatus, detail: Optional[str] = None) -> "NormalizedRevenue":
+        return cls(pms_property_id=pms_property_id, day=day, provider=provider, status=status, detail=detail)
 
 
 @dataclass(slots=True, frozen=True)
@@ -87,7 +110,11 @@ class NormalizedReservation:
 @runtime_checkable
 class PMSProvider(Protocol):
     """Read-only interface of a PMS (Décision #7). Writes stay on the legacy
-    adapter methods behind their own read-only guard."""
+    adapter methods behind their own read-only guard.
+
+    ``fetch_occupancy`` and ``fetch_fb_revenue`` never raise for a PMS-side
+    problem: they return an absent value with its status.
+    """
 
     @property
     def provider_name(self) -> PMSProviderName: ...
@@ -97,7 +124,7 @@ class PMSProvider(Protocol):
 
     async def fetch_occupancy(self, pms_property_id: str, day: date) -> NormalizedOccupancy: ...
 
-    async def fetch_revenue(self, pms_property_id: str, day: date, category: str = "Total") -> NormalizedRevenue: ...
+    async def fetch_fb_revenue(self, pms_property_id: str, day: date) -> NormalizedRevenue: ...
 
     async def fetch_reservations(self, pms_property_id: str, start: date, end: date) -> list[NormalizedReservation]: ...
 

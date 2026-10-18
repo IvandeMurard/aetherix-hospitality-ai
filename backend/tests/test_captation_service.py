@@ -29,14 +29,16 @@ from app.services.captation_service import (
 
 def _make_log(
     sync_date: date,
-    occupancy: int,
+    rooms_sold: int,
     fb_revenue: float,
     tenant_id: str = "hotel_a",
 ) -> PMSSyncLog:
     log = PMSSyncLog()
     log.tenant_id = tenant_id
     log.sync_date = sync_date
-    log.occupancy = occupancy
+    log.rooms_sold = rooms_sold
+    log.occupancy_status = "ok"
+    log.fb_revenue_status = "ok"
     log.fb_revenue = fb_revenue
     return log
 
@@ -62,7 +64,7 @@ class TestCaptationServiceCalculations:
         self.svc = CaptationService()
 
     def test_to_dataframe_sets_captation_rate(self):
-        logs = [_make_log(date(2025, 1, 6), occupancy=100, fb_revenue=2000.0)]
+        logs = [_make_log(date(2025, 1, 6), rooms_sold=100, fb_revenue=2000.0)]
         df = self.svc._to_dataframe(logs)
         assert df["captation_rate"].iloc[0] == pytest.approx(20.0)
 
@@ -91,7 +93,7 @@ class TestCaptationServiceCalculations:
             d = date.fromordinal(start.toordinal() + i)
             is_weekend = d.weekday() >= 5
             revenue = 3000.0 if is_weekend else 1500.0
-            logs.append(_make_log(d, occupancy=100, fb_revenue=revenue))
+            logs.append(_make_log(d, rooms_sold=100, fb_revenue=revenue))
 
         df = self.svc._to_dataframe(logs)
         avg = self.svc._compute_overall_avg(df)
@@ -183,7 +185,7 @@ class TestCaptationServiceDB:
 
     @pytest.mark.asyncio
     async def test_calculate_baseline_avg_revenue_per_room(self):
-        """AC1: avg_fb_revenue_per_room equals fb_revenue / occupancy."""
+        """AC1: avg_fb_revenue_per_room equals fb_revenue / rooms_sold."""
         logs = _build_logs(n=14, base_revenue=2000.0, base_occ=100)
         db = _mock_db_no_existing_baseline(logs)
 
@@ -329,3 +331,25 @@ class TestPMSSyncAutoRecalculation:
                 await service.sync_daily_data(PmsTarget("pilot_hotel", "apaleo", "PAR"), date(2025, 6, 15))
             except RuntimeError:
                 pass  # Acceptable — external mock bypassed the internal guard
+
+
+# ---------------------------------------------------------------------------
+# HOS-352 — only figures the PMS reported feed the baseline
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_only_pms_reported_rows_feed_the_baseline():
+    """Absent figures, mock fixtures and pre-HOS-352 rows (legacy ``occupancy``,
+    no room counts) are left out by the query itself."""
+    db = AsyncMock()
+    rows = MagicMock()
+    rows.scalars.return_value.all.return_value = []
+    db.execute = AsyncMock(return_value=rows)
+
+    await CaptationService()._load_sync_logs("hotel_a", db)
+
+    sql = str(db.execute.await_args.args[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "pms_sync_logs.occupancy_status = 'ok'" in sql
+    assert "pms_sync_logs.fb_revenue_status = 'ok'" in sql
+    assert "pms_sync_logs.rooms_sold > 0" in sql
+    assert "pms_sync_logs.occupancy >" not in sql
