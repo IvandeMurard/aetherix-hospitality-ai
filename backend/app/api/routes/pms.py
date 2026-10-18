@@ -14,28 +14,25 @@ from app.core.security import get_current_user
 from app.db.models import RestaurantProfile
 from app.db.session import get_db
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
-from app.services.apaleo_adapter import ApaleoPMSAdapter, ApaleoSyncError
-from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
-from app.services.pms_sync import MockPMSAdapter, PMSSyncService
+from app.providers.pms.apaleo_adapter import ApaleoSyncError
+from app.services.pms_sync import PMSSyncService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pms", tags=["pms"])
 
 
-def adapter_for(target, *, use_mock: bool = False, use_mcp: bool = False):
-    """The adapter of the hotel's own PMS (HOS-347). Adding a PMS = adding an
-    entry here once its adapter exists (Décision #28); until then, refused."""
-    from app.services.pms_identity import PmsIdentityError
+_LABELS = {("apaleo", "rest"): "apaleo_raw", ("apaleo", "mcp"): "apaleo_mcp", ("mock", "mock"): "mock"}
 
-    if use_mock:
-        return MockPMSAdapter(), "mock"
-    if target.pms_type == "apaleo":
-        return (ApaleoMCPAdapter(), "apaleo_mcp") if use_mcp else (ApaleoPMSAdapter(), "apaleo_raw")
-    if use_mcp:
-        raise PmsIdentityError("pms_not_supported", "use_mcp applies to Apaleo only")
-    raise PmsIdentityError("pms_not_supported",
-                           f"no adapter yet for this hotel's PMS ({target.pms_type}); nothing was synced")
+
+def adapter_for(target, *, use_mock: bool = False, use_mcp: bool = False):
+    """The adapter of the hotel's own PMS (HOS-347), from the vendor-neutral
+    PMS layer (HOS-280, ``providers.pms.factory``). A PMS without an adapter is
+    refused (``pms_not_supported``), never routed to another vendor's."""
+    from app.providers.pms.factory import get_pms_provider
+
+    key = ("mock", "mock") if use_mock else (target.pms_type, "mcp" if use_mcp else "rest")
+    return get_pms_provider(*key), _LABELS.get(key, f"{key[0]}_{key[1]}")
 
 
 async def _sync_task(service: PMSSyncService, target, sync_date: date) -> None:

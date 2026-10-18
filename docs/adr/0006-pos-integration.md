@@ -750,6 +750,11 @@ Faire la normalisation *au moment* d'écrire l'adapter Mews mélangerait deux ri
 - `docs/context/decisions-architecturales.md` — Décision #28
 - HOS-186, HOS-254, HOS-279, HOS-280, HOS-281
 
+### 9.7 Implémentation HOS-280 (17/10/2026) — deux écarts assumés
+
+1. **Factory par PMS de l'hôtel, pas par variable d'environnement.** Le POS de §D6-bis choisit un fournisseur global via `POS_BACKEND`. Pour le PMS, HOS-347 a fait du `pms_type` un fait propre à chaque hôtel : `get_pms_provider(pms_type, transport)` garde une instance par (PMS, transport) (esprit Décision #10) et refuse un PMS sans adaptateur (`pms_not_supported`), jamais de repli vers un autre éditeur.
+2. **Valeurs étiquetées, pas corrigées.** Le schéma canonique dit ce qu'est chaque valeur : `unit` (REST : figure du endpoint, unité non vérifiée ; MCP : pourcentage de chambres vendues), `scope` (REST retombe sur le total si la catégorie vaut 0 ; MCP ignore la catégorie), `is_placeholder` (MCP renvoyait occupation 80 et revenu 0.0 hors configuration ou en erreur, comme si le PMS l'avait dit). Les valeurs stockées par `PMSSyncLog` restent identiques (AC3) ; la sync journalise un placeholder. Corriger ces écarts change des chiffres : story dédiée.
+
 ---
 
 ## 10. Amendment 2026-07-31 — §D4 différé : le socle `hotel_cohort_features` n'existe pas

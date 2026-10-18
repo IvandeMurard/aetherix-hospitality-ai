@@ -88,13 +88,18 @@ class _RecordingAdapter:
     def __init__(self):
         self.calls = []
 
-    async def get_occupancy(self, property_id, target_date):
-        self.calls.append(property_id)
-        return 70
+    async def fetch_occupancy(self, property_id, target_date):
+        from app.providers.pms.base import NormalizedOccupancy, OccupancyUnit, PMSProviderName
 
-    async def get_revenue(self, property_id, target_date, category="Total"):
         self.calls.append(property_id)
-        return 1200.0
+        return NormalizedOccupancy(property_id, target_date, 70, OccupancyUnit.PERCENT, PMSProviderName.APALEO)
+
+    async def fetch_revenue(self, property_id, target_date, category="Total"):
+        from app.providers.pms.base import NormalizedRevenue, PMSProviderName, RevenueScope
+
+        self.calls.append(property_id)
+        return NormalizedRevenue(property_id, target_date, 1200.0, category, RevenueScope.CATEGORY,
+                                 PMSProviderName.APALEO)
 
 
 @pytest.mark.asyncio

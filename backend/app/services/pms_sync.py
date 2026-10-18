@@ -33,37 +33,15 @@ class PMSAdapter(abc.ABC):
         """Write staffing recommendations back to the PMS schedules/tasks."""
         ...
 
-class MockPMSAdapter(PMSAdapter):
-    """Mock adapter for development and pilot verification."""
-    
-    def __init__(self):
-        # Mocking some baseline data
-        self.mock_data = {
-            "pilot_hotel": {
-                "base_occupancy": 100,
-                "base_fb_revenue": 2500.0,
-            }
-        }
+# HOS-280 (Décision #28): the adapters live in ``app.providers.pms``; this
+# ABC stays for existing callers, and the moved adapters are registered as
+# its virtual subclasses so isinstance checks keep holding.
+from app.providers.pms.apaleo_adapter import ApaleoPMSAdapter as _ApaleoREST  # noqa: E402
+from app.providers.pms.apaleo_mcp_adapter import ApaleoMCPAdapter as _ApaleoMCP  # noqa: E402
+from app.providers.pms.mock_adapter import MockPMSAdapter  # noqa: E402,F401 — re-export
 
-    async def get_occupancy(self, property_id: str, target_date: date) -> int:
-        return int(self.mock_data.get(property_id, {}).get("base_occupancy", 50))
-
-    async def get_revenue(self, property_id: str, target_date: date, category: str = "Total") -> float:
-        return self.mock_data.get(property_id, {}).get("base_fb_revenue", 1000.0)
-
-    async def get_historical_data(self, property_id: str, start_date: date, end_date: date) -> List[Dict[str, Any]]:
-        return [
-            {
-                "date": target_date.isoformat(),
-                "occupancy": 80,
-                "fb_revenue": 2000.0,
-            } for target_date in [start_date] # Simplification for mock
-        ]
-
-    async def update_staffing_in_pms(self, property_id: str, target_date: date, staffing_deltas: Dict[str, int]) -> bool:
-        # Simulate successful write-back
-        print(f"Mocked push to {property_id} on {target_date}: {staffing_deltas}")
-        return True
+for _cls in (_ApaleoREST, _ApaleoMCP, MockPMSAdapter):
+    PMSAdapter.register(_cls)
 
 class PIIStripper:
     """Utility to ensure GDPR compliance by stripping/hashing guest PII."""
@@ -114,8 +92,18 @@ class PMSSyncService:
         if not isinstance(target, PmsTarget):
             raise TypeError("sync_daily_data needs a PmsTarget (pms_identity.resolve_by_tenant)")
         pms_id, tenant_id = target.pms_property_id, target.tenant_id
-        occupancy = await self.adapter.get_occupancy(pms_id, target_date)
-        revenue = await self.adapter.get_revenue(pms_id, target_date, category="F&B")
+        # HOS-280: read the vendor-neutral layer. Stored values are unchanged;
+        # a placeholder (not from the PMS) is now said out loud in the log.
+        occ = await self.adapter.fetch_occupancy(pms_id, target_date)
+        rev = await self.adapter.fetch_revenue(pms_id, target_date, category="F&B")
+        occupancy, revenue = occ.value, rev.amount
+        if occ.is_placeholder or rev.is_placeholder:
+            import logging  # noqa: PLC0415
+
+            logging.getLogger(__name__).warning(
+                "pms_sync: placeholder value stored for %s on %s (occupancy=%s, revenue=%s) — not from the PMS",
+                tenant_id, target_date, occ.is_placeholder, rev.is_placeholder,
+            )
         property_id = tenant_id  # everything below is Aetherix-side
 
         # Story 2.2: Persist sync result to Supabase
