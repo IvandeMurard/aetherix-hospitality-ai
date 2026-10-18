@@ -408,6 +408,11 @@ class StaffingRecommendation(Base):
     # consequences (risk_assessment.SCHEMA). Mirror of migration 20260925120000.
     decision_rule = Column(String, nullable=True)
     risk_assessment = Column(JSONB, nullable=True)
+    # HOS-344: for a counter (status modified), the extra (negative = fewer)
+    # staff the person kept instead, when the host agent relays the figure
+    # over MCP. NULL otherwise. Read by learning_loop.revealed_staffing_ratio.
+    # Mirror of migration 20261018190000.
+    retained_delta_staff = Column(Integer, nullable=True)
     # HOS-350: at most one reminder before commit_at, through the hotel's
     # channel. reminder_status NULL = not yet due; never records a decision.
     # Mirror of migration 20261017150000.

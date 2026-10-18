@@ -342,6 +342,8 @@ async def tool_submit_feedback_to_memory(
 # Recommendation states a host may still decide. `ready_to_push` covers a
 # headless tenant whose recommendations never go through WhatsApp.
 _HOST_DECIDABLE_STATUSES = ("ready_to_push", "dispatched")
+# HOS-344: bound of a counter's figure (= hotel_parameters max_extra_staff bound).
+MAX_RETAINED_DELTA = 50
 
 
 async def tool_record_host_decision(
@@ -354,9 +356,15 @@ async def tool_record_host_decision(
     actual_value: Optional[float] = None,
     notes: Optional[str] = None,
     request_id: str = "",
+    retained_delta_staff: Any = None,
     **provenance: Any,
 ) -> dict[str, Any]:
     """MCP ``submit_feedback_to_memory``: record a host's decision.
+
+    ``retained_delta_staff`` (HOS-344): with ``outcome = modified`` only, the
+    extra staff the person kept instead (negative = fewer), an integer within
+    ±``MAX_RETAINED_DELTA``. Stored on the recommendation; the learning loop
+    reads it as the counter's figure. Refused with any other outcome.
 
     Order: outcome + provenance/reason validation (400, typed) → the
     recommendation must belong to the token's hotel (404, never another
@@ -375,6 +383,13 @@ async def tool_record_host_decision(
     if outcome not in ("accepted", "rejected", "modified", "ignored"):
         raise MCPAuthError(400, "invalid_input",
                            "outcome must be accepted|rejected|modified|ignored")
+    if retained_delta_staff is not None:
+        if outcome != "modified":
+            raise MCPAuthError(400, "invalid_input", "retained_delta_staff is only for outcome=modified")
+        if (isinstance(retained_delta_staff, bool) or not isinstance(retained_delta_staff, int)
+                or abs(retained_delta_staff) > MAX_RETAINED_DELTA):
+            raise MCPAuthError(400, "invalid_input",
+                               f"retained_delta_staff must be an integer within ±{MAX_RETAINED_DELTA}")
     try:
         decision = parse_agent_decision(provenance)
     except ProvenanceError as exc:
@@ -421,6 +436,7 @@ async def tool_record_host_decision(
         rec.reason_source = decision.reason_source
         rec.reason_evidence = [e.model_dump() for e in decision.evidence] or None
         rec.decision_policy_version = policy.version
+        rec.retained_delta_staff = retained_delta_staff
         logger.info(
             "host_decision_recorded hotel=%s rec=%s outcome=%s decided_by=%s reason_code=%s "
             "reason_source=%s caller=%s policy=%s",

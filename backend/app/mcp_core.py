@@ -183,7 +183,9 @@ TOOLS_MANIFEST: list[dict[str, Any]] = [
             "negative: `reason_code` from the enum; if the person gave none, send "
             "`none_given` with `reason_source: human`; if you infer a reason yourself, "
             "send `reason_source: agent_inferred` — never attribute a guess to the person. "
-            "`ignored` records no decision."
+            "`ignored` records no decision. When the person counters with a figure "
+            "(outcome `modified`), send it as `retained_delta_staff`: the extra staff they "
+            "keep instead, negative for fewer; the hotel's staffing ratio is learned from it."
         ),
         "inputSchema": {
             "type": "object",
@@ -230,6 +232,11 @@ TOOLS_MANIFEST: list[dict[str, Any]] = [
                     },
                 },
                 "actual_value": {"type": "number"},
+                "retained_delta_staff": {
+                    "type": "integer", "minimum": -50, "maximum": 50,
+                    "description": "outcome=modified only: extra staff kept instead of the "
+                                   "recommendation (negative = fewer).",
+                },
                 "notes": {"type": "string", "maxLength": 1000},
             },
         },

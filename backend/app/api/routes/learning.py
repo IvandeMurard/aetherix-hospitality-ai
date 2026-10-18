@@ -9,6 +9,7 @@ GET  /hotels/{tenant_id}/learning/report                   arm C report (read-on
 GET  /hotels/{tenant_id}/learning/items[?status=]          review queue
 POST /hotels/{tenant_id}/learning/items/{item_id}/approve  {note?, case?} → applies
 POST /hotels/{tenant_id}/learning/items/{item_id}/reject   {note?}
+POST /hotels/{tenant_id}/learning/items/{item_id}/rollback applied parameter proposal → replaced value
 POST /hotels/{tenant_id}/learning/calibration/rollback     {forecaster?} → previous version
 """
 from __future__ import annotations
@@ -96,6 +97,21 @@ async def reject(
     current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db),
 ):
     return await _decide(tenant_id, item_id, body, False, current_user, db)
+
+
+@router.post("/{tenant_id}/learning/items/{item_id}/rollback")
+async def rollback_item(
+    tenant_id: str, item_id: str,
+    current_user: dict = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    """An applied parameter proposal → the value it replaced (HOS-344)."""
+    await require_user_owns_tenant(db, current_user, tenant_id)
+    try:
+        out = await ls.rollback_parameter(db, tenant_id, item_id, current_user)
+    except ls.LearningError as exc:
+        raise _http(exc) from exc
+    await db.commit()
+    return out
 
 
 @router.post("/{tenant_id}/learning/calibration/rollback")
