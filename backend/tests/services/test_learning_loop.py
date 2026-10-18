@@ -399,3 +399,173 @@ async def test_learning_routes_are_tenant_scoped(db):
         r = c.post(f"/api/v1/hotels/h1/learning/items/{item.id}/approve", json={"note": "yes"})
         assert r.status_code == 200 and r.json()["status"] == "applied"
         assert c.post("/api/v1/hotels/h1/learning/calibration/rollback", json={}).status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# HOS-344 — staffing ratio revealed by what the manager kept
+# ---------------------------------------------------------------------------
+
+def _staff_ra(extra, delta, *, c=15.0, base=100.0, rule="newsvendor-v1"):
+    return {"decision_rule": rule, "demand_quantile": base + extra, "point_forecast": base + extra - 4,
+            "baseline_covers": base, "recommended_delta_staff": delta, "covers_per_staff": c,
+            "covers_per_staff_source": "hotel_parameter"}
+
+
+def _kept(status, ra, retained=None, *, i=0, decided_by="human_via_host", reason="none_given",
+          reason_source="human", actual=None):
+    return {"id": f"rec-{i}", "status": status, "decided_by": decided_by, "reason_code": reason,
+            "reason_source": reason_source, "risk_assessment": ra, "retained_delta_staff": retained,
+            "actual_covers": actual, "window_start": f"2026-09-{i % 28 + 1:02d}T19:00:00+00:00"}
+
+
+def _team(n_accepted, counters):
+    """n accepted recommendations (30 extra covers, +2 at c = 15) and counters
+    given as (extra covers, staff kept)."""
+    rows = [_kept("accepted", _staff_ra(30, 2), i=i) for i in range(n_accepted)]
+    rows += [_kept("modified", _staff_ra(e, 2), k, i=100 + j) for j, (e, k) in enumerate(counters)]
+    return rows
+
+
+def test_an_accepted_recommendation_confirms_the_ratio_in_force():
+    # 30 extra covers, +2 at 15 covers/person → the manager's ratio is in [15, 30)
+    assert ll._ratio_interval(_kept("accepted", _staff_ra(30, 2))) == ("accepted", 15.0, 30.0)
+    assert ll._ratio_interval(_kept("accepted", _staff_ra(12, 1))) == ("accepted", 12.0, float("inf"))
+
+
+def test_a_counter_gives_its_own_interval():
+    assert ll._ratio_interval(_kept("modified", _staff_ra(30, 2), 1)) == ("counter", 30.0, float("inf"))
+    assert ll._ratio_interval(_kept("modified", _staff_ra(30, 2), 4)) == ("counter", 7.5, 10.0)
+    # staffing.reduce: 20 covers under the baseline, the manager cuts 1 instead of 2
+    assert ll._ratio_interval(_kept("modified", _staff_ra(-20, -2), -1)) == ("counter", 20.0, float("inf"))
+
+
+@pytest.mark.parametrize("row", [
+    _kept("accepted", _staff_ra(30, 2), decided_by="host_agent_autonomous"),       # agent decision
+    _kept("accepted", _staff_ra(30, 2), reason_source="agent_inferred"),           # inferred reason
+    _kept("modified", _staff_ra(30, 2), 1, reason="forecast_too_high"),            # about the forecast
+    _kept("rejected", _staff_ra(30, 2)),                                           # the cost signal
+    _kept("modified", _staff_ra(30, 2)),                                           # WhatsApp counter, no figure
+    _kept("accepted", _staff_ra(30, 2, rule="deviation-scale-v1")),               # delta not sized from c
+    _kept("accepted", _staff_ra(90, 4)),                                           # capped: ceil(90/15) = 6
+])
+def test_rows_that_say_nothing_about_the_ratio_are_left_out(row):
+    assert ll._ratio_interval(row) is None
+
+
+def test_a_counter_that_fits_no_ratio_is_counted_not_used():
+    rows = [_kept("modified", _staff_ra(30, 2), 0), _kept("modified", _staff_ra(30, 2), -1)]
+    rsr = ll.revealed_staffing_ratio(rows)
+    assert (rsr["n"], rsr["unusable"], rsr["estimate"]) == (0, 2, None)
+
+
+def test_confirmations_outweigh_a_few_counters_no_proposal():
+    rows = _team(6, [(30, 1)] * 3)
+    assert ll.propose_staffing_ratio(rows, {"covers_per_extra_staff": 15.0}) == []
+
+
+def test_a_leaner_team_is_proposed_with_its_evidence():
+    rows = _team(3, [(30, 1)] * 6)          # 6 times the manager kept 1 person for 30 extra covers
+    (p,) = ll.propose_staffing_ratio(rows, {"covers_per_extra_staff": 15.0})
+    assert (p["parameter"], p["current_value"], p["proposed_value"]) == ("covers_per_extra_staff", 15.0, 30.0)
+    ev = p["evidence"]
+    assert (ev["n"], ev["accepted"], ev["counters"], ev["interval"], ev["in_force"]) == (9, 3, 6, [30.0, None], 15.0)
+    assert ev["violations"] == 3 and ev["anchor_violations"] == 6
+    assert len(ev["recommendation_ids"]) == 6
+    assert p["independent_actuals"] is False and "No rota or POS" in ev["actuals_note"]
+
+
+def test_a_richer_team_is_proposed_too():
+    rows = _team(2, [(30, 4)] * 7)          # 4 people for 30 extra covers: ratio in [7.5, 10)
+    (p,) = ll.propose_staffing_ratio(rows, {"covers_per_extra_staff": 15.0})
+    assert p["proposed_value"] == 9.0       # the consistent ratio closest to the one in force
+
+
+@pytest.mark.parametrize("rows, why", [
+    (_team(0, [(30, 1)] * 7), "n = 7 < 8"),
+    (_team(6, [(30, 1)] * 2), "2 counters < 3"),
+    (_team(1, [(30, 3)] * 7), "3 people for 30 covers: [10, 15) gives 14, a 7 % change"),
+])
+def test_thresholds_hold_proposals_back(rows, why):
+    assert ll.propose_staffing_ratio(rows, {"covers_per_extra_staff": 15.0}) == [], why
+
+
+def test_outcomes_never_change_the_staffing_ratio():
+    rows = _team(3, [(30, 1)] * 6)
+    with_actuals = [{**r, "actual_covers": 999, "actual_covers_source": "pos_data"} for r in rows]
+    assert ll.propose_staffing_ratio(rows, {"covers_per_extra_staff": 15.0}) == \
+        ll.propose_staffing_ratio(with_actuals, {"covers_per_extra_staff": 15.0})
+
+
+def test_ratio_in_force_falls_back_to_the_recommendations_with_its_source():
+    (p,) = ll.propose_staffing_ratio(_team(3, [(30, 1)] * 6), {})
+    assert p["current_value"] is None
+    assert (p["evidence"]["in_force"], p["evidence"]["in_force_source"]) == (15.0, "hotel_parameter")
+
+
+@pytest.mark.asyncio
+async def test_staffing_ratio_applied_on_approval_then_rolled_back(db):
+    from app.services import hotel_parameters as hp
+    from app.services import learning_store as ls
+
+    await hp.set_parameter(db, "h1", "covers_per_extra_staff", 15.0, set_by="gm@hotel", set_via="dashboard_api")
+    (p,) = ll.propose_staffing_ratio(_team(3, [(30, 1)] * 6), {"covers_per_extra_staff": 15.0})
+    item = await ls.add_item(db, "h1", "cost_parameter", p["parameter"], p,
+                             evidence=p["evidence"], independent_actuals=p["independent_actuals"])
+    assert item.reviewer_role == "hotel"
+    assert (await hp.load(db, "h1")).get("covers_per_extra_staff") == 15.0     # proposing applies nothing
+    await ls.decide(db, "h1", str(item.id), approve=True, actor=OWNER)
+    pv = (await hp.load(db, "h1")).values["covers_per_extra_staff"]
+    assert pv.value == 30.0 and pv.set_via == "proposal_approval"
+
+    out = await ls.rollback_parameter(db, "h1", str(item.id), OWNER)
+    assert out["status"] == "retired"
+    pv = (await hp.load(db, "h1")).values["covers_per_extra_staff"]
+    assert pv.value == 15.0 and f"rollback:{item.id}" in pv.set_by
+    assert len(await hp.history(db, "h1", "covers_per_extra_staff")) == 3       # append-only
+    with pytest.raises(ls.LearningError):
+        await ls.rollback_parameter(db, "h1", str(item.id), OWNER)               # already retired
+
+
+@pytest.mark.asyncio
+async def test_rollback_refused_when_the_hotel_changed_the_value_since(db):
+    from app.services import hotel_parameters as hp
+    from app.services import learning_store as ls
+
+    item = await ls.add_item(db, "h1", "cost_parameter", "covers_per_extra_staff",
+                             {"parameter": "covers_per_extra_staff", "current_value": 15.0,
+                              "proposed_value": 30.0, "rule": "revealed_staffing_ratio_v1"})
+    await ls.decide(db, "h1", str(item.id), approve=True, actor=OWNER)
+    await hp.set_parameter(db, "h1", "covers_per_extra_staff", 22.0, set_by="gm@hotel", set_via="dashboard_api")
+    with pytest.raises(ls.LearningError) as e:
+        await ls.rollback_parameter(db, "h1", str(item.id), OWNER)
+    assert e.value.status == 409
+    assert (await hp.load(db, "h1")).get("covers_per_extra_staff") == 22.0
+
+
+def _golden_ratio():
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[3] / "eval" / "golden_dataset.jsonl"
+    rows = (json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+    return [r for r in rows if r["id"].startswith("reco-learned-ratio-")]
+
+
+_RATIO_GOLDEN = _golden_ratio()
+
+
+def test_learned_ratio_golden_scenarios_exist():
+    assert len(_RATIO_GOLDEN) >= 2
+
+
+@pytest.mark.parametrize("scenario", _RATIO_GOLDEN, ids=[s["id"] for s in _RATIO_GOLDEN])
+def test_learned_ratio_golden_scenarios(scenario):
+    """The recommendation layer has no eval runner; these golden rows are graded here."""
+    inp, exp = scenario["input"], scenario["expected"]
+    rows = [
+        _kept(d["status"], _staff_ra(d["extra_covers"], d["recommended"], c=inp["ratio_in_force"]),
+              d.get("kept"), i=i, decided_by=d.get("decided_by", "human_via_host"),
+              reason=d.get("reason", "none_given"), reason_source=d.get("reason_source", "human"))
+        for i, d in enumerate(inp["decisions"])
+    ]
+    proposals = ll.propose_staffing_ratio(rows, {"covers_per_extra_staff": inp["ratio_in_force"]})
+    assert [p["proposed_value"] for p in proposals] == ([exp["proposed_ratio"]] if exp["proposed_ratio"] else [])

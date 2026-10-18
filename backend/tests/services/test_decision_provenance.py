@@ -283,3 +283,43 @@ def test_recap_tool_requires_the_read_scope():
     with pytest.raises(MCPAuthError):
         require_scope(["feedback"], "get_decision_recap")
     require_scope(["receipts:read"], "get_decision_recap")
+
+
+# ---------------------------------------------------------------------------
+# HOS-344 — a counter's figure, relayed by the host agent
+# ---------------------------------------------------------------------------
+
+COUNTER = {"decided_by": "human_via_host", "reason_code": "staffing_constraint", "reason_source": "human"}
+
+
+@pytest.mark.asyncio
+async def test_a_relayed_counter_stores_the_staff_kept(db):
+    rec = await _rec(db)
+    await _call(db, rec.id, outcome="modified", retained_delta_staff=1, **COUNTER)
+    await db.refresh(rec)
+    assert (rec.status, rec.retained_delta_staff) == ("modified", 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome, value", [
+    ("accepted", 1),        # only a counter carries a figure
+    ("modified", 51),       # beyond the bound
+    ("modified", 1.5),      # not a headcount
+    ("modified", True),     # a boolean is not an integer here
+])
+async def test_a_counter_figure_is_validated_and_writes_nothing(db, outcome, value):
+    rec = await _rec(db)
+    with pytest.raises(MCPAuthError) as e:
+        await _call(db, rec.id, outcome=outcome, retained_delta_staff=value, **COUNTER)
+    assert e.value.status == 400
+    await db.refresh(rec)
+    assert (rec.status, rec.retained_delta_staff) == ("dispatched", None)
+
+
+def test_the_counter_figure_is_in_the_tool_schema():
+    from app.mcp_core import V1_TOOLS_MANIFEST
+
+    (tool,) = [t for t in V1_TOOLS_MANIFEST if t["name"] == "submit_feedback_to_memory"]
+    prop = tool["inputSchema"]["properties"]["retained_delta_staff"]
+    assert (prop["type"], prop["minimum"], prop["maximum"]) == ("integer", -50, 50)
+    assert "retained_delta_staff" not in tool["inputSchema"]["required"]

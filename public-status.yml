@@ -243,10 +243,10 @@ entries:
     status: Built
     deployed: unknown
     description: >-
-      A weekly pass proposes recalibrations that apply only after a named person
-      approves, with rollback; tested on constructed data, nothing learned from real
-      outcomes yet.
-    verified_on: 2026-09-25
+      A weekly pass proposes recalibrations and a staffing ratio learned from
+      managers' counter-proposals; each applies only after a named person approves,
+      with rollback. Tested on constructed data, no real outcomes yet.
+    verified_on: 2026-10-18
     evidence:
       - backend/app/services/learning_loop.py
       - backend/app/workers/learning_loop_worker.py

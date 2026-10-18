@@ -14,8 +14,10 @@ Who may decide (``reviewer_role``):
 
 Applying:
 
-* ``cost_parameter`` → ``hotel_parameters.set_parameter`` with
-  ``set_via = "proposal_approval"`` and ``set_by = "<approver> (proposal:<id>)"``;
+* ``cost_parameter`` (costs, constraints, and the staffing ratio
+  ``covers_per_extra_staff`` since HOS-344) → ``hotel_parameters.set_parameter``
+  with ``set_via = "proposal_approval"`` and ``set_by = "<approver>
+  (proposal:<id>)"``; ``rollback_parameter`` sets the replaced value again;
 * ``calibration`` → the item becomes ``applied`` = the tenant's active
   calibration for that forecaster; the previously applied one is ``retired``.
   ``rollback_calibration`` retires the active one and re-applies the previous
@@ -93,6 +95,7 @@ async def recommendation_rows(db: AsyncSession, tenant_id: str, since: datetime)
             "actual_covers": float(r.actual_covers) if r.actual_covers is not None else None,
             "actual_covers_source": r.actual_covers_source,
             "window_start": _utc(r.window_start).isoformat() if r.window_start else None,
+            "retained_delta_staff": r.retained_delta_staff,
         }
         for r in recs
     ]
@@ -267,6 +270,33 @@ async def decide(
     return item_as_dict(item)
 
 
+async def rollback_parameter(
+    db: AsyncSession, tenant_id: str, item_id: str, actor: Mapping, *, now: Optional[datetime] = None,
+) -> dict:
+    """Undo an applied parameter proposal (HOS-344): set the value it replaced
+    again — history stays append-only — and retire the item. Refused when the
+    parameter was changed since, so a later choice is never overwritten.
+    Commits nothing: the caller owns the transaction."""
+    item = await _get(db, tenant_id, item_id)
+    if item.kind != "cost_parameter" or item.status != "applied":
+        raise LearningError(409, "only an applied parameter proposal can be rolled back")
+    _check_reviewer(item, actor)
+    payload = _json(item.payload) or {}
+    name = payload["parameter"]
+    if (await hp.load(db, tenant_id)).get(name) != payload["proposed_value"]:
+        raise LearningError(409, f"{name} changed since this proposal was applied: set it directly")
+    now = now or datetime.now(timezone.utc)
+    row = await hp.set_parameter(
+        db, tenant_id, name, payload.get("current_value"),
+        set_by=f"{_actor_name(actor)} (rollback:{item.id})", set_via="proposal_approval",
+        note=f"rollback of learning proposal {payload.get('rule')}", at=now,
+    )
+    item.status = "retired"
+    item.applied_ref = f"{item.applied_ref} | rolled back {row['set_at']}"
+    await db.flush()
+    return item_as_dict(item)
+
+
 async def active_calibration(db: AsyncSession, tenant_id: str, forecaster: str) -> Optional[fc.Calibration]:
     """The tenant's active realised calibration for ``forecaster`` (latest
     applied item), or None."""
@@ -353,7 +383,8 @@ async def run_pass(
         created.append(str(it.id))
 
     params = await hp.load(db, tenant_id)
-    for p in ll.propose_cost_updates(rows, {k: params.get(k) for k in hp.CATALOG}):
+    param_values = {k: params.get(k) for k in hp.CATALOG}
+    for p in [*ll.propose_cost_updates(rows, param_values), *ll.propose_staffing_ratio(rows, param_values)]:
         it = await add_item(
             db, tenant_id, "cost_parameter", p["parameter"], p,
             evidence=p["evidence"], independent_actuals=p["independent_actuals"], now=now,

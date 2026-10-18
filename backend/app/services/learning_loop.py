@@ -10,7 +10,8 @@ Inputs are plain dicts built from ``staffing_recommendations`` rows
 (``learning_store.recommendation_rows``): ``id``, ``tenant_id``, ``status``,
 ``decided_by``, ``reason_code``, ``reason_source``, ``decision_rule``,
 ``risk_assessment`` (as stored at issue time), ``predicted_covers``,
-``actual_covers``, ``actual_covers_source``, ``window_start``.
+``actual_covers``, ``actual_covers_source``, ``window_start``,
+``retained_delta_staff`` (a counter's figure, HOS-344).
 
 Learning hygiene, enforced here (tested):
 
@@ -404,7 +405,164 @@ def propose_cost_updates(rows: Iterable[Mapping], params: Mapping[str, Optional[
 
 
 # ---------------------------------------------------------------------------
-# 4. Overrides and reasons → destination
+# 4. Staffing ratio revealed by the manager's decisions (HOS-344)
+# ---------------------------------------------------------------------------
+#
+# Signal scope (AC1 audit, 18/10/2026). What a decision on a staffing
+# recommendation carries:
+#
+# * a decision: accepted | rejected | modified, who decided, a reason;
+# * the recommendation as issued (risk_assessment): demand sized for
+#   (``demand_quantile``, else ``point_forecast``), ``baseline_covers`` (what the
+#   usual team is sized for), ``recommended_delta_staff``, the ratio used
+#   (``covers_per_staff`` = ``covers_per_extra_staff``) and ``decision_rule``;
+# * a **total** of extra (or fewer) staff, never a per-role breakdown;
+# * for a counter (``modified``), the figure the person kept only when the host
+#   agent relays it over MCP (``retained_delta_staff``, HOS-344). WhatsApp
+#   replies carry a covers figure at most, never a headcount: a WhatsApp
+#   counter is ``modified`` with no figure and says nothing here.
+#
+# So the rule learned is the **global** ratio of the decision layer,
+# ``covers_per_extra_staff`` (covers one extra staff member serves). Per-role
+# ratios (``covers_per_server`` …, HOS-343) are out of scope: no decision
+# carries a role.
+#
+# Each usable decision gives an interval on the ratio the person acts on,
+# assuming they size extra staff like the rule (Δ = ceil(E / c), E = extra
+# covers over the baseline):
+#
+# * accepted newsvendor recommendation: Δ was ceil(E / c_used), so the interval
+#   contains c_used: a confirmation, not a deviation. Fallback rows
+#   (deviation-scale-v1) and Δ capped by the hotel's limits did not size Δ
+#   from c: skipped.
+# * counter with a figure Δr ≠ 0: c ∈ [E/Δr, E/(Δr − 1)) (upper bound open when
+#   Δr = 1). Δr = 0 (the usual team absorbs it) or a sign opposite to E fits
+#   no ratio: counted, not used.
+# * rejections are not used: a refusal is already the cost trade-off's signal
+#   (``revealed_critical_ratio``); reading it again here would count the same
+#   decision twice for two parameters.
+#
+# Simply dividing E by Δ would be biased low (Δ is rounded up). The proposal
+# is the consistent ratio closest to the one in force (smallest change).
+
+STAFFING_RATIO_MIN_N = 8          # usable human decisions
+STAFFING_RATIO_MIN_COUNTERS = 3   # of which counters with a figure: the only deviation evidence
+STAFFING_RATIO_MIN_CHANGE = 0.20  # relative gap to the ratio in force
+_RATIO_GRID = tuple(range(1, 201))  # covers, the parameter's bounds (hotel_parameters)
+
+
+def _ratio_interval(row: Mapping) -> Optional[tuple[str, float, float]]:
+    """(kind, lower, upper) on the person's ratio from one decision, or None."""
+    if decider_group(row.get("decided_by")) != "human":
+        return None
+    if row.get("reason_source") == "agent_inferred":
+        return None  # hygiene rule 2: we cannot tell whether it was about the forecast
+    if human_reason(row) in FORECAST_REASONS:
+        return None  # disagrees with the forecast, not with the ratio
+    ra = row.get("risk_assessment")
+    if not isinstance(ra, Mapping):
+        return None
+    demand = ra.get("demand_quantile") if ra.get("demand_quantile") is not None else ra.get("point_forecast")
+    base = ra.get("baseline_covers")
+    if demand is None or base is None:
+        return None
+    extra = float(demand) - float(base)
+
+    if row.get("status") == "accepted" and ra.get("decision_rule") == "newsvendor-v1":
+        kind, kept = "accepted", int(ra.get("recommended_delta_staff") or 0)
+        c_used = ra.get("covers_per_staff")
+        if not c_used or math.ceil(extra / float(c_used) - 1e-9) != kept:
+            return None  # capped by max_extra_staff / max_staff_reduction: Δ did not come from c
+    elif row.get("status") == "modified" and row.get("retained_delta_staff") is not None:
+        kind, kept = "counter", int(row["retained_delta_staff"])
+    else:
+        return None
+    if kept == 0 or extra == 0 or (kept > 0) != (extra > 0):
+        return (f"{kind}_unusable", 0.0, 0.0)
+    e, k = abs(extra), abs(kept)
+    return (kind, e / k, e / (k - 1) if k > 1 else math.inf)
+
+
+def _violations(intervals: list[tuple[str, float, float]], g: float) -> int:
+    return sum(1 for _, lo, hi in intervals if not (lo <= g < hi))
+
+
+def revealed_staffing_ratio(rows: Iterable[Mapping], anchor: Optional[float] = None) -> dict:
+    """The ratios consistent with the most human decisions (grid points
+    violating the fewest intervals). The estimate is the consistent ratio
+    closest to ``anchor`` (the ratio in force): the smallest change the
+    decisions call for. A counter keeping one extra person has no upper bound,
+    so a median of the consistent range would be arbitrary. Without an anchor:
+    the lowest consistent ratio. ``interval`` upper bound None = open."""
+    rows = list(rows)
+    found = [(r, _ratio_interval(r)) for r in rows]
+    usable = [(r, b) for r, b in found if b is not None and not b[0].endswith("_unusable")]
+    out: dict = {
+        "n": len(usable),
+        "accepted": sum(1 for _, b in usable if b[0] == "accepted"),
+        "counters": sum(1 for _, b in usable if b[0] == "counter"),
+        "unusable": sum(1 for _, b in found if b is not None and b[0].endswith("_unusable")),
+        "estimate": None, "interval": None, "violations": None, "anchor_violations": None,
+        "recommendation_ids": [str(r.get("id")) for r, b in usable if b[0] == "counter"][:20],
+    }
+    if not usable:
+        return out
+    intervals = [b for _, b in usable]
+    violations = [_violations(intervals, g) for g in _RATIO_GRID]
+    best = min(violations)
+    tied = [g for g, v in zip(_RATIO_GRID, violations) if v == best]
+    estimate = min(tied, key=lambda g: (abs(g - anchor), g)) if anchor else tied[0]
+    out.update(
+        estimate=float(estimate),
+        interval=[float(tied[0]), None if tied[-1] == _RATIO_GRID[-1] else float(tied[-1])],
+        violations=best,
+        anchor_violations=_violations(intervals, anchor) if anchor else None,
+    )
+    return out
+
+
+def propose_staffing_ratio(rows: Iterable[Mapping], params: Mapping[str, Optional[float]]) -> list[dict]:
+    """A ``covers_per_extra_staff`` proposal with its evidence, or nothing.
+
+    Proposed only from ``STAFFING_RATIO_MIN_N`` usable human decisions of which
+    ``STAFFING_RATIO_MIN_COUNTERS`` counters, when the ratio in force fits
+    fewer decisions than the best ratio does and differs from the estimate by
+    ``STAFFING_RATIO_MIN_CHANGE``. The ratio in force is the hotel's parameter,
+    else the one the latest recommendation used (and its source)."""
+    rows = list(rows)
+    current = params.get("covers_per_extra_staff")
+    in_force, in_force_source = current, "hotel_parameter"
+    if in_force is None:
+        latest = max(
+            (r for r in rows if isinstance(r.get("risk_assessment"), Mapping)
+             and r["risk_assessment"].get("covers_per_staff") is not None),
+            key=lambda r: str(r.get("window_start") or ""), default=None,
+        )
+        if latest is not None:
+            in_force = float(latest["risk_assessment"]["covers_per_staff"])
+            in_force_source = latest["risk_assessment"].get("covers_per_staff_source") or "recommendation"
+    if not in_force:
+        return []
+    rsr = revealed_staffing_ratio(rows, anchor=in_force)
+    if (rsr["estimate"] is None or rsr["n"] < STAFFING_RATIO_MIN_N
+            or rsr["counters"] < STAFFING_RATIO_MIN_COUNTERS):
+        return []
+    if (rsr["anchor_violations"] <= rsr["violations"]
+            or abs(rsr["estimate"] - in_force) / in_force < STAFFING_RATIO_MIN_CHANGE):
+        return []
+    return [{
+        "parameter": "covers_per_extra_staff", "current_value": current, "proposed_value": rsr["estimate"],
+        "rule": "revealed_staffing_ratio_v1",
+        "evidence": {**rsr, "in_force": in_force, "in_force_source": in_force_source,
+                     "actuals_note": ("Declared: decisions only. No rota or POS headcount source "
+                                      "says how many people actually worked.")},
+        # AC5: what people decided, not what was measured.
+        "independent_actuals": False,
+    }]
+
+
+# ---------------------------------------------------------------------------
+# 5. Overrides and reasons → destination
 # ---------------------------------------------------------------------------
 
 ROUTE_DESTINATIONS = {
