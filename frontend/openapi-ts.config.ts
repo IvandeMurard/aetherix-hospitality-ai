@@ -7,5 +7,5 @@ export default defineConfig({
     path: "./src/lib",
     format: "prettier",
   },
-  client: "@hey-api/client-fetch",
+  plugins: ["@hey-api/typescript", "@hey-api/sdk", "@hey-api/client-fetch"],
 });
