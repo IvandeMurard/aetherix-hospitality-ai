@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { use, useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
@@ -71,8 +71,10 @@ function StatusBadge({ status }: { status: string }) {
 export default function ReceiptDrillDownPage({
   params,
 }: {
-  params: { hotel: string; date: string };
+  params: Promise<{ hotel: string; date: string }>;
 }) {
+  // Next 15+ passes route params as a Promise.
+  const { hotel, date } = use(params);
   const [payload, setPayload] = useState<ReceiptPayload | null>(null);
   const [trustKpi, setTrustKpi] = useState<TrustKpiData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,9 +86,9 @@ export default function ReceiptDrillDownPage({
       : null;
 
     const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const receiptUrl = `${baseUrl}/api/v1/receipts/${params.hotel}/${params.date}`;
-    const kpiUrl = `${baseUrl}/api/v1/kpi/${params.hotel}/recommendation_acceptance?days=7`;
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    const receiptUrl = `${baseUrl}/api/v1/receipts/${hotel}/${date}`;
+    const kpiUrl = `${baseUrl}/api/v1/kpi/${hotel}/recommendation_acceptance?days=7`;
 
     const receiptFetch = fetch(receiptUrl, { headers })
       .then(async (res) => {
@@ -109,7 +111,7 @@ export default function ReceiptDrillDownPage({
     Promise.all([receiptFetch, kpiFetch])
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [params.hotel, params.date]);
+  }, [hotel, date]);
 
   if (loading) {
     return (

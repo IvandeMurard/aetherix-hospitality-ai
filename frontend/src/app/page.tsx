@@ -99,7 +99,7 @@ export default function LandingPage() {
             F&amp;B operations run on gut feeling
           </h2>
           <p className="text-center text-muted-foreground mb-12 max-w-2xl mx-auto">
-            Most hotels still plan staffing and prep based on last week's
+            Most hotels still plan staffing and prep based on last week&apos;s
             numbers and experience. The result is predictable.
           </p>
           <div className="grid md:grid-cols-3 gap-6">

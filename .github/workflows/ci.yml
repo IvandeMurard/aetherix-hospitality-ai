@@ -41,6 +41,42 @@ jobs:
         run: ruff check . --select E,F --ignore E501
 
   # ---------------------------------------------------------------------------
+  # Frontend — tsc + eslint + next build (HOS-356)
+  # The frontend stopped compiling on main without anyone noticing, because no
+  # job built it. The pnpm version comes from frontend/package.json `packageManager`.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm exec tsc --noEmit
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+  # ---------------------------------------------------------------------------
   # AC1/AC2/AC5/AC6 — pytest + coverage
   # ---------------------------------------------------------------------------
   pytest:
