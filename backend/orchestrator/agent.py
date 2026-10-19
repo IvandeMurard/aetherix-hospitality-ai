@@ -124,8 +124,13 @@ class OrchestratorAgent:
             system_prompt=system_prompt,
         )
 
-        # 6. Staffing — on this hotel's own rules (HOS-343)
-        staffing = await self._staffer.calculate_recommendation(predicted_covers, tenant_id=tenant_id)
+        # 6. Staffing — on this hotel's own rules (HOS-343), per context class
+        # when the hotel set one (HOS-345): the same date, service and context
+        # the forecast used, passed as plain data (no app.* import).
+        staffing = await self._staffer.calculate_recommendation(
+            predicted_covers, tenant_id=tenant_id,
+            target_date=target_date, service_type=service_type, context=context,
+        )
 
         return {
             "tenant_id": tenant_id,

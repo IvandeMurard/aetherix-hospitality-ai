@@ -10,6 +10,7 @@ Contract under test: the guardrail NEVER blanks a recommendation.
 """
 from __future__ import annotations
 
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -159,13 +160,17 @@ async def test_engine_tier1_attaches_caveat_keeps_covers():
 
 async def test_engine_tier2_swaps_baseline_and_recomputes_staffing():
     engine, staffer = await _engine_with_staffer()
-    result = {"prediction": {"covers": 80, "confidence": 0.30}, "staffing_recommendation": {"servers": 6}}
+    result = {"prediction": {"covers": 80, "confidence": 0.30}, "staffing_recommendation": {"servers": 6},
+              "date": "2026-07-14", "service_type": "dinner"}
+    context = {"baseline_covers": 50}
     with patch.object(fg, "record_forecast_trip", AsyncMock()):
-        out = await engine._apply_forecast_guardrail("hotel_x", result, {"baseline_covers": 50})
+        out = await engine._apply_forecast_guardrail("hotel_x", result, context)
     assert out["prediction"]["covers"] == 50
     assert out["prediction"]["baseline_used"] is True
     assert out["staffing_recommendation"] == {"servers": 3}
-    staffer.calculate_recommendation.assert_awaited_once_with(50, tenant_id="hotel_x")
+    # HOS-345: the recompute keeps the service's context classes
+    staffer.calculate_recommendation.assert_awaited_once_with(
+        50, tenant_id="hotel_x", target_date=date(2026, 7, 14), service_type="dinner", context=context)
 
 
 async def test_engine_guardrail_failure_is_non_fatal():

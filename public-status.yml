@@ -226,6 +226,20 @@ entries:
     evidence:
       - backend/app/services/hotel_parameters.py
 
+  - id: staffing-rules
+    name: Staffing on the hotel's own rules
+    status: Built
+    deployed: unknown
+    description: >-
+      Staffing follows the hotel's own ratios and usual team, per service and context
+      (event night, banquet, holiday, high season), and says which rule served. Tested on
+      constructed data.
+    verified_on: 2026-10-18
+    evidence:
+      - backend/app/services/staffing_service.py
+      - backend/app/services/staffing_context.py
+      - backend/tests/services/test_staffing_context.py
+
   - id: risk-recommendations
     name: Risk-bearing recommendations
     status: Built
