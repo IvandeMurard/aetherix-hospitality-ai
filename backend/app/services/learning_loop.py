@@ -417,10 +417,12 @@ def propose_cost_updates(rows: Iterable[Mapping], params: Mapping[str, Optional[
 #   usual team is sized for), ``recommended_delta_staff``, the ratio used
 #   (``covers_per_staff`` = ``covers_per_extra_staff``) and ``decision_rule``;
 # * a **total** of extra (or fewer) staff, never a per-role breakdown;
-# * for a counter (``modified``), the figure the person kept only when the host
-#   agent relays it over MCP (``retained_delta_staff``, HOS-344). WhatsApp
-#   replies carry a covers figure at most, never a headcount: a WhatsApp
-#   counter is ``modified`` with no figure and says nothing here.
+# * for a counter (``modified``), the figure the person kept
+#   (``retained_delta_staff``, HOS-344): relayed by the host agent over MCP, or
+#   stated on WhatsApp as a delta ("2 extras", "1 de moins") and read
+#   deterministically (HOS-354). A WhatsApp counter without such a figure
+#   ("plutôt 3 serveurs": extra, or a total?) is ``modified`` with no figure and
+#   says nothing here.
 #
 # So the rule learned is the **global** ratio of the decision layer,
 # ``covers_per_extra_staff`` (covers one extra staff member serves). Per-role

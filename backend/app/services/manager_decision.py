@@ -65,6 +65,7 @@ class DecisionSource(str, Enum):
     manager_revision = "manager_revision"    # "corriger mardi" from the recap, confirmed (ADR-0007 §17.2)
     host_relay = "host_relay"                # MCP: a human's decision relayed by a host agent (§17.4)
     host_agent = "host_agent"                # MCP: host agent alone — refused by the default policy
+    question_confirmed = "question_confirmed"  # position stated in a question, manager said yes (HOS-357)
 
 
 # Origin of a confirmation prompt → source recorded when the manager says yes.
@@ -72,6 +73,7 @@ CONFIRMED_SOURCE: dict[str, DecisionSource] = {
     "model": DecisionSource.model_confirmed,
     "keyword_ambiguous": DecisionSource.keyword_confirmed,
     "bare_ack": DecisionSource.bare_ack_confirmed,
+    "question": DecisionSource.question_confirmed,
 }
 
 # Below this model confidence an inferred decision is confirmed, never written
@@ -594,6 +596,173 @@ def match_revision_command(body: str) -> Optional[RevisionCommand]:
 
 
 # ---------------------------------------------------------------------------
+# Questions (HOS-357): a question is never a decision
+# ---------------------------------------------------------------------------
+# A reply containing "?", or opening with an interrogative, is a question. It is
+# answered (explanation), never parsed as a decision. A position stated in the
+# same message ("pourquoi 3 extras ? 2 suffisent") is confirmed, never written
+# (Décisions #6, #38). "pourquoi pas" / "why not" without "?" is a lukewarm yes,
+# not a question: it stays on the decision path (confirmation).
+
+_INTERROGATIVES = frozenset({"pourquoi", "why", "combien", "comment", "how"})
+_NOT_A_QUESTION = (("pourquoi", "pas"), ("why", "not"))
+
+
+def is_question(body: str) -> bool:
+    if "?" in body:
+        return True
+    toks = tokens(body)
+    if not toks or toks[0] not in _INTERROGATIVES:
+        return False
+    return tuple(toks[:2]) not in _NOT_A_QUESTION
+
+
+# ---------------------------------------------------------------------------
+# Staffing figure in a reply (HOS-354): "plutôt 2 extras" → +2
+# ---------------------------------------------------------------------------
+# The figure a manager keeps when countering a staffing recommendation, read
+# deterministically, as `retained_delta_staff` (HOS-344): extra staff kept,
+# negative for fewer. Only a figure that says it is a DELTA counts: "2 extras",
+# "+1", "1 serveur de plus", "2 de moins". A role noun alone ("3 serveurs",
+# "3 people") may be a total, and a bare number ("plutôt 2") may be covers: the
+# code does not guess. A figure equal to what the recommendation proposed refers
+# to it ("pourquoi 3 extras ?"): it is not a counter, and when it says it is a
+# delta its unit carries over to another number in the same reply ("pourquoi 3
+# extras ? 2 suffisent" → +2). A number after "au lieu de" / "instead of" /
+# "not" is the value being replaced, never the counter.
+
+MAX_STAFF_FIGURE = 50   # mcp_server.MAX_RETAINED_DELTA: beyond it, not a headcount
+
+_FIGURE_TOKEN_RE = re.compile(
+    r"[+\-]?\d+(?:[.,:/]\d+|h\d*)*(?:€|%)?"   # a number, with what makes it a time, date, amount
+    r"|[^\W\d_]+(?:'[^\W\d_]+)?"              # a word
+    r"|[?!.;,…]"                               # a clause break
+)
+_DELTA_UNITS = frozenset({"extra", "extras", "renfort", "renforts"})
+_ROLE_UNITS = frozenset({
+    "serveur", "serveurs", "serveuse", "serveuses", "cuisinier", "cuisiniers", "commis",
+    "plongeur", "plongeurs", "barman", "barmen", "runner", "runners", "chef", "chefs",
+    "personne", "personnes", "employé", "employés", "staff", "people", "person", "persons",
+    "waiter", "waiters", "waitress", "server", "servers", "cook", "cooks", "bartender",
+    "bartenders",
+})
+_COVERS_UNITS = frozenset({
+    "couvert", "couverts", "cover", "covers", "pax", "guest", "guests", "client", "clients",
+})
+_PLUS_MARKERS = (("de", "plus"), ("en", "plus"), ("more",), ("extra",))
+_MINUS_MARKERS = (("de", "moins"), ("en", "moins"), ("fewer",), ("less",))
+# Words that may follow a number without giving it a unit ("2 suffisent",
+# "4 au lieu de 5", "120 instead").
+_BARE_FOLLOWERS = frozenset({
+    "au", "suffit", "suffisent", "suffira", "suffiront", "suffiraient", "seulement", "max",
+    "maximum", "plutôt", "plutot", "pas", "alors", "only", "instead", "enough", "not",
+    "then", "will", "would", "is", "are",
+})
+# After these, a number is the value being replaced ("2 extras au lieu de 3",
+# "make it 2 not 3"), never the counter.
+_OLD_VALUE_PREFIXES = (("lieu", "de"), ("lieu", "d"), ("instead", "of"), ("not",), ("pas",))
+# A number without a unit is a counter only in a reply that counters something.
+_COUNTER_WORDS = frozenset({
+    "plutôt", "plutot", "lieu", "suffit", "suffisent", "suffira", "suffiront", "suffiraient",
+    "seulement", "rather", "instead", "only", "enough", "make",
+})
+
+
+@dataclass(frozen=True)
+class StaffFigure:
+    """A staffing figure read in a reply. ``delta`` = the signed extra staff
+    kept (``retained_delta_staff``). ``unit_unknown`` = a number the manager
+    must qualify ("plutôt 2": extras? covers? a total?), never guessed."""
+
+    delta: Optional[int] = None
+    unit_unknown: Optional[int] = None
+
+
+def _figure_sign(words: list[str]) -> Optional[int]:
+    for markers, sign in ((_MINUS_MARKERS, -1), (_PLUS_MARKERS, 1)):
+        for m in markers:
+            if any(tuple(words[i:i + len(m)]) == m for i in range(len(words))):
+                return sign
+    return None
+
+
+def read_staff_figure(body: str, proposal: Optional[Proposal] = None) -> Optional[StaffFigure]:
+    """The counter figure a reply gives (``delta``), a number to qualify in a
+    countering reply (``unit_unknown``), or ``None``: no figure, only the
+    proposal's own figure, covers, several different counters, or 0 ("no
+    extra" is a stance, read as such by the decision path)."""
+    proposal = proposal or Proposal()
+    direction = {"add": 1, "reduce": -1}.get(proposal.kind)
+    magnitude = proposal.magnitude
+    toks = _FIGURE_TOKEN_RE.findall(body.lower().replace("’", "'").replace("−", "-"))
+    words = {t for t in toks if t[0].isalpha()}
+
+    staff: list[tuple[int, Optional[int], bool]] = []   # (n, sign, says it is a delta)
+    bare: list[int] = []
+    for i, tok in enumerate(toks):
+        if not re.fullmatch(r"[+\-]?\d+", tok):
+            continue                                     # a word, 19h, 23/10, 1,5, 12€
+        before = tuple(toks[max(0, i - 2):i])
+        if any(before[-len(p):] == p for p in _OLD_VALUE_PREFIXES):
+            continue                                     # the value being replaced
+        n = abs(int(tok))
+        after: list[str] = []
+        for nxt in toks[i + 1:i + 4]:
+            if not nxt[0].isalpha():
+                break
+            after.append(nxt)
+        sign = -1 if tok[0] == "-" else 1 if tok[0] == "+" else _figure_sign(after)
+        unit = after[0] if after else None
+        if unit in _COVERS_UNITS or n > MAX_STAFF_FIGURE:
+            continue
+        if unit in _DELTA_UNITS:
+            staff.append((n, sign or 1, True))
+        elif unit in _ROLE_UNITS or sign is not None:
+            staff.append((n, sign, sign is not None))
+        elif unit is None or unit in _BARE_FOLLOWERS:
+            bare.append(n)
+
+    def refers_to_proposal(n: int, sign: Optional[int]) -> bool:
+        return n == magnitude and (sign is None or sign == direction)
+
+    # Only a reference that says it is a delta ("3 extras") lends its unit.
+    carry = direction is not None and any(
+        explicit and refers_to_proposal(n, s) for n, s, explicit in staff
+    )
+    counters: set[int] = set()
+    unqualified: list[int] = []
+    for n, sign, explicit in staff:
+        if refers_to_proposal(n, sign):
+            continue
+        if explicit:
+            counters.add(n * sign)                       # type: ignore[operator]
+        elif carry:
+            counters.add(n * direction)                  # type: ignore[operator]
+        else:
+            unqualified.append(n)                        # "3 serveurs": extra, or a total?
+    for n in bare:
+        if carry:
+            counters.add(n * direction)                  # type: ignore[operator]
+        else:
+            unqualified.append(n)
+
+    counters.discard(0)
+    if len(counters) == 1:
+        return StaffFigure(delta=counters.pop())
+    if not counters and unqualified and words & _COUNTER_WORDS:
+        return StaffFigure(unit_unknown=unqualified[0])
+    return None
+
+
+def describe_staff_figure(delta: int, locale: Optional[str] = "fr") -> str:
+    """"2 extras" / "1 de moins" — "2 extra staff" / "1 fewer"."""
+    n = abs(delta)
+    if _loc(locale) == "en":
+        return f"{n} extra staff" if delta > 0 else f"{n} fewer"
+    return (f"{n} extra" + ("s" if n > 1 else "")) if delta > 0 else f"{n} de moins"
+
+
+# ---------------------------------------------------------------------------
 # (d) Quick-reply button payloads — fixed IDs, no model involved
 # ---------------------------------------------------------------------------
 
@@ -889,6 +1058,27 @@ _COPY = {
         "fr": "Répondez ACCEPTER, REFUSER ou CORRIGER.",
         "en": "Reply ACCEPT, REJECT or CORRECT.",
     },
+    # HOS-354 / HOS-357: a staffing figure is quoted back before it is written.
+    "confirm_figure": {
+        "fr": "Je note {figure} au lieu de {proposed}, c'est bien ça ?",
+        "en": "I'm noting {figure} instead of {proposed}, is that right?",
+    },
+    "recorded_figure": {
+        "fr": "Correction enregistrée : {figure}.",
+        "en": "Correction recorded: {figure}.",
+    },
+    "reason_figure_thanks": {
+        "fr": "Merci, c'est noté : {figure}.",
+        "en": "Thanks, noted: {figure}.",
+    },
+    "figure_unit": {
+        "fr": "{n} quoi ? Pour que je le note, répondez par exemple « {n} extras » ou « {n} de moins ».",
+        "en": "{n} what? To note it, reply for example \"{n} extra staff\" or \"{n} fewer\".",
+    },
+    "no_recommendation_to_explain": {
+        "fr": "Je n'ai pas encore de recommandation à vous expliquer.",
+        "en": "I don't have a recommendation to explain yet.",
+    },
 }
 
 
@@ -910,8 +1100,26 @@ def confirmation_question(decision: str, locale: Optional[str] = "fr") -> str:
     return text_for("confirm_question", locale, word=_DECISION_WORD[_loc(locale)][decision])
 
 
-def recorded_message(decision: str, locale: Optional[str] = "fr") -> str:
+def recorded_message(decision: str, locale: Optional[str] = "fr",
+                     retained_delta_staff: Optional[int] = None) -> str:
+    if decision == "modified" and retained_delta_staff is not None:
+        return text_for("recorded_figure", locale,
+                        figure=describe_staff_figure(retained_delta_staff, locale))
     return _COPY["recorded"][_loc(locale)][decision]
+
+
+def figure_confirmation_question(delta: int, proposal: Optional[Proposal],
+                                 locale: Optional[str] = "fr") -> str:
+    """"Je note 2 extras au lieu de 3, c'est bien ça ?" — the figure is shown
+    to the manager before it is written (HOS-354, HOS-357)."""
+    figure = describe_staff_figure(delta, locale)
+    direction = {"add": 1, "reduce": -1}.get(proposal.kind) if proposal else None
+    if direction is None or not proposal.magnitude:   # type: ignore[union-attr]
+        return text_for("confirm_question", locale, word=figure)
+    proposed = direction * proposal.magnitude         # type: ignore[union-attr]
+    same_way = (proposed > 0) == (delta > 0)
+    return text_for("confirm_figure", locale, figure=figure,
+                    proposed=str(abs(proposed)) if same_way else describe_staff_figure(proposed, locale))
 
 
 # ---------------------------------------------------------------------------
@@ -932,6 +1140,7 @@ REPLY_RESULTS: tuple[str, ...] = (
     "revision_requested",     # "corriger mardi refus": confirmation asked, nothing written
     "revised",                # revision confirmed → decision replaced (source manager_revision)
     "revision_declined",      # revision not confirmed → nothing changed
+    "question_answered",      # a question explained; no position in it → nothing written (HOS-357)
 )
 NON_REPLY_RESULTS: tuple[str, ...] = ("confirmation_expired", "revision_expired")
 

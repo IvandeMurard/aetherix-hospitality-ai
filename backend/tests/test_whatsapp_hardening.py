@@ -1,8 +1,8 @@
 """Tests for HOS-132 — WhatsApp & alert pipeline production hardening.
 
 Coverage:
-- AC4: generate_and_send() sets "answered" only on confirmed Twilio 2xx
-- AC4: generate_and_send() leaves status unchanged when Twilio fails
+- AC4: a question is marked "answered" only once Twilio accepted the reply,
+  sent to the manager's number (HOS-357: _bg_question; was generate_and_send)
 - AC5: _validate_phone() correctly identifies valid/invalid E.164 numbers
 - AC5: alert_dispatcher sets "config_error" on invalid phone (existing — smoke)
 - AC6: run_pending() query excludes "config_error" status
@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.alert_dispatcher import _validate_phone
-from app.services.explainability_service import ExplainabilityService
 
 # ===========================================================================
 # AC5 — _validate_phone E.164 validation
@@ -44,142 +43,65 @@ class TestValidatePhone:
 
 
 # ===========================================================================
-# AC4 — generate_and_send(): "answered" gated on Twilio success
+# AC4 — a question is marked "answered" only once Twilio accepted the reply
+# (HOS-357: the answer is sent by the route's _bg_question, to the manager's
+# number — never to the digest stored on conversational_queries)
 # ===========================================================================
 
-def _make_db_objects():
-    """Build minimal ConversationalQuery + StaffingRecommendation mocks."""
-    cq_id = uuid.uuid4()
-
-    cq = MagicMock()
-    cq.id = cq_id
-    cq.status = "processing"
-    cq.from_number = "+33612345678"
-    cq.body = "Why do we need extra staff?"
-    cq.recommendation_id = uuid.uuid4()
-
-    rec = MagicMock()
-    rec.id = uuid.uuid4()
-    rec.anomaly_id = None
-    rec.window_start = None
-    rec.window_end = None
-    rec.roi_net = None
-    rec.roi_labor_cost = None
-    rec.message_text = "Add 2 servers for dinner rush"
-    rec.recommended_headcount = 8
-    rec.triggering_factor = "surge"
-
-    return cq, rec, cq_id
+_NUMBER = "whatsapp:+33612345678"
 
 
-def _make_session(cq, rec):
-    """Build a mock AsyncSession that returns cq then rec on successive execute() calls."""
-    session = MagicMock()
-    session.commit = AsyncMock()
+async def _run_bg_question(sent: bool, stored: dict):
+    from app.api.routes import twilio_inbound as webhook
+    from app.services.inbound_decision import ReplyPlan
 
-    results = [
-        MagicMock(scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=cq)))),
-        MagicMock(scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=rec)))),
-    ]
-    session.execute = AsyncMock(side_effect=results)
-    return session
+    session = AsyncMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=False)
+    queries = MagicMock()
+    queries.parse_and_store = AsyncMock(return_value=stored)
+    queries.mark_answered = AsyncMock()
+    explainer = MagicMock()
+    explainer.explain = AsyncMock(return_value="Concert au Zénith ce soir.")
+    plan = ReplyPlan(text="Concert au Zénith ce soir.", result="question_answered")
+
+    with patch.object(webhook, "AsyncSessionLocal", MagicMock(return_value=session)), \
+         patch.object(webhook.InboundDecisionService, "profile_for",
+                      new_callable=AsyncMock, return_value=MagicMock(manager_locale=None)), \
+         patch.object(webhook.InboundDecisionService, "latest_recommendation",
+                      new_callable=AsyncMock, return_value=MagicMock()), \
+         patch.object(webhook.InboundDecisionService, "handle_question",
+                      new_callable=AsyncMock, return_value=plan), \
+         patch.object(webhook, "QueryParserService", MagicMock(return_value=queries)), \
+         patch.object(webhook, "ExplainabilityService", MagicMock(return_value=explainer)), \
+         patch.object(webhook, "_send_plan", new_callable=AsyncMock, return_value=sent) as send:
+        await webhook._bg_question(from_number=_NUMBER, body="pourquoi ?")
+    return send, queries, explainer
 
 
-class TestGenerateAndSendStatusUpdate:
+class TestQuestionAnsweredStatus:
     @pytest.mark.asyncio
     async def test_sets_answered_on_twilio_success(self):
-        """AC4: status = "answered" only when Twilio returns 2xx."""
-        cq, rec, cq_id = _make_db_objects()
-        session = _make_session(cq, rec)
-
-        llm = MagicMock()
-        llm.complete = AsyncMock(return_value="Here is your explanation.")
-
-        with patch(
-            "app.services.explainability_service._send_twilio_reply",
-            new_callable=AsyncMock,
-            return_value=True,
-        ):
-            service = ExplainabilityService(llm=llm)
-            result = await service.generate_and_send(cq_id, session)
-
-        assert cq.status == "answered"
-        session.commit.assert_awaited()
-        assert result["status"] == "sent"
+        query_id = uuid.uuid4()
+        send, queries, _ = await _run_bg_question(
+            True, {"status": "stored", "query_id": str(query_id)})
+        assert send.await_args.args[0] == _NUMBER   # the number, not a digest
+        queries.mark_answered.assert_awaited_once()
+        assert queries.mark_answered.await_args.args[0] == query_id
 
     @pytest.mark.asyncio
     async def test_does_not_set_answered_on_twilio_failure(self):
-        """AC4: status must NOT be updated when Twilio fails."""
-        cq, rec, cq_id = _make_db_objects()
-        cq.status = "processing"
-        session = _make_session(cq, rec)
-
-        llm = MagicMock()
-        llm.complete = AsyncMock(return_value="Explanation text.")
-
-        with patch(
-            "app.services.explainability_service._send_twilio_reply",
-            new_callable=AsyncMock,
-            return_value=False,  # Twilio failure
-        ):
-            service = ExplainabilityService(llm=llm)
-            await service.generate_and_send(cq_id, session)
-
-        assert cq.status != "answered"
+        _, queries, _ = await _run_bg_question(
+            False, {"status": "stored", "query_id": str(uuid.uuid4())})
+        queries.mark_answered.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_fallback_sets_answered_on_twilio_success(self):
-        """AC4: fallback path (no recommendation) also gates 'answered' on Twilio success."""
-        cq = MagicMock()
-        cq.id = uuid.uuid4()
-        cq.status = "processing"
-        cq.from_number = "+33612345678"
-        cq.body = "??"
-        cq.recommendation_id = None  # no linked recommendation
-
-        session = MagicMock()
-        session.commit = AsyncMock()
-        # Only one execute call — for the ConversationalQuery
-        session.execute = AsyncMock(return_value=MagicMock(
-            scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=cq)))
-        ))
-
-        with patch(
-            "app.services.explainability_service._send_twilio_reply",
-            new_callable=AsyncMock,
-            return_value=True,
-        ):
-            service = ExplainabilityService(llm=MagicMock())
-            result = await service.generate_and_send(cq.id, session)
-
-        assert cq.status == "answered"
-        assert result["status"] == "sent_fallback"
-
-    @pytest.mark.asyncio
-    async def test_fallback_does_not_set_answered_on_twilio_failure(self):
-        """AC4: fallback path leaves status unchanged when Twilio fails."""
-        cq = MagicMock()
-        cq.id = uuid.uuid4()
-        cq.status = "processing"
-        cq.from_number = "+33612345678"
-        cq.body = "??"
-        cq.recommendation_id = None
-
-        session = MagicMock()
-        session.commit = AsyncMock()
-        session.execute = AsyncMock(return_value=MagicMock(
-            scalars=MagicMock(return_value=MagicMock(first=MagicMock(return_value=cq)))
-        ))
-
-        with patch(
-            "app.services.explainability_service._send_twilio_reply",
-            new_callable=AsyncMock,
-            return_value=False,
-        ):
-            service = ExplainabilityService(llm=MagicMock())
-            await service.generate_and_send(cq.id, session)
-
-        assert cq.status != "answered"
+    async def test_duplicate_question_is_not_answered_twice(self):
+        send, queries, explainer = await _run_bg_question(
+            True, {"status": "duplicate", "query_id": str(uuid.uuid4())})
+        explainer.explain.assert_not_awaited()
+        send.assert_not_awaited()
+        queries.mark_answered.assert_not_awaited()
 
 
 # ===========================================================================

@@ -7,12 +7,11 @@ Coverage:
 4. retry on network error: TransportError retried
 5. no retry on 4xx: raises immediately
 6. DLQ log on definitive failure: structured logger.error with to/from/body
-7. isolated session: _bg_parse_query has no db parameter and opens AsyncSessionLocal
+7. isolated session: _bg_question (HOS-357) has no db parameter and opens AsyncSessionLocal
 """
 from __future__ import annotations
 
 import inspect
-import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -311,43 +310,31 @@ class TestTwilioDLQ:
 # 6. Isolated session in background task
 # ===========================================================================
 
-class TestBgParseQueryIsolatedSession:
-    def test_bg_parse_query_has_no_db_parameter(self):
-        from app.api.routes.twilio_inbound import _bg_parse_query
+class TestBgQuestionIsolatedSession:
+    def test_bg_question_has_no_db_parameter(self):
+        from app.api.routes.twilio_inbound import _bg_question
 
-        sig = inspect.signature(_bg_parse_query)
+        sig = inspect.signature(_bg_question)
         assert "db" not in sig.parameters
 
     @pytest.mark.asyncio
-    async def test_bg_parse_query_opens_asyncsessionlocal(self):
-        from app.api.routes.twilio_inbound import _bg_parse_query
+    async def test_bg_question_opens_asyncsessionlocal(self):
+        from app.api.routes.twilio_inbound import _bg_question
 
         mock_session = AsyncMock()
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session.__aexit__ = AsyncMock(return_value=False)
         mock_session_factory = MagicMock(return_value=mock_session)
 
-        parse_result = {"status": "stored", "query_id": str(uuid.uuid4())}
-
-        mock_explainer_instance = AsyncMock()
-        mock_explainer_instance.generate_and_send = AsyncMock(
-            return_value={"status": "sent"}
-        )
-        mock_explainer_cls = MagicMock(return_value=mock_explainer_instance)
-
         with patch("app.api.routes.twilio_inbound.AsyncSessionLocal", mock_session_factory), \
-             patch("app.api.routes.twilio_inbound.QueryParserService") as MockParser, \
-             patch("app.api.routes.twilio_inbound.ExplainabilityService", mock_explainer_cls):
-            mock_parser_instance = AsyncMock()
-            mock_parser_instance.parse_and_store = AsyncMock(return_value=parse_result)
-            MockParser.return_value = mock_parser_instance
-
-            await _bg_parse_query(from_number="+336", body="test question")
+             patch("app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+                   new_callable=AsyncMock, return_value=None):
+            await _bg_question(from_number="+336", body="pourquoi ?")
 
         mock_session_factory.assert_called_once()
 
-    def test_route_does_not_forward_request_session_to_bg_task(self, monkeypatch):
-        """P2-4: The webhook route must schedule _bg_receipt_feedback without a db kwarg."""
+    @staticmethod
+    def _client(monkeypatch) -> TestClient:
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
         from app.api.routes.twilio_inbound import router
         from app.db.session import get_db
@@ -359,18 +346,45 @@ class TestBgParseQueryIsolatedSession:
             yield AsyncMock()
 
         app.dependency_overrides[get_db] = _noop_db
+        return TestClient(app)
 
-        with patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock) as mock_bg, \
+    @pytest.mark.parametrize("body, task", [
+        ("hello", "_bg_receipt_feedback"),
+        ("hello?", "_bg_question"),
+    ])
+    def test_route_does_not_forward_request_session_to_bg_task(self, monkeypatch, body, task):
+        """P2-4 / HOS-357: the background task of a known manager's free text or
+        question is scheduled without the request's db session."""
+        with patch(f"app.api.routes.twilio_inbound.{task}", new_callable=AsyncMock) as mock_bg, \
              patch("app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+                   new_callable=AsyncMock, return_value=MagicMock()), \
+             patch("app.api.routes.twilio_inbound.InboundDecisionService.handle_deterministic",
                    new_callable=AsyncMock, return_value=None):
-            with TestClient(app) as client:
+            with self._client(monkeypatch) as client:
                 resp = client.post(
                     "/webhooks/twilio/inbound",
-                    data={"From": "+336", "Body": "hello?", "To": "+14155238886"},
+                    data={"From": "+336", "Body": body, "To": "+14155238886"},
                 )
 
         assert resp.status_code == 200
-        # Verify the bg task was scheduled with from_number and body, no db kwarg
         mock_bg.assert_awaited_once()
-        call_kwargs = mock_bg.await_args.kwargs
-        assert "db" not in call_kwargs
+        assert "db" not in mock_bg.await_args.kwargs
+
+    def test_unknown_sender_gets_no_context_and_no_task(self, monkeypatch):
+        """HOS-357: an unknown number has no recommendation; nothing runs in the
+        background (the legacy path promised an answer, then went silent)."""
+        with patch("app.api.routes.twilio_inbound._bg_receipt_feedback",
+                   new_callable=AsyncMock) as bg_free, \
+             patch("app.api.routes.twilio_inbound._bg_question", new_callable=AsyncMock) as bg_q, \
+             patch("app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+                   new_callable=AsyncMock, return_value=None):
+            with self._client(monkeypatch) as client:
+                resp = client.post(
+                    "/webhooks/twilio/inbound",
+                    data={"From": "+336", "Body": "pourquoi ?", "To": "+14155238886"},
+                )
+
+        assert resp.status_code == 200
+        assert "couldn" in resp.text and "looking into it" not in resp.text
+        bg_free.assert_not_awaited()
+        bg_q.assert_not_awaited()

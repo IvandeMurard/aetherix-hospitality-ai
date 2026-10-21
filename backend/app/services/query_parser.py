@@ -6,8 +6,9 @@ Routes non-action inbound messages (natural language queries like "Why?" or
 2. Finding the most recent dispatched StaffingRecommendation for that property.
 3. Persisting a ConversationalQuery row (idempotency: 60 s dedup window).
 
-Called as a FastAPI BackgroundTask so the Twilio webhook can return a TwiML
-acknowledgement within Twilio's 15 s deadline.
+Called from the question background task (``twilio_inbound._bg_question``,
+HOS-357) for a known manager only: the route answers an unknown number itself.
+``mark_answered`` closes the row once the answer was accepted by Twilio.
 
 Lookup chain (mirrors ActionLoggerService):
   inbound phone number
@@ -143,14 +144,12 @@ class QueryParserService:
         # -----------------------------------------------------------------------
         # 4. Persist the ConversationalQuery row
         # -----------------------------------------------------------------------
-        # profile.id is the internal property UUID (String column, UUID-formatted).
-        # Use it for both tenant_id and property_id — both are UUID columns.
-        # HOS-165 will add a proper tenant UUID; until then property UUID serves as
-        # the tenant UUID surrogate (single-property-per-tenant Phase MVP).  HOS-164.
-        _prop_uuid = uuid.UUID(str(profile.id))
+        # tenant_id is the hotel's slug (TEXT since 20260508000000, HOS-165;
+        # one key per hotel, Décision #43). It used to be given the property
+        # UUID, which a TEXT column refuses: the path never ran until HOS-357.
         query = ConversationalQuery(
-            tenant_id=_prop_uuid,
-            property_id=_prop_uuid,
+            tenant_id=profile.tenant_id,
+            property_id=uuid.UUID(str(profile.id)),
             from_number=stored_number,
             body=body,
             recommendation_id=recommendation_id,
@@ -171,6 +170,13 @@ class QueryParserService:
             "query_id": str(query.id),
             "recommendation_id": str(recommendation_id) if recommendation_id else None,
         }
+
+    async def mark_answered(self, query_id: uuid.UUID, session: AsyncSession) -> None:
+        """The answer was accepted by Twilio (HOS-357): only then ``answered``."""
+        query = await session.get(ConversationalQuery, query_id)
+        if query is not None:
+            query.status = "answered"
+            await session.commit()
 
 
 def _is_uuid(value: str) -> bool:

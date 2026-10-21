@@ -11,9 +11,13 @@ Order in which a reply is read (first match wins):
 2. answer to a pending confirmation ("oui" / "non" / buttons);
 3. stance lexicon (``match_keyword``): stance × proposal → record, two
    readings → confirm, bare acknowledgement → rule (b);
+3b. a question (``is_question``, HOS-357) → ``handle_question``: answered,
+   never a decision; a position stated in it is always confirmed;
 4. answer to a pending reason request (never changes the decision);
 5. free text: covers regex, then the model (``ReceiptsService.parse_inbound``),
-   then ``resolve_feedback`` (threshold → record or confirm).
+   then ``resolve_feedback`` (threshold → record or confirm). A staffing figure
+   stated as a delta ("2 extras", HOS-354) goes with a correction only, and is
+   quoted back whenever the correction is confirmed.
 
 Steps 1-3 need no model and run synchronously in the webhook. Steps 4-5 run in
 the background task. Nothing here reads ``actual_covers`` (§16.6).
@@ -38,7 +42,7 @@ from app.db.models import (
 from app.services.decision_policy import authorize_decision
 from app.services.decision_provenance import DecidedBy
 from app.services.decision_recap import _tz, build_recap, render_text
-from app.services.receipts import FeedbackIntent, resolve_feedback
+from app.services.receipts import FeedbackIntent, resolve_feedback, resolve_question
 from app.services.manager_decision import (
     BUTTON_CONFIRMATIONS,
     BUTTON_DECISIONS,
@@ -54,11 +58,14 @@ from app.services.manager_decision import (
     compute_capture_metrics,
     confirmation_question,
     decision_word,
+    describe_staff_figure,
+    figure_confirmation_question,
     match_confirmation_answer,
     match_keyword,
     match_recap_command,
     match_revision_command,
     proposal_from_recommendation,
+    read_staff_figure,
     recorded_message,
     resolve_keyword,
     routed_reason,
@@ -258,9 +265,66 @@ class InboundDecisionService:
             reason=feedback.reason,
             reason_route=routed_reason(feedback.reason_route, feedback.reason_route_confidence),
             reason_route_confidence=feedback.reason_route_confidence,
+            retained_delta_staff=feedback.retained_delta_staff,
         )
         rec = recs[0] if (res.action == "record" and recs) else None
         return plan, res, rec
+
+    async def handle_question(
+        self,
+        profile: RestaurantProfile,
+        body: str,
+        explanation: str,
+        parse,
+        now: datetime,
+        request_id: str = "",
+    ) -> ReplyPlan:
+        """A question (HOS-357, ``manager_decision.is_question``): never a decision.
+
+        ``explanation``: the answer, already written (``ExplainabilityService``).
+        ``parse``: ``ReceiptsService.parse_inbound``, called in question mode
+        only if a recommendation is pending.
+
+        * No position in it → the explanation alone; an open prompt is neither
+          closed nor replaced (like ``recap``); event ``question_answered``.
+        * A position ("pourquoi 3 extras ? 2 suffisent", "ok mais pourquoi ?") →
+          the explanation, then a confirmation of that position, whatever the
+          confidence (`resolve_question`); a staffing figure is quoted. Nothing
+          is written before yes.
+        * A number to qualify ("pourquoi ? plutôt 2") → the explanation and the
+          question "2 quoi ?"; nothing written, no prompt.
+        """
+        locale = self._locale_for(profile, None)
+        recs = await self.pending_recommendations(profile)
+        rec_id = recs[0].id if recs else None
+        if recs:
+            ctx = self.pending_context(recs, now)
+            feedback = await parse(body, self.proposal_of(recs[0]), question=True)
+            res = resolve_question(feedback, ctx)
+            if res.action == "confirm":
+                prompt = await self.open_prompt(profile, now)
+                await self._supersede(prompt, now)
+                plan = await self._ask_confirmation(
+                    profile, recs[0], res.decision, res.origin, res.confidence, None,
+                    now, "text", request_id,
+                    retained_delta_staff=feedback.retained_delta_staff
+                    if res.decision == "modified" else None,
+                    locale=locale,
+                )
+                plan.text = f"{explanation}\n\n{plan.text}"
+                return plan
+            if feedback.figure_unit_unknown is not None:
+                n = str(feedback.figure_unit_unknown)
+                await self._event(profile, rec_id, "question_answered", "text", request_id,
+                                  why="figure_unit_unknown", now=now)
+                await self.db.commit()
+                return ReplyPlan(text=f"{explanation}\n\n{text_for('figure_unit', locale, n=n)}",
+                                 result="question_answered", extras={"why": "figure_unit_unknown"})
+        await self._event(profile, rec_id, "question_answered", "text", request_id,
+                          why="explained", now=now)
+        await self.db.commit()
+        return ReplyPlan(text=explanation, buttons="decision" if recs else None,
+                         result="question_answered", extras={"why": "explained"})
 
     async def handle_reason(
         self,
@@ -272,17 +336,37 @@ class InboundDecisionService:
         now: datetime,
         request_id: str = "",
     ) -> ReplyPlan:
-        """Step 4: store the reason typed. Never touches the recorded decision."""
+        """Step 4: store the reason typed. Never touches the recorded decision.
+
+        After a correction recorded without a figure, "Quel changement ?" may be
+        answered with one ("2 extras, le groupe a annulé"): a delta read by
+        ``read_staff_figure`` completes the correction's ``retained_delta_staff``
+        (HOS-354). The decision itself is unchanged."""
         prompt.status = "answered"
         prompt.resolved_at = now
         routed = routed_reason(route, route_confidence)
+        text = text_for("reason_thanks", self.locale)
+        rec = None
+        if prompt.recommendation_id is not None:
+            rec = (await self.db.execute(
+                select(StaffingRecommendation).where(
+                    StaffingRecommendation.id == prompt.recommendation_id)
+            )).scalars().first()
+        if (rec is not None and rec.status == "modified" and rec.retained_delta_staff is None
+                and rec.decided_by == DecidedBy.human_whatsapp.value):
+            figure = read_staff_figure(body, self.proposal_of(rec))
+            if figure is not None and figure.delta is not None:
+                rec.retained_delta_staff = figure.delta
+                text = text_for("reason_figure_thanks", self.locale,
+                                figure=describe_staff_figure(figure.delta, self.locale))
+                logger.info("inbound_decision: retained_delta_staff=%s from reason rec=%s",
+                            figure.delta, rec.id)
         await self._event(
             profile, prompt.recommendation_id, "reason_captured", "text", request_id,
             prompt_id=prompt.id, reason_text=body.strip()[:1000],
             reason_route=routed, reason_route_confidence=route_confidence, now=now)
         await self.db.commit()
-        return ReplyPlan(text=text_for("reason_thanks", self.locale), result="reason_captured",
-                         extras={"reason_route": routed})
+        return ReplyPlan(text=text, result="reason_captured", extras={"reason_route": routed})
 
     async def cancel_reason_prompt(self, profile: RestaurantProfile, now: datetime) -> None:
         await self.db.execute(
@@ -361,12 +445,15 @@ class InboundDecisionService:
         reason: Optional[str] = None,
         reason_route: Optional[str] = None,
         reason_route_confidence: Optional[float] = None,
+        retained_delta_staff: Optional[int] = None,
     ) -> ReplyPlan:
+        # HOS-354: a staffing figure goes with a correction only.
+        figure = retained_delta_staff if res.decision == "modified" else None
         if res.action == "record":
             return await self._record_or_explain(
                 profile, recs, res.decision, res.source, res.confidence, now, channel,
                 request_id, reason=reason, reason_route=reason_route,
-                reason_route_confidence=reason_route_confidence,
+                reason_route_confidence=reason_route_confidence, retained_delta_staff=figure,
             )
         if res.action == "confirm":
             if not recs:
@@ -374,7 +461,7 @@ class InboundDecisionService:
                                                 request_id, text_for("no_pending", self.locale), now=now)
             return await self._ask_confirmation(
                 profile, recs[0], res.decision, res.origin, res.confidence, corrected_value,
-                now, channel, request_id,
+                now, channel, request_id, retained_delta_staff=figure,
             )
         # none
         why = res.why or "no_decision"
@@ -403,6 +490,7 @@ class InboundDecisionService:
         reason_route: Optional[str] = None,
         reason_route_confidence: Optional[float] = None,
         result: str = "recorded",
+        retained_delta_staff: Optional[int] = None,
     ) -> ReplyPlan:
         if not recs:
             return await self._not_recorded(profile, None, "no_pending_recommendation", channel,
@@ -418,15 +506,20 @@ class InboundDecisionService:
         rec.decision_confidence = round(float(confidence), 3)
         rec.decided_by = DecidedBy.human_whatsapp.value
         rec.decision_policy_version = policy.version
+        figure = retained_delta_staff if decision == "modified" else None
+        if figure is not None:
+            rec.retained_delta_staff = figure   # HOS-354: read in the reply, never guessed
         await self._event(
             profile, rec.id, result, channel, request_id,
             prompt_id=prompt.id if prompt else None, decision=decision,
             decision_source=source.value, confidence=confidence,
             reason_text=reason, reason_route=reason_route,
             reason_route_confidence=reason_route_confidence, now=now)
-        text = recorded_message(decision, self.locale)
+        text = recorded_message(decision, self.locale, figure)
         if wants_reason_prompt(decision, reason_already_given=bool(reason)):
-            key = "reason_after_reject" if decision == "rejected" else "reason_after_correct"
+            # The change is known when the figure is: only the reason is asked.
+            key = ("reason_after_reject" if decision == "rejected" or figure is not None
+                   else "reason_after_correct")
             self.db.add(ManagerPrompt(
                 created_at=now,
                 tenant_id=profile.tenant_id, property_id=uuid.UUID(str(profile.id)),
@@ -448,7 +541,10 @@ class InboundDecisionService:
         now: datetime,
         channel: str,
         request_id: str,
+        retained_delta_staff: Optional[int] = None,
+        locale: Optional[str] = None,
     ) -> ReplyPlan:
+        locale = locale or self.locale
         prompt = ManagerPrompt(
             id=uuid.uuid4(),
             created_at=now,
@@ -456,15 +552,19 @@ class InboundDecisionService:
             recommendation_id=rec.id, kind="decision_confirmation",
             proposed_decision=decision, origin=origin,
             confidence=round(float(confidence), 3),
-            corrected_value=corrected_value, status="pending",
-            expires_at=now + PROMPT_WINDOW, request_id=request_id,
+            corrected_value=corrected_value, retained_delta_staff=retained_delta_staff,
+            status="pending", expires_at=now + PROMPT_WINDOW, request_id=request_id,
         )
         self.db.add(prompt)
         await self._event(profile, rec.id, "confirmation_requested", channel, request_id,
                           prompt_id=prompt.id, decision=decision, confidence=confidence,
                           why=origin, now=now)
         await self.db.commit()
-        text = f"{confirmation_question(decision, self.locale)} {text_for('confirm_text_hint', self.locale)}"
+        question = (
+            figure_confirmation_question(retained_delta_staff, self.proposal_of(rec), locale)
+            if retained_delta_staff is not None else confirmation_question(decision, locale)
+        )
+        text = f"{question} {text_for('confirm_text_hint', locale)}"
         return ReplyPlan(text=text, buttons="confirm", result="confirmation_requested",
                          decision=decision, extras={"origin": origin})
 
@@ -511,6 +611,7 @@ class InboundDecisionService:
             profile, [rec], prompt.proposed_decision, source,
             float(prompt.confidence) if prompt.confidence is not None else 1.0,
             now, channel, request_id, prompt=prompt, result="confirmed",
+            retained_delta_staff=prompt.retained_delta_staff,
         )
 
     # ------------------------------------------------------------------

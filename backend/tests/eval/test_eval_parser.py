@@ -294,14 +294,16 @@ def test_dataset_has_confirmation_trigger_cases():
 
     trig = [s for s in load_scenarios(layer="parser") if s["category"] == "parser_confirmation"]
     assert len(trig) >= 10
-    assert all(s["expected"]["requires_confirmation"] is True for s in trig)
     from app.schemas.webhook import ActionType
     from app.services.action_logger import parse_action
     from app.services.manager_decision import is_bare_ack
 
-    by_path = {"model": [], "keyword_ambiguous": []}
+    by_path = {"model": [], "keyword_ambiguous": [], "question": []}
     for s in trig:
         by_path[s["expected"]["path"]].append(s)
+    # Two-reading cases ask; question cases (HOS-357) may only be answered.
+    assert all(s["expected"]["requires_confirmation"] is True
+               for s in by_path["model"] + by_path["keyword_ambiguous"])
     # Model-path cases must reach the model: a keyword would decide them without it.
     assert len(by_path["model"]) >= 10
     for s in by_path["model"]:
@@ -311,6 +313,52 @@ def test_dataset_has_confirmation_trigger_cases():
     preds = eval_parser._quiet_stub_run(by_path["keyword_ambiguous"])
     for s, p in zip(by_path["keyword_ambiguous"], preds):
         assert (p.stage, p.action) == ("keyword_ambiguous", "confirm"), s["id"]
+
+
+def test_golden_questions_never_write_a_decision():
+    """HOS-357: every golden question, whatever the model says (a confident
+    position, nothing, a failure), lands on a confirmation or on nothing —
+    never on a write. Its staffing figure is read without the model."""
+    from app.services.manager_decision import is_question
+    from scripts.eval.loader import load_scenarios
+
+    questions = [s for s in load_scenarios(layer="parser")
+                 if s["category"] == "parser_confirmation" and s["expected"]["path"] == "question"]
+    assert len(questions) >= 4
+    assert all(is_question(s["input"]["message"]) for s in questions)
+    for answer in ('{"stance": "adopt_proposal", "confidence": 0.99}',
+                   '{"stance": "counter_value", "confidence": 0.99}',
+                   '{"stance": "none", "confidence": 0.99}',
+                   RuntimeError("api down")):
+        llm = _ScriptedLLM({s["input"]["message"]: answer for s in questions})
+        preds = eval_parser._run_production(questions, llm)
+        for s, p in zip(questions, preds):
+            assert p.action != "record", (s["id"], answer)
+            wants = s["expected"]["requires_confirmation"]
+            if p.stage in ("staff_figure", "figure_unit"):   # decided without the model
+                assert (p.action == "confirm") is wants, s["id"]
+    # A question with a position the model reads confidently is still confirmed.
+    okwhy = next(s for s in questions if s["id"] == "parser-question-okwhy-fr-001")
+    [p] = eval_parser._run_production(
+        [okwhy], _ScriptedLLM({okwhy["input"]["message"]: '{"stance": "adopt_proposal", "confidence": 0.99}'}))
+    assert (p.label, p.stage, p.action) == ("accepted", "llm", "confirm")
+
+
+def test_golden_staffing_figures_match_the_rule():
+    """HOS-354: every golden reply that states (or must not yield) a staffing
+    figure is read as annotated by ``read_staff_figure`` — never guessed."""
+    from app.services.manager_decision import read_staff_figure
+    from scripts.eval.loader import load_scenarios
+
+    cases = [s for s in load_scenarios(layer="parser")
+             if "retained_delta_staff" in s["expected"].get("extracted", {})]
+    assert len(cases) >= 6
+    for s in cases:
+        figure = read_staff_figure(s["input"]["message"], eval_parser.case_proposal(s))
+        extracted = s["expected"]["extracted"]
+        assert (figure.delta if figure else None) == extracted["retained_delta_staff"], s["id"]
+        if "unit_asked" in extracted:
+            assert figure is not None and figure.unit_unknown == extracted["unit_asked"], s["id"]
 
 
 def test_every_proposal_kind_has_graded_cases():
@@ -379,11 +427,18 @@ def test_real_backend_uses_pinned_target_and_reports_canary(monkeypatch):
     assert all(c["stage"] == "llm" for c in r["cases"])
     assert r["deterministic"]["disagreements"] == []
     # A model that answers "counter_value" to everything auto-writes every trigger
-    # case it sees; the deterministic two-reading cases (§19) never reach it and
-    # are confirmed whatever the model says.
+    # case it sees — except questions (HOS-357), always confirmed; the
+    # deterministic two-reading cases (§19) never reach it and are confirmed
+    # whatever the model says.
+    from app.services.manager_decision import is_question
+    from scripts.eval.loader import load_scenarios
+
+    question_ids = {s["id"] for s in load_scenarios(layer="parser")
+                    if s["category"] == "parser_confirmation" and is_question(s["input"]["message"])}
     trig_cases = r["confirmation_trigger"]["cases"]
-    model_seen = [c for c in trig_cases if c["stage"] == "llm"]
+    model_seen = [c for c in trig_cases if c["stage"] == "llm" and c["id"] not in question_ids]
     assert r["confirmation_trigger"]["auto_written"] == len(model_seen) > 0
+    assert all(c["action"] != "record" for c in trig_cases if c["id"] in question_ids)
     assert all(c["action"] == "confirm" for c in trig_cases if c["stage"] == "keyword_ambiguous")
     assert any(b.startswith("confirmation trigger") for b in r["thresholds"]["breaches"])
     assert baselines.parser_baseline_freeze_refusal(r) is None

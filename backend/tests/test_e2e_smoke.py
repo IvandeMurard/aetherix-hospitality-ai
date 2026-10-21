@@ -9,8 +9,8 @@ Coverage areas
 1.  Backend health          — GET /health → 200
 2.  POST /predict           — structured response, claude_used flag, heuristic fallback
 3.  ReasoningService        — heuristic fallback text; Claude path (mocked client)
-4.  ExplainabilityService   — generate_and_send full pipeline; fallback when no recommendation
-5.  Twilio inbound webhook  — inbound conversational query → query-ack TwiML
+4.  ExplainabilityService   — answer from the stored recommendation; no model; none stored
+5.  Twilio inbound webhook  — a known manager's question → the answer task (HOS-357)
 6.  TwilioClient            — NotConfiguredError; send_whatsapp prefix; mocked HTTP POST
 7.  Linear integration      — create_issue and list_issues hit the right GraphQL endpoint
 """
@@ -262,39 +262,18 @@ class TestReasoningService:
 
 
 # ===========================================================================
-# 4. ExplainabilityService — full pipeline
+# 4. ExplainabilityService — answer from the stored recommendation (HOS-357)
 # ===========================================================================
 
-def _make_db_session(query=None, recommendation=None, anomaly=None):
-    """Build an AsyncSession that returns rows in execute() call order."""
+def _make_db_session(anomaly=None):
+    """An AsyncSession whose single execute() returns the anomaly."""
     session = AsyncMock()
-
-    def _make_result(obj):
-        r = MagicMock()
-        scalars = MagicMock()
-        scalars.first.return_value = obj
-        r.scalars.return_value = scalars
-        return r
-
-    session.execute = AsyncMock(
-        side_effect=[
-            _make_result(query),
-            _make_result(recommendation),
-            _make_result(anomaly),
-        ]
-    )
-    session.commit = AsyncMock()
+    result = MagicMock()
+    scalars = MagicMock()
+    scalars.first.return_value = anomaly
+    result.scalars.return_value = scalars
+    session.execute = AsyncMock(return_value=result)
     return session
-
-
-def _make_query(from_number: str = "+33600000001", recommendation_id=None):
-    q = MagicMock()
-    q.id = uuid.uuid4()
-    q.body = "Why do you recommend 5 extra staff tonight?"
-    q.from_number = from_number
-    q.recommendation_id = recommendation_id or uuid.uuid4()
-    q.status = "pending"
-    return q
 
 
 def _make_recommendation():
@@ -321,95 +300,44 @@ def _make_anomaly():
 
 
 class TestExplainabilityService:
-    """Smoke: full pipeline from DB fetch to Twilio dispatch."""
+    """Smoke: stored recommendation + anomaly → the answer (sent by the route)."""
 
     @pytest.mark.asyncio
-    async def test_generate_and_send_marks_query_answered(self):
+    async def test_explain_uses_the_model_with_the_stored_context(self):
         from app.services.explainability_service import ExplainabilityService
 
-        query = _make_query()
-        rec = _make_recommendation()
-        anomaly = _make_anomaly()
-        session = _make_db_session(query=query, recommendation=rec, anomaly=anomaly)
+        llm = MagicMock()
+        llm.complete = AsyncMock(return_value="Une conférence tech à proximité : +25 % en F&B.")
+        svc = ExplainabilityService(llm=llm)
 
-        svc = ExplainabilityService.__new__(ExplainabilityService)
-        mock_msg = MagicMock()
-        mock_msg.content = [MagicMock(text="Based on the tech conference, 5 extra servers make sense.")]
-        mock_claude = AsyncMock()
-        mock_claude.messages.create = AsyncMock(return_value=mock_msg)
-        svc._claude = mock_claude
+        text = await svc.explain("pourquoi ?", _make_recommendation(),
+                                 _make_db_session(anomaly=_make_anomaly()), "fr")
 
-        with patch("app.services.explainability_service._send_twilio_reply", new_callable=AsyncMock) as mock_send:
-            result = await svc.generate_and_send(query_id=query.id, session=session)
-
-        assert result["status"] == "sent"
-        assert query.status == "answered"
-        mock_send.assert_awaited_once()
+        assert text == "Une conférence tech à proximité : +25 % en F&B."
+        prompt = llm.complete.call_args.kwargs["messages"][0]["content"]
+        assert "Tech conference nearby (+25% F&B)" in prompt
+        assert "SURGE (+28.5% vs baseline)" in prompt
 
     @pytest.mark.asyncio
-    async def test_generate_and_send_sends_to_correct_number(self):
+    async def test_explain_without_model_uses_stored_fields(self):
         from app.services.explainability_service import ExplainabilityService
 
-        query = _make_query(from_number="+33600000099")
-        rec = _make_recommendation()
-        session = _make_db_session(query=query, recommendation=rec, anomaly=None)
+        llm = MagicMock()
+        llm.complete = AsyncMock(side_effect=RuntimeError("no key"))
+        svc = ExplainabilityService(llm=llm)
 
-        svc = ExplainabilityService.__new__(ExplainabilityService)
-        mock_msg = MagicMock()
-        mock_msg.content = [MagicMock(text="Explanation text.")]
-        mock_claude = AsyncMock()
-        mock_claude.messages.create = AsyncMock(return_value=mock_msg)
-        svc._claude = mock_claude
+        text = await svc.explain("why?", _make_recommendation(), _make_db_session(), "en")
 
-        with patch("app.services.explainability_service._send_twilio_reply", new_callable=AsyncMock) as mock_send:
-            await svc.generate_and_send(query_id=query.id, session=session)
-
-        call_args = mock_send.call_args
-        assert call_args[0][0] == "+33600000099"
+        assert "Add 5 servers for dinner service." in text
+        assert "Recorded reason: Tech conference nearby (+25% F&B)." in text
 
     @pytest.mark.asyncio
-    async def test_generate_and_send_fallback_when_no_recommendation(self):
-        """When no recommendation is linked, send fallback and mark answered."""
+    async def test_explain_without_recommendation(self):
         from app.services.explainability_service import ExplainabilityService
 
-        query = _make_query()
-        query.recommendation_id = None
-        # Only one execute() result needed (the query itself)
-        session = AsyncMock()
-        result_mock = MagicMock()
-        scalars_mock = MagicMock()
-        scalars_mock.first.return_value = query
-        result_mock.scalars.return_value = scalars_mock
-        session.execute = AsyncMock(return_value=result_mock)
-        session.commit = AsyncMock()
-
-        svc = ExplainabilityService.__new__(ExplainabilityService)
-        svc._claude = None
-
-        with patch("app.services.explainability_service._send_twilio_reply", new_callable=AsyncMock) as mock_send:
-            result = await svc.generate_and_send(query_id=query.id, session=session)
-
-        assert result["status"] == "sent_fallback"
-        mock_send.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_generate_and_send_query_not_found_returns_error(self):
-        from app.services.explainability_service import ExplainabilityService
-
-        session = AsyncMock()
-        result_mock = MagicMock()
-        scalars_mock = MagicMock()
-        scalars_mock.first.return_value = None
-        result_mock.scalars.return_value = scalars_mock
-        session.execute = AsyncMock(return_value=result_mock)
-
-        svc = ExplainabilityService.__new__(ExplainabilityService)
-        svc._claude = None
-
-        result = await svc.generate_and_send(query_id=uuid.uuid4(), session=session)
-
-        assert result["status"] == "error"
-        assert result["reason"] == "query_not_found"
+        svc = ExplainabilityService(llm=MagicMock())
+        text = await svc.explain("why?", None, _make_db_session(), "en")
+        assert text == "I don't have a recommendation to explain yet."
 
 
 # ===========================================================================
@@ -431,20 +359,25 @@ async def _noop_db() -> AsyncGenerator:
 
 
 class TestTwilioInboundConversationalPath:
-    """Story 5.1/5.2 smoke: unknown body → query-ack TwiML; pipeline is called."""
+    """Story 5.1/5.2 + HOS-357 smoke: a known manager's question goes to the
+    answer task, never to decision capture."""
 
     @pytest.fixture(autouse=True)
     def skip_signature(self, monkeypatch):
         monkeypatch.setenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "true")
 
-    def test_conversational_query_returns_ack_twiml(self, monkeypatch):
+    def test_question_goes_to_the_answer_task(self, monkeypatch):
         from app.db.session import get_db
 
         app = _webhook_app()
         app.dependency_overrides[get_db] = _noop_db
 
-        with patch("app.api.routes.twilio_inbound._bg_receipt_feedback", new_callable=AsyncMock), \
+        with patch("app.api.routes.twilio_inbound._bg_receipt_feedback",
+                   new_callable=AsyncMock) as bg_feedback, \
+             patch("app.api.routes.twilio_inbound._bg_question", new_callable=AsyncMock) as bg_question, \
              patch("app.api.routes.twilio_inbound.InboundDecisionService.profile_for",
+                   new_callable=AsyncMock, return_value=MagicMock()), \
+             patch("app.api.routes.twilio_inbound.InboundDecisionService.handle_deterministic",
                    new_callable=AsyncMock, return_value=None):
             with TestClient(app) as client:
                 resp = client.post(
@@ -454,8 +387,8 @@ class TestTwilioInboundConversationalPath:
 
         assert resp.status_code == 200
         assert "application/xml" in resp.headers.get("content-type", "")
-        # P2-4: all non-action messages route through receipt feedback bg task
-        assert "looking into it" in resp.text or "Got your question" in resp.text
+        bg_question.assert_awaited_once()
+        bg_feedback.assert_not_awaited()
 
 
 # ===========================================================================

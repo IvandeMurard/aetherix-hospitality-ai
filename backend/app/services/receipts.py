@@ -54,6 +54,7 @@ from app.services.manager_decision import (
     Resolution,
     is_bare_ack,
     parse_model_json,
+    read_staff_figure,
     resolve_bare_ack,
     resolve_model,
 )
@@ -190,12 +191,19 @@ class FeedbackIntent:
                   that depends on the proposal and is decided by `resolve_feedback`.
         source: Which pass decided — ``ack_regex``, ``covers_regex``, ``llm``,
                 ``llm_unmappable`` (answer failed the schema) or ``llm_error``
-                (call failed). The last two never carry a stance.
+                (call failed). The last two never carry a stance. For a question
+                (HOS-357) also ``staff_figure`` (a counter figure stated in it)
+                and ``figure_unit`` (a number to qualify, nothing to decide).
+        retained_delta_staff: the staffing figure the reply states as a delta
+                  (``manager_decision.read_staff_figure``, HOS-354). Written only
+                  with a ``modified`` decision, never guessed by the model.
+        figure_unit_unknown: a number the manager must qualify ("plutôt 2").
     """
 
     __slots__ = ("intent", "stance", "actual_value", "notes", "reason",
                  "reason_route", "reason_route_confidence", "confidence",
-                 "requires_confirmation", "source")
+                 "requires_confirmation", "source", "retained_delta_staff",
+                 "figure_unit_unknown")
 
     def __init__(
         self,
@@ -208,6 +216,8 @@ class FeedbackIntent:
         reason: Optional[str] = None,
         reason_route: Optional[str] = None,
         reason_route_confidence: Optional[float] = None,
+        retained_delta_staff: Optional[int] = None,
+        figure_unit_unknown: Optional[int] = None,
     ) -> None:
         self.intent = intent
         self.stance = stance
@@ -218,6 +228,8 @@ class FeedbackIntent:
         self.reason_route_confidence = reason_route_confidence
         self.confidence = confidence
         self.source = source
+        self.retained_delta_staff = retained_delta_staff
+        self.figure_unit_unknown = figure_unit_unknown
         self.requires_confirmation = (
             source == "llm"
             and stance in ("adopt_proposal", "decline_proposal", "keep_current", "counter_value")
@@ -241,11 +253,28 @@ def resolve_feedback(feedback: FeedbackIntent, ctx: PendingContext) -> Resolutio
     """
     if feedback.source == "ack_regex":
         return resolve_bare_ack(ctx)
-    if feedback.source == "covers_regex":
+    if feedback.source in ("covers_regex", "staff_figure"):
         return Resolution("record", "modified", DecisionSource.correction_pattern)
     if feedback.source == "llm":
         return resolve_model(feedback.stance, feedback.confidence, ctx.proposal)
+    if feedback.source == "figure_unit":
+        return Resolution("none", why="figure_unit_unknown")
     return Resolution("none", why=feedback.source)
+
+
+def resolve_question(feedback: FeedbackIntent, ctx: PendingContext) -> Resolution:
+    """A question never writes a decision (HOS-357, Décisions #6, #38).
+
+    The position stated in it, if any ("pourquoi 3 extras ? 2 suffisent", "ok
+    mais pourquoi ?"), is resolved like any reply, then always CONFIRMED with
+    the manager, whatever the confidence: ``record`` becomes ``confirm`` (origin
+    ``question``). No position → ``none``: the question is only answered.
+    Shared by the Twilio route and the parser eval, like `resolve_feedback`."""
+    res = resolve_feedback(feedback, ctx)
+    if res.action in ("record", "confirm") and res.decision is not None:
+        return Resolution("confirm", res.decision, origin="question",
+                          confidence=res.confidence, why=res.why or "question")
+    return res
 
 
 def outcome_for_feedback(feedback: FeedbackIntent, ctx: PendingContext) -> Optional[str]:
@@ -519,7 +548,9 @@ class ReceiptsService:
 
         return narrative.strip()
 
-    async def parse_inbound(self, text: str, proposal: Optional[Proposal] = None) -> FeedbackIntent:
+    async def parse_inbound(
+        self, text: str, proposal: Optional[Proposal] = None, question: bool = False,
+    ) -> FeedbackIntent:
         """Classify a manager's WhatsApp reply into a FeedbackIntent (P2-4, ADR-0007 §16, §19).
 
         ``proposal``: what the pending recommendation proposed (direction,
@@ -534,14 +565,37 @@ class ReceiptsService:
           3. Model (fast tier) → stance, validated against ``ClassifierOutput``.
              A call failure is ``llm_error``, a schema failure ``llm_unmappable``:
              neither carries a stance, nothing is coerced.
+        A staffing figure stated as a delta ("2 extras") is read deterministically
+        and carried as ``retained_delta_staff`` (HOS-354); the model never gives it.
+
+        ``question`` (HOS-357, ``manager_decision.is_question``): the reply asks
+        something. Passes 1-2 are skipped (a covers figure in a question quotes
+        the forecast, it does not correct it). A counter figure in it →
+        ``staff_figure``; a number to qualify → ``figure_unit``; otherwise the
+        model reads the position, if any. `resolve_question` confirms whatever
+        it lands on.
 
         Explicit keywords ("oui", "refusé", "✅") never reach this method: the
         route matches them first (``action_logger.parse_action``).
         """
         stripped = text.strip()
+        figure = read_staff_figure(stripped, proposal)
+        figure_delta = figure.delta if figure else None
+
+        if question and figure is not None:
+            if figure.delta is not None:
+                return FeedbackIntent(
+                    intent="structured_correction", stance="counter_value", actual_value=None,
+                    notes=stripped, confidence=1.0, source="staff_figure",
+                    retained_delta_staff=figure.delta,
+                )
+            return FeedbackIntent(
+                intent="free_form", stance=None, actual_value=None, notes=stripped,
+                confidence=1.0, source="figure_unit", figure_unit_unknown=figure.unit_unknown,
+            )
 
         # --- Pass 1: bare acknowledgement ---
-        if is_bare_ack(stripped):
+        if not question and is_bare_ack(stripped):
             intent = FeedbackIntent(
                 intent="acknowledge",
                 stance=None,
@@ -557,7 +611,7 @@ class ReceiptsService:
             return intent
 
         # --- Pass 2: structured correction (regex) ---
-        m = _COVERS_RE.search(stripped)
+        m = None if question else _COVERS_RE.search(stripped)
         if m:
             raw_val = m.group(1) or m.group(2)
             actual = float(raw_val) if raw_val else None
@@ -568,6 +622,7 @@ class ReceiptsService:
                 notes=stripped,
                 confidence=1.0,
                 source="covers_regex",
+                retained_delta_staff=figure_delta,
             )
             logger.info(
                 "receipts.parse_inbound: intent=structured_correction actual_value=%s confidence=1.0 text=%r",
@@ -611,13 +666,15 @@ class ReceiptsService:
                 intent = FeedbackIntent(
                     intent=out.intent,
                     stance=out.stance,
-                    actual_value=out.corrected_value,
+                    # A covers figure in a question quotes the forecast.
+                    actual_value=None if question else out.corrected_value,
                     notes=out.notes or stripped,
                     confidence=out.confidence,
                     source="llm",
                     reason=out.reason,
                     reason_route=out.reason_route,
                     reason_route_confidence=out.reason_route_confidence,
+                    retained_delta_staff=figure_delta,
                 )
 
         logger.info(

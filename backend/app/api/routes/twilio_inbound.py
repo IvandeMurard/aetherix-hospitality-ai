@@ -1,13 +1,17 @@
-"""Twilio Inbound Webhook — Story 4.3 (HOS-26) + Story 5.1 (HOS-28) + Story 5.2 (HOS-29) + P2-4 (HOS-170).
+"""Twilio Inbound Webhook — Story 4.3 (HOS-26) + Story 5.1 (HOS-28) + Story 5.2 (HOS-29) + P2-4 (HOS-170) + HOS-357.
 
 Public endpoint: POST /webhooks/twilio/inbound
 
 Receives inbound SMS/WhatsApp messages forwarded by Twilio.
 - Button payload / confirmation answer / exact keyword / bare acknowledgement
   → decided synchronously, no model (InboundDecisionService, Décision #38).
+- A question ("?", "pourquoi …", HOS-357) → answered in the background
+  (ExplainabilityService); never a decision. A position stated in it is
+  confirmed with the manager, never written.
 - Everything else  → P2-4 receipt feedback path (parse_inbound + resolve_feedback)
-                     in the background; falls back to QueryParserService /
-                     ExplainabilityService if no hotel profile matches the sender.
+                     in the background.
+- A number with no hotel profile → "no context" reply, nothing else: there is
+  no recommendation to explain or decide on, and no model is called.
 
 Security model
 --------------
@@ -45,8 +49,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import AsyncSessionLocal, get_db
 from app.integrations.twilio_client import TwilioClient
 from app.core.pii import pseudonymise
-from app.schemas.webhook import ActionType, TwilioInboundPayload
-from app.services.action_logger import parse_action
+from app.schemas.webhook import TwilioInboundPayload
 from app.services.decision_messaging import (
     buttons_available,
     send_with_buttons,
@@ -54,6 +57,7 @@ from app.services.decision_messaging import (
 )
 from app.services.explainability_service import ExplainabilityService
 from app.services.inbound_decision import InboundDecisionService, ReplyPlan
+from app.services.manager_decision import is_question
 from app.services.query_parser import QueryParserService
 from app.services.receipts import ReceiptsService
 
@@ -169,14 +173,17 @@ def _twiml_message(text: str) -> str:
 _TWIML_EMPTY = "<?xml version='1.0' encoding='UTF-8'?><Response></Response>"
 
 
-async def _send_plan(to: str, plan: ReplyPlan) -> None:
-    """Send a reply out of band (REST), with quick replies when available."""
+async def _send_plan(to: str, plan: ReplyPlan) -> bool:
+    """Send a reply out of band (REST), with quick replies when available.
+    True once Twilio accepted it."""
     if not plan.text:
-        return
+        return False
     try:
         await send_with_buttons(_twilio_client, to, plan.text, plan.buttons)
     except Exception:
         logger.warning("twilio_inbound: reply send failed for %s", pseudonymise(to))
+        return False
+    return True
 
 
 @router.post("/twilio/inbound")
@@ -201,14 +208,16 @@ async def twilio_inbound_webhook(
         exact FR/EN keyword, bare acknowledgement) are decided synchronously by
         ``InboundDecisionService.handle_deterministic`` — no model. The reply is
         TwiML text, or sent via REST with quick replies when enabled.
+      * A question (``is_question``, HOS-357) goes to ``_bg_question``: an
+        answer, never a decision; a position stated in it is confirmed.
       * Everything else (free text, reason after a reject/correction) goes to
         the background task: covers regex → model → ``resolve_feedback``.
       * A decision the system is unsure of is confirmed, never written.
 
     Story 4.3 (HOS-26) — AC#3 actioned_at set, AC#6 TwiML XML, AC#7 public,
     AC#8 signature check skipped when TWILIO_SKIP_SIGNATURE_VALIDATION=true.
-    Story 5.1 (HOS-28) — non-decision text kicks off a BackgroundTask; unknown
-    sender falls back to the conversational query path.
+    Story 5.1 (HOS-28) — non-decision text kicks off a BackgroundTask.
+    HOS-357 — an unknown sender gets the "no context" reply and nothing else.
     """
     skip_validation = (
         os.getenv("TWILIO_SKIP_SIGNATURE_VALIDATION", "false").lower() == "true"
@@ -258,13 +267,21 @@ async def twilio_inbound_webhook(
                 background_tasks.add_task(_send_plan, payload.From_, plan)
                 return _xml_response(_TWIML_EMPTY)
             return _xml_response(_twiml_message(text_fallback(plan.text, plan.buttons)))
-    elif ButtonPayload or parse_action(payload.Body) != ActionType.unknown:
-        # A decision with no known sender has nothing to attach to.
+
+        # HOS-357: a question is answered, never parsed as a decision.
+        if is_question(payload.Body):
+            logger.info("twilio_inbound: question from=%s — scheduling answer bg task",
+                        pseudonymise(From))
+            background_tasks.add_task(_bg_question, from_number=payload.From_, body=payload.Body)
+            return _xml_response(_TWIML_EMPTY)
+    else:
+        # HOS-357: no hotel profile → no recommendation to decide on or explain.
+        # (The legacy "Why?" fallback looked the number up the same way and could
+        # never find one: the sender got "looking into it", then nothing.)
         return _xml_response(_TWIML_QUERY_NO_CONTEXT)
 
     # -------------------------------------------------------------------
-    # Free text: model path in the background. Falls back to the legacy
-    # conversational query (Story 5.1) if the sender has no hotel profile.
+    # Free text: model path in the background.
     # -------------------------------------------------------------------
     logger.info(
         "twilio_inbound: inbound from=%s — scheduling receipt feedback bg task",
@@ -281,7 +298,8 @@ async def twilio_inbound_webhook(
 async def _bg_receipt_feedback(from_number: str, body: str) -> None:
     """Free-text reply (P2-4, ADR-0007 §16): reason or decision.
 
-    1. Resolve the hotel from the phone number; unknown → legacy query path.
+    1. Resolve the hotel from the phone number (the route already did; gone
+       meanwhile → nothing).
     2. A pending reason request → the reply is the reason: routed (typed),
        stored, never changes the recorded decision.
     3. Otherwise ``parse_inbound`` (covers regex → model, shown the pending
@@ -298,11 +316,7 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
         profile = await decisions.profile_for(from_number)
 
         if profile is None:
-            logger.info(
-                "_bg_receipt_feedback: no profile for %s — falling back to conversational query",
-                pseudonymise(from_number),
-            )
-            await _bg_parse_query(from_number=from_number, body=body)
+            logger.info("_bg_receipt_feedback: no profile for %s", pseudonymise(from_number))
             return
 
         hotel_id: str = profile.tenant_id
@@ -389,36 +403,41 @@ _COVERS_REJECTED_REPLY = (
 )
 
 
-async def _bg_parse_query(
-    from_number: str,
-    body: str,
-) -> None:
-    """Background task: parse, store, then generate & send explainability receipt.
+async def _bg_question(from_number: str, body: str) -> None:
+    """Background task (HOS-357): a known manager's question, answered.
 
     Opens an isolated AsyncSession so that commits here are independent of
     the request session (fixes silent rollback — same pattern as HOS-154).
 
-    Story 5.1 (HOS-28) AC#2 — identifies tenant + recommendation.
-    Story 5.2 (HOS-29)       — calls Claude and replies via Twilio.
+    1. The question is stored (``conversational_queries``, number as a digest);
+       the same text from the same number within 60 s is a duplicate (a Twilio
+       retry, a double send) and is not answered twice.
+    2. ``ExplainabilityService`` writes the answer about the hotel's latest
+       recommendation, in the manager's language, from stored fields only.
+    3. ``InboundDecisionService.handle_question`` adds what the question needs:
+       nothing, a confirmation of the position it states, or "2 quoi ?". It
+       never writes a decision.
+    4. The reply goes to the manager's number (not the stored digest); the
+       question is marked answered only once Twilio accepted it.
     """
+    request_id = str(uuid.uuid4())
     async with AsyncSessionLocal() as db:
-        # Step 1: store the query (Story 5.1)
-        parser = QueryParserService()
-        parse_result = await parser.parse_and_store(
-            from_number=from_number, body=body, session=db
-        )
-        logger.info("twilio_inbound bg_parse_query: parse_result=%s", parse_result)
-
-        if parse_result.get("status") not in ("stored",):
-            # duplicate or not_found — QueryParserService already logged
+        decisions = InboundDecisionService(db)
+        profile = await decisions.profile_for(from_number)
+        if profile is None:
             return
-
-        # Step 2: generate explanation and send reply (Story 5.2)
-        query_id = parse_result.get("query_id")
-        if query_id:
-            import uuid as _uuid
-            explainer = ExplainabilityService()
-            explain_result = await explainer.generate_and_send(
-                query_id=_uuid.UUID(query_id), session=db
-            )
-            logger.info("twilio_inbound bg_parse_query: explain_result=%s", explain_result)
+        queries = QueryParserService()
+        stored = await queries.parse_and_store(from_number=from_number, body=body, session=db)
+        if stored.get("status") != "stored":
+            return
+        locale = getattr(profile, "manager_locale", None) or "fr"
+        explanation = await ExplainabilityService().explain(
+            body, await decisions.latest_recommendation(profile), db, locale
+        )
+        plan = await decisions.handle_question(
+            profile, body, explanation, ReceiptsService(db).parse_inbound, _now(), request_id
+        )
+        logger.info("twilio_inbound: question result=%s decision=%s",
+                    plan.result, plan.decision)
+        if await _send_plan(from_number, plan):
+            await queries.mark_answered(uuid.UUID(stored["query_id"]), db)
