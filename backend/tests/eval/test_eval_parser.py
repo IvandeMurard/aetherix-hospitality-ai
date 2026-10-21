@@ -298,9 +298,14 @@ def test_dataset_has_confirmation_trigger_cases():
     from app.services.action_logger import parse_action
     from app.services.manager_decision import is_bare_ack
 
-    by_path = {"model": [], "keyword_ambiguous": [], "question": []}
+    by_path = {"model": [], "keyword_ambiguous": [], "question": [], "forecast": []}
     for s in trig:
         by_path[s["expected"]["path"]].append(s)
+    # HOS-358: a forecast request never reaches decision capture, no model call.
+    assert len(by_path["forecast"]) >= 1
+    preds = eval_parser._quiet_stub_run(by_path["forecast"])
+    for s, p in zip(by_path["forecast"], preds):
+        assert (p.label, p.stage, p.action) == ("not_recorded", "forecast_command", "none"), s["id"]
     # Two-reading cases ask; question cases (HOS-357) may only be answered.
     assert all(s["expected"]["requires_confirmation"] is True
                for s in by_path["model"] + by_path["keyword_ambiguous"])

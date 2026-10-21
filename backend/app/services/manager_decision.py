@@ -596,6 +596,92 @@ def match_revision_command(body: str) -> Optional[RevisionCommand]:
 
 
 # ---------------------------------------------------------------------------
+# Command: "prévision [jour] [service]" (HOS-358)
+# ---------------------------------------------------------------------------
+# Whole reply only, like the other commands: "prévision", "prévision demain",
+# "prévision mardi midi", "forecast friday lunch", "prévision 23/10". Any word
+# the command does not know → not the command (the reply goes on to the
+# question or free-text path). It asks for a forecast; it is never a decision.
+
+_FORECAST_WORDS = {"prévision": "fr", "prevision": "fr", "prévisions": "fr",
+                   "previsions": "fr", "forecast": "en"}
+_FORECAST_DAYS_AHEAD = {"aujourd'hui": 0, "today": 0, "tonight": 0, "demain": 1,
+                        "tomorrow": 1, "après-demain": 2, "apres-demain": 2}
+_FORECAST_SERVICES = {
+    "midi": "lunch", "déjeuner": "lunch", "dejeuner": "lunch", "lunch": "lunch",
+    "soir": "dinner", "dîner": "dinner", "diner": "dinner", "dinner": "dinner",
+    "tonight": "dinner",
+    "matin": "breakfast", "petit-déjeuner": "breakfast", "petit-dejeuner": "breakfast",
+    "petit-déj": "breakfast", "petit-dej": "breakfast", "breakfast": "breakfast",
+}
+_FORECAST_FILLERS = frozenset({"pour", "de", "du", "le", "la", "ce", "for", "the", "this", "on"})
+
+
+@dataclass(frozen=True)
+class ForecastCommand:
+    """"prévision mardi midi": which day (ahead of today) and which service.
+    No day → today; no service → dinner (the MCP tool's default)."""
+
+    days_ahead: Optional[int] = None
+    weekday: Optional[int] = None
+    day_month: Optional[tuple[int, int]] = None
+    service: str = "dinner"
+    locale: Optional[str] = None
+    ref: str = ""                   # the day as typed, echoed in replies
+
+    def target_date(self, today):
+        """The next date the command names, today included. A day/month
+        already past this year is next year's."""
+        from datetime import date as _date
+
+        if self.weekday is not None:
+            return today + timedelta(days=(self.weekday - today.weekday()) % 7)
+        if self.day_month is not None:
+            d, m = self.day_month
+            try:
+                candidate = _date(today.year, m, d)
+            except ValueError:
+                return None
+            if candidate < today:
+                try:
+                    candidate = candidate.replace(year=today.year + 1)
+                except ValueError:
+                    return None
+            return candidate
+        return today + timedelta(days=self.days_ahead or 0)
+
+
+def match_forecast_command(body: str) -> Optional[ForecastCommand]:
+    toks = tokens(body)
+    if not toks or toks[0] not in _FORECAST_WORDS or len(toks) > 5:
+        return None
+    kwargs: dict = {"locale": _FORECAST_WORDS[toks[0]]}
+    day_set = False
+    for tok in toks[1:]:
+        if tok in _FORECAST_FILLERS:
+            continue
+        if tok in _FORECAST_DAYS_AHEAD or tok in WEEKDAYS or _DATE_RE.match(tok):
+            if day_set:
+                return None                       # two days: not a command
+            day_set = True
+            kwargs["ref"] = tok
+            if tok in WEEKDAYS:
+                kwargs["weekday"] = WEEKDAYS[tok]
+            elif _DATE_RE.match(tok):
+                d, m = _DATE_RE.match(tok).groups()
+                kwargs["day_month"] = (int(d), int(m))
+            else:
+                kwargs["days_ahead"] = _FORECAST_DAYS_AHEAD[tok]
+            if tok in _FORECAST_SERVICES:         # "tonight" is a day and a service
+                kwargs["service"] = _FORECAST_SERVICES[tok]
+        elif tok in _FORECAST_SERVICES:
+            kwargs["service"] = _FORECAST_SERVICES[tok]
+        else:
+            return None
+    return ForecastCommand(**kwargs)
+
+
+# ---------------------------------------------------------------------------
 # Questions (HOS-357): a question is never a decision
 # ---------------------------------------------------------------------------
 # A reply containing "?", or opening with an interrogative, is a question. It is
@@ -1141,6 +1227,7 @@ REPLY_RESULTS: tuple[str, ...] = (
     "revised",                # revision confirmed → decision replaced (source manager_revision)
     "revision_declined",      # revision not confirmed → nothing changed
     "question_answered",      # a question explained; no position in it → nothing written (HOS-357)
+    "forecast_served",        # "prévision mardi" answered; never a decision (HOS-358)
 )
 NON_REPLY_RESULTS: tuple[str, ...] = ("confirmation_expired", "revision_expired")
 

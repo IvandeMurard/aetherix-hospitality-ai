@@ -5,6 +5,8 @@ Public endpoint: POST /webhooks/twilio/inbound
 Receives inbound SMS/WhatsApp messages forwarded by Twilio.
 - Button payload / confirmation answer / exact keyword / bare acknowledgement
   → decided synchronously, no model (InboundDecisionService, Décision #38).
+- "prévision [jour] [service]" (HOS-358) → computed in the background like the
+  MCP tool, on the hotel's stored context; never a decision.
 - A question ("?", "pourquoi …", HOS-357) → answered in the background
   (ExplainabilityService); never a decision. A position stated in it is
   confirmed with the manager, never written.
@@ -57,7 +59,7 @@ from app.services.decision_messaging import (
 )
 from app.services.explainability_service import ExplainabilityService
 from app.services.inbound_decision import InboundDecisionService, ReplyPlan
-from app.services.manager_decision import is_question
+from app.services.manager_decision import ForecastCommand, is_question, match_forecast_command
 from app.services.query_parser import QueryParserService
 from app.services.receipts import ReceiptsService
 
@@ -255,6 +257,16 @@ async def twilio_inbound_webhook(
             logger.info("twilio_inbound: hotel data command action=%s", data_cmd.action)
             return _xml_response(_twiml_message(reply))
 
+        # HOS-358: "prévision mardi" — computed like the MCP tool, in the
+        # background (the engine runs Prophet). Never a decision.
+        forecast_cmd = None if ButtonPayload else match_forecast_command(payload.Body)
+        if forecast_cmd is not None:
+            background_tasks.add_task(
+                _bg_forecast, from_number=payload.From_, command=forecast_cmd,
+                engine=getattr(request.app.state, "engine", None),
+            )
+            return _xml_response(_TWIML_EMPTY)
+
         plan = await decisions.handle_deterministic(
             profile, payload.Body, ButtonPayload.strip(), _now(), request_id=str(uuid.uuid4())
         )
@@ -401,6 +413,47 @@ _COVERS_REJECTED_REPLY = (
     "range for your venue, so I didn't record the number. If it's correct, "
     "please reply with the figure again to confirm."
 )
+
+
+async def _bg_forecast(from_number: str, command: ForecastCommand, engine) -> None:
+    """Background task (HOS-358): "prévision mardi midi", answered.
+
+    The same computation as the MCP tool ``get_operational_predictions``: the
+    app's forecast engine (guardrail included) on the hotel's stored context
+    (``forecast_context``). The answer (``forecast_reply``) is deterministic and
+    goes to the manager's number. No decision is written, no prompt touched.
+    """
+    from app.services import forecast_context
+    from app.services.decision_recap import _tz
+    from app.services.forecast_reply import bad_date_reply, render_forecast
+
+    request_id = str(uuid.uuid4())
+    async with AsyncSessionLocal() as db:
+        decisions = InboundDecisionService(db)
+        profile = await decisions.profile_for(from_number)
+        if profile is None:
+            return
+        now = _now()
+        locale = command.locale or getattr(profile, "manager_locale", None) or "fr"
+        day = command.target_date(now.astimezone(_tz()).date())
+        if day is None:
+            await decisions.record_forecast_served(profile, None, "bad_date", now, request_id)
+            await _send_plan(from_number, ReplyPlan(text=bad_date_reply(command.ref, locale)))
+            return
+        context = await forecast_context.build(db, profile, day, command.service)
+        result = None
+        if engine is not None:
+            try:
+                result = await engine.get_forecast(profile.tenant_id, day, command.service, dict(context))
+            except Exception:
+                logger.exception("twilio_inbound: forecast failed tenant=%s", profile.tenant_id)
+        rec = await decisions.recommendation_for_day(profile, day)
+        prediction = (result or {}).get("prediction") or {}
+        why = ("unavailable" if result is None else "mock" if prediction.get("is_mock") else "served")
+        await decisions.record_forecast_served(profile, rec.id if rec else None, why, now, request_id)
+        text = render_forecast(result, context, day, command.service, locale, rec)
+    logger.info("twilio_inbound: forecast served why=%s", why)
+    await _send_plan(from_number, ReplyPlan(text=text, result="forecast_served"))
 
 
 async def _bg_question(from_number: str, body: str) -> None:

@@ -238,14 +238,16 @@ class RAGService:
     def build_context_string(
         self, target_date: date, service_type: str, context: Dict[str, Any]
     ) -> str:
-        """Build a standardised context string for embedding query generation."""
-        weather = context.get("weather", {})
-        events = context.get("events", [])
+        """Build a standardised context string for embedding query generation.
+        An absent value is written as unknown, never as a default (HOS-358)."""
+        weather = context.get("weather") or {}
+        events = context.get("events") or []
         events_str = ", ".join(e.get("type", "Event") for e in events) or "None"
+        occupancy = context.get("occupancy")
         return (
             f"Date: {target_date.isoformat()}\n"
             f"Service: {service_type}\n"
-            f"Weather: {weather.get('condition', 'Unknown')}\n"
+            f"Weather: {weather.get('condition') or 'Unknown'}\n"
             f"Events: {events_str}\n"
-            f"Hotel Occupancy: {context.get('occupancy', 0.8)}\n"
+            f"Hotel Occupancy: {occupancy if occupancy is not None else 'unknown'}\n"
         )

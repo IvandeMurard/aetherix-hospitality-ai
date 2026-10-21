@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from sqlalchemy import select, update
@@ -146,6 +146,29 @@ class InboundDecisionService:
             .limit(1)
         )
         return result.scalars().first()
+
+    async def recommendation_for_day(self, profile: RestaurantProfile, day) -> Optional[StaffingRecommendation]:
+        """The latest sent recommendation whose window falls on ``day`` (hotel
+        local date) — shown next to a ``prévision`` answer (HOS-358)."""
+        tz = _tz()
+        lo = datetime.combine(day, datetime.min.time(), tzinfo=timezone.utc) - timedelta(days=1)
+        rows = (await self.db.execute(
+            select(StaffingRecommendation)
+            .where(
+                StaffingRecommendation.property_id == uuid.UUID(str(profile.id)),
+                StaffingRecommendation.status.in_(["dispatched", "accepted", "rejected", "modified"]),
+                StaffingRecommendation.window_start >= lo,
+                StaffingRecommendation.window_start < lo + timedelta(days=3),
+            )
+            .order_by(StaffingRecommendation.dispatched_at.desc().nullslast())
+        )).scalars().all()
+        return next((r for r in rows if _utc(r.window_start).astimezone(tz).date() == day), None)
+
+    async def record_forecast_served(self, profile: RestaurantProfile, rec_id, why: str,
+                                     now: datetime, request_id: str = "") -> None:
+        """A ``prévision`` answer: one reply event, never a decision, no prompt touched."""
+        await self._event(profile, rec_id, "forecast_served", "text", request_id, why=why, now=now)
+        await self.db.commit()
 
     @staticmethod
     def proposal_of(rec: Optional[StaffingRecommendation]) -> Proposal:

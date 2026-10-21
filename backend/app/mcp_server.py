@@ -82,7 +82,12 @@ async def tool_get_operational_predictions(
     service_type: str = "dinner",
     context: Optional[dict[str, Any]] = None,
     engine: Optional[Any] = None,
+    db: Optional[AsyncSession] = None,
 ) -> dict[str, Any]:
+    """HOS-358: the context is the hotel's stored one (``forecast_context``),
+    the same as the WhatsApp ``prévision`` command; keys the caller fills win."""
+    from app.services import forecast_context
+
     try:
         tdate = date.fromisoformat(target_date)
     except ValueError as exc:
@@ -91,7 +96,11 @@ async def tool_get_operational_predictions(
         raise MCPAuthError(400, "invalid_input", "service_type must be breakfast|lunch|dinner")
     if engine is None:
         raise MCPAuthError(503, "upstream_unavailable", "Prediction engine not initialized")
-    ctx = context or {"weather": {"condition": "Unknown"}, "events": [], "occupancy": None}
+    built = (
+        await forecast_context.build_for_tenant(db, hotel_id, tdate, service_type)
+        if db is not None else await forecast_context.build(None, None, tdate, service_type)  # type: ignore[arg-type]
+    )
+    ctx = forecast_context.merge(context, built)
     try:
         return await engine.get_forecast(hotel_id, tdate, service_type, ctx)
     except Exception as exc:
@@ -158,9 +167,11 @@ async def tool_get_recommendations_with_memory_context(
     try:
         if target_date and engine is not None:
             tdate = date.fromisoformat(target_date)
+            from app.services import forecast_context
+
             forecast = await engine.get_forecast(
                 hotel_id, tdate, "dinner",
-                {"weather": {}, "events": [], "occupancy": None},
+                await forecast_context.build_for_tenant(db, hotel_id, tdate, "dinner"),
             )
             reasoning_summary = forecast.get("reasoning", "")
             confidence = forecast.get("prediction", {}).get("confidence", 0.0)
@@ -690,7 +701,8 @@ async def dispatch_tool(
 
         try:
             if tool_name == "get_operational_predictions":
-                result = await tool_get_operational_predictions(tok.hotel_id, engine=engine, **args)
+                result = await tool_get_operational_predictions(
+                    tok.hotel_id, engine=engine, db=db, **args)
             elif tool_name == "get_recommendations_with_memory_context":
                 result = await tool_get_recommendations_with_memory_context(
                     tok.hotel_id, db=db, embedding_provider=embedding_provider, engine=engine, **args,
