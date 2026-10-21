@@ -19,7 +19,7 @@ from app.db.models import MCPApiToken, RestaurantProfile, TrainingRun
 from app.db.session import get_db
 from app.mcp_core import ADMIN_TRAIN_SCOPE, MCPAuthError
 from app.mcp_server import verify_bearer
-from app.services.events_enrichment import enrich_events_context
+from app.services import forecast_context
 
 logger = logging.getLogger(__name__)
 
@@ -127,13 +127,9 @@ async def get_property_prediction(
 
     property_id = profile.tenant_id
 
-    # HOS-225: wire real local events (PredictHQ, HOS-84) into the forecast
-    # context so reasoning cites concrete drivers instead of "events: []".
-    context = {
-        "weather": {"condition": "Clear", "temp": 22},
-        "events": await enrich_events_context(db, profile, prediction_date),
-        "occupancy": 0.85,
-    }
+    # HOS-358: the hotel's stored context (weather, events, PMS occupancy), true
+    # or absent. It replaced a hard-coded "Clear, 22 °C" and 85 % occupancy.
+    context = await forecast_context.build(db, profile, prediction_date, service_type)
 
     try:
         result = await engine.get_forecast(property_id, prediction_date, service_type, context)
@@ -176,21 +172,12 @@ async def predict(
     hotel_id = tok.hotel_id
     response.headers["X-Aetherix-Hotel-Id"] = hotel_id
 
-    ctx = body.context or {
-        "weather": {"condition": "Unknown", "temp": None},
-        "events": [],
-        "occupancy": None,
-    }
-
-    # HOS-225: enrich with real local events only when the caller didn't supply
-    # them. An explicit non-empty `events` list is respected (back-compat: MCP
-    # callers that pass their own context stay authoritative).
-    if not ctx.get("events"):
-        prof_result = await db.execute(
-            select(RestaurantProfile).where(RestaurantProfile.tenant_id == hotel_id)
-        )
-        profile = prof_result.scalars().first()
-        ctx = {**ctx, "events": await enrich_events_context(db, profile, body.target_date)}
+    # HOS-358 (was HOS-225, events only): the hotel's stored context; every key
+    # the caller fills stays authoritative (back-compat for MCP callers).
+    ctx = forecast_context.merge(
+        body.context,
+        await forecast_context.build_for_tenant(db, hotel_id, body.target_date, body.service_type),
+    )
 
     try:
         result = await engine.get_forecast(hotel_id, body.target_date, body.service_type, ctx)

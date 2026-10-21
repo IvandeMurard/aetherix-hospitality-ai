@@ -327,12 +327,22 @@ async def _production_prediction(service, message: str, proposal) -> Prediction:
     A question goes through `parse_inbound(question=True)` and
     `resolve_question`, as in `InboundDecisionService.handle_question`: whatever
     it reads is confirmed, never written. A staffing figure stated in it is
-    read without the model (stage ``staff_figure`` / ``figure_unit``)."""
+    read without the model (stage ``staff_figure`` / ``figure_unit``).
+
+    A ``prévision`` command (HOS-358) is matched before anything else, as in
+    the route: it asks for a forecast and never reaches decision capture."""
     from app.schemas.webhook import ActionType
     from app.services.action_logger import parse_action
-    from app.services.manager_decision import is_question, match_keyword, resolve_keyword
+    from app.services.manager_decision import (
+        is_question,
+        match_forecast_command,
+        match_keyword,
+        resolve_keyword,
+    )
     from app.services.receipts import resolve_feedback, resolve_question
 
+    if match_forecast_command(message) is not None:
+        return Prediction("not_recorded", "forecast_command", action="none")
     ctx = _eval_context(proposal.kind)
     action = parse_action(message)
     if action != ActionType.unknown:
