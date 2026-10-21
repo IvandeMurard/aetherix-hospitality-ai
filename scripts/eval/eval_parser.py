@@ -321,12 +321,17 @@ class _StubLLM:
 
 async def _production_prediction(service, message: str, proposal) -> Prediction:
     """The route's decision sequence (`api/routes/twilio_inbound.py`), in order:
-    stance lexicon → bare ack / covers regex / model (shown the proposal) →
-    `resolve_feedback` (stance × proposal)."""
+    stance lexicon → question gate (HOS-357) → bare ack / covers regex / model
+    (shown the proposal) → `resolve_feedback` (stance × proposal).
+
+    A question goes through `parse_inbound(question=True)` and
+    `resolve_question`, as in `InboundDecisionService.handle_question`: whatever
+    it reads is confirmed, never written. A staffing figure stated in it is
+    read without the model (stage ``staff_figure`` / ``figure_unit``)."""
     from app.schemas.webhook import ActionType
     from app.services.action_logger import parse_action
-    from app.services.manager_decision import match_keyword, resolve_keyword
-    from app.services.receipts import resolve_feedback
+    from app.services.manager_decision import is_question, match_keyword, resolve_keyword
+    from app.services.receipts import resolve_feedback, resolve_question
 
     ctx = _eval_context(proposal.kind)
     action = parse_action(message)
@@ -335,10 +340,11 @@ async def _production_prediction(service, message: str, proposal) -> Prediction:
         stage = "keyword_ambiguous" if res.action == "confirm" else "keyword"
         return Prediction(res.decision or "not_recorded", stage, action=res.action)
 
-    feedback = await service.parse_inbound(message, proposal)
+    question = is_question(message)
+    feedback = await service.parse_inbound(message, proposal, question=question)
     if feedback.source in ("llm_error", "llm_unmappable"):
         return Prediction("error", feedback.source, error=feedback.source, action="error")
-    res = resolve_feedback(feedback, ctx)
+    res = resolve_question(feedback, ctx) if question else resolve_feedback(feedback, ctx)
     stage = {"ack_regex": "bare_ack"}.get(feedback.source, feedback.source)
     if res.action == "none":
         return Prediction("not_recorded", stage, action="none")

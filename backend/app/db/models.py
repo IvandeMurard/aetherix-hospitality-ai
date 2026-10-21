@@ -410,7 +410,8 @@ class StaffingRecommendation(Base):
     risk_assessment = Column(JSONB, nullable=True)
     # HOS-344: for a counter (status modified), the extra (negative = fewer)
     # staff the person kept instead, when the host agent relays the figure
-    # over MCP. NULL otherwise. Read by learning_loop.revealed_staffing_ratio.
+    # over MCP or the manager states it on WhatsApp ("2 extras", HOS-354).
+    # NULL otherwise. Read by learning_loop.revealed_staffing_ratio.
     # Mirror of migration 20261018190000.
     retained_delta_staff = Column(Integer, nullable=True)
     # HOS-350: at most one reminder before commit_at, through the hotel's
@@ -572,6 +573,10 @@ class ManagerPrompt(Base):
     origin = Column(String, nullable=True)               # model | keyword_ambiguous | bare_ack | <decision source>
     confidence = Column(Numeric(4, 3), nullable=True)
     corrected_value = Column(Numeric(10, 2), nullable=True)
+    # HOS-354: the staffing figure quoted in the confirmation ("2 extras au lieu
+    # de 3"), written to staffing_recommendations.retained_delta_staff only when
+    # the manager says yes. Mirror of migration 20261021120000.
+    retained_delta_staff = Column(Integer, nullable=True)
     status = Column(String, nullable=False, default="pending")
     # pending | confirmed | declined | expired | answered | superseded
     expires_at = Column(DateTime(timezone=True), nullable=False)

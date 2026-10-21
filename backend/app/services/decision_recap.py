@@ -50,6 +50,7 @@ SOURCE_BUCKET: dict[str, str] = {
     "model_confirmed": "confirmed",
     "keyword_confirmed": "confirmed",
     "bare_ack_confirmed": "confirmed",
+    "question_confirmed": "confirmed",
     "manager_revision": "revised",
     "host_relay": "host",
     "host_agent": "agent",
