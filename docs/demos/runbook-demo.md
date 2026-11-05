@@ -15,10 +15,10 @@
 |---|---|---|---|
 | 0:00 | **Problème** | `fiche-aetherix.md` | Mardi 14 h, la responsable F&B d'un hôtel indépendant doit décider si elle ajoute un extra pour le dîner de mercredi, avant l'heure limite du planning. Aujourd'hui elle le fait de tête (moyenne des 4 derniers mercredis). Trop de staff = coût, pas assez = service dégradé. |
 | 0:45 | **Ce qui marche — la boucle** | `demo_whatsapp_conversation.py` | Une recommandation par jour. La réponse du manager est lue de façon **déterministe d'abord** (lexique, commandes) ; le modèle ne lit que ce que le lexique ne sait pas, sa sortie est validée par schéma, et sous 0,85 de confiance **rien n'est écrit sans un « oui »**. Une question n'est jamais une décision. Tout finit dans un registre de décisions, avec qui a décidé et comment. |
-| 2:15 | **Ce qui marche — apprendre sans dériver** | `closed_loop_demo.py` | 30 jours simulés, choc de demande +25 % au jour 15 : erreur 15,6 % → 12,1 % après recalibration hebdomadaire. Un réel aberrant (900 couverts pour 120 places) est rejeté par une borne (G-3) au lieu d'être appris. Les règles d'effectif apprises ne s'appliquent qu'après approbation d'une personne nommée. |
+| 2:15 | **Ce qui marche — apprendre sans dériver** | `closed_loop_demo.py` | 30 jours simulés, choc de demande +25 % au jour 15 : erreur 15,9 % → 12,3 % après recalibration hebdomadaire (relevé du 05/11 ; relancer le script et citer le chiffre affiché). Un réel aberrant (900 couverts pour 120 places) est rejeté par une borne (G-3) au lieu d'être appris. Les règles d'effectif apprises ne s'appliquent qu'après approbation d'une personne nommée. |
 | 3:15 | **Prévision sur données réelles** | `docs/context/mape-benchmark.md` | Kaggle Recruit (restaurants réels) : Prophet bat la baseline naïve en moyenne (MAPE 49,7 % vs 55,9 %) mais **fait jeu égal en médiane** (27,0 vs 27,6 %) et est **derrière à J+1** (28,5 vs 27,9 %). J'ai déclenché moi-même la clause de pivot : la valeur n'est pas le modèle, c'est la boucle de décision. |
 | 4:00 | **Construit avec Claude Code** | Linear HOS-357 → PR #298 → CI | Une story : contexte d'audit, périmètre tranché et daté par moi, critères d'acceptation, cas golden ajoutés, gate d'éval bloquant. Puis 2 corrections où la mesure a contredit l'IA (§3). |
-| 5:30 | **Limites avant pilote** | §4 | 0 utilisateur ; qualité du modèle de lecture non mesurée sur modèle réel ; réels déclarés par le manager (pas de POS) ; templates WhatsApp non approuvés ; défense prompt-injection différée ; staging arrêté. |
+| 5:30 | **Limites avant pilote** | §4 | 0 utilisateur ; lecture du modèle mesurée à 98,1 % (n=52) avec 1 cas ambigu résiduel (« pourquoi pas », écrit sans confirmation, seuil = 0) ; réels déclarés par le manager (pas de POS) ; templates WhatsApp non approuvés ; défense prompt-injection différée ; staging arrêté. |
 | 6:30 | Ouverture | — | Ce qui se transpose chez vos clients : éval dès la conception, humain dans la boucle sur l'irréversible, étiquetage honnête (Built / Synthetic / Design), livrer dans les outils du client plutôt qu'un dashboard. |
 
 **Vidéo de secours** : enregistrer les deux scripts le 06/11 au matin (3 min, mention « données fictives, boucle réelle »). Elle ferme HOS-310 AC3.
@@ -62,6 +62,11 @@ Ce que montre `demo_whatsapp_conversation.py` (une semaine, Hôtel Kléber ficti
    - MAPE synthétique 15,09 % = **circulaire** (données générées avec les régresseurs de Prophet) → gate interne seulement (Décision #33) ;
    - page `/dashboard` qui affichait « Live from Apaleo » avec des chiffres codés en dur → supprimée (HOS-355) ;
    - 05/11 : le run hebdomadaire « modèle réel » affichait FAIL 0 % alors que la clé API était invalide → corrigé en NON MESURÉ (commit `b5541a8`).
+   - 05/11 (après changement de clé) : première vraie mesure du modèle de lecture (Haiku 4.5) → **7 cas rejetés au schéma**
+     (`stance: "acknowledge"`, `intent: "none"` : le modèle mélangeait les listes). Prompt corrigé (PR #302), schéma **inchangé**
+     (un échec de schéma reste un échec, ADR-0007 §15) → précision **98,1 %** (n=52, 3 runs identiques, 0 % d'échec de schéma).
+     Reste 1 cas ambigu (« pourquoi pas ») non réglé volontairement : cas held-out, on ne règle pas le prompt dessus.
+     Une 2ᵉ tentative (durcir `reason_route`) a fait **baisser** la précision à 96,2 % : annulée.
 3. **BMAD** : montrer `tools/bmad/_bmad-output/implementation-artifacts/` (une story → son fichier) et ce que
    j'ai **ajouté** à la méthode (éval dès la conception, taxonomie de statuts) et **coupé** (Décision #24, gel Epic 16).
    Ne pas dérouler les personas.
@@ -71,13 +76,13 @@ Ce que montre `demo_whatsapp_conversation.py` (une semaine, Hôtel Kléber ficti
 | Limite | État | Ce qui la lève |
 |---|---|---|
 | 0 utilisateur réel | aucun hôtel | design partner + protocole de preuve gelé (`docs/planning/protocole-de-preuve.md` : Δ MdAPE ≥ 5 pp, acceptation ≥ 30 %) |
-| Lecture des réponses par le modèle | non mesurée sur modèle réel (secret GitHub invalide) | HOS-342 : run réel Claude + Gemini, baselines figées |
+| Lecture des réponses par le modèle | mesurée le 05/11 : 98,1 % (n=52), 1 cas ambigu résiduel ; Claude seul, pas encore Gemini ; baseline CI pas figée | HOS-342 : run CI sur `main`, puis Claude + Gemini, baselines figées |
 | Réels | déclarés par le manager (`independent_actuals: false`) | POS (Epic 13) |
 | Texte de la recommandation | en anglais (`format_message`) alors que la conversation est en français | traduire le formatter |
 | WhatsApp | templates non approuvés, boutons derrière un flag | soumission Meta (catégorie Utility) |
 | Prompt-injection | G-6 différé (HOS-114, HOS-253) | durcissement du chemin texte libre |
 | Données guest (Anima) | gate DPIA fermé, 13 mesures bloquantes | rien avant ces mesures |
-| Staging | arrêté (essai Fly expiré) | §5 |
+| Staging | **relancé le 05/11** : `aetherix-backend` v16, smoke 4/4 (prévision + mémoire en base). Twilio (Account SID `AC…`, webhook, `join`) à finir | §5.3 |
 
 ## 5. Relancer l'environnement (optionnel pour la démo)
 
@@ -95,21 +100,24 @@ npx supabase login
 npx supabase link --project-ref imfrvrngxbtotmfbdtpf
 npx supabase db push            # applique supabase/migrations/ manquantes
 
-# 2. Fly (org ivan-de-murard) — moyen de paiement ajouté avant, sinon rien ne démarre
-fly auth login
-fly apps list -o ivan-de-murard
-fly apps list                   # si l'app est dans l'org personnelle :
-fly apps move aetherix-backend --org ivan-de-murard
-fly secrets list -a aetherix-backend    # les secrets survivent avec l'app ; vérifier DATABASE_URL
-fly deploy --remote-only -a aetherix-backend
-curl https://aetherix-backend.fly.dev/health
+# 2. Fly — compte ivandemurard@hotmail.fr (PAS le Gmail : il ne voit aucune app), org `personal`
+fly auth whoami                         # doit afficher le compte hotmail ; sinon fly auth logout && fly auth login
+fly apps list                           # aetherix-backend doit apparaître (déployé)
+fly secrets list -a aetherix-backend    # noms + empreintes seulement ; les secrets survivent
+fly deploy --remote-only -a aetherix-backend    # depuis la branche à déployer
+curl https://aetherix-backend.fly.dev/health    # {"status":"ok"} ; /health ne teste PAS la base
+# Preuve base + prévision + mémoire (jeton MCP : docs/context/runbook-pre-pilot.md §1.3) :
+#   $env:APP_BASE_URL="https://aetherix-backend.fly.dev"; backend\.venv\Scripts\python scripts\ci\smoke_test_e2e.py --skip 2,6
+# Ne pas créer d'app via « Launch from GitHub » : elle génère un doublon vide et suspendu
+#   (05/11 : aetherix-hospitality-ai et aetherix-hospitality-ai-6hzt-w, à supprimer).
 
 # 3. Connexion GitHub → Fly (déploiements suivants via Actions)
 fly tokens create deploy -a aetherix-backend
 #    → coller la valeur dans le secret d'Actions FLY_API_TOKEN (lien §5.5)
 
-# 4. Apaleo
-cd backend; python ..\scripts\ops\validate_apaleo_sandbox.py; cd ..
+# 4. Apaleo (vert au 05/11 : OAuth, MCP, 243 outils ; latence MCP ~1,8 s > gate 500 ms)
+$env:PYTHONIOENCODING="utf-8"   # sinon crash cosmétique final (emoji, console cp1252) → exit 1 à tort
+backend\.venv\Scripts\python scripts\ops\validate_apaleo_sandbox.py
 ```
 
 Si Supabase n'offre plus « Restore » (pause > 90 jours) : nouveau projet EU, `npx supabase link` sur le
@@ -123,10 +131,10 @@ nouveau ref, `db push`, puis mettre à jour `DATABASE_URL`, `SUPABASE_URL`, `SUP
    `supabase/migrations/` (`supabase db push` ou l'éditeur SQL dans l'ordre des fichiers).
 3. Test : `python scripts/ci/smoke_test_e2e.py` (voir `docs/context/runbook-pre-pilot.md`) ou une requête sur `restaurant_profiles`.
 
-### 5.2 Fly.io (org `ivan-de-murard`)
+### 5.2 Fly.io (compte ivandemurard@hotmail.fr, org `personal`)
 1. Dashboard Fly → Billing : ajouter un moyen de paiement (l'essai est terminé, rien ne démarre sans).
-2. `fly auth login` puis `fly apps list -o ivan-de-murard`. Si `aetherix-backend` existe ailleurs ou est pris :
-   `fly apps create <nom> -o ivan-de-murard` et changer `app =` dans `fly.toml`.
+2. `fly auth login` puis `fly apps list`. Si `aetherix-backend` existe ailleurs ou est pris :
+   `fly apps create <nom> -o personal` et changer `app =` dans `fly.toml`.
 3. Secrets (jamais dans le repo) : `fly secrets set -a <app> DATABASE_URL=… SUPABASE_URL=… SUPABASE_KEY=… ANTHROPIC_API_KEY=… MISTRAL_API_KEY=… PII_HASH_PEPPER=… TWILIO_ACCOUNT_SID=… TWILIO_AUTH_TOKEN=… TWILIO_WHATSAPP_NUMBER=… APALEO_CLIENT_ID=… APALEO_CLIENT_SECRET=… APALEO_MCP_SERVER_URL=…` (liste : `docs/ops/environment-variables.md`).
 4. **Connexion GitHub** : workflow manuel `.github/workflows/fly-deploy.yml`. Créer un jeton
    `fly tokens create deploy -a <app>`, l'ajouter en secret d'Actions `FLY_API_TOKEN`, puis Actions →
@@ -134,6 +142,8 @@ nouveau ref, `db push`, puis mettre à jour `DATABASE_URL`, `SUPABASE_URL`, `SUP
 5. Puis seulement : `public-status.yml` → `deployed: true` sur les entrées vérifiées.
 
 ### 5.3 Twilio WhatsApp (sandbox)
+0. `TWILIO_ACCOUNT_SID` doit être l'**Account SID `AC…`** (console Twilio, page d'accueil), pas un SID de clé API `SK…` :
+   le SDK du backend ne s'authentifie pas avec. (Le `backend/.env` local contenait un `SK…` le 05/11.) Poser avec `fly secrets set`, jamais dans un chat.
 1. Console Twilio → Messaging → Try it out → WhatsApp sandbox : renvoyer `join <code>` depuis le téléphone
    (la session sandbox expire, il faut la rejoindre à nouveau).
 2. « When a message comes in » → `https://<app>.fly.dev/webhooks/twilio/inbound` (POST).
