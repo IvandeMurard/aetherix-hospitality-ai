@@ -192,6 +192,12 @@ OUTPUT_SANITY_MAX_HEADCOUNT_DELTA_MULT: float = float(
 # All demo_emit() calls are no-ops when false.
 DEMO_MODE: bool = _os.getenv("DEMO_MODE", "false").lower() == "true"
 
+# When true, the WhatsApp forecast answer ends with a "demonstration, fictional hotel,
+# synthetic training data" line (Décision #33: no unqualified figure). Separate from
+# DEMO_MODE on purpose: that one switches the SSE demo board on. Off by default so a real
+# hotel never sees it.
+FORECAST_DEMO_NOTICE: bool = _os.getenv("FORECAST_DEMO_NOTICE", "false").lower() == "true"
+
 # ─── RGPD — pseudonymisation & rétention (Story 7.5 / HOS-115) ─────────────────
 # Poivre serveur pour les digests d'identifiants stockés (numéro d'expéditeur,
 # guest_id PMS). Sans lui, un digest de numéro de téléphone est trivialement

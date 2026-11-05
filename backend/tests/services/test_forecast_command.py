@@ -469,3 +469,23 @@ async def test_predictions_current_invents_nothing(db):
                                   current_user={"id": owner}, db=db)
     [(_, _, _, ctx)] = engine.calls
     assert ctx["weather"] == {} and ctx["occupancy"] is None   # was "Clear, 22 °C" and 0.85
+
+
+def test_demo_notice_is_off_by_default_and_on_demand():
+    assert "🧪" not in render_forecast(_RESULT, _CTX, DAY, "dinner", "fr")
+    fr = render_forecast(_RESULT, _CTX, DAY, "dinner", "fr", demo_notice=True)
+    assert fr.endswith("🧪 _Démonstration : hôtel fictif, modèle entraîné sur des données synthétiques._")
+    en = render_forecast(_RESULT, _CTX, DAY, "dinner", "en", demo_notice=True)
+    assert en.endswith("🧪 _Demonstration: fictional hotel, model trained on synthetic data._")
+
+
+def test_demo_notice_follows_the_config_flag(monkeypatch):
+    from app.core import config
+    monkeypatch.setattr(config, "FORECAST_DEMO_NOTICE", True)
+    assert "🧪" in render_forecast(_RESULT, _CTX, DAY, "dinner", "fr")
+
+
+def test_demo_notice_only_on_a_served_forecast():
+    mock = {"prediction": {"covers": 45, "is_mock": True}}
+    assert "🧪" not in render_forecast(mock, _CTX, DAY, "dinner", "fr", demo_notice=True)
+    assert "🧪" not in render_forecast(None, _CTX, DAY, "dinner", "fr", demo_notice=True)

@@ -23,6 +23,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Mapping, Optional
 
+from app.core import config
 from app.services.staffing_context import CLASS_LABELS
 
 _DAYS = {
@@ -77,6 +78,7 @@ _T = {
         "occupancy_unknown": "Occupation : non disponible",
         "not_used": "_Ces éléments ne modifient pas encore le chiffre de couverts._",
         "hint": "💬 _Un autre jour ? Écrivez « prévision {day} »._",
+        "demo": "🧪 _Démonstration : hôtel fictif, modèle entraîné sur des données synthétiques._",
         "km": "{d} km",
     },
     "en": {
@@ -106,6 +108,7 @@ _T = {
         "occupancy_unknown": "Occupancy: unavailable",
         "not_used": "_These do not change the covers figure yet._",
         "hint": "💬 _Another day? Reply “forecast {day}”._",
+        "demo": "🧪 _Demonstration: fictional hotel, model trained on synthetic data._",
         "km": "{d} km",
     },
 }
@@ -208,9 +211,13 @@ def render_forecast(
     service: str,
     locale: Optional[str] = "fr",
     recommendation: Any = None,
+    demo_notice: Optional[bool] = None,
 ) -> str:
     """``result`` = ``engine.get_forecast(...)``, ``None`` when the engine is
-    unavailable or failed. Blocks are separated by a blank line."""
+    unavailable or failed. Blocks are separated by a blank line.
+
+    ``demo_notice`` adds the "fictional hotel, synthetic data" line to a served forecast;
+    ``None`` reads ``config.FORECAST_DEMO_NOTICE`` (off by default)."""
     loc = _loc(locale)
     t = _T[loc]
     fmt = {"day": day_label(day, loc), "service": CLASS_LABELS[loc].get(service, service)}
@@ -244,6 +251,8 @@ def render_forecast(
     if served:
         nxt = _DAYS[loc][(day.weekday() + 1) % 7]
         blocks.append([t["hint"].format(day=nxt.lower())])
+        if config.FORECAST_DEMO_NOTICE if demo_notice is None else demo_notice:
+            blocks.append([t["demo"]])
     return "\n\n".join("\n".join(b) for b in blocks)
 
 
