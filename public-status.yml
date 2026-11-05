@@ -28,7 +28,7 @@ entries:
   - id: fnb-node
     name: F&B execution node
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Backend that turns covers, staffing and demand signals into recommendations for
       an F&B manager; zero real users so far.
@@ -40,7 +40,7 @@ entries:
   - id: covers-forecast
     name: Covers forecast
     status: Shadow-mode
-    deployed: unknown
+    deployed: false
     description: >-
       Benchmarked on real public restaurant data (ahead of a naive baseline on mean
       error, level with it on the median); no manager decision has been delivered on it.
@@ -52,7 +52,7 @@ entries:
   - id: daily-receipt
     name: Daily receipt
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Daily WhatsApp and e-mail digest of what was recommended, what was decided and
       what happened.
@@ -64,7 +64,7 @@ entries:
   - id: mcp-server
     name: MCP server
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Atomic, tenant-scoped MCP tools so a host agent can read recommendations and
       record decisions; no external consumer yet.
@@ -75,7 +75,7 @@ entries:
   - id: operational-memory
     name: Operational memory
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Per-property vector memory of past services and outcomes; it has only ever held
       synthetic data.
@@ -87,7 +87,7 @@ entries:
   - id: runtime-guardrails
     name: Runtime guardrails
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Heartbeat, error-rate alerting, forecast circuit-breaker and output bounds, each
       trip logged with a machine-readable reason; exercised in CI, not in a real incident.
@@ -112,7 +112,7 @@ entries:
   - id: decision-ledger
     name: Decision ledger
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Links each recommendation to the response it got and the outcome that followed,
       in one auditable record.
@@ -123,7 +123,7 @@ entries:
   - id: decision-capture
     name: Decision capture with confirmation
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       A manager's reply is read as a stance on the proposal, deterministically first;
       an uncertain reading is confirmed before anything is recorded. Model reading
@@ -148,7 +148,7 @@ entries:
   - id: decision-recap
     name: Decision recap
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Deterministic recap of recent recommendations, decisions and outcomes, on demand
       in chat or through an MCP tool; no model, no estimated money.
@@ -160,7 +160,7 @@ entries:
   - id: decision-provenance
     name: Decision provenance and agent reasons
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Every decision records who made it, and an agent caller must give a structured
       reason; an agent's inference is never stored as a human decision.
@@ -195,7 +195,7 @@ entries:
   - id: correction-window
     name: Point of no return per decision type
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Each recommendation carries the last moment it can still be changed; the timings
       are defaults until a hotel sets its own.
@@ -218,7 +218,7 @@ entries:
   - id: hotel-parameters
     name: Per-hotel costs and limits
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Bounded, audited per-hotel costs and limits; while none is set, no amount of money
       is ever shown. No hotel has set any.
@@ -229,7 +229,7 @@ entries:
   - id: staffing-rules
     name: Staffing on the hotel's own rules
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Staffing follows the hotel's own ratios and usual team, per service and context
       (event night, banquet, holiday, high season), and says which rule served. Tested on
@@ -243,7 +243,7 @@ entries:
   - id: risk-recommendations
     name: Risk-bearing recommendations
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       Each recommendation states what follows if accepted and if refused; probabilities
       and amounts only when calibrated and configured, otherwise qualitative.
@@ -255,7 +255,7 @@ entries:
   - id: learning-loop
     name: Learning loop with named approval
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       A weekly pass proposes recalibrations and a staffing ratio learned from
       managers' counter-proposals; each applies only after a named person approves,
@@ -280,7 +280,7 @@ entries:
   - id: hotel-owned-data
     name: Hotel-owned data
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       A hotel can export or delete all its data, learned parts included, after seeing the
       plan. Cross-hotel learning is opt-in, averages over five or more hotels; none exists
@@ -294,7 +294,7 @@ entries:
   - id: hotel-data-via-agent
     name: Hotel data through the hotel's own agent
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       The hotel's own agent reads its data export and deletion plan over MCP. A deletion
       or an opt-in to sharing waits for the owner to confirm on WhatsApp; deletion runs a
@@ -308,7 +308,7 @@ entries:
   - id: one-reminder
     name: One reminder before the point of no return
     status: Built
-    deployed: unknown
+    deployed: false
     description: >-
       An unanswered recommendation gets one reminder, at a time the hotel sets, on its own
       channel and within WhatsApp's rules. Silence stays "no reply", never a decision.
