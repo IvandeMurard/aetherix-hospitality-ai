@@ -69,6 +69,14 @@ from app.workers.receipts_dispatcher import (
 from app.workers.recap_dispatcher import register_weekly_recap_job
 from app.workers.weather_sync import start_weather_scheduler
 
+# Sans cette ligne, uvicorn ne configure que ses propres loggers : tous les `logger.info`
+# de l'application (webhook Twilio, tâches d'arrière-plan) disparaissent des journaux Fly
+# et une tâche qui s'arrête en silence est indiagnosticable (constaté le 05/11/2026).
+# No-op si le root logger a déjà un handler (tests, autre configuration). `LOG_LEVEL` pour régler.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(levelname)s %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 # APScheduler instance — shared across all registered cron jobs
