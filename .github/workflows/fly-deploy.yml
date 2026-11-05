@@ -1,0 +1,49 @@
+name: Deploy — Fly.io staging (manual)
+
+# Deploys the backend (root Dockerfile + fly.toml) to Fly.io. Manual only:
+# a deploy needs the Fly app, its secrets (flyctl secrets set …) and a live
+# database first, so it never runs on push. Runbook: docs/demos/runbook-demo.md §5.
+#
+# Secret: FLY_API_TOKEN — a deploy token scoped to the app
+#   (flyctl tokens create deploy -a <app>), stored in the repo's Actions secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Fly app name (must exist in the organisation)"
+        required: true
+        default: "aetherix-backend"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fly-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::FLY_API_TOKEN is not set — nothing deployed."
+            exit 1
+          fi
+          flyctl deploy --remote-only --app "${{ github.event.inputs.app }}"
+      - name: Health check
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "https://${{ github.event.inputs.app }}.fly.dev/health" || true)
+            echo "health: $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 10
+          done
+          echo "::error::/health did not return 200 — the deploy is not verified live."
+          exit 1
