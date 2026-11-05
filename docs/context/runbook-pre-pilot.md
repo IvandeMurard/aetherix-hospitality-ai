@@ -49,7 +49,7 @@ REDIS_URL=rediss://...               # secret
 
 # Smoke test driver (see §2)
 APP_BASE_URL=https://staging.aetherix.internal
-SMOKE_MCP_TOKEN=<bearer with predict + memory_write + memory_read scopes>
+SMOKE_MCP_TOKEN=<bearer with predict + recommend + feedback scopes — see §1.3>
 SMOKE_HOTEL_ID=demo_hotel
 ```
 
@@ -78,17 +78,22 @@ and resolve any drift before retrying.
 ### 1.3 Seed data
 
 The MCP API token used by the smoke test must exist in
-`mcp_api_tokens` and carry the scopes `predict`, `memory_read`,
-`memory_write`. Generate with:
+`mcp_api_tokens` and carry the scopes `predict`, `recommend`, `feedback`
+(steps 3-4 of the smoke test; tool → scope map = `_TOOL_SCOPE` in
+`backend/app/mcp_core.py`). `scripts/create_user.py` has **no** `--mcp-token`
+option (the former instruction here was stale). Generate with:
 
 ```bash
-python scripts/create_user.py --mcp-token \
-  --hotel-id demo_hotel \
-  --scopes predict,memory_read,memory_write
+backend/.venv/Scripts/python.exe -I scripts/ops/mint_mcp_token.py \
+  --env backend/.env --sql mcp_token_insert.sql
 ```
 
-The script prints the raw token once — store it in the team password manager
-and export as `SMOKE_MCP_TOKEN`.
+The raw token is written to `SMOKE_MCP_TOKEN` in `backend/.env` and **never
+printed**; only its SHA-256 goes into `mcp_token_insert.sql`. Paste that file in
+the Supabase SQL editor of the project the backend's `DATABASE_URL` points to.
+Verified 05/11/2026: smoke steps 3-5 pass against `aetherix-backend.fly.dev`.
+Never `source` a `.env` in a shell (values with `,` or `=` break it and the error
+echoes the secret).
 
 Prophet model: ensure `demo_data/prophet_model.json` exists. If not,
 trigger a one-shot training run:
