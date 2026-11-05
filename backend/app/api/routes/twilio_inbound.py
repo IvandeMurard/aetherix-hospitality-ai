@@ -83,7 +83,7 @@ _TWIML_QUERY_NO_CONTEXT = (
     "<?xml version='1.0' encoding='UTF-8'?>"
     "<Response><Message>"
     "Sorry, I couldn't find an active recommendation linked to your number. "
-    "Please contact your F&B manager directly."
+    "Please contact your F&amp;B manager directly."
     "</Message></Response>"
 )
 
