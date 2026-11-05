@@ -78,7 +78,7 @@ Ce que montre `demo_whatsapp_conversation.py` (une semaine, Hôtel Kléber ficti
 | Limite | État | Ce qui la lève |
 |---|---|---|
 | 0 utilisateur réel | aucun hôtel | design partner + protocole de preuve gelé (`docs/planning/protocole-de-preuve.md` : Δ MdAPE ≥ 5 pp, acceptation ≥ 30 %) |
-| Lecture des réponses par le modèle | mesurée le 05/11 : 98,1 % (n=52), 1 cas ambigu (« pourquoi pas ») corrigé par une règle de lexique le 05/11, held-out consommé, run CI à relancer ; Claude seul, pas encore Gemini ; baseline CI pas figée | HOS-342 : run CI sur `main`, puis Claude + Gemini, baselines figées |
+| Lecture des réponses par le modèle | mesurée le 05/11 : 98,1 % (n=52), 1 cas ambigu (« pourquoi pas ») corrigé par une règle de lexique le 05/11, held-out consommé ; **run CI #24 sur `main` : PASS** ; Claude seul, pas encore Gemini ; baseline CI pas figée | HOS-342 : run CI sur `main`, puis Claude + Gemini, baselines figées |
 | Réels | déclarés par le manager (`independent_actuals: false`) | POS (Epic 13) |
 | Texte de la recommandation | en anglais (`format_message`) alors que la conversation est en français | traduire le formatter |
 | WhatsApp | templates non approuvés, boutons derrière un flag | soumission Meta (catégorie Utility) |

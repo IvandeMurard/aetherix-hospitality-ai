@@ -185,9 +185,9 @@ entries:
     status: Built
     deployed: n/a
     description: >-
-      Grades the production reply path against one pinned model version. First real-model
-      run: 98.1% decision accuracy on 52 cases; one ambiguous reply is still written
-      without confirmation, so the gate does not pass yet.
+      Grades the production reply path on one pinned model: 98.1% on 52 hand-written
+      cases, no reply written without a required confirmation; one provider, no frozen
+      baseline yet.
     verified_on: 2026-11-05
     evidence:
       - scripts/eval/eval_parser.py
