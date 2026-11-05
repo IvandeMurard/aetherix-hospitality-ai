@@ -28,11 +28,11 @@ entries:
   - id: fnb-node
     name: F&B execution node
     status: Built
-    deployed: false
+    deployed: true
     description: >-
       Backend that turns covers, staffing and demand signals into recommendations for
-      an F&B manager; zero real users so far.
-    verified_on: 2026-09-25
+      an F&B manager; staging runs on a fictional hotel, zero real users so far.
+    verified_on: 2026-11-05
     evidence:
       - backend/app/main.py
       - backend/app/services/prediction_engine.py
@@ -185,9 +185,10 @@ entries:
     status: Built
     deployed: n/a
     description: >-
-      Grades the production reply path against one pinned model version; no real-model
-      score exists yet.
-    verified_on: 2026-09-25
+      Grades the production reply path against one pinned model version. First real-model
+      run: 98.1% decision accuracy on 52 cases; one ambiguous reply is still written
+      without confirmation, so the gate does not pass yet.
+    verified_on: 2026-11-05
     evidence:
       - scripts/eval/eval_parser.py
       - .github/workflows/eval-parser-real.yml
