@@ -18,7 +18,7 @@
 | 2:15 | **Ce qui marche — apprendre sans dériver** | `closed_loop_demo.py` | 30 jours simulés, choc de demande +25 % au jour 15 : erreur 15,9 % → 12,3 % après recalibration hebdomadaire (relevé du 05/11 ; relancer le script et citer le chiffre affiché). Un réel aberrant (900 couverts pour 120 places) est rejeté par une borne (G-3) au lieu d'être appris. Les règles d'effectif apprises ne s'appliquent qu'après approbation d'une personne nommée. |
 | 3:15 | **Prévision : mesure sur données réelles (évaluation ≠ service)** | `docs/context/mape-benchmark.md` | Kaggle Recruit est un **benchmark hors ligne**, pas le jeu d'entraînement du service de démo (voir §6, « Entraîné sur Kaggle ? »). Kaggle Recruit (restaurants réels) : Prophet bat la baseline naïve en moyenne (MAPE 49,7 % vs 55,9 %) mais **fait jeu égal en médiane** (27,0 vs 27,6 %) et est **derrière à J+1** (28,5 vs 27,9 %). J'ai déclenché moi-même la clause de pivot : la valeur n'est pas le modèle, c'est la boucle de décision. |
 | 4:00 | **Construit avec Claude Code** | Linear HOS-357 → PR #298 → CI | Une story : contexte d'audit, périmètre tranché et daté par moi, critères d'acceptation, cas golden ajoutés, gate d'éval bloquant. Puis 2 corrections où la mesure a contredit l'IA (§3). |
-| 5:30 | **Limites avant pilote** | §4 | 0 utilisateur ; lecture du modèle mesurée à 98,1 % (n=52) avec 1 cas ambigu résiduel (« pourquoi pas », écrit sans confirmation, seuil = 0) ; réels déclarés par le manager (pas de POS) ; templates WhatsApp non approuvés ; défense prompt-injection différée ; staging arrêté. |
+| 5:30 | **Limites avant pilote** | §4 | 0 utilisateur ; lecture du modèle mesurée à 98,1 % (n=52) sur des cas écrits par moi, pas par de vrais managers ; « pourquoi pas » était écrit sans confirmation → corrigé par une règle de lexique, pas par le prompt ; réels déclarés par le manager (pas de POS) ; templates WhatsApp non approuvés ; défense prompt-injection différée ; staging relancé (v25) mais sync PMS non planifiée. |
 | 6:30 | Ouverture | — | Ce qui se transpose chez vos clients : éval dès la conception, humain dans la boucle sur l'irréversible, étiquetage honnête (Built / Synthetic / Design), livrer dans les outils du client plutôt qu'un dashboard. |
 
 **Vidéo de secours** : enregistrer les deux scripts le 06/11 au matin (3 min, mention « données fictives, boucle réelle »). Elle ferme HOS-310 AC3.
@@ -65,7 +65,9 @@ Ce que montre `demo_whatsapp_conversation.py` (une semaine, Hôtel Kléber ficti
    - 05/11 (après changement de clé) : première vraie mesure du modèle de lecture (Haiku 4.5) → **7 cas rejetés au schéma**
      (`stance: "acknowledge"`, `intent: "none"` : le modèle mélangeait les listes). Prompt corrigé (PR #302), schéma **inchangé**
      (un échec de schéma reste un échec, ADR-0007 §15) → précision **98,1 %** (n=52, 3 runs identiques, 0 % d'échec de schéma).
-     Reste 1 cas ambigu (« pourquoi pas ») non réglé volontairement : cas held-out, on ne règle pas le prompt dessus.
+     Reste 1 cas ambigu (« pourquoi pas ») écrit sans confirmation. Pas de retouche du prompt sur un cas held-out :
+     règle de lexique déterministe (« oui tiède » → « Je note une validation, c'est bien ça ? »), conforme à la
+     Décision #41. Le cas mesure désormais le lexique, plus le modèle : il est consommé comme held-out.
      Une 2ᵉ tentative (durcir `reason_route`) a fait **baisser** la précision à 96,2 % : annulée.
 3. **BMAD** : montrer `tools/bmad/_bmad-output/implementation-artifacts/` (une story → son fichier) et ce que
    j'ai **ajouté** à la méthode (éval dès la conception, taxonomie de statuts) et **coupé** (Décision #24, gel Epic 16).
@@ -76,7 +78,7 @@ Ce que montre `demo_whatsapp_conversation.py` (une semaine, Hôtel Kléber ficti
 | Limite | État | Ce qui la lève |
 |---|---|---|
 | 0 utilisateur réel | aucun hôtel | design partner + protocole de preuve gelé (`docs/planning/protocole-de-preuve.md` : Δ MdAPE ≥ 5 pp, acceptation ≥ 30 %) |
-| Lecture des réponses par le modèle | mesurée le 05/11 : 98,1 % (n=52), 1 cas ambigu résiduel ; Claude seul, pas encore Gemini ; baseline CI pas figée | HOS-342 : run CI sur `main`, puis Claude + Gemini, baselines figées |
+| Lecture des réponses par le modèle | mesurée le 05/11 : 98,1 % (n=52), 1 cas ambigu (« pourquoi pas ») corrigé par une règle de lexique le 05/11, held-out consommé, run CI à relancer ; Claude seul, pas encore Gemini ; baseline CI pas figée | HOS-342 : run CI sur `main`, puis Claude + Gemini, baselines figées |
 | Réels | déclarés par le manager (`independent_actuals: false`) | POS (Epic 13) |
 | Texte de la recommandation | en anglais (`format_message`) alors que la conversation est en français | traduire le formatter |
 | WhatsApp | templates non approuvés, boutons derrière un flag | soumission Meta (catégorie Utility) |
@@ -200,7 +202,7 @@ Le secret d'Actions `ANTHROPIC_API_KEY` renvoie 401 sur chaque run hebdomadaire 
 - **Que se passe-t-il si le modèle se trompe ?** Sous 0,85 rien n'est écrit sans « oui » ; au-dessus, la
   décision est citée en retour et corrigeable (« corriger mardi »). La source de chaque décision est stockée.
 - **Le modèle est-il entraîné sur Kaggle (données réelles) ?** Non, et il faut le dire avant qu'on le suppose. Kaggle Recruit
-  (829 restaurants japonais, 2016-2017) est un **benchmark d'évaluation hors ligne** : il mesure la méthode (Prophet ≈ naïve en médiane).
+  (30 restaurants japonais évalués sur 829, 2016-2017) est un **benchmark d'évaluation hors ligne** : il mesure la méthode (Prophet ≈ naïve en médiane).
   Le service de démo tourne sur un **hôtel fictif** : modèle entraîné sur une série **synthétique** de 365 jours
   (`backend/data/demo/prophet_training.json`, générée par `generate_demo_data.py`), occupation et réservations lues sur la
   sandbox Apaleo. Le 15,09 % synthétique est circulaire (Décision #33) et n'est pas cité. Le message porte la mention « 🧪 Démonstration ».

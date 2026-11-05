@@ -339,6 +339,14 @@ NEED_NEGATION_PHRASES: frozenset[str] = frozenset({
 # Hesitation: reluctant yes or soft no.
 HESITATION_TOKENS: frozenset[str] = frozenset({"bof"})
 
+# Lukewarm yes: "pourquoi pas" / "why not" (without "?", see is_question). It
+# leans towards adopting but can mean indifference, so it is never written on
+# its own: the reading offered is the yes, and it waits for the manager's "oui"
+# (Décisions #38, #41). Found by the held-out golden case
+# parser-confirm-whynot-fr-001 on the first real-model run (05/11/2026), which
+# wrote it without confirmation.
+LUKEWARM_PHRASES: frozenset[str] = frozenset({"pourquoi pas", "why not"})
+
 # Acknowledgement: assent without decision content. Alone → rule (b). Next to
 # a stance it reads as adopting ("oui 👍"), so "non ok" is two readings.
 ACK_TOKENS: frozenset[str] = frozenset({
@@ -360,6 +368,7 @@ _PHRASE_CLASSES: tuple[tuple[str, frozenset[str]], ...] = (
     ("need_negation", NEED_NEGATION_PHRASES),
     ("adopt", ADOPT_PHRASES),
     ("decline", DECLINE_PHRASES),
+    ("lukewarm", LUKEWARM_PHRASES),
 )
 _TOKEN_CLASSES: tuple[tuple[str, frozenset[str]], ...] = (
     ("adopt", ADOPT_TOKENS),
@@ -388,7 +397,7 @@ def stance_readings(unit: str, kind: str) -> tuple[str, ...]:
     """Stances a lexicon unit can express, given the proposal's direction.
     Empty = no stance (politeness). Order is irrelevant: readings are compared
     through the decisions they imply."""
-    if unit == "adopt" or unit == "ack":
+    if unit in ("adopt", "ack", "lukewarm"):
         return ("adopt_proposal",)
     if unit == "decline":
         return ("decline_proposal",)
@@ -1035,10 +1044,15 @@ def resolve_keyword(match: KeywordMatch, ctx: PendingContext) -> Resolution:
     acknowledgement goes to rule (b)."""
     if match.kind == "bare_ack":
         return resolve_bare_ack(ctx)
-    return resolve_stances(
+    res = resolve_stances(
         (stance_readings(u, ctx.proposal) for u in match.units),
         ctx.proposal, source=DecisionSource.keyword, origin="keyword_ambiguous",
     )
+    if "lukewarm" in match.units and res.action == "record":
+        # A lukewarm yes is never written without the manager's confirmation.
+        return Resolution("confirm", res.decision, origin="keyword_ambiguous",
+                          confidence=res.confidence, why="lukewarm")
+    return res
 
 
 def resolve_bare_ack(ctx: PendingContext) -> Resolution:
