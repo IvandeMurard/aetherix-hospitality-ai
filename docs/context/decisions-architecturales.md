@@ -504,7 +504,7 @@ What this changes and what it does not:
 1. **Supersedes the calendar parts of Décisions #23 §D4 and #24.** Both deferrals were calendar arbitrations, not design rejections (ADR-0006 §10, ADR-0008 §17.6). The designs stay as written.
 2. **The shared precondition remains.** `hotel_cohort_features` v1 does not exist. It must be built first (synthetic data) before Story 13.5 (HOS-260) and the cohort half of the graph. ADR-0006 §10.4 and ADR-0008 §17.6 need an amendment that records the restart.
 3. **Gates unchanged.** The DPIA gate (Décision #20) stays closed: no real guest data (HOS-239), and no `Guest` / `Stay` / `Sentiment` graph nodes outside synthetic data. PMS write (HOS-240) contradicts Décisions #7 and #44 and needs its own decision before any code. A CRM partnership (HOS-238) needs a signed third party.
-4. **Order (to confirm by Ivan):** POS ingestion 13.1 to 13.4 and Orchestrator 2.1 / 2.5 can start now. `hotel_cohort_features` v1 comes before 13.5 and Epic 14.
+4. **Order (confirmed by Ivan, 05/11/2026):** POS ingestion 13.1 to 13.4 and Orchestrator 2.1 / 2.5 first. `hotel_cohort_features` v1 comes before 13.5 and Epic 14.
 
 ## Notes de maintenance
 

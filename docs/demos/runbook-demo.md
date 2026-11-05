@@ -83,6 +83,39 @@ Ce que montre `demo_whatsapp_conversation.py` (une semaine, Hôtel Kléber ficti
 
 Ordre : **Supabase → Fly → Twilio → Apaleo.** Chaque étape a son test de sortie.
 
+### 5.0 Relance express — terminal local (PowerShell, racine du repo)
+
+Plus simple qu'une session cloud : `backend/.env`, `flyctl` et la connexion navigateur sont sur la machine.
+Budget : 45 min. Arrêter à 13:30 le 06/11 si ce n'est pas vert, et faire la démo sur les scripts locaux.
+
+```powershell
+# 1. Supabase (projet imfrvrngxbtotmfbdtpf) — d'abord dans le navigateur :
+#    https://supabase.com/dashboard/project/imfrvrngxbtotmfbdtpf  → « Restore » si proposé.
+npx supabase login
+npx supabase link --project-ref imfrvrngxbtotmfbdtpf
+npx supabase db push            # applique supabase/migrations/ manquantes
+
+# 2. Fly (org ivan-de-murard) — moyen de paiement ajouté avant, sinon rien ne démarre
+fly auth login
+fly apps list -o ivan-de-murard
+fly apps list                   # si l'app est dans l'org personnelle :
+fly apps move aetherix-backend --org ivan-de-murard
+fly secrets list -a aetherix-backend    # les secrets survivent avec l'app ; vérifier DATABASE_URL
+fly deploy --remote-only -a aetherix-backend
+curl https://aetherix-backend.fly.dev/health
+
+# 3. Connexion GitHub → Fly (déploiements suivants via Actions)
+fly tokens create deploy -a aetherix-backend
+#    → coller la valeur dans le secret d'Actions FLY_API_TOKEN (lien §5.5)
+
+# 4. Apaleo
+cd backend; python ..\scripts\ops\validate_apaleo_sandbox.py; cd ..
+```
+
+Si Supabase n'offre plus « Restore » (pause > 90 jours) : nouveau projet EU, `npx supabase link` sur le
+nouveau ref, `db push`, puis mettre à jour `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_KEY` dans
+`backend/.env` **et** `fly secrets set -a aetherix-backend …`. Les données de démo sont fictives : rien à récupérer.
+
 ### 5.1 Supabase
 1. Dashboard Supabase → le projet. Un projet gratuit inactif est mis en pause après 7 jours ; il se restaure
    depuis le dashboard **pendant 90 jours seulement**, ensuite seule la sauvegarde est téléchargeable.
@@ -118,8 +151,12 @@ Ordre : **Supabase → Fly → Twilio → Apaleo.** Chaque étape a son test de 
 
 ### 5.5 GitHub — clé du run « modèle réel »
 Le secret d'Actions `ANTHROPIC_API_KEY` renvoie 401 sur chaque run hebdomadaire depuis plusieurs semaines.
-Le remplacer (Settings → Secrets and variables → Actions), puis lancer « Eval — inbound parser (real model, opt-in) »
-→ premier chiffre réel de qualité de lecture (HOS-342).
+
+1. Nouvelle clé : https://console.anthropic.com/settings/keys → « Create Key ».
+2. Secrets du repo : https://github.com/IvandeMurard/aetherix-hospitality-ai/settings/secrets/actions →
+   `ANTHROPIC_API_KEY` → crayon (Update) → coller → « Update secret ». Même page pour `FLY_API_TOKEN` (« New repository secret »).
+3. Lancer : https://github.com/IvandeMurard/aetherix-hospitality-ai/actions/workflows/eval-parser-real.yml →
+   « Run workflow » (runs = 3) → premier chiffre réel de qualité de lecture (HOS-342).
 
 ## 6. Questions probables
 
