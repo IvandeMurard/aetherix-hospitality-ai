@@ -253,11 +253,14 @@ _RESULT = {
 
 def test_answer_fr():
     text = render_forecast(_RESULT, _CTX, DAY, "dinner", "fr")
-    assert text.splitlines() == [
-        "Prévision mardi 15/01, dîner : 84 couverts (fourchette 70–98).",
-        "Effectif conseillé : 6 serveurs (+2), 1 à l'accueil, 3 en cuisine (+1) (règles de l'hôtel).",
-        "À savoir : pluie, 14 °C ; Concert Bercy (0,6 km) ; occupation inconnue.",
-        "La prévision de couverts ne tient pas encore compte de ce contexte.",
+    assert text.split("\n\n") == [
+        "📊 *Prévision · mardi 15/01 · dîner*\n*84 couverts* · fourchette 70–98",
+        "👥 *Effectif conseillé*\n• 6 serveurs (habituel : 4)\n• 1 à l'accueil\n"
+        "• 3 en cuisine (habituel : 2)\n_Selon les règles de l'hôtel._",
+        "🌤 *Contexte*\n• Météo : pluie, 14 °C\n• Événements : Concert Bercy (0,6 km)\n"
+        "• Occupation : non disponible\n"
+        "_Ces éléments ne modifient pas encore le chiffre de couverts._",
+        "💬 _Un autre jour ? Écrivez « prévision mercredi »._",
     ]
 
 
@@ -266,26 +269,27 @@ def test_answer_en_with_default_rules_and_calibrated_interval():
               "staffing_recommendation": {**_RESULT["staffing_recommendation"], "rules": {
                   "servers": {"covers_per_source": "default"}}}}
     text = render_forecast(result, {**_CTX, "occupancy": 0.82}, DAY, "lunch", "en")
-    assert text.startswith("Forecast Tuesday 15/01, lunch: 84 covers (range 72–96).")
-    assert "(default rules, not set by the hotel)" in text
-    assert "occupancy 82%" in text
+    assert text.startswith("📊 *Forecast · Tuesday 15/01 · lunch*\n*84 covers* · range 72–96")
+    assert "_Default rules and usual staffing, not set by the hotel._" in text
+    assert "• Occupancy: 82%" in text
 
 
 def test_mock_forecast_is_never_a_figure():
     result = {"prediction": {"covers": 45, "is_mock": True, "range_min": 38, "range_max": 52}}
     text = render_forecast(result, _CTX, DAY, "dinner", "fr")
-    assert text.startswith("mardi 15/01, dîner : pas de prévision chiffrée")
+    assert text.startswith("📊 *Prévision · mardi 15/01 · dîner*\nPas de prévision chiffrée")
     assert "45" not in text and "Effectif" not in text
-    assert "ne tient pas encore compte" not in text
+    assert "ne modifient pas encore" not in text and "Un autre jour" not in text
 
 
 def test_engine_unavailable_is_said():
     text = render_forecast(None, {"weather": {}, "events": [], "occupancy": None,
                                   "context_sources": {"events": {"status": "absent"}}},
                            DAY, "dinner", "fr")
-    assert text.splitlines() == [
-        "mardi 15/01, dîner : prévision indisponible pour le moment.",
-        "À savoir : météo inconnue ; événements inconnus ; occupation inconnue.",
+    assert text.split("\n\n") == [
+        "📊 *Prévision · mardi 15/01 · dîner*\nPrévision indisponible pour le moment.",
+        "🌤 *Contexte*\n• Météo : non disponible\n• Événements : non disponibles\n"
+        "• Occupation : non disponible",
     ]
 
 
@@ -293,7 +297,7 @@ def test_recommendation_already_sent_is_shown():
     rec = StaffingRecommendation(status="dispatched", message_text="+2 extras",
                                  risk_assessment={"recommended_delta_staff": 2})
     text = render_forecast(_RESULT, _CTX, DAY, "dinner", "fr", rec)
-    assert "Recommandation déjà envoyée pour ce jour : 2 extras (en attente de décision)." in text
+    assert "📌 *Recommandation déjà envoyée* : 2 extras (en attente de décision)." in text
 
 
 def test_baseline_used_is_said():
@@ -368,9 +372,9 @@ async def test_bg_forecast_uses_the_stored_context_and_writes_no_decision(db):
     assert ctx["weather"]["condition"] == "rain" and ctx["occupancy"] == 0.82
     to, text = reply.await_args.args
     assert to == f"whatsapp:{PHONE}"
-    assert text.startswith("Prévision mardi 15/01, dîner : 84 couverts")
-    assert "Recommandation déjà envoyée pour ce jour : 2 extras" in text
-    assert "occupation 82 %" in text
+    assert text.startswith("📊 *Prévision · mardi 15/01 · dîner*\n*84 couverts*")
+    assert "📌 *Recommandation déjà envoyée* : 2 extras" in text
+    assert "• Occupation : 82 %" in text
     await db.refresh(rec)
     await db.refresh(prompt)
     assert (rec.status, rec.action, rec.decision_source) == ("dispatched", None, None)
@@ -383,9 +387,9 @@ async def test_bg_forecast_uses_the_stored_context_and_writes_no_decision(db):
 async def test_bg_forecast_mock_and_unavailable(db):
     await _profile(db)
     reply = await _run(db, "prévision", _Engine({"prediction": {"covers": 45, "is_mock": True}}))
-    assert "pas de prévision chiffrée" in reply.await_args.args[1]
+    assert "Pas de prévision chiffrée" in reply.await_args.args[1]
     reply = await _run(db, "prévision", None)
-    assert "prévision indisponible" in reply.await_args.args[1]
+    assert "Prévision indisponible" in reply.await_args.args[1]
     whys = [e.why for e in (await db.execute(select(InboundReplyEvent))).scalars().all()]
     assert sorted(whys) == ["mock", "unavailable"]
 

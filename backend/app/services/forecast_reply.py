@@ -4,14 +4,19 @@ Renders what the forecast engine returned (the same engine and guardrail as the
 MCP tool ``get_operational_predictions``), the stored context it was given
 (``forecast_context``) and the recommendation already sent for that day, if any.
 
-Rules:
+Rules (unchanged by the 05/11/2026 layout rework — only the presentation moved):
 
 * A mock forecast (no trained model, ``prediction.is_mock``) is never shown as
   a figure: the answer says there is no forecast (HOS-303).
-* Every context element is what was stored or is said to be unknown. The covers
+* Every context element is what was stored or is said to be unavailable. The covers
   figure does not use this context yet (no Prophet regressors), so the answer
   says so instead of implying it does.
 * Whose staffing rules were used is said (Décision #43): the hotel's, or defaults.
+  When the rule is a default, "usual staffing" is a default too and is labelled so.
+
+Layout: one short block per question the manager has — how many covers, how many
+staff, what is around — with WhatsApp emphasis (``*bold*``, ``_italic_``) and one
+closing hint on how to ask for another day. The figure comes first.
 """
 from __future__ import annotations
 
@@ -46,51 +51,61 @@ _STATUS = {
 }
 _T = {
     "fr": {
-        "head": "Prévision {day}, {service} : {covers} couverts{range}.",
-        "range": " (fourchette {lo}–{hi})",
-        "baseline": " Valeur de référence : la prévision du modèle était jugée peu fiable.",
-        "mock": "{day}, {service} : pas de prévision chiffrée, aucun modèle de prévision n'est encore entraîné.",
-        "unavailable": "{day}, {service} : prévision indisponible pour le moment.",
+        "title": "📊 *Prévision · {day} · {service}*",
+        "figure": "*{covers} couverts*{range}",
+        "range": " · fourchette {lo}–{hi}",
+        "baseline": "_Valeur de référence : la prévision du modèle était jugée peu fiable._",
+        "mock": "Pas de prévision chiffrée : aucun modèle de prévision n'est encore entraîné.",
+        "unavailable": "Prévision indisponible pour le moment.",
         "bad_date": "Je ne trouve pas la date « {ref} ».",
-        "staff": "Effectif conseillé : {roles}{rules}.",
-        "rules_hotel": " (règles de l'hôtel)",
-        "rules_default": " (règles par défaut, non fixées par l'hôtel)",
-        "rules_mixed": " (règles de l'hôtel quand elles sont fixées, par défaut ailleurs)",
-        "rec": "Recommandation déjà envoyée pour ce jour : {what} ({status}).",
+        "staff_title": "👥 *Effectif conseillé*",
+        "usual": "habituel : {n}",
+        "rules_hotel": "_Selon les règles de l'hôtel._",
+        "rules_default": "_Règles et effectif habituel par défaut, non fixés par l'hôtel._",
+        "rules_mixed": "_Règles de l'hôtel quand elles sont fixées, par défaut ailleurs._",
+        "rec": "📌 *Recommandation déjà envoyée* : {what} ({status}).",
         "rec_delta": "{n} extra{s}",
         "rec_cut": "{n} de moins",
         "rec_none": "effectif habituel",
-        "context": "À savoir : {items}.",
-        "weather_unknown": "météo inconnue",
-        "events_none": "aucun événement connu à proximité",
-        "events_unknown": "événements inconnus",
-        "occupancy": "occupation {pct} %",
-        "occupancy_unknown": "occupation inconnue",
-        "not_used": "La prévision de couverts ne tient pas encore compte de ce contexte.",
+        "context_title": "🌤 *Contexte*",
+        "weather": "Météo : {v}",
+        "weather_unknown": "non disponible",
+        "events": "Événements : {v}",
+        "events_none": "aucun connu à proximité",
+        "events_unknown": "non disponibles",
+        "occupancy": "Occupation : {pct} %",
+        "occupancy_unknown": "Occupation : non disponible",
+        "not_used": "_Ces éléments ne modifient pas encore le chiffre de couverts._",
+        "hint": "💬 _Un autre jour ? Écrivez « prévision {day} »._",
         "km": "{d} km",
     },
     "en": {
-        "head": "Forecast {day}, {service}: {covers} covers{range}.",
-        "range": " (range {lo}–{hi})",
-        "baseline": " Reference value: the model's forecast was judged unreliable.",
-        "mock": "{day}, {service}: no forecast figure, no forecasting model is trained yet.",
-        "unavailable": "{day}, {service}: forecast unavailable right now.",
+        "title": "📊 *Forecast · {day} · {service}*",
+        "figure": "*{covers} covers*{range}",
+        "range": " · range {lo}–{hi}",
+        "baseline": "_Reference value: the model's forecast was judged unreliable._",
+        "mock": "No forecast figure: no forecasting model is trained yet.",
+        "unavailable": "Forecast unavailable right now.",
         "bad_date": "I can't find the date \"{ref}\".",
-        "staff": "Suggested staffing: {roles}{rules}.",
-        "rules_hotel": " (the hotel's rules)",
-        "rules_default": " (default rules, not set by the hotel)",
-        "rules_mixed": " (the hotel's rules where set, defaults elsewhere)",
-        "rec": "Recommendation already sent for this day: {what} ({status}).",
+        "staff_title": "👥 *Suggested staffing*",
+        "usual": "usual: {n}",
+        "rules_hotel": "_Based on the hotel's rules._",
+        "rules_default": "_Default rules and usual staffing, not set by the hotel._",
+        "rules_mixed": "_The hotel's rules where set, defaults elsewhere._",
+        "rec": "📌 *Recommendation already sent*: {what} ({status}).",
         "rec_delta": "{n} extra staff",
         "rec_cut": "{n} fewer",
         "rec_none": "usual staffing",
-        "context": "Good to know: {items}.",
-        "weather_unknown": "weather unknown",
-        "events_none": "no known event nearby",
-        "events_unknown": "events unknown",
-        "occupancy": "occupancy {pct}%",
-        "occupancy_unknown": "occupancy unknown",
-        "not_used": "The covers forecast does not take this context into account yet.",
+        "context_title": "🌤 *Context*",
+        "weather": "Weather: {v}",
+        "weather_unknown": "unavailable",
+        "events": "Events: {v}",
+        "events_none": "none known nearby",
+        "events_unknown": "unavailable",
+        "occupancy": "Occupancy: {pct}%",
+        "occupancy_unknown": "Occupancy: unavailable",
+        "not_used": "_These do not change the covers figure yet._",
+        "hint": "💬 _Another day? Reply “forecast {day}”._",
         "km": "{d} km",
     },
 }
@@ -109,30 +124,30 @@ def _num(value: float, loc: str) -> str:
     return text.replace(".", ",") if loc == "fr" else text
 
 
-def _staff_line(staffing: Mapping[str, Any], loc: str) -> Optional[str]:
+def _staff_block(staffing: Mapping[str, Any], loc: str) -> Optional[list[str]]:
     t = _T[loc]
     deltas = staffing.get("deltas") or {}
-    parts = []
+    bullets = []
     for role in ("servers", "hosts", "runners", "kitchen"):
         n = staffing.get(role) or 0
         if not n:
             continue
         one, many = _ROLES[loc][role]
-        part = f"{n} {one if n == 1 else many}"
+        line = f"• {n} {one if n == 1 else many}"
         d = deltas.get(role)
-        if d:
-            part += f" ({d:+d})"
-        parts.append(part)
-    if not parts:
+        if d:  # delta = recommended - usual, so usual = n - d (a default when the rule is a default)
+            line += f" ({t['usual'].format(n=int(n - d))})"
+        bullets.append(line)
+    if not bullets:
         return None
     rules = staffing.get("rules") or {}
     sources = {r.get("covers_per_source") for role, r in rules.items()
                if role != "sommeliers" and isinstance(r, Mapping)
                and r.get("covers_per_source") in ("hotel", "default")}
-    rules_label = (t["rules_hotel"] if sources == {"hotel"}
-                   else t["rules_default"] if sources == {"default"}
-                   else t["rules_mixed"] if sources else "")
-    return t["staff"].format(roles=", ".join(parts), rules=rules_label)
+    note = (t["rules_hotel"] if sources == {"hotel"}
+            else t["rules_default"] if sources == {"default"}
+            else t["rules_mixed"] if sources else None)
+    return [t["staff_title"], *bullets, *([note] if note else [])]
 
 
 def _recommendation_line(rec: Any, loc: str) -> Optional[str]:
@@ -153,18 +168,18 @@ def _recommendation_line(rec: Any, loc: str) -> Optional[str]:
     return t["rec"].format(what=what, status=status)
 
 
-def _context_line(context: Mapping[str, Any], loc: str) -> str:
+def _context_block(context: Mapping[str, Any], loc: str, with_note: bool) -> list[str]:
     t = _T[loc]
     sources = context.get("context_sources") or {}
-    items = []
+    lines = [t["context_title"]]
     weather = context.get("weather") or {}
     if weather.get("condition") or weather.get("temp") is not None:
         w = [_WEATHER[loc].get(weather.get("condition"), weather.get("condition"))]
         if weather.get("temp") is not None:
             w.append(f"{_num(float(weather['temp']), loc)} °C")
-        items.append(", ".join(x for x in w if x))
+        lines.append("• " + t["weather"].format(v=", ".join(x for x in w if x)))
     else:
-        items.append(t["weather_unknown"])
+        lines.append("• " + t["weather"].format(v=t["weather_unknown"]))
     events = context.get("events") or []
     if events:
         labels = []
@@ -173,15 +188,17 @@ def _context_line(context: Mapping[str, Any], loc: str) -> str:
             dist = e.get("distance_km")
             labels.append(f"{name} ({t['km'].format(d=_num(float(dist), loc))})"
                           if dist is not None else name)
-        items.append(", ".join(labels))
+        lines.append("• " + t["events"].format(v=", ".join(labels)))
     elif (sources.get("events") or {}).get("status") in ("ok", "caller"):
-        items.append(t["events_none"])
+        lines.append("• " + t["events"].format(v=t["events_none"]))
     else:
-        items.append(t["events_unknown"])
+        lines.append("• " + t["events"].format(v=t["events_unknown"]))
     occ = context.get("occupancy")
-    items.append(t["occupancy"].format(pct=round(float(occ) * 100)) if occ is not None
-                 else t["occupancy_unknown"])
-    return t["context"].format(items=" ; ".join(items) if loc == "fr" else "; ".join(items))
+    lines.append("• " + (t["occupancy"].format(pct=round(float(occ) * 100)) if occ is not None
+                         else t["occupancy_unknown"]))
+    if with_note:
+        lines.append(t["not_used"])
+    return lines
 
 
 def render_forecast(
@@ -193,39 +210,41 @@ def render_forecast(
     recommendation: Any = None,
 ) -> str:
     """``result`` = ``engine.get_forecast(...)``, ``None`` when the engine is
-    unavailable or failed."""
+    unavailable or failed. Blocks are separated by a blank line."""
     loc = _loc(locale)
     t = _T[loc]
     fmt = {"day": day_label(day, loc), "service": CLASS_LABELS[loc].get(service, service)}
     prediction = (result or {}).get("prediction") or {}
-    lines: list[str] = []
+    blocks: list[list[str]] = [[t["title"].format(**fmt)]]
     mock = bool(prediction.get("is_mock"))
+    served = False
     if result is None or prediction.get("covers") is None:
-        lines.append(t["unavailable"].format(**fmt))
+        blocks[0].append(t["unavailable"])
     elif mock:
-        lines.append(t["mock"].format(**fmt))
+        blocks[0].append(t["mock"])
     else:
+        served = True
         interval = prediction.get("calibrated_interval")
         lo, hi = (interval if isinstance(interval, (list, tuple)) and len(interval) == 2
                   else (prediction.get("range_min"), prediction.get("range_max")))
         rng = (t["range"].format(lo=round(float(lo)), hi=round(float(hi)))
                if lo is not None and hi is not None else "")
-        head = t["head"].format(covers=round(float(prediction["covers"])), range=rng, **fmt)
+        blocks[0].append(t["figure"].format(covers=round(float(prediction["covers"])), range=rng))
         if prediction.get("baseline_used"):
-            head += t["baseline"]
-        lines.append(head)
+            blocks[0].append(t["baseline"])
         staffing = result.get("staffing_recommendation")
         if isinstance(staffing, Mapping):
-            staff = _staff_line(staffing, loc)
+            staff = _staff_block(staffing, loc)
             if staff:
-                lines.append(staff)
+                blocks.append(staff)
     rec_line = _recommendation_line(recommendation, loc)
     if rec_line:
-        lines.append(rec_line)
-    lines.append(_context_line(context, loc))
-    if result is not None and not mock and prediction.get("covers") is not None:
-        lines.append(t["not_used"])
-    return "\n".join(lines)
+        blocks.append([rec_line])
+    blocks.append(_context_block(context, loc, with_note=served))
+    if served:
+        nxt = _DAYS[loc][(day.weekday() + 1) % 7]
+        blocks.append([t["hint"].format(day=nxt.lower())])
+    return "\n\n".join("\n".join(b) for b in blocks)
 
 
 def bad_date_reply(ref: str, locale: Optional[str] = "fr") -> str:
