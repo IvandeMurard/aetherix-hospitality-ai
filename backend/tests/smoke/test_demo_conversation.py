@@ -28,3 +28,9 @@ def test_demo_conversation_runs_and_records_each_path(capsys):
     assert "je remplace une validation par un refus" in out  # revision asks first
     assert "Récap semaine" in out
     assert "source manager_revision" in out and "source model_confirmed" in out
+    # learning loop: proposed by the weekly pass, approved by a named person, rolled back
+    assert "PROPOSITION covers_per_extra_staff : 15.0 → 12.0" in out
+    assert "approuvé par claire@maison-lumen.example · statut applied" in out
+    assert "retour arrière en un appel : statut retired · ratio en vigueur 15" in out
+    # the debrief line is a prototype and says so
+    assert "[aperçu HOS-363" in out

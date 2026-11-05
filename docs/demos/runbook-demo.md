@@ -15,7 +15,7 @@
 |---|---|---|---|
 | 0:00 | **Problème** | `fiche-aetherix.md` | Mardi 14 h, la responsable F&B d'un hôtel indépendant doit décider si elle ajoute un extra pour le dîner de mercredi, avant l'heure limite du planning. Aujourd'hui elle le fait de tête (moyenne des 4 derniers mercredis). Trop de staff = coût, pas assez = service dégradé. |
 | 0:45 | **Ce qui marche — la boucle** | `demo_whatsapp_conversation.py` | Une recommandation par jour. La réponse du manager est lue de façon **déterministe d'abord** (lexique, commandes) ; le modèle ne lit que ce que le lexique ne sait pas, sa sortie est validée par schéma, et sous 0,85 de confiance **rien n'est écrit sans un « oui »**. Une question n'est jamais une décision. Tout finit dans un registre de décisions, avec qui a décidé et comment. |
-| 2:15 | **Ce qui marche — apprendre sans dériver** | `closed_loop_demo.py` | 30 jours simulés, choc de demande +25 % au jour 15 : erreur 15,9 % → 12,3 % après recalibration hebdomadaire (relevé du 05/11 ; relancer le script et citer le chiffre affiché). Un réel aberrant (900 couverts pour 120 places) est rejeté par une borne (G-3) au lieu d'être appris. Les règles d'effectif apprises ne s'appliquent qu'après approbation d'une personne nommée. |
+| 2:15 | **Ce qui marche — apprendre sans dériver** | `closed_loop_demo.py` | 30 jours simulés, choc de demande +25 % au jour 15 : erreur 15,9 % → 12,3 % après recalibration hebdomadaire (relevé du 05/11 ; relancer le script et citer le chiffre affiché). Un réel aberrant (900 couverts pour 120 places) est rejeté par une borne (G-3) au lieu d'être appris. Les règles d'effectif apprises ne s'appliquent qu'après approbation d'une personne nommée : la fin de `demo_whatsapp_conversation.py` le montre (proposition → approbation → effet → retour arrière, HOS-365). |
 | 3:15 | **Prévision : mesure sur données réelles (évaluation ≠ service)** | `docs/context/mape-benchmark.md` | Kaggle Recruit est un **benchmark hors ligne**, pas le jeu d'entraînement du service de démo (voir §6, « Entraîné sur Kaggle ? »). Kaggle Recruit (restaurants réels) : Prophet bat la baseline naïve en moyenne (MAPE 49,7 % vs 55,9 %) mais **fait jeu égal en médiane** (27,0 vs 27,6 %) et est **derrière à J+1** (28,5 vs 27,9 %). J'ai déclenché moi-même la clause de pivot : la valeur n'est pas le modèle, c'est la boucle de décision. |
 | 4:00 | **Construit avec Claude Code** | Linear HOS-357 → PR #298 → CI | Une story : contexte d'audit, périmètre tranché et daté par moi, critères d'acceptation, cas golden ajoutés, gate d'éval bloquant. Puis 2 corrections où la mesure a contredit l'IA (§3). |
 | 5:30 | **Limites avant pilote** | §4 | 0 utilisateur ; lecture du modèle mesurée à 98,1 % (n=52) sur des cas écrits par moi, pas par de vrais managers ; « pourquoi pas » était écrit sans confirmation → corrigé par une règle de lexique, pas par le prompt ; réels déclarés par le manager (pas de POS) ; templates WhatsApp non approuvés ; défense prompt-injection différée ; staging relancé (v25) mais sync PMS non planifiée. |
@@ -40,7 +40,7 @@ $env:ANTHROPIC_API_KEY="..."; backend\.venv\Scripts\python scripts\ops\demo_what
 Répéter une fois le mode réel avant l'entretien : un modèle réel peut lire « bof, ça me paraît beaucoup »
 autrement que le script. C'est un bon moment de démo (confiance → confirmation), pas un incident.
 
-Ce que montre `demo_whatsapp_conversation.py` (une semaine, Hôtel Kléber fictif) :
+Ce que montre `demo_whatsapp_conversation.py` (deux semaines, Maison Lumen fictif) — semaine 1, un chemin par réponse :
 
 | Réponse du manager | Chemin | Ce qui est écrit |
 |---|---|---|
@@ -51,6 +51,26 @@ Ce que montre `demo_whatsapp_conversation.py` (une semaine, Hôtel Kléber ficti
 | `bof, ça me paraît beaucoup` | modèle, confiance 0,6 | rien avant « oui » → refus `model_confirmed` |
 | `corriger mardi refus` + `oui` | commande, confirmation | décision remplacée (`manager_revision`) |
 | `recap semaine` | gabarit déterministe, sans LLM | récap : 4 reçues, écart prévision/réel sur 3 jours mesurés |
+
+Effectifs dimensionnés par la vraie règle (`risk_assessment.assess`, newsvendor, coûts fictifs, calibration **synthétique**) :
++1 les soirs normaux, +2 les soirs d'événement, avec les lignes « Si accepté / Si refusé ».
+
+Semaine 2 et après — **les trois retours de la boucle**, chacun avec son statut :
+
+| Retour | Ce que montre le script | Statut |
+|---|---|---|
+| Humain | Claire valide les soirs normaux, retient **+3** au lieu de +2 les soirs d'événement | construit |
+| Recommandation vs réel | couverts réels saisis après chaque service, écart affiché | réels **déclarés**, pas de POS (HOS-364) |
+| Débrief du dernier service | ligne « Dernier dîner mesuré : prévu / réel / décision » en tête de la recommandation | **prototype du script** (HOS-363), pas dans le produit |
+
+Puis la boucle d'apprentissage, sur le code de production :
+
+1. Passe hebdomadaire (`learning_store.run_pass`, lundi 03:40) : **proposition** `covers_per_extra_staff` 15 → 12, sur 8 décisions humaines dont 3 contre-propositions, avec la mention « réels indépendants : non ». Rien n'est appliqué par la passe.
+2. **Approbation** par une personne nommée (`learning_store.decide`) : la valeur est appliquée et tracée.
+3. Recommandation suivante d'un soir d'événement : **toujours +2**, pas +3. Constat affiché tel quel : le ratio entre aussi dans le coût du manque de personnel, donc le seuil de risque baisse (0,79 → 0,75) et la demande couverte aussi. La règle d'apprentissage suppose cette demande fixe. Défaut de composition entre deux de mes propres règles, trouvé en construisant cette démo : **HOS-365**.
+4. **Retour arrière en un appel** (`rollback_parameter`) : ratio 15 rétabli, historique append-only.
+
+À dire : « La boucle propose, un humain approuve, on mesure l'effet, on peut revenir en arrière. Et ici, la mesure montre que ma règle d'apprentissage ne fait pas encore ce qu'elle promet : c'est ce que la boucle sert à voir. » Vocabulaire : apprentissage **approuvé par l'hôtel**, jamais « automatique » (Décision #40).
 
 ## 3. « Construit avec Claude Code » — les preuves à montrer
 
