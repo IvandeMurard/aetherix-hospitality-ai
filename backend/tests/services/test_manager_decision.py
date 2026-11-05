@@ -489,3 +489,28 @@ def test_decision_rules_never_read_the_outcome():
     assert "actual_covers" not in inspect.getsource(md).replace(
         "Nothing in this\n  module reads ``actual_covers``", ""
     )
+
+
+# ---------------------------------------------------------------------------
+# Lukewarm yes — "pourquoi pas" / "why not" (golden parser-confirm-whynot-fr-001)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("body", ["pourquoi pas", "Pourquoi pas", "why not", "pourquoi pas merci"])
+@pytest.mark.parametrize("kind", ["add", "reduce", "no_change"])
+def test_lukewarm_yes_is_confirmed_as_acceptance_never_written(body, kind):
+    from datetime import datetime, timedelta, timezone
+
+    from app.services.manager_decision import PendingContext, match_keyword, resolve_keyword
+
+    now = datetime(2030, 1, 15, 12, tzinfo=timezone.utc)
+    match = match_keyword(body)
+    assert match is not None and "lukewarm" in match.units
+    res = resolve_keyword(match, PendingContext(1, now - timedelta(hours=1), now, proposal=kind))
+    assert (res.action, res.decision, res.why) == ("confirm", "accepted", "lukewarm")
+
+
+def test_lukewarm_yes_with_question_mark_stays_a_question():
+    from app.services.manager_decision import is_question, match_keyword
+
+    assert match_keyword("pourquoi pas ?") is None
+    assert is_question("pourquoi pas ?")
