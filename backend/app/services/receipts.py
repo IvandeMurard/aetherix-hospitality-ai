@@ -135,11 +135,11 @@ If the reply could express two different stances toward THIS proposal (e.g. "no 
 
 confidence: your probability (0.0-1.0) that the stance is right. Use a low value when the reply could be read two ways. Low-confidence answers are confirmed with the manager, never recorded silently.
 
-intent: structured_correction (corrects a specific number) | free_form (context or a non-numeric change) | acknowledge (pure acknowledgement).
+intent (required, exactly one of these three words; "none" is NOT a valid intent): structured_correction (corrects a specific number) | free_form (context, a question, hesitation, a non-numeric change, or no position at all) | acknowledge (pure acknowledgement).
+"acknowledge" is an intent, never a stance: a reply that simply agrees ("all good, see you at 6") has stance adopt_proposal and intent acknowledge.
 corrected_value: the corrected number of covers if the manager gives one, else null.
 reason: the manager's reason in their own words if they give one, else null. Never invent one.
-reason_route: only if a reason is given, where it belongs: memory (situational context for similar nights) | decision_rule (a rule the manager applies) | policy (a hotel or company constraint) | case_set (a case where the forecast was wrong for an identifiable cause) | upstream_filter (the input data was wrong) | null.
-reason_route_confidence: 0.0-1.0, or null.
+reason_route: only if a reason is given, where it belongs: memory (situational context for similar nights) | decision_rule (a rule the manager applies) | policy (a hotel or company constraint) | case_set (a case where the forecast was wrong for an identifiable cause) | upstream_filter (the input data was wrong) | null.reason_route_confidence: 0.0-1.0, or null.
 
 Respond with a single JSON object only, no explanation, no markdown:
 {"stance": "<stance>", "confidence": <0.0-1.0>, "intent": "<intent>", "corrected_value": <number or null>, "reason": <string or null>, "reason_route": <string or null>, "reason_route_confidence": <number or null>, "notes": "<cleaned manager note or empty string>"}\

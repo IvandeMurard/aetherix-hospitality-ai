@@ -100,6 +100,15 @@ def test_real_run_records_target_dataset_version_and_failure_rate(monkeypatch):
     assert result["llm_failure_rate"] == 0.0
 
 
+def test_a_model_that_is_never_reached_is_not_measured(monkeypatch):
+    """Invalid key (401) on every call: no answer came back, so there is no score.
+    Reporting it as 0 % accuracy would read as a model-quality FAIL."""
+    _real_env(monkeypatch, _StubProvider(RuntimeError("401 invalid x-api-key")))
+
+    with pytest.raises(ParserEvalNotMeasured, match="every model call failed"):
+        eval_parser.run()
+
+
 def test_a_model_that_cannot_answer_shows_in_the_failure_rate(monkeypatch):
     _real_env(monkeypatch, _StubProvider("not json at all"))
 

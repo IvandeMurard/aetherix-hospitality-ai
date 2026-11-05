@@ -293,6 +293,7 @@ class _RecordingLLM:
     def __init__(self, inner) -> None:
         self._inner = inner
         self.calls = 0
+        self.answered = 0  # calls that returned an answer (well-formed or not)
         self.temperatures: set[float] = set()
         self.tiers: set[str] = set()
 
@@ -300,10 +301,12 @@ class _RecordingLLM:
         self.calls += 1
         self.temperatures.add(temperature)
         self.tiers.add(tier)
-        return await self._inner.complete(
+        answer = await self._inner.complete(
             messages=messages, max_tokens=max_tokens, temperature=temperature,
             system=system, tier=tier,
         )
+        self.answered += 1
+        return answer
 
     @property
     def model_id(self) -> str:
@@ -578,6 +581,13 @@ def run(dataset: Path = DEFAULT_DATASET, seed: int = 42, runs: int = 1) -> dict:
         for _ in range(max(1, runs)):
             llm, primary, target = _real_llm()
             preds = _run_production(graded + trigger_set, llm)
+            if llm.calls and not llm.answered:
+                # Not one call came back (invalid key, quota, network): the model
+                # was never asked, so this is not a 0 % score — it is no score.
+                raise ParserEvalNotMeasured(
+                    f"every model call failed ({llm.calls}/{llm.calls}) for target "
+                    f"{target} — e.g. an invalid or revoked key. NOT MEASURED."
+                )
             graded_preds, trigger_preds = preds[:len(graded)], preds[len(graded):]
             r = compute_parser_metrics(graded, _replay(graded_preds))
             r["confirmation_trigger"] = confirmation_trigger(trigger_set, trigger_preds)

@@ -495,6 +495,17 @@ Séparation canonique : **Anima** (*Who is this guest?*) · **Hive/Mesh** (*What
 
 **Consequences:** HOS-349 and HOS-350 apply it. The weekly recap is the artifact that keeps the work visible when delivery happens elsewhere. Scheduling-tool and PMS write-back (ADR-0006, Phase 5+) inherit rules 2 to 4.
 
+### 45 — POS, Context Graph, Anima and Orchestrator 2.x no longer deferred (05/11/2026)
+
+**Decision (Ivan, PO):** Epic 13 (POS, HOS-254), Epic 14 (Context Graph, HOS-255), the Anima epics (HOS-228, HOS-230, HOS-231) and Orchestrator Phase 2.1 to 2.5 (HOS-331 to HOS-335) are no longer deferred. They are prioritised (Todo, High) and built next, under Décision #36 (portfolio objective, synthetic or mock data, honest labels per Décision #33).
+
+What this changes and what it does not:
+
+1. **Supersedes the calendar parts of Décisions #23 §D4 and #24.** Both deferrals were calendar arbitrations, not design rejections (ADR-0006 §10, ADR-0008 §17.6). The designs stay as written.
+2. **The shared precondition remains.** `hotel_cohort_features` v1 does not exist. It must be built first (synthetic data) before Story 13.5 (HOS-260) and the cohort half of the graph. ADR-0006 §10.4 and ADR-0008 §17.6 need an amendment that records the restart.
+3. **Gates unchanged.** The DPIA gate (Décision #20) stays closed: no real guest data (HOS-239), and no `Guest` / `Stay` / `Sentiment` graph nodes outside synthetic data. PMS write (HOS-240) contradicts Décisions #7 and #44 and needs its own decision before any code. A CRM partnership (HOS-238) needs a signed third party.
+4. **Order (confirmed by Ivan, 05/11/2026):** POS ingestion 13.1 to 13.4 and Orchestrator 2.1 / 2.5 first. `hotel_cohort_features` v1 comes before 13.5 and Epic 14.
+
 ## Notes de maintenance
 
 - Toute nouvelle décision architecturale : ajouter ligne d'index dans `CLAUDE.md` §Décisions architecturales + section H3 détaillée ici. Ne **JAMAIS** écrire le détail dans CLAUDE.md (rule budget ≤ 150 lignes).
