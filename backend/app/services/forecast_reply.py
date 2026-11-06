@@ -80,6 +80,7 @@ _T = {
         "hint": "💬 _Un autre jour ? Écrivez « prévision {day} »._",
         "demo": "🧪 _Démonstration : hôtel fictif, modèle entraîné sur des données synthétiques._",
         "km": "{d} km",
+        "ack": "⏳ Demande reçue : je calcule la prévision {day}…",
     },
     "en": {
         "title": "📊 *Forecast · {day} · {service}*",
@@ -110,6 +111,7 @@ _T = {
         "hint": "💬 _Another day? Reply “forecast {day}”._",
         "demo": "🧪 _Demonstration: fictional hotel, model trained on synthetic data._",
         "km": "{d} km",
+        "ack": "⏳ Request received: computing the {day} forecast…",
     },
 }
 
@@ -254,6 +256,14 @@ def render_forecast(
         if config.FORECAST_DEMO_NOTICE if demo_notice is None else demo_notice:
             blocks.append([t["demo"]])
     return "\n\n".join("\n".join(b) for b in blocks)
+
+
+def ack_reply(ref: str, locale: Optional[str] = "fr") -> str:
+    """Immediate "received, working on it" line sent while the engine runs.
+    ``ref`` is what the manager wrote ("vendredi soir"), echoed back so the
+    manager sees the request was understood. Nothing is computed here."""
+    ref = " ".join((ref or "").split())[:40]
+    return _T[_loc(locale)]["ack"].format(day=f"« {ref} »" if ref else "").replace("  ", " ")
 
 
 def bad_date_reply(ref: str, locale: Optional[str] = "fr") -> str:

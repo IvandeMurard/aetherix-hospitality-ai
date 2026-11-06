@@ -265,7 +265,12 @@ async def twilio_inbound_webhook(
                 _bg_forecast, from_number=payload.From_, command=forecast_cmd,
                 engine=getattr(request.app.state, "engine", None),
             )
-            return _xml_response(_TWIML_EMPTY)
+            # Immediate acknowledgement (TwiML, same request): the engine takes
+            # seconds and WhatsApp shows nothing meanwhile.
+            from app.services.forecast_reply import ack_reply
+
+            ack_locale = forecast_cmd.locale or getattr(profile, "manager_locale", None) or "fr"
+            return _xml_response(_twiml_message(ack_reply(forecast_cmd.ref, ack_locale)))
 
         plan = await decisions.handle_deterministic(
             profile, payload.Body, ButtonPayload.strip(), _now(), request_id=str(uuid.uuid4())

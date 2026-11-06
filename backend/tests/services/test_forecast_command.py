@@ -428,6 +428,7 @@ def test_route_sends_the_command_to_the_background_with_the_engine(monkeypatch):
                                data={"From": PHONE, "Body": "prévision demain ?", "To": "+1"})
     assert resp.status_code == 200
     bg.assert_awaited_once()
+    assert "<Message>" in resp.text and "demain" in resp.text.lower()   # immediate ack, echoes the day
     assert bg.await_args.kwargs["engine"] is sentinel
     assert bg.await_args.kwargs["command"].days_ahead == 1
     deterministic.assert_not_awaited()            # never reaches decision capture
@@ -489,3 +490,11 @@ def test_demo_notice_only_on_a_served_forecast():
     mock = {"prediction": {"covers": 45, "is_mock": True}}
     assert "🧪" not in render_forecast(mock, _CTX, DAY, "dinner", "fr", demo_notice=True)
     assert "🧪" not in render_forecast(None, _CTX, DAY, "dinner", "fr", demo_notice=True)
+
+
+def test_ack_reply_echoes_the_request_and_follows_the_locale():
+    from app.services.forecast_reply import ack_reply
+
+    assert ack_reply("vendredi soir", "fr") == "⏳ Demande reçue : je calcule la prévision « vendredi soir »…"
+    assert ack_reply("friday", "en") == "⏳ Request received: computing the « friday » forecast…"
+    assert "  " not in ack_reply("", "fr")
