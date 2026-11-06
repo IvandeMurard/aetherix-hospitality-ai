@@ -145,7 +145,7 @@ Variables (LLM, Supabase, Apaleo, Redis, Logfire, WhatsApp buttons + recap templ
 
 **Linear** — Workspace `Hospitalityagent`, team `2f6bb5e2-d735-4769-9377-11fe186aa0ad`. Conventions Epic/Story → `docs/context/linear-conventions.md`. Verify session : `list_teams` doit retourner "Hospitalityagent".
 
-**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille + watchlist = `Veille/` uniquement** (migration achevée 30/07/2026, plus rien dans le repo). Détail → `docs/INDEX.md` §Convention local-only.
+**Obsidian** — Vault `C:\Users\ivand\OneDrive\Documents\Agentic AI Hospitality`. MCP : Claude Desktop + Claude Code. Reports : `AI Reports/Intelligence/`. **Veille + watchlist = `Veille/` uniquement** (migration achevée 30/07/2026, plus rien dans le repo). Détail → `docs/INDEX.md` §Convention local-only. **Source de vérité (06/11/2026) :** docs du projet = ce dépôt ; veille = vault. Le vault ne duplique pas les docs du repo : l'ancien dossier `Aetherix Project Context` est archivé (`_archive/`) et `scripts/ops/sync_obsidian.ps1` est désactivé.
 
 **BMad modes** — Déclare en début de conversation. Veille · SM (Bob) · Dev (Amelia) · Architect (Winston) · PM · Analyst (Mary) · QA · Tech Writer. Files in `tools/bmad/_bmad/bmm/agents/`.
 
