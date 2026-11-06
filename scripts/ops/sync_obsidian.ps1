@@ -6,6 +6,11 @@ param(
     [switch]$DryRun
 )
 
+# DESACTIVE le 06/11/2026 : le vault ne duplique plus les docs du repo (source de verite = le repo).
+# L'ancien dossier "Aetherix Project Context" est archive dans le vault (_archive/).
+# La veille vit uniquement dans Agentic AI Hospitality/Veille/. Voir CLAUDE.md, section Obsidian.
+Write-Host "sync_obsidian.ps1 est desactive (voir CLAUDE.md, section Obsidian)." -ForegroundColor Yellow
+exit 0
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 

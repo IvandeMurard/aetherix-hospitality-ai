@@ -32,7 +32,7 @@ entries:
     description: >-
       Backend that turns covers, staffing and demand signals into recommendations for
       an F&B manager; staging runs on a fictional hotel, zero real users so far.
-    verified_on: 2026-11-05
+    verified_on: 2026-11-06
     evidence:
       - backend/app/main.py
       - backend/app/services/prediction_engine.py
@@ -40,14 +40,27 @@ entries:
   - id: covers-forecast
     name: Covers forecast
     status: Shadow-mode
-    deployed: false
+    deployed: true
     description: >-
       Benchmarked on real public restaurant data (ahead of a naive baseline on mean
       error, level with it on the median); no manager decision has been delivered on it.
-    verified_on: 2026-09-25
+    verified_on: 2026-11-06
     evidence:
       - backend/app/services/prediction_engine.py
       - docs/context/mape-benchmark.md
+
+  - id: forecast-on-request
+    name: Forecast on request over WhatsApp
+    status: Built
+    deployed: true
+    description: >-
+      A manager asks for a forecast in chat and receives the covers forecast with its
+      context; runs on staging with a fictional hotel, zero real users so far.
+    verified_on: 2026-11-06
+    evidence:
+      - backend/app/api/routes/twilio_inbound.py
+      - backend/app/services/forecast_reply.py
+      - backend/app/services/forecast_context.py
 
   - id: daily-receipt
     name: Daily receipt
