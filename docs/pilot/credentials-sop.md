@@ -143,7 +143,7 @@ Si fuite confirmée ou suspectée :
 
 Avant d'exécuter `flyctl secrets set` pour un partner :
 
-- [ ] Discovery call §3 onboarding-kit.md complété, 8/8 prereqs cochés.
+- [ ] Discovery call §3 onboarding-kit.md complété, 9/9 prereqs cochés.
 - [ ] Partner a généré l'app Apaleo avec scopes **read-only uniquement** (vérifier dans le portal screenshot envoyé par le partner).
 - [ ] Credentials reçus via canal chiffré (1Password share / Bitwarden Send / Signal). **Pas d'email.**
 - [ ] `.gitignore` vérifié — `.env.partner-validation` exclu.
