@@ -71,6 +71,22 @@ Apaleo expose 235 outils MCP natifs. Aucun ne prédit les couverts, ne calcule l
 - **30 min/mois** : un call de feedback pour caler le modèle.
 - **Engagement RGPD** : données opérationnelles uniquement (covers, occupancy, staffing). Aucune PII guest exfiltrée.
 
+#### Comment on décide à la fin des 4 semaines
+
+Un pilote qui ne s'arrête jamais et ne démarre jamais vraiment coûte plus cher qu'un « non » documenté. Avant le jour 1, on remplit ensemble **une page** (le *pilot brief*) :
+
+| Case | Ce qu'on y écrit |
+|------|------------------|
+| **Le problème** | Une phrase, dans vos mots (ex. « savoir combien de couverts au dîner pour caler l'équipe »). Un seul problème. |
+| **La baseline** | Ce que vous faites aujourd'hui : « la moyenne des 4 derniers mêmes jours » ou votre tableur, et le temps que ça prend par semaine. **Mesurée avant**, sans la « nettoyer ». |
+| **Le responsable** | Une personne nommée côté hôtel, qui lit le Receipt et corrige. |
+| **Le niveau d'autorité** | Aetherix **recommande, vous validez**. Aucune action sans votre accord (Décision #6), PMS en lecture seule (Décision #7). |
+| **La destination** | Où la recommandation arrive et dans quelle routine elle est lue (le Receipt WhatsApp du matin). |
+| **Les mesures** | L'écart face à la baseline à l'horizon où vous pouvez encore changer quelque chose · recommandations acceptées ou corrigées · temps gagné. Fixées **avant** de lire les résultats. |
+| **Les conditions d'arrêt** | Ce qui nous fait arrêter ou réviser (ex. aucune réponse pendant une semaine, accès aux données bloqué). |
+
+Semaine 1 : baseline et accès aux données. Semaines 2 à 4 : Receipt quotidien, vous répondez. **Fin de semaine 4 : une décision écrite**, parmi quatre : *arrêter* (le problème n'est pas matériel, l'accès est bloqué ou la sortie n'est pas fiable) · *réviser* (la valeur est plausible, mais les définitions ou les seuils sont à travailler) · *continuer* (la sortie est fiable et utile au niveau d'autorité actuel) · *étendre* (un problème voisin, ou un niveau d'autorité relevé sur preuve). Un « arrêter » appuyé sur des mesures est un résultat, pas un échec. Le pilot brief ne promet aucun résultat chiffré.
+
 #### Contact
 
 Ivan de Murard — fondateur Aetherix — ivandemurard@gmail.com
@@ -174,8 +190,9 @@ Dérouler la checklist §4 ci-dessous, cocher en direct.
 - [ ] **Restaurant ouvert le soir** confirmé (pas seulement petit-déj — sinon scope hors ICP Phase 3).
 - [ ] **Historique Apaleo ≥ 60 jours** sur la property (sinon cold-start meta-learner ADR 0005, à signaler).
 - [ ] **Décideur unique identifié** côté hôtel (GM ou propriétaire) — éviter le pilot enlisé en validation interne.
+- [ ] **Pilot brief d'une page rempli avec le décideur** — problème, baseline mesurée avant, responsable nommé, niveau d'autorité, destination, mesures, conditions d'arrêt (cf. §1, « Comment on décide à la fin des 4 semaines »).
 
-**Critère de Go pilot :** 8/8 cochés ou plan explicite pour combler les manques dans les 7 jours.
+**Critère de Go pilot :** 9/9 cochés ou plan explicite pour combler les manques dans les 7 jours.
 
 ---
 
