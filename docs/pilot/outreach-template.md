@@ -60,9 +60,9 @@ Bonjour {{prénom}},
 
 Je suis Ivan, fondateur d'Aetherix. On construit un agent IA F&B pour les hôtels sous Apaleo — forecast couverts J+1 + recommandation staffing, livré chaque matin par WhatsApp.
 
-Je vous écris parce que {{property_name}} coche tout ce qu'on cherche pour un pilot : 4★, Apaleo, restaurant ouvert le soir à {{ville}}. Je suis direct sur où on en est : le forecast est benchmarké sur des données publiques réelles (30 restaurants), pas encore sur des couverts d'hôtel. C'est exactement ce que ce pilot mesure — et vous verrez le chiffre en même temps que moi.
+Je vous écris parce que {{property_name}} coche tout ce qu'on cherche pour un pilot : 4★, Apaleo, restaurant ouvert le soir à {{ville}}. Je suis direct sur où on en est : le forecast est benchmarké sur des données publiques réelles (30 restaurants), pas encore sur des couverts d'hôtel. C'est ce que ce pilote commence à mesurer : 2 semaines disent si vous l'utilisez, la précision sur vos couverts se lit sur la durée — et vous verrez le chiffre en même temps que moi.
 
-On lance 1 pilot de 4 semaines en juin/juillet, sans coût pour vous. Vous nous donnez un client Apaleo read-only (15 min de setup), votre F&B Manager lit un message WhatsApp 2 min/jour et nous renvoie un mot pour valider. C'est tout.
+On lance 1 pilote de 2 semaines jusqu'à une première décision (4 semaines si vous choisissez de continuer) en juin/juillet, sans coût pour vous. Vous nous donnez un client Apaleo read-only (15 min de setup), votre F&B Manager lit un message WhatsApp 2 min/jour et nous renvoie un mot pour valider. C'est tout.
 
 Ce qu'on demande en échange : 30 min de feedback par mois, et la permission de citer {{property_name}} comme design partner si le pilot marche.
 
@@ -83,9 +83,9 @@ Hi {{first_name}},
 
 I'm Ivan, founder of Aetherix. We're building an F&B AI agent for hotels running Apaleo — daily covers forecast + staffing recommendation, delivered by WhatsApp every morning.
 
-I'm reaching out because {{property_name}} ticks every box for our pilot ICP: 4★, Apaleo, restaurant open in the evening in {{city}}. Straight about where we stand: the forecast is benchmarked on real public data (30 restaurants), not yet on hotel covers. That is precisely what this pilot measures — and you'll see the number the same day I do.
+I'm reaching out because {{property_name}} ticks every box for our pilot ICP: 4★, Apaleo, restaurant open in the evening in {{city}}. Straight about where we stand: the forecast is benchmarked on real public data (30 restaurants), not yet on hotel covers. That is what this pilot starts to measure: two weeks tell us whether you use it, accuracy on your covers takes longer to read — and you'll see the number the same day I do.
 
-We're onboarding 1 pilot for 4 weeks in June/July, at no cost. You give us a read-only Apaleo OAuth2 client (15-min setup), your F&B Manager reads one WhatsApp message per day (2 min) and replies with a single word to validate. That's the whole loop.
+We're onboarding 1 pilot: 2 weeks to a first decision, 4 weeks if you choose to continue, in June/July, at no cost. You give us a read-only Apaleo OAuth2 client (15-min setup), your F&B Manager reads one WhatsApp message per day (2 min) and replies with a single word to validate. That's the whole loop.
 
 In exchange: 30 min of monthly feedback, and permission to name {{property_name}} as a design partner if the pilot lands.
 
@@ -99,7 +99,7 @@ ivandemurard@gmail.com
 
 ## 6. Message email — Français (version longue, contexte Apaleo)
 
-> Subject : `Pilot F&B sur Apaleo — 4 semaines, sans coût, pour {{property_name}}`
+> Subject : `Pilot F&B sur Apaleo — 2 semaines puis 4 si vous continuez, sans coût, pour {{property_name}}`
 
 ```
 Bonjour {{prénom}},
@@ -114,7 +114,7 @@ Concrètement :
 - Read-only sur votre Apaleo (aucune écriture, aucun risque opérationnel).
 - Human-in-the-loop (vous validez chaque recommandation).
 
-Ce qu'on cherche : 1 hôtel design partner pour un pilot 4 semaines, démarrage juin/juillet. Aucun coût. En échange, 30 min de feedback par mois et l'autorisation de citer {{property_name}} si le pilot fonctionne.
+Ce qu'on cherche : 1 hôtel design partner pour un pilote de 2 semaines jusqu'à une première décision (4 si vous continuez), démarrage juin/juillet. Aucun coût. En échange, 30 min de feedback par mois et l'autorisation de citer {{property_name}} si le pilot fonctionne.
 
 Pourquoi {{property_name}} : {{raison spécifique — taille, restaurant, localisation, intro par X}}.
 
@@ -131,7 +131,7 @@ ivandemurard@gmail.com
 
 ## 7. Message email — English (long version, Apaleo context)
 
-> Subject : `F&B pilot on Apaleo — 4 weeks, free, for {{property_name}}`
+> Subject : `F&B pilot on Apaleo — 2 weeks, then 4 if you continue, free, for {{property_name}}`
 
 ```
 Hi {{first_name}},
@@ -146,7 +146,7 @@ Concretely:
 - Read-only on your Apaleo (zero writes, zero operational risk).
 - Human-in-the-loop (you validate every recommendation).
 
-What we're looking for: 1 design partner hotel for a 4-week pilot, kicking off June/July. No cost. In exchange, 30 min of monthly feedback and permission to name {{property_name}} as a design partner if the pilot lands.
+What we're looking for: 1 design partner hotel for a pilot of 2 weeks to a first decision (4 if you continue), kicking off June/July. No cost. In exchange, 30 min of monthly feedback and permission to name {{property_name}} as a design partner if the pilot lands.
 
 Why {{property_name}}: {{specific reason — size, restaurant profile, location, intro from X}}.
 

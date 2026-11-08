@@ -110,7 +110,7 @@ Le dépôt ne porte plus que **le code et la documentation vivante**. Trois ense
 - Phases 0-2 terminées → `_archive/planning/`
 
 ## 🚀 Pilot & Ops
-- `pilot/onboarding-kit.md` · `pilot/outreach-template.md` · `pilot/credentials-sop.md`
+- `pilot/onboarding-kit.md` · `pilot/outreach-template.md` · `pilot/credentials-sop.md` · `pilot/pilot-brief.schema.json` (typed pilot brief for a hotel's own agent, Design)
 - `pilot/journal-prospection.md` — **journal de prospection design-partner (01/08)** : modèle d'entrée 6 champs (objection en verbatim), tableau de bord, synthèse des objections à partir de 10 conversations (4 familles : valeur / preuve / risque / coût de changement), et la grille des **5 maillons de la chaîne de valeur** — c'est le critère de sortie n°5 du plan 90 j, s'il est tenu
 - `ops/latency-slo.md` — SLO latence · `ops/llm-fallback-runbook.md` — runbook fallback LLM
 - `ops/public-status-sync.md` — **statut public d'Aetherix → méta-repo (Décision #42)** : `public-status.yml`, gate de fuite, Action qui ouvre une PR sur le méta-repo, création du token `META_REPO_TOKEN`

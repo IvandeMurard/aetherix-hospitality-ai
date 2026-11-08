@@ -2,7 +2,7 @@
 
 > **Audience**: third-party agents, enterprise agent hubs, partner integrations.
 > **v0**: retired 2026-08-01 (HOS-315). See the migration note below.
-> **v1**: 3 atomic tools — `recall_memory` replaces `get_recommendations_with_memory_context`.
+> **v1**: 11 atomic tools (table below) — `recall_memory` replaces `get_recommendations_with_memory_context`.
 > **Spec**: [ADR 0001](../adr/0001-aetherix-mcp-server-v0.md) · [ADR 0004](../adr/0004-orchestrator-separation.md)
 
 ---
@@ -18,6 +18,16 @@ Endpoint: `POST /mcp/v1/`
 | `get_operational_predictions` | `predict` | F&B covers forecast + staffing for a target date |
 | `recall_memory` | `memory:read` | Semantic recall from the property's operational memory |
 | `submit_feedback_to_memory` | `feedback` | Record manager outcome for a past recommendation |
+| `get_decision_recap` | `receipts:read` | Deterministic recap of recent recommendations, decisions and outcomes |
+| `get_pending_recommendations` | `receipts:read` | Recommendations still waiting for a decision (read-only) |
+| `get_hotel_data_export` | `hotel_data` | The hotel's own data export |
+| `get_hotel_data_deletion_plan` | `hotel_data` | What a deletion would remove, before anything is deleted |
+| `request_hotel_data_deletion` | `hotel_data` | Request a deletion (waits for the owner's confirmation; cancellable) |
+| `set_hive_consent` | `hotel_data` | Opt in or out of anonymised cross-hotel sharing (waits for the owner's confirmation) |
+| `get_hotel_data_requests` | `hotel_data` | Status of the hotel's export and deletion requests |
+| `cancel_hotel_data_request` | `hotel_data` | Cancel a pending deletion |
+
+*Table checked against `V1_TOOLS_MANIFEST` and the scope map in `backend/app/mcp_core.py` on 2026-11-08; it listed 3 tools while the manifest advertises 11.*
 
 ### v0 — retired on 2026-08-01
 
@@ -220,6 +230,33 @@ Errors are RFC 7807 Problem Details wrapped inside the MCP JSON-RPC error envelo
 | `rate_limited` | 429 | Per-tool rate limit exceeded |
 | `upstream_unavailable` | 503 | Prophet model not trained / LLM backend down |
 | `internal_error` | 500 | Catch-all — check server logs |
+
+---
+
+## Onboarding a hotel through its own agent (Design)
+
+> **Status: Design.** No external agent has used this yet (the public status says "no external consumer yet"). It is written down so the first one finds the rules already settled.
+
+**Who this is for:** the hotel's own agent, acting for the GM or the F&B manager, or an assistant helping them evaluate Aetherix (Décision #44: deliver through the hotel's own tools).
+
+**One source, two forms.** The pilot brief the hotel agrees with a human is in [`docs/pilot/onboarding-kit.md`](../pilot/onboarding-kit.md) §1. Its typed form is [`docs/pilot/pilot-brief.schema.json`](../pilot/pilot-brief.schema.json): same fields, no second version of the content. If they disagree, the kit wins and the schema is fixed.
+
+**Authority: level L0 (ADR-0013). The agent prepares, a human decides.**
+
+| An agent may | An agent may not |
+|---|---|
+| Read the kit and the schema | Accept the pilot, sign, or commit the hotel |
+| Check the prerequisites (kit §4) in read-only mode | Create or approve the Apaleo client, or any access grant |
+| Compute the baseline from exports it is already allowed to read | Ask for a token for itself |
+| Draft the pilot brief (`drafted_by: "agent"`) | Fill a decision point: `decided_by` is always `"human"` |
+| Once a token exists: read `get_operational_predictions` (`predict`), `get_pending_recommendations` and `get_decision_recap` (`receipts:read`) to prepare the evidence | Record a decision in the manager's place, or change the authority level |
+| | Opt in to Hive sharing or request a deletion without the owner's confirmation (those tools wait for it) |
+
+**Decision points.** End of week 2: *stop / revise / continue*. If the hotel continues, end of week 4: *stop / continue / extend*. An agent can assemble the baseline-versus-measures evidence; the decision and its date are the human's.
+
+**What two weeks can and cannot show.** Whether the manager reads, answers and corrects, and whether planning work changes. Not the accuracy of the forecast, which is read on the hotel's own history (protocol: `docs/planning/protocole-de-preuve.md`).
+
+**No new tool.** Status is derivable from the tools above. A `get_pilot_brief` tool waits for a real agent that needs it.
 
 ---
 
