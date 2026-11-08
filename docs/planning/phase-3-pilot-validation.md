@@ -24,7 +24,7 @@ Both tracks ship code that improves Aetherix. Track B is *aligned* with the prod
 
 ### Track A — Business gate
 
-A1. **1 design partner onboarded** on real Apaleo property (read-only PMS, daily Receipt delivery, ≥4 weeks live).
+A1. **1 design partner onboarded** on real Apaleo property (read-only PMS, daily Receipt delivery; **2 weeks to a written first decision, ≥4 weeks live if the hotel chooses to continue** — decision of 08/11/2026: the 4 weeks were Aetherix's evidence need, not the hotel's decision need; if the hotel stops at 2 weeks, A1 and A2 are not met, which is a result, not a defect of the gate).
 A2. **Trust-KPI measured** with directional lift on `recommendation_acceptance_rate` (Receipts cohort vs ablated cohort).
 A3. **Pricing model decided** — at least 1 tier proposal backed by ≥90d of `agent_action_log` on the pilot hotel.
 A4. **Apaleo Agent Hub application submitted** with passing review checklist (security + integration + value prop).
@@ -119,7 +119,7 @@ Code lives in `backend/app/integrations/events_paris/` + MCP tool registered in 
 Phase 3 closes when **all of** :
 
 ### Track A
-- [ ] A1 — design partner onboarded for ≥4 weeks live receipt delivery
+- [ ] A1 — design partner onboarded, first written decision at 2 weeks; ≥4 weeks live receipt delivery if the hotel continues (amended 08/11/2026)
 - [ ] A2 — US-7 ablation readout shows directional lift on `recommendation_acceptance_rate` (sample size noted, even if N=1 pilot with synthetic ablation)
 - [ ] A3 — pricing model decision doc landed with PM sign-off
 - [ ] A4 — Apaleo Agent Hub application submitted

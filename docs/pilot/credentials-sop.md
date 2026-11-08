@@ -108,7 +108,7 @@ Une fois validé : **supprimer `.env.partner-validation` immédiatement** (`Remo
 
 ## 4. Révocation (fin de pilot ou résiliation)
 
-Trigger : fin des 4 semaines pilot, ou résiliation à l'initiative du partner / Aetherix.
+Trigger : fin du pilote (décision écrite à 2 semaines, ou bilan à 4 semaines si le partner a choisi de continuer), ou résiliation à l'initiative du partner / Aetherix.
 
 1. **Partner** révoque l'app dans Apaleo Developer Portal (**Apps → "Aetherix F&B Pilot" → Revoke**). Cette action est la seule qui garantit la révocation côté Apaleo — Aetherix ne peut pas révoquer un secret partner.
 2. **Ivan** supprime les secrets côté Fly.io :

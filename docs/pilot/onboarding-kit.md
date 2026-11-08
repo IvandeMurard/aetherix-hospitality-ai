@@ -66,12 +66,12 @@ Apaleo expose 235 outils MCP natifs. Aucun ne prédit les couverts, ne calcule l
 
 #### Ce qu'on vous demande
 
-- **4 semaines** de pilot, **aucun coût** pendant cette période.
+- **2 semaines** de pilote jusqu'à une première décision écrite, **prolongeables à 4** si vous choisissez de continuer. **Aucun coût** pendant cette période.
 - **2 min/jour** : lire le Receipt WhatsApp et répondre par un mot.
 - **30 min/mois** : un call de feedback pour caler le modèle.
 - **Engagement RGPD** : données opérationnelles uniquement (covers, occupancy, staffing). Aucune PII guest exfiltrée.
 
-#### Comment on décide à la fin des 4 semaines
+#### Comment on décide : à 2 semaines, puis à 4 si vous continuez
 
 Un pilote qui ne s'arrête jamais et ne démarre jamais vraiment coûte plus cher qu'un « non » documenté. Avant le jour 1, on remplit ensemble **une page** (le *pilot brief*) :
 
@@ -85,7 +85,9 @@ Un pilote qui ne s'arrête jamais et ne démarre jamais vraiment coûte plus che
 | **Les mesures** | L'écart face à la baseline à l'horizon où vous pouvez encore changer quelque chose · recommandations acceptées ou corrigées · temps gagné. Fixées **avant** de lire les résultats. |
 | **Les conditions d'arrêt** | Ce qui nous fait arrêter ou réviser (ex. aucune réponse pendant une semaine, accès aux données bloqué). |
 
-Semaine 1 : baseline et accès aux données. Semaines 2 à 4 : Receipt quotidien, vous répondez. **Fin de semaine 4 : une décision écrite**, parmi quatre : *arrêter* (le problème n'est pas matériel, l'accès est bloqué ou la sortie n'est pas fiable) · *réviser* (la valeur est plausible, mais les définitions ou les seuils sont à travailler) · *continuer* (la sortie est fiable et utile au niveau d'autorité actuel) · *étendre* (un problème voisin, ou un niveau d'autorité relevé sur preuve). Un « arrêter » appuyé sur des mesures est un résultat, pas un échec. Le pilot brief ne promet aucun résultat chiffré.
+Jours 1 et 2 : baseline et accès aux données. Jours 3 à 14 : Receipt quotidien, vous répondez. **Fin de semaine 2 : une première décision écrite**, parmi trois : *arrêter* (le problème n'est pas matériel, l'accès est bloqué ou la sortie n'est pas fiable) · *réviser* (la valeur est plausible, mais les définitions ou les seuils sont à travailler) · *continuer* (la sortie est fiable et utile au niveau d'autorité actuel). Si vous continuez : semaines 3 et 4 avec les mêmes mesures, puis **un bilan écrit de fin de semaine 4** : *arrêter* · *continuer* · *étendre* (un problème voisin, ou un niveau d'autorité relevé sur preuve). Un « arrêter » appuyé sur des mesures est un résultat, pas un échec.
+
+Ce que 2 semaines montrent, et ce qu'elles ne montrent pas : si vous lisez le Receipt, répondez et corrigez, et si le travail de planification change. Elles ne suffisent pas à juger la précision du forecast : celle-ci se lit sur l'historique de votre établissement, pas sur 14 jours. Le pilot brief ne promet aucun résultat chiffré.
 
 #### Contact
 
@@ -132,7 +134,7 @@ Lors du discovery call (§3 Q1 + Q7), récupérer les vraies valeurs et recalcul
 
 ### 0-2 min — Opening
 
-- Rappel : "Merci pour le temps. 45 min, j'aimerais comprendre votre setup F&B, vous montrer Aetherix en 15 min, et voir si un pilot 4 semaines a du sens."
+- Rappel : "Merci pour le temps. 45 min, j'aimerais comprendre votre setup F&B, vous montrer Aetherix en 15 min, et voir si un pilote de 2 semaines (4 si vous continuez) a du sens."
 - Confirmer enregistrement (si call interne — pas le prospect).
 - Confirmer rôle : "Vous êtes F&B Manager ou GM ? Qui prendrait la décision sur un outil comme celui-ci ?"
 
@@ -186,11 +188,11 @@ Dérouler la checklist §4 ci-dessous, cocher en direct.
 - [ ] **Numéro WhatsApp Business** configuré et joignable (le prospect doit savoir qui contrôle ce numéro côté hôtel).
 - [ ] **F&B Manager nommé** disponible 2 min/jour pour lire le Receipt et répondre.
 - [ ] **Accord RGPD opérationnel** — données covers/occupancy/staffing uniquement. Pas de PII guest. Stockage EU (Supabase Stockholm, Fly.io Paris).
-- [ ] **Engagement écrit** : ≥ 4 semaines, feedback call mensuel 30 min, droit de résiliation à tout moment sans pénalité.
+- [ ] **Engagement écrit** : 2 semaines jusqu'à une première décision, prolongeables à 4 si l'hôtel choisit de continuer ; feedback call mensuel 30 min ; droit de résiliation à tout moment sans pénalité.
 - [ ] **Restaurant ouvert le soir** confirmé (pas seulement petit-déj — sinon scope hors ICP Phase 3).
 - [ ] **Historique Apaleo ≥ 60 jours** sur la property (sinon cold-start meta-learner ADR 0005, à signaler).
 - [ ] **Décideur unique identifié** côté hôtel (GM ou propriétaire) — éviter le pilot enlisé en validation interne.
-- [ ] **Pilot brief d'une page rempli avec le décideur** — problème, baseline mesurée avant, responsable nommé, niveau d'autorité, destination, mesures, conditions d'arrêt (cf. §1, « Comment on décide à la fin des 4 semaines »).
+- [ ] **Pilot brief d'une page rempli avec le décideur** — problème, baseline mesurée avant, responsable nommé, niveau d'autorité, destination, mesures, conditions d'arrêt (cf. §1, « Comment on décide : à 2 semaines, puis à 4 si vous continuez » ; forme typée pour un agent : `pilot-brief.schema.json`).
 
 **Critère de Go pilot :** 9/9 cochés ou plan explicite pour combler les manques dans les 7 jours.
 
