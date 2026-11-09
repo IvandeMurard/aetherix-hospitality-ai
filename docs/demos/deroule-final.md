@@ -13,6 +13,7 @@
 | 11:00 | `git pull origin main` puis lancer les deux scripts (§5) | les sorties correspondent à ce document |
 | 11:15 | Enregistrer la **vidéo de secours** (3 min : WhatsApp + script), mention « données fictives, boucle réelle » | fichier lisible hors ligne |
 | 14:30 | `fly status -a aetherix-backend` · `curl https://aetherix-backend.fly.dev/health` | machine `started`, `{"status":"ok"}` |
+| 11:00 | **Rejoindre la sandbox Twilio** : envoyer `join <code>` (Console Twilio → Messaging → Try it out → Send a WhatsApp message) depuis le téléphone du profil. L'adhésion dure **72 h**. Sans elle, Twilio répond « not connected to a Sandbox » | confirmation Twilio reçue |
 | 14:30 | Envoyer `prévision vendredi` au numéro sandbox depuis le téléphone | réponse avec « 🧪 Démonstration » |
 | 15:15 | Fermer `backend/.env`, terminaux avec jetons, vault Obsidian, autres conversations WhatsApp | rien de privé à l'écran |
 | 15:20 | Ouvrir les fenêtres dans l'ordre du §1, police du terminal agrandie | — |
