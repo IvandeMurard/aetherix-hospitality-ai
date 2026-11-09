@@ -40,7 +40,9 @@ def _validate_phone(number: str) -> bool:
 def _format_message(rec: StaffingRecommendation) -> str:
     """Build the final dispatch message from recommendation fields."""
     parts = [rec.message_text]
-    if rec.triggering_factor:
+    # The formatter already writes "Trigger: <factor>" into the message: the
+    # factor is appended only when the message does not already carry it.
+    if rec.triggering_factor and rec.triggering_factor not in (rec.message_text or ""):
         parts.append(f"Context: {rec.triggering_factor}")
     return "\n".join(parts)
 

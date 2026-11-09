@@ -378,6 +378,17 @@ def test_format_message_includes_triggering_factor():
     assert "High occupancy: 92%" in msg
 
 
+def test_format_message_does_not_repeat_a_factor_already_in_the_message():
+    """The formatter writes "Trigger: <factor>"; the dispatcher must not add it twice."""
+    rec = _make_rec(
+        message_text="Add 2 staff for 19:00–23:00. Trigger: match à 2 km (21:00).",
+        triggering_factor="match à 2 km (21:00)",
+    )
+    msg = _format_message(rec)
+    assert msg.count("match à 2 km (21:00)") == 1
+    assert "Context:" not in msg
+
+
 def test_format_message_without_triggering_factor():
     """_format_message must work when triggering_factor is None."""
     rec = _make_rec(message_text="No changes needed.", triggering_factor=None)

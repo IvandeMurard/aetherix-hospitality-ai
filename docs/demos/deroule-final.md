@@ -15,6 +15,8 @@
 | 14:30 | `fly status -a aetherix-backend` · `curl https://aetherix-backend.fly.dev/health` | machine `started`, `{"status":"ok"}` |
 | 11:00 | **Rejoindre la sandbox Twilio** : envoyer `join <code>` (Console Twilio → Messaging → Try it out → Send a WhatsApp message) depuis le téléphone du profil. L'adhésion dure **72 h**. Sans elle, Twilio répond « not connected to a Sandbox » | confirmation Twilio reçue |
 | 14:30 | Envoyer `prévision vendredi` au numéro sandbox depuis le téléphone | réponse avec « 🧪 Démonstration » |
+| 14:30 | `push_demo_recommendation.py --env backend/.env` (simulation) : vérifier règle `newsvendor-v1`, +2 et les lignes « Si accepté / Si refusé ». Si coûts absents : ajouter `--set-demo-costs` | message affiché, rien d'écrit |
+| 15:20 | Même commande avec `--apply`, puis attendre le message sur le téléphone (dispatcher : 2 min max). **Ne pas y répondre avant la démo** | recommandation reçue sur WhatsApp |
 | 15:15 | Fermer `backend/.env`, terminaux avec jetons, vault Obsidian, autres conversations WhatsApp | rien de privé à l'écran |
 | 15:20 | Ouvrir les fenêtres dans l'ordre du §1, police du terminal agrandie | — |
 
@@ -40,14 +42,20 @@
 Parties prenantes, une phrase : elle décide, la direction paie, le PMS distribue. Livraison dans ses outils :
 WhatsApp ou son propre agent via MCP, **pas de dashboard**.
 
-### 0:40 — La chaîne réelle (40 s) · fenêtre 2
-Envoyer en direct `prévision vendredi`.
-> « C'est la vraie chaîne : WhatsApp → Twilio → Fly → Supabase, sandbox Apaleo pour l'occupation. L'hôtel est
-> fictif et le message le dit. »
+### 0:40 — Une vraie décision, sur la vraie chaîne (1 min) · fenêtre 2
+Le téléphone a reçu la recommandation de 15:20. La montrer :
+« Add 2 staff for 19:00–23:00. Trigger: match à 2 km » + « Si accepté : +2 extras (360 €) ; risque ≈ 15 % / Si refusé :
+risque ≈ 70 % (incertitude calibrée sur données synthétiques) ».
+Répondre **en direct** `mets-en 3 de plus` → « Correction enregistrée : 3 extras. Une raison ? ».
+> « C'est la vraie chaîne : WhatsApp → Twilio → Fly → Supabase, le vrai modèle lit ma réponse, et la décision est écrite
+> avec qui l'a prise et comment. L'hôtel est fictif, les coûts aussi, et le message le dit. Oui, la première ligne est en
+> anglais : c'est un défaut connu, dans le backlog. »
 
-**Plan B** si rien n'arrive en 20 s : « le webhook est sur un staging » → passer au terminal, sans s'attarder.
+**Plan B** si rien n'arrive en 20 s : « le webhook est sur un staging » → passer au terminal (§1:40, ligne `mets-en 3`).
+Si le modèle demande une confirmation (« Je note… c'est bien ça ? ») : répondre `oui`. C'est le comportement voulu
+sous 0,85 de confiance : le dire.
 
-### 1:20 — Ce que fait le manager, et ce que le système en fait (1 min 40) · fenêtre 3, semaine 1
+### 1:40 — Les autres réponses, et ce que le système en fait (1 min 20) · fenêtre 3, semaine 1
 Faire défiler, s'arrêter sur 4 lignes seulement :
 - `ok` → validé, **sans modèle** ;
 - `mets-en 3 de plus` → le modèle lit une contre-proposition, le chiffre est lu **sans modèle** et cité en retour ;
@@ -108,12 +116,13 @@ Critères de succès **gelés avant toute mesure** : Δ MdAPE ≥ 5 pts contre l
 
 | Panne | Réaction |
 |---|---|
-| WhatsApp ne répond pas | Une phrase, puis terminal (§2, 1:20). Ne pas déboguer en direct |
+| WhatsApp ne répond pas | Une phrase, puis terminal (§2, 1:40). Ne pas déboguer en direct |
+| La recommandation n'est pas arrivée à 15:25 | `fly logs -a aetherix-backend --no-tail` (dispatcher) ; sinon montrer la simulation du script et passer au terminal |
 | Partage d'écran qui rame | Vidéo de secours |
 | Le modèle réel lit autrement que prévu | C'est la démonstration : confiance → confirmation |
 | Question technique hors sujet | « Bonne question, je vous montre après ? » Garder le minutage |
 
-**Version 3 minutes** si le temps manque : 0:00 problème → 1:20 (4 lignes) → 3:00 (HOS-365) → 6:45 limites.
+**Version 3 minutes** si le temps manque : 0:00 problème → 0:40 (décision en direct) → 3:00 (HOS-365) → 6:45 limites.
 
 ## 4. Questions probables (réponses courtes)
 
