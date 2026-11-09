@@ -165,6 +165,9 @@ async def test_nothing_stored_is_absent_never_a_default(db):
     assert (ctx["weather"], ctx["events"], ctx["occupancy"]) == ({}, [], None)
     assert ctx["context_sources"]["weather"]["reason"] == "no_forecast_near_service"
     assert ctx["context_sources"]["occupancy"]["reason"] == "not_synced_for_day"
+    # no event ever stored = never looked, not "nothing nearby"
+    assert ctx["context_sources"]["events"] == {
+        "status": "absent", "source": "predicthq", "reason": "never_synced"}
 
 
 @pytest.mark.asyncio

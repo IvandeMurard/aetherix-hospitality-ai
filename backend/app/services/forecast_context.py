@@ -36,7 +36,7 @@ from typing import Any, Mapping, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import PMSSyncLog, RestaurantProfile, WeatherForecast
+from app.db.models import LocalEvent, PMSSyncLog, RestaurantProfile, WeatherForecast
 from app.providers.pms.base import PMSDataStatus
 from app.services.events_enrichment import enrich_events_context
 
@@ -132,6 +132,19 @@ async def _occupancy(db: AsyncSession, profile: RestaurantProfile,
     return rate, _source(log.occupancy_status, "pms")
 
 
+async def _events_synced(db: AsyncSession, profile: RestaurantProfile) -> bool:
+    """True when the event sync has stored at least one event for this hotel.
+    Without it, an empty list means "never looked", not "nothing nearby"."""
+    try:
+        row = (await db.execute(
+            select(LocalEvent.id).where(LocalEvent.tenant_id == profile.tenant_id).limit(1)
+        )).first()
+    except Exception:  # noqa: BLE001
+        logger.warning("forecast_context: events coverage lookup failed", exc_info=True)
+        return False
+    return row is not None
+
+
 async def build(
     db: AsyncSession,
     profile: Optional[RestaurantProfile],
@@ -149,8 +162,10 @@ async def build(
     occupancy, occupancy_src = await _occupancy(db, profile, target_date)
     if getattr(profile, "latitude", None) is None:
         events_src = _source("absent", "predicthq", reason="no_hotel_coordinates")
-    else:
+    elif events or await _events_synced(db, profile):
         events_src = _source("ok", "predicthq", count=len(events))
+    else:
+        events_src = _source("absent", "predicthq", reason="never_synced")
     return {
         "weather": weather,
         "events": events,
