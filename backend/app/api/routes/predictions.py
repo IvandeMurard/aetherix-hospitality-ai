@@ -102,6 +102,11 @@ class PredictResponse(BaseModel):
     confidence_factors: list
     claude_used: bool
     staffing_recommendation: Dict[str, Any]
+    # Additive (HOS-366): the runtime guardrail verdict, absent when nominal.
+    # `verified: false` means a check could not run (rule B): the figure is
+    # delivered but must not be presented as verified; `reserve` is the
+    # qualitative caveat to show. Tier 1/2 caveats ride here too.
+    forecast_guardrail: Optional[Dict[str, Any]] = None
 
 @router.get("/current")
 async def get_property_prediction(
@@ -206,6 +211,7 @@ async def predict(
         confidence_factors=confidence_factors,
         claude_used=claude_used,
         staffing_recommendation=result.get("staffing_recommendation", {}),
+        forecast_guardrail=result.get("forecast_guardrail"),
     )
 
 

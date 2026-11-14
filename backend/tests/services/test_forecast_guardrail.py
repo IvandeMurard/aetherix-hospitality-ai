@@ -176,7 +176,127 @@ async def test_engine_tier2_swaps_baseline_and_recomputes_staffing():
 async def test_engine_guardrail_failure_is_non_fatal():
     engine, _ = await _engine_with_staffer()
     result = {"prediction": {"covers": 80, "confidence": 0.30}, "staffing_recommendation": {"servers": 6}}
-    with patch.object(fg, "apply", AsyncMock(side_effect=RuntimeError("boom"))):
+    with (
+        patch.object(fg, "apply", AsyncMock(side_effect=RuntimeError("boom"))),
+        patch.object(fg, "record_forecast_trip", AsyncMock()),
+    ):
         out = await engine._apply_forecast_guardrail("hotel_x", result, {})
     # Original recommendation survives a guardrail failure.
     assert out["staffing_recommendation"] == {"servers": 6}
+
+
+# ---------------------------------------------------------------------------
+# Rule B (PO 14/11/2026, HOS-366, audit of silences case 9): a guardrail that
+# fails yields a typed "not verified" verdict — delivered, flagged, recorded.
+# ---------------------------------------------------------------------------
+
+def test_missing_confidence_is_not_verified_not_nominal():
+    v = fg.evaluate(80, None)
+    assert v.tier == fg.NOT_VERIFIED
+    assert not v.is_verified and not v.is_nominal
+    assert v.reason == "guardrail_not_verified"
+    assert v.effective_covers == 80          # delivered unchanged, nothing invented
+    assert v.confidence is None              # no default confidence made up
+    assert v.baseline_used is False
+    assert v.abstention is not None and v.abstention.reason == "guardrail_not_verified"
+
+
+def test_crash_inside_the_tiering_is_a_not_verified_verdict(monkeypatch):
+    monkeypatch.setattr(fg, "_evaluate", MagicMock(side_effect=ZeroDivisionError("boom")))
+    v = fg.evaluate(80, 0.9)
+    assert v.tier == fg.NOT_VERIFIED
+    assert "ZeroDivisionError" in v.detail
+    assert v.failed_checks == (fg.GUARDRAIL_TOOL,)
+
+
+def test_not_verified_message_is_qualitative_no_number():
+    import re
+
+    v = fg.not_verified(80, check="x", detail="y", locale="fr")
+    msg = v.abstention.human_message
+    assert msg and not re.search(r"\d", msg)       # no confidence figure, no percentage
+    assert "guardrail_not_verified" not in msg     # never the raw code
+    assert not re.search(r"\d", fg.not_verified(80, check="x", detail="y", locale="en").abstention.human_message)
+
+
+async def test_not_verified_logs_typed_row_and_raises_ops_error():
+    store: list = []
+    error = AsyncMock()
+    with (
+        patch.object(fg, "AsyncSessionLocal", lambda: _Sess(store)),
+        patch("app.services.ops_dispatcher.dispatch_error", error),
+    ):
+        await fg.record_forecast_trip("hotel_x", fg.evaluate(80, None))
+    assert len(store) == 1
+    assert store[0].abstention_reason == "guardrail_not_verified"
+    assert store[0].error_code == "guardrail_not_verified"
+    assert store[0].payload["failed_checks"] == [fg.GUARDRAIL_TOOL]
+    error.assert_awaited_once()
+
+
+async def test_engine_guardrail_crash_delivers_forecast_flagged_not_verified():
+    engine, staffer = await _engine_with_staffer()
+    result = {"prediction": {"covers": 80, "confidence": 0.9}, "staffing_recommendation": {"servers": 6}}
+    trip = AsyncMock()
+    with (
+        patch.object(fg, "apply", AsyncMock(side_effect=RuntimeError("boom"))),
+        patch.object(fg, "record_forecast_trip", trip),
+    ):
+        out = await engine._apply_forecast_guardrail("hotel_x", result, {})
+    assert out["prediction"]["covers"] == 80                 # delivered, unchanged
+    assert out["staffing_recommendation"] == {"servers": 6}
+    guard = out["forecast_guardrail"]
+    assert guard["tier"] == fg.NOT_VERIFIED
+    assert guard["verified"] is False                        # never presented as verified
+    assert guard["reserve"] and guard["human_message"]
+    assert guard["not_verified_checks"] == [fg.GUARDRAIL_TOOL]
+    # The typed event (NFR2): one trip with the not-verified verdict.
+    (hotel, verdict), _ = trip.await_args
+    assert hotel == "hotel_x" and verdict.reason == "guardrail_not_verified"
+
+
+async def test_engine_staffing_recompute_crash_does_not_half_apply_the_baseline():
+    engine, staffer = await _engine_with_staffer()
+    staffer.calculate_recommendation = AsyncMock(side_effect=RuntimeError("rules unavailable"))
+    result = {"prediction": {"covers": 80, "confidence": 0.30}, "staffing_recommendation": {"servers": 6}}
+    with patch.object(fg, "record_forecast_trip", AsyncMock()):
+        out = await engine._apply_forecast_guardrail("hotel_x", result, {"baseline_covers": 50})
+    # Before HOS-366 the baseline covers were written, then the recompute failed:
+    # a baseline figure next to the Prophet staffing, shipped as if checked.
+    assert out["prediction"]["covers"] == 80
+    assert "baseline_used" not in out["prediction"]
+    assert out["forecast_guardrail"]["verified"] is False
+
+
+async def test_engine_missing_confidence_is_flagged_not_skipped():
+    engine, _ = await _engine_with_staffer()
+    result = {"prediction": {"covers": 80, "confidence": None}, "staffing_recommendation": {"servers": 6}}
+    with patch.object(fg, "AsyncSessionLocal", lambda: _Sess([])), \
+            patch("app.services.ops_dispatcher.dispatch_error", AsyncMock()):
+        out = await engine._apply_forecast_guardrail("hotel_x", result, {})
+    assert out["forecast_guardrail"]["verified"] is False
+
+
+async def test_engine_nominal_stays_clean():
+    engine, _ = await _engine_with_staffer()
+    result = {"prediction": {"covers": 80, "confidence": 0.9}, "staffing_recommendation": {"servers": 6}}
+    with patch.object(fg, "record_forecast_trip", AsyncMock()):
+        out = await engine._apply_forecast_guardrail("hotel_x", result, {})
+    assert "forecast_guardrail" not in out
+
+
+def test_forecast_reply_shows_the_reserve_without_a_number():
+    from app.services.forecast_reply import render_forecast
+
+    result = {
+        "prediction": {"covers": 80, "confidence": 0.9, "is_mock": False},
+        "staffing_recommendation": {},
+        "forecast_guardrail": {"tier": fg.NOT_VERIFIED, "verified": False},
+    }
+    text = render_forecast(result, {}, date(2026, 11, 17), "dinner", "fr", demo_notice=False)
+    assert "*80 couverts*" in text
+    assert "Non vérifié" in text
+    assert "%" not in text                     # no confidence percentage shown
+    clean = render_forecast({**result, "forecast_guardrail": None}, {}, date(2026, 11, 17),
+                            "dinner", "fr", demo_notice=False)
+    assert "Non vérifié" not in clean

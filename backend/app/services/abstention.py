@@ -21,11 +21,14 @@ AbstentionReason = Literal[
     "data_quality_alert",             # any — PMS sync stale / weather missing
     "drift_detected_high",            # any — distribution shift FAIL (D5)
     "ood_unsupported_input",          # parser — unsupported language / anomalous payload
+    # any — a guardrail crashed: the output is still delivered, flagged "not
+    # verified", never shown as verified (rule B, PO 14/11/2026, HOS-366).
+    "guardrail_not_verified",
 ]
 
 AbstentionLayer = Literal["forecast", "recommendation", "receipt", "parser"]
 
-# Runtime-iterable tuple of the 7 reasons (a typing.Literal can't be iterated).
+# Runtime-iterable tuple of the 8 reasons (a typing.Literal can't be iterated).
 # Single source of truth for the i18n mapping + its blocking coverage test.
 ABSTENTION_REASONS: tuple[str, ...] = (
     "cold_start_no_cohort",
@@ -35,6 +38,7 @@ ABSTENTION_REASONS: tuple[str, ...] = (
     "data_quality_alert",
     "drift_detected_high",
     "ood_unsupported_input",
+    "guardrail_not_verified",
 )
 
 

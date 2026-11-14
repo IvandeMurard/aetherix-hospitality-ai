@@ -13,6 +13,9 @@ Rules (unchanged by the 05/11/2026 layout rework — only the presentation moved
   says so instead of implying it does.
 * Whose staffing rules were used is said (Décision #43): the hotel's, or defaults.
   When the rule is a default, "usual staffing" is a default too and is labelled so.
+* A figure a guardrail could not check (``forecast_guardrail.verified`` false,
+  rule B, HOS-366) is shown with a qualitative "not verified" reserve, never as
+  a clean figure and never with a confidence percentage.
 
 Layout: one short block per question the manager has — how many covers, how many
 staff, what is around — with WhatsApp emphasis (``*bold*``, ``_italic_``) and one
@@ -24,6 +27,7 @@ from datetime import date
 from typing import Any, Mapping, Optional
 
 from app.core import config
+from app.i18n.abstention_messages import localized_message
 from app.services.staffing_context import CLASS_LABELS
 
 _DAYS = {
@@ -241,6 +245,10 @@ def render_forecast(
         blocks[0].append(t["figure"].format(covers=round(float(prediction["covers"])), range=rng))
         if prediction.get("baseline_used"):
             blocks[0].append(t["baseline"])
+        guard = result.get("forecast_guardrail") or {}
+        if guard.get("verified") is False:
+            # Rule B (HOS-366): a check did not run — qualitative reserve, no number.
+            blocks[0].append(f"⚠️ _{localized_message('guardrail_not_verified', loc)}_")
         staffing = result.get("staffing_recommendation")
         if isinstance(staffing, Mapping):
             staff = _staff_block(staffing, loc)

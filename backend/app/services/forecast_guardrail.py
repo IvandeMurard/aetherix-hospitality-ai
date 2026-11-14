@@ -16,9 +16,22 @@ So this guardrail produces a **confidence indicator, not a switch**, in two tier
     ``live_mape > MAPE_CATASTROPHE``): fall back to a simpler baseline (tagged as
     such), recommendation still delivered — mirrors the ADR-0005 degradation.
 
+A third, non-tier verdict covers the guardrail itself failing — **rule B**,
+signed by the PO on 14/11/2026 (HOS-366, audit of silences cases 9 and 12):
+
+  * **Not verified** (``tier == NOT_VERIFIED``): the guardrail could not run
+    (it crashed, it had no confidence to read, or an upstream check such as the
+    agent constitution failed). The figure is still delivered — same "a number
+    with a caveat beats nothing" rule — but it is **never presented as
+    verified**: it carries the ``guardrail_not_verified`` abstention flag, whose
+    manager-facing copy is a *qualitative* reserve. No numeric confidence is
+    shown to the manager (``confidence`` is an uncalibrated heuristic of the
+    interval width). It used to be skipped with a WARNING and shipped clean.
+
 Every non-nominal verdict is logged to ``agent_action_log`` with a typed reason
 (AC5 / NFR2) — populating the abstention columns so it feeds the Epic 11
-abstention metrics. A Tier-2 fallback also raises an ops anomaly alert (Linear).
+abstention metrics. A Tier-2 fallback also raises an ops anomaly alert (Linear),
+a not-verified verdict an ops error (a guardrail that did not run is P1).
 Thresholds live in ``app.core.config`` and are documented in
 ``eval/FAILURE_THRESHOLDS.md``.
 """
@@ -41,13 +54,16 @@ logger = logging.getLogger(__name__)
 NOMINAL = "nominal"
 TIER1_FLAG = "tier1_flag"
 TIER2_FALLBACK = "tier2_fallback"
+# Rule B (HOS-366): the guardrail could not run — delivered, flagged, not verified.
+NOT_VERIFIED = "not_verified"
 
 # Abstention reason codes (must be members of the HOS-206 reason set — the i18n
 # coverage test enforces the mapping). Tier 1 reuses the confidence reason; Tier 2
 # reuses the ADR-0005 cold-start degradation reason (same "degrade, don't cut"
-# semantics).
+# semantics). Not-verified has its own reason (rule B, HOS-366).
 REASON_TIER1 = "confidence_below_threshold"
 REASON_TIER2 = "cold_start_meta_learner_drift"
+REASON_NOT_VERIFIED = "guardrail_not_verified"
 
 # agent_action_log.tool_name for forecast-guardrail trip rows.
 GUARDRAIL_TOOL = "forecast.guardrail"
@@ -58,22 +74,66 @@ class ForecastVerdict:
     """Outcome of the confidence-tiering decision on one forecast.
 
     ``effective_covers`` is what staffing must be computed on: the Prophet point
-    estimate for nominal/Tier-1, the baseline for Tier-2. ``abstention`` is the
-    manager-facing flag carrier (None when nominal) — it does NOT blank the
-    result; the recommendation is always delivered.
+    estimate for nominal/Tier-1/not-verified, the baseline for Tier-2.
+    ``abstention`` is the manager-facing flag carrier (None when nominal) — it
+    does NOT blank the result; the recommendation is always delivered.
+    ``failed_checks`` names the checks that could not run (not-verified only).
     """
 
     tier: str
-    effective_covers: int
-    confidence: float
+    effective_covers: Optional[int]
+    confidence: Optional[float]
     baseline_used: bool
     abstention: Optional[AgentAbstention] = None
     reason: Optional[str] = None
     detail: Optional[str] = None
+    failed_checks: tuple[str, ...] = ()
 
     @property
     def is_nominal(self) -> bool:
         return self.tier == NOMINAL
+
+    @property
+    def is_verified(self) -> bool:
+        return self.tier != NOT_VERIFIED
+
+
+def _as_covers(value) -> Optional[int]:
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def not_verified(
+    predicted_covers,
+    *,
+    check: str,
+    detail: str,
+    locale: Optional[str] = None,
+) -> ForecastVerdict:
+    """Rule B verdict: ``check`` could not run on this forecast.
+
+    The figure is delivered unchanged and flagged; nothing is invented in its
+    place (no baseline, no default confidence). The manager-facing copy is the
+    qualitative ``guardrail_not_verified`` message, never a number.
+    """
+    covers = _as_covers(predicted_covers)
+    return ForecastVerdict(
+        tier=NOT_VERIFIED,
+        effective_covers=covers,
+        confidence=None,
+        baseline_used=False,
+        abstention=AgentAbstention(
+            reason=REASON_NOT_VERIFIED,
+            layer="forecast",
+            context={"failed_check": check, "prophet_covers": covers, "error": detail[:200]},
+            human_message=localized_message(REASON_NOT_VERIFIED, locale),
+        ),
+        reason=REASON_NOT_VERIFIED,
+        detail=f"{check} could not run ({detail[:200]}); figure delivered as not verified.",
+        failed_checks=(check,),
+    )
 
 
 def simple_baseline(context: Optional[dict], predicted_covers: float) -> tuple[int, bool]:
@@ -96,13 +156,40 @@ def simple_baseline(context: Optional[dict], predicted_covers: float) -> tuple[i
 
 def evaluate(
     predicted_covers: float,
+    confidence: Optional[float],
+    *,
+    context: Optional[dict] = None,
+    live_mape: Optional[float] = None,
+    locale: Optional[str] = None,
+) -> ForecastVerdict:
+    """Pure tiering decision. Never returns a blank/abstaining result.
+
+    Fails closed under rule B (HOS-366): a missing confidence or a crash inside
+    the tiering returns a typed ``NOT_VERIFIED`` verdict, never a clean one.
+    """
+    if confidence is None:
+        return not_verified(
+            predicted_covers, check=GUARDRAIL_TOOL, detail="no confidence to evaluate", locale=locale
+        )
+    try:
+        return _evaluate(
+            predicted_covers, confidence, context=context, live_mape=live_mape, locale=locale
+        )
+    except Exception as exc:  # noqa: BLE001 — rule B: a crashed guardrail is a typed verdict
+        logger.error("forecast_guardrail: evaluation failed: %s", exc)
+        return not_verified(
+            predicted_covers, check=GUARDRAIL_TOOL, detail=f"{type(exc).__name__}: {exc}", locale=locale
+        )
+
+
+def _evaluate(
+    predicted_covers: float,
     confidence: float,
     *,
     context: Optional[dict] = None,
     live_mape: Optional[float] = None,
     locale: Optional[str] = None,
 ) -> ForecastVerdict:
-    """Pure tiering decision. Never returns a blank/abstaining result."""
     warn = config.FORECAST_CONFIDENCE_WARN
     catastrophe = config.FORECAST_CONFIDENCE_CATASTROPHE
     mape_ceiling = config.FORECAST_MAPE_CATASTROPHE
@@ -194,6 +281,7 @@ async def record_forecast_trip(hotel_id: str, verdict: ForecastVerdict) -> None:
                         "tier": verdict.tier,
                         "detail": verdict.detail,
                         "baseline_used": verdict.baseline_used,
+                        "failed_checks": list(verdict.failed_checks),
                     },
                     abstention_reason=verdict.reason,
                     abstention_layer="forecast",
@@ -223,6 +311,17 @@ async def record_forecast_trip(hotel_id: str, verdict: ForecastVerdict) -> None:
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("forecast_guardrail: dispatch_anomaly failed: %s", exc)
+    elif verdict.tier == NOT_VERIFIED:
+        # Rule B: a guardrail that did not run is a P1 (audit of silences,
+        # category G), not a routine caveat. dispatch_error handles its own
+        # delivery failure (HOS-367 owns that handler).
+        from app.services.ops_dispatcher import dispatch_error
+
+        await dispatch_error(
+            title=f"forecast not verified (guardrail did not run): {hotel_id}",
+            detail=verdict.detail or "A forecast check could not run — delivered as not verified.",
+            tags=["forecast_guardrail", REASON_NOT_VERIFIED, hotel_id],
+        )
 
     from app.core.observability import guardrail_trip
 
