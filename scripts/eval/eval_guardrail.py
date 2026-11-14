@@ -98,6 +98,27 @@ def _mock_suppression(**kw) -> str | None:
     return breach[0] if breach else None
 
 
+def _constitution_gate(**kw) -> str | None:
+    """HOS-366 (audit case 11): no free-text model call without the constitution."""
+    from app.services import whatsapp_service
+
+    breach = whatsapp_service.evaluate_constitution_gate(**kw)
+    return breach[0] if breach else None
+
+
+def _pms_history(**kw) -> str | None:
+    """HOS-366 (audit case 3): a failed reservation read is a typed absence
+    (``PMSReadError.status``), never an empty history."""
+    from app.providers.pms.apaleo_mcp_adapter import reservations_from_payload
+    from app.providers.pms.base import PMSReadError
+
+    try:
+        reservations_from_payload(kw["payload"])
+    except PMSReadError as exc:
+        return exc.status.value
+    return None
+
+
 GUARDS = {
     "forecast_guardrail": _forecast,
     "feedback_guard": _feedback,
@@ -107,6 +128,8 @@ GUARDS = {
     "heartbeat_partial": _partial,
     "heartbeat_job_error": _job_error,
     "mock_forecast": _mock_suppression,
+    "pms_history": _pms_history,
+    "constitution_gate": _constitution_gate,
 }
 
 

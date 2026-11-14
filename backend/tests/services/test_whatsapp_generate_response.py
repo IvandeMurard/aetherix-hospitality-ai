@@ -3,7 +3,8 @@
 Coverage:
 - AC1: LLM is called with a system prompt when profile and forecast load successfully
 - AC2: Forecast failure falls back to minimal context but LLM is still called
-- AC3: AgentConstitutionService failure still calls LLM with system=None
+- AC3: AgentConstitutionService failure → no LLM call, deterministic reply +
+  typed trip (HOS-366, rule B; it used to call the LLM with system=None)
 - AC4: LLM exception returns graceful fallback string
 - AC5: LLM response is returned verbatim (no keyword filtering applied)
 """
@@ -23,6 +24,7 @@ for _mod in ("pandas", "prophet", "qdrant_client", "redis", "twilio"):
         sys.modules[_mod] = MagicMock()
 
 from app.db.models import RestaurantProfile  # noqa: E402
+from app.services import whatsapp_service  # noqa: E402
 from app.services.whatsapp_service import WhatsAppService  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -127,24 +129,97 @@ class TestGenerateResponseForecastFailure:
 
 
 # ---------------------------------------------------------------------------
-# AC3 — AgentConstitutionService failure: LLM called with system=None
+# AC3 — AgentConstitutionService failure. HOS-366 (rule B, audit of silences
+# case 11) reverses the old behaviour, which this test used to freeze ("LLM
+# called with system=None"): no model call without the constitution — a
+# deterministic reply and a typed trip instead.
 # ---------------------------------------------------------------------------
 
 class TestGenerateResponseConstitutionFailure:
     @pytest.mark.asyncio
-    async def test_llm_called_without_system_when_constitution_fails(self):
+    async def test_no_llm_call_when_constitution_fails(self):
         svc = _make_service()
         svc.engine.get_forecast = AsyncMock(return_value=_FAKE_FORECAST)
+        trip = AsyncMock()
 
         # AgentConstitutionService is a deferred local import — patch at source module
         with patch(
             "app.services.agent_constitution.AgentConstitutionService.build_system_prompt",
             side_effect=Exception("render error"),
-        ):
-            await svc._generate_response("hello?", "tenant-demo", _profile())
+        ), patch("app.services.whatsapp_service._record_constitution_trip", trip):
+            result = await svc._generate_response("hello?", "tenant-demo", _profile())
 
-        call_kwargs = svc._llm.complete.call_args.kwargs
-        assert "system" not in call_kwargs
+        svc._llm.complete.assert_not_awaited()
+        assert result == whatsapp_service.no_constitution_reply("fr")
+        trip.assert_awaited_once()
+        assert trip.await_args.args[0] == "tenant-demo"
+        assert "render error" in trip.await_args.args[1]
+
+    @pytest.mark.asyncio
+    async def test_blank_constitution_is_treated_as_missing(self):
+        svc = _make_service()
+        svc.engine.get_forecast = AsyncMock(return_value=_FAKE_FORECAST)
+        with patch(
+            "app.services.agent_constitution.AgentConstitutionService.build_system_prompt",
+            return_value="   ",
+        ), patch("app.services.whatsapp_service._record_constitution_trip", AsyncMock()):
+            await svc._generate_response("hello?", "tenant-demo", _profile())
+        svc._llm.complete.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_reply_follows_the_manager_locale(self):
+        svc = _make_service()
+        svc.engine.get_forecast = AsyncMock(return_value=_FAKE_FORECAST)
+        profile = _profile()
+        profile.manager_locale = "en"
+        with patch(
+            "app.services.agent_constitution.AgentConstitutionService.build_system_prompt",
+            side_effect=Exception("render error"),
+        ), patch("app.services.whatsapp_service._record_constitution_trip", AsyncMock()):
+            result = await svc._generate_response("hello?", "tenant-demo", profile)
+        assert result == whatsapp_service.no_constitution_reply("en")
+        assert "%" not in result
+
+    @pytest.mark.asyncio
+    async def test_trip_writes_a_typed_row_and_alerts_ops(self):
+        store: list = []
+
+        class _Sess:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *_): return False
+            def add(self, obj): store.append(obj)
+            async def commit(self): return None
+
+        error = AsyncMock()
+        with patch.object(whatsapp_service, "AsyncSessionLocal", lambda: _Sess()), \
+                patch("app.services.ops_dispatcher.dispatch_error", error):
+            await whatsapp_service._record_constitution_trip("tenant-demo", "render error")
+        assert len(store) == 1
+        assert store[0].error_code == "constitution_unavailable"
+        assert store[0].tool_name == whatsapp_service.CONSTITUTION_TOOL
+        error.assert_awaited_once()
+
+
+class TestNotVerifiedForecastIsMarkedForTheModel:
+    @pytest.mark.asyncio
+    async def test_not_verified_forecast_is_marked_in_the_constitution_context(self):
+        svc = _make_service()
+        svc.engine.get_forecast = AsyncMock(return_value={
+            **_FAKE_FORECAST, "forecast_guardrail": {"tier": "not_verified", "verified": False},
+        })
+        await svc._generate_response("forecast?", "tenant-demo", _profile())
+        system = svc._llm.complete.call_args.kwargs["system"]
+        assert "NOT VERIFIED" in system
+
+
+@pytest.mark.parametrize("prompt,expected", [
+    (None, "constitution_unavailable"),
+    ("", "constitution_unavailable"),
+    ("You are Aetherix…", None),
+])
+def test_evaluate_constitution_gate(prompt, expected):
+    breach = whatsapp_service.evaluate_constitution_gate(prompt)
+    assert (breach[0] if breach else None) == expected
 
 
 # ---------------------------------------------------------------------------

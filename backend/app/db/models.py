@@ -371,7 +371,10 @@ class StaffingRecommendation(Base):
     # Mirror of migration 20260603120000 (schema drift gate — Décision #16).
     predicted_covers = Column(Numeric(10, 2), nullable=True)
     actual_covers = Column(Numeric(10, 2), nullable=True)
-    actual_covers_source = Column(String, nullable=True)  # manager_feedback | pos_data (Phase 4)
+    # manager_feedback | manager_feedback_flagged (HOS-268) | pos_data (Phase 4) |
+    # manager_feedback_unverified (HOS-366: bounds check could not run —
+    # actual_covers stays NULL, the figure is in the ground_truth memory row)
+    actual_covers_source = Column(String, nullable=True)
     actual_covers_at = Column(DateTime(timezone=True), nullable=True)
 
     # Décision #38 / ADR-0007 §16: how the manager's decision was captured

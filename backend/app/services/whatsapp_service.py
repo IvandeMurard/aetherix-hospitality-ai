@@ -24,6 +24,42 @@ logger = logging.getLogger(__name__)
 MOCK_FORECAST_TOOL = "mock_forecast_guardrail"
 REASON_MOCK_FORECAST = "mock_forecast_suppressed"
 
+# HOS-366 (rule B, audit of silences case 11): no free-text model call without
+# the agent constitution. When it cannot be built, the manager gets a
+# deterministic message and a typed trip is logged (NFR2, ADR-0009).
+CONSTITUTION_TOOL = "constitution_guardrail"
+REASON_CONSTITUTION_UNAVAILABLE = "constitution_unavailable"
+
+_NO_CONSTITUTION_REPLY = {
+    "fr": (
+        "Je ne peux pas répondre à ce message pour le moment : un contrôle de "
+        "sécurité d'Aetherix n'a pas pu se charger. L'équipe est prévenue, "
+        "réessayez un peu plus tard."
+    ),
+    "en": (
+        "I can't answer this message right now: one of Aetherix's safety checks "
+        "could not load. The team has been alerted, please try again a little later."
+    ),
+}
+
+
+def evaluate_constitution_gate(system_prompt: Optional[str]) -> tuple[str, str] | None:
+    """Trip when the model would run without its constitution (HOS-366).
+
+    Pure predicate for the `guardrail` eval layer: a missing or blank system
+    prompt means no free-text generation — the caller answers deterministically.
+    """
+    if system_prompt is not None and system_prompt.strip():
+        return None
+    return (
+        REASON_CONSTITUTION_UNAVAILABLE,
+        "agent constitution could not be built; no model call without it.",
+    )
+
+
+def no_constitution_reply(locale: Optional[str]) -> str:
+    return _NO_CONSTITUTION_REPLY["en" if (locale or "").lower().startswith("en") else "fr"]
+
 
 def evaluate_mock_suppression(
     is_mock: bool, demo_mode: bool | None = None
@@ -69,6 +105,43 @@ async def _record_mock_forecast_trip(hotel_id: str) -> None:
         logger.warning("mock_forecast_guardrail: agent_action_log write failed: %s", exc)
     guardrail_trip(MOCK_FORECAST_TOOL, hotel_id, REASON_MOCK_FORECAST)
     logger.warning("mock_forecast_guardrail: TRIP hotel_id=%s", hotel_id)
+
+
+async def _record_constitution_trip(hotel_id: str, detail: str) -> None:
+    """Log one typed trip row when the constitution could not be built
+    (HOS-366), plus an ops error: a guardrail that did not load is P1.
+
+    Same recording shape as ``_record_mock_forecast_trip``; its own failure
+    handling is HOS-367's scope, not changed here.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            db.add(
+                AgentActionLog(
+                    hotel_id=hotel_id or "_system",
+                    tool_name=CONSTITUTION_TOOL,
+                    status="tool_error",
+                    error_code=REASON_CONSTITUTION_UNAVAILABLE,
+                    payload={
+                        "kind": "trip",
+                        "reason": REASON_CONSTITUTION_UNAVAILABLE,
+                        "detail": detail[:300],
+                    },
+                    request_id="",
+                )
+            )
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001 — HOS-367 owns this handler's own failure
+        logger.warning("constitution_guardrail: agent_action_log write failed: %s", exc)
+    from app.services.ops_dispatcher import dispatch_error
+
+    await dispatch_error(
+        title=f"WhatsApp: agent constitution unavailable — {hotel_id}",
+        detail=f"{detail[:300]}\n\nNo model call was made; the manager got a deterministic reply.",
+        tags=["constitution_guardrail", REASON_CONSTITUTION_UNAVAILABLE, hotel_id],
+    )
+    guardrail_trip(CONSTITUTION_TOOL, hotel_id, REASON_CONSTITUTION_UNAVAILABLE, detail[:300])
+    logger.error("constitution_guardrail: TRIP hotel_id=%s — %s", hotel_id, detail[:300])
 
 
 def _mask_number(raw: Optional[str]) -> str:
@@ -208,6 +281,13 @@ class WhatsAppService:
                 if prediction.get("is_mock"):
                     # DEMO_MODE: numbers allowed but visibly marked (AC2).
                     covers = f"{covers} (demo data — model not trained)"
+                if (forecast.get("forecast_guardrail") or {}).get("verified") is False:
+                    # Rule B (HOS-366): a check did not run on this figure — the
+                    # model must not present it as verified.
+                    covers = (
+                        f"{covers} (NOT VERIFIED: a safety check could not run on this "
+                        "figure — tell the manager it is not verified)"
+                    )
                 forecast_context = {
                     "date": date.today().isoformat(),
                     "covers": covers,
@@ -220,14 +300,22 @@ class WhatsAppService:
             forecast_context = {"date": date.today().isoformat()}
 
         # 2. Build agent constitution system prompt
+        system_prompt: Optional[str] = None
+        failure = ""
         try:
             system_prompt = AgentConstitutionService().build_system_prompt(
                 profile=profile,
                 forecast_context=forecast_context,
             )
-        except Exception as exc:
-            logger.warning("WhatsApp: AgentConstitutionService failed: %s", exc)
-            system_prompt = None
+        except Exception as exc:  # noqa: BLE001 — rule B: typed trip + deterministic reply below
+            failure = f"{type(exc).__name__}: {exc}"
+
+        # HOS-366 (rule B, audit case 11): no free-text model call without the
+        # constitution. It used to log a WARNING and call the model bare.
+        gate = evaluate_constitution_gate(system_prompt)
+        if gate is not None:
+            await _record_constitution_trip(tenant_id, failure or gate[1])
+            return no_constitution_reply(getattr(profile, "manager_locale", None))
 
         # 3. Single LLM call — intent understanding delegated to Claude
         try:
@@ -235,9 +323,8 @@ class WhatsAppService:
                 "messages": [{"role": "user", "content": text}],
                 "max_tokens": 400,
                 "temperature": 0.3,
+                "system": system_prompt,
             }
-            if system_prompt is not None:
-                llm_kwargs["system"] = system_prompt
             return await self._llm.complete(**llm_kwargs)
         except Exception as exc:
             logger.error("WhatsApp: LLM call failed: %s", exc)

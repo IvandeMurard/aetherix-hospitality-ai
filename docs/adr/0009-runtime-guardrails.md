@@ -68,3 +68,21 @@ Sink = **dispatch ops existant** (Linear/WhatsApp selon la criticité), cohéren
 - **Suppression binaire des sorties low-confidence** : écartée (Décision #6 HITL-always — un staffing avec réserve > pas de staffing).
 - **Nouveau canal d'alerting (Slack dédié)** : écarté pour la Phase 3 — réutilise le dispatch ops Linear/WhatsApp existant (coût ops nul).
 - **Guardrails dans un sidecar séparé** : écarté — checks in-process < 50 ms, cohérent avec le rejet du sidecar MCP (ADR-0001).
+
+## 5. Amendement 14/11/2026 — un garde-fou qui plante rend « non vérifié » (règle B)
+
+> Décision signée par le PO le 14/11/2026, appliquée par HOS-366. Origine : `docs/context/audit-silences-2026-09.md` (catégories F et G, cas 3, 9, 10, 11, 12) — plusieurs garde-fous s'ouvraient en silence quand ils plantaient, ce qui contredisait NFR2 : un garde-fou qui plante sans rien dire n'est jamais compté comme déclenché.
+
+**Règle.** Un garde-fou qui ne peut pas s'exécuter (exception, entrée illisible, dépendance indisponible) rend un verdict typé **« non vérifié »** et un événement (NFR2). Effets :
+
+- le résultat n'est **jamais présenté comme vérifié** ;
+- au pire, le manager reçoit le chiffre avec une **réserve qualitative** visible — jamais un silence, jamais un chiffre propre (cohérent avec la non-suppression §2.1 et G-4) ;
+- **aucun score de confiance chiffré n'est montré au manager** : la `confidence` actuelle est une heuristique de largeur d'intervalle, non calibrée (et constante à 0.85 sur le mock non entraîné) ;
+- jamais de valeur plausible inventée sur échec : absence typée, verdict « non vérifié », ou erreur ;
+- pas de génération libre par le modèle sans la constitution de l'agent : réponse ou explication déterministe à la place.
+
+**Exception écrite** : le *fail-open* voulu du rate-limit (`rate_limit.check_rate_limit_async`), qui reste ouvert quand Redis est indisponible.
+
+**Porteurs réutilisés.** Raison HOS-206 `guardrail_not_verified` (ajoutée à l'ensemble, copie FR/EN qualitative dans `app/i18n/abstention_messages.py`) ; verdict `NOT_VERIFIED` de `forecast_guardrail` (G-4) ; sévérité `unverified` de `feedback_guard` (G-3, valeur enregistrée avec la source `manager_feedback_unverified` et sans `actual_covers`) ; raison `constitution_unavailable` du garde-fou de constitution WhatsApp. Chaque verdict « non vérifié » écrit une ligne typée dans `agent_action_log` et lève une alerte ops de niveau erreur. Couvert par la couche eval `guardrail` (scénarios positifs et négatifs).
+
+**Limite connue.** Les enregistreurs de déclenchement avalent encore leur propre échec (catégorie M de l'audit) : traité par HOS-367, pas ici.

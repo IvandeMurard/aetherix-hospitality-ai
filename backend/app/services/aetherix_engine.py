@@ -117,52 +117,85 @@ class AetherixEngine:
         """Epic 12 G-4 (HOS-251) — confidence-tiered guardrail at dispatch.
 
         Never blanks the recommendation: Tier 1 attaches a confidence caveat,
-        Tier 2 swaps in a baseline (and recomputes staffing on it). Non-fatal —
-        a guardrail failure must not drop an otherwise-valid recommendation.
+        Tier 2 swaps in a baseline (and recomputes staffing on it).
+
+        Rule B (PO 14/11/2026, HOS-366, audit of silences case 9): a guardrail
+        that fails is a typed **not verified** verdict, never a silent skip. The
+        forecast is still delivered — unchanged, nothing invented in its place —
+        with ``forecast_guardrail.verified = False``, the qualitative
+        ``reserve`` for the manager (no numeric confidence) and a trip row +
+        ops error. The same applies to checks the orchestrator reports as not
+        run (``unverified_checks``, case 12: agent constitution / profile).
         """
+        from app.i18n.abstention_messages import localized_message
         from app.services import forecast_guardrail as fg
 
-        try:
-            prediction = result.get("prediction") or {}
-            covers = prediction.get("covers")
-            confidence = prediction.get("confidence")
-            if covers is None or confidence is None:
-                return result
+        prediction = result.get("prediction") or {}
+        covers = prediction.get("covers")
+        # Checks the orchestrator could not run (plain data, ADR-0004 boundary).
+        upstream = [str(c) for c in (result.pop("unverified_checks", None) or [])]
+        if covers is None:
+            # No figure is delivered, so there is nothing to verify or to flag.
+            return result
 
+        staffing = None
+        try:
             verdict = await fg.apply(
                 tenant_id,
                 covers,
-                confidence,
+                prediction.get("confidence"),
                 context=context,
                 live_mape=(context or {}).get("live_mape"),
             )
-            if verdict.is_nominal:
-                return result
-
-            # Tier 2: deliver the baseline, not the untrustworthy Prophet point —
-            # recompute staffing on the baseline covers so the headcount matches.
+            # Tier 2: recompute staffing on the baseline covers so the headcount
+            # matches. Computed before anything is changed, so a failure here
+            # cannot leave a baseline figure next to the Prophet staffing.
             if verdict.baseline_used:
-                prediction["covers"] = verdict.effective_covers
-                prediction["baseline_used"] = True
-                result["staffing_recommendation"] = await self._staffer.calculate_recommendation(
+                staffing = await self._staffer.calculate_recommendation(
                     verdict.effective_covers, tenant_id=tenant_id,
                     target_date=_as_date(result.get("date")),
                     service_type=result.get("service_type"), context=context,
                 )
+        except Exception as exc:  # noqa: BLE001 — rule B: typed verdict + trip, not a skip
+            logger.error("forecast guardrail failed — forecast delivered as not verified: %s", exc)
+            verdict = fg.not_verified(covers, check=fg.GUARDRAIL_TOOL, detail=f"{type(exc).__name__}: {exc}")
+            await fg.record_forecast_trip(tenant_id, verdict)
 
-            # Surface the manager-facing caveat alongside the delivered number.
-            result["forecast_guardrail"] = {
-                "tier": verdict.tier,
-                "reason": verdict.reason,
-                "baseline_used": verdict.baseline_used,
-                # AgentAbstention is intentionally falsy (__bool__ → False), so test
-                # `is not None` rather than truthiness here.
-                "human_message": (
-                    verdict.abstention.human_message if verdict.abstention is not None else None
-                ),
-            }
-        except Exception:
-            logger.warning("forecast guardrail skipped (non-fatal)", exc_info=True)
+        if upstream:
+            upstream_verdict = fg.not_verified(
+                covers, check=",".join(upstream), detail="reported by the orchestrator"
+            )
+            await fg.record_forecast_trip(tenant_id, upstream_verdict)
+            if verdict.is_nominal:
+                verdict = upstream_verdict
+
+        if verdict.is_nominal:
+            return result
+
+        # Tier 2: deliver the baseline, not the untrustworthy Prophet point.
+        if verdict.baseline_used and staffing is not None:
+            prediction["covers"] = verdict.effective_covers
+            prediction["baseline_used"] = True
+            result["staffing_recommendation"] = staffing
+
+        not_verified_checks = list(dict.fromkeys([*verdict.failed_checks, *upstream]))
+        # Surface the manager-facing caveat alongside the delivered number.
+        result["forecast_guardrail"] = {
+            "tier": verdict.tier,
+            "reason": verdict.reason,
+            "baseline_used": verdict.baseline_used and staffing is not None,
+            # AgentAbstention is intentionally falsy (__bool__ → False), so test
+            # `is not None` rather than truthiness here.
+            "human_message": (
+                verdict.abstention.human_message if verdict.abstention is not None else None
+            ),
+            # Rule B: never presented as verified when a check did not run.
+            "verified": not not_verified_checks,
+            "not_verified_checks": not_verified_checks,
+            "reserve": (
+                localized_message(fg.REASON_NOT_VERIFIED) if not_verified_checks else None
+            ),
+        }
         return result
 
     async def _cache_recommendation(self, tenant_id: str, target_date: date, data: Dict) -> None:

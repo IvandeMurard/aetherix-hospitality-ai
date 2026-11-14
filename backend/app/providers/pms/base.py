@@ -15,6 +15,9 @@ A PMS figure is true or absent, never invented (HOS-352):
   an unverified unit.
 * revenue is F&B revenue only, net of tax, in the PMS's currency. A source
   that cannot isolate F&B gives no figure, never the total instead.
+* a reservation history is a list, so it cannot carry a status: a read that
+  failed raises ``PMSReadError`` with its status (HOS-366). An empty list only
+  ever means "the PMS answered, no reservation in that range".
 """
 from __future__ import annotations
 
@@ -39,6 +42,20 @@ class PMSDataStatus(str, Enum):
     @property
     def has_value(self) -> bool:
         return self in (PMSDataStatus.OK, PMSDataStatus.FIXTURE)
+
+
+class PMSReadError(Exception):
+    """A PMS read that returned no usable answer (HOS-366).
+
+    Raised where the result is a list (reservation history): an empty list would
+    be indistinguishable from "no reservations", so the absence is typed by the
+    exception and its ``status`` (``not_configured`` or ``pms_error``) instead.
+    """
+
+    def __init__(self, status: PMSDataStatus, detail: Optional[str] = None) -> None:
+        self.status = status
+        self.detail = detail
+        super().__init__(f"{status.value}: {detail}" if detail else status.value)
 
 
 @dataclass(slots=True, frozen=True)
@@ -113,7 +130,9 @@ class PMSProvider(Protocol):
     adapter methods behind their own read-only guard.
 
     ``fetch_occupancy`` and ``fetch_fb_revenue`` never raise for a PMS-side
-    problem: they return an absent value with its status.
+    problem: they return an absent value with its status. ``fetch_reservations``
+    raises ``PMSReadError`` (or the transport's own error) when the read fails:
+    it never returns ``[]`` for a failure.
     """
 
     @property

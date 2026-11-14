@@ -337,6 +337,8 @@ class AgentAbstention:
 
 Tous les services modèles concernés retournent `Union[Result, AgentAbstention]`.
 
+> Amendement 14/11/2026 (HOS-366) : 8e raison `guardrail_not_verified` — un garde-fou n'a pas pu s'exécuter, la sortie est livrée avec une réserve qualitative, jamais présentée comme vérifiée (règle B, ADR-0009 §5).
+
 #### D6.b — Propagation : explicite, pas de cascade auto
 
 Chaque caller vérifie `isinstance(result, AgentAbstention)`. Pas de cascade automatique car :

@@ -56,6 +56,13 @@ RECALL_K_WIDENED = 10
 #: A bound, not a guideline: the agent has no say in it.
 MAX_RECALL_ATTEMPTS = 2
 
+#: Rule B (PO 14/11/2026, HOS-366): name of the check reported in a forecast's
+#: ``unverified_checks`` when the agent constitution (or the hotel profile it is
+#: built from) could not be loaded. The orchestrator then makes no model call
+#: (deterministic explanation instead) and the app layer flags the forecast
+#: "not verified" and records the typed event.
+CHECK_AGENT_CONSTITUTION = "agent_constitution"
+
 
 class RecallOutcome(str, Enum):
     """Why the recall loop stopped. Every exit path carries one of these.

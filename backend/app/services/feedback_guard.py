@@ -16,6 +16,16 @@ On an implausible value the policy (``FEEDBACK_BOUNDS_POLICY``) is either
 ``reject`` (value not ingested) or ``flag`` (ingested but tagged). Either way a
 typed trip is logged to ``agent_action_log`` (AC3) and an ops alert is raised via
 ``ops_dispatcher`` (Linear sink — no Slack, consistent with HOS-248).
+
+Rule B (PO 14/11/2026, HOS-366, audit of silences case 10): when the check
+itself cannot run (its capacity / history lookup fails, or it crashes), the
+verdict is ``unverified`` — it used to be ``BoundsVerdict(True, "ok")``, so the
+value reached training unbounded. An unverified value is recorded with
+``actual_covers_source = "manager_feedback_unverified"`` and **no**
+``actual_covers``: every reader of measured actuals (learning loop, live error,
+ledger, weekly MAPE) filters on ``actual_covers IS NOT NULL``, so it is held out
+by construction, not by a filter each reader must remember. The figure itself
+stays in the ground-truth memory row and the trip row, for a human to verify.
 """
 from __future__ import annotations
 
@@ -31,6 +41,12 @@ logger = logging.getLogger(__name__)
 
 # Typed trip reason (AC3 / NFR2). Stored in agent_action_log.error_code.
 REASON_IMPLAUSIBLE = "implausible_feedback"
+# Rule B (HOS-366): the bounds check could not run. Same reason as the forecast
+# guardrail's not-verified verdict — one reason for "a guardrail did not run".
+REASON_NOT_VERIFIED = "guardrail_not_verified"
+SEVERITY_UNVERIFIED = "unverified"
+# actual_covers_source of a manager figure the check could not verify.
+SOURCE_UNVERIFIED = "manager_feedback_unverified"
 # agent_action_log.tool_name for feedback-ingestion guard rows.
 FEEDBACK_TOOL = "feedback.ingestion"
 
@@ -40,9 +56,19 @@ class BoundsVerdict:
     """Outcome of a plausibility check on an actual_covers value."""
 
     plausible: bool
-    severity: str  # "ok" | "reject" | "flag"
+    severity: str  # "ok" | "reject" | "flag" | "unverified"
     reason: Optional[str] = None
     detail: Optional[str] = None
+
+
+def not_verified(detail: str) -> BoundsVerdict:
+    """Rule B verdict: the bounds check could not run on this value."""
+    return BoundsVerdict(
+        False,
+        SEVERITY_UNVERIFIED,
+        REASON_NOT_VERIFIED,
+        f"feedback bounds check could not run ({detail[:200]}); value held as unverified.",
+    )
 
 
 def _policy() -> str:
@@ -63,7 +89,27 @@ def evaluate(
     historical_max: Optional[float] = None,
 ) -> BoundsVerdict:
     """Bound an actual_covers value. Capacity is enforced whenever seats are
-    known (default turns used when the turn config is missing)."""
+    known (default turns used when the turn config is missing).
+
+    Fails closed (rule B, HOS-366): a crash inside the check is an
+    ``unverified`` verdict, never ``ok``."""
+    try:
+        return _evaluate(
+            actual_value, total_seats=total_seats, turns_sum=turns_sum,
+            historical_max=historical_max,
+        )
+    except Exception as exc:  # noqa: BLE001 — rule B: typed verdict, never "ok"
+        logger.error("feedback_guard: bounds evaluation failed: %s", exc)
+        return not_verified(f"{type(exc).__name__}: {exc}")
+
+
+def _evaluate(
+    actual_value: float,
+    *,
+    total_seats: Optional[float] = None,
+    turns_sum: Optional[float] = None,
+    historical_max: Optional[float] = None,
+) -> BoundsVerdict:
     # Lower bound — negative / zero / sub-minimum.
     if actual_value < config.FEEDBACK_COVERS_MIN:
         return BoundsVerdict(
@@ -145,7 +191,8 @@ async def record_feedback_trip(
 
         title = f"feedback bounds [{severity}]: {hotel_id} — {reason}"
         tags = ["feedback_guard", reason, hotel_id]
-        if severity == "reject":
+        # A check that did not run is an error (P1), like a rejected value.
+        if severity in ("reject", SEVERITY_UNVERIFIED):
             await dispatch_error(title=title, detail=detail, tags=tags)
         else:
             await dispatch_anomaly(title=title, detail=detail, tags=tags)

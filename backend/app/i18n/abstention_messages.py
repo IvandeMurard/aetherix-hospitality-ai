@@ -26,7 +26,7 @@ class LocalizedMessages:
         return self.en if (locale or "").lower().startswith("en") else self.fr
 
 
-# 7 reasons × {fr, en} = 14 manager-facing strings. No raw codes (enforced).
+# 8 reasons × {fr, en} = 16 manager-facing strings. No raw codes (enforced).
 _MESSAGES: dict[str, dict[str, str]] = {
     "cold_start_no_cohort": {
         "fr": "Aetherix manque encore d'historique comparable pour cet établissement — pas de recommandation fiable aujourd'hui.",
@@ -55,6 +55,12 @@ _MESSAGES: dict[str, dict[str, str]] = {
     "ood_unsupported_input": {
         "fr": "Aetherix ne peut traiter cette demande pour le moment — merci de répondre en français ou en anglais.",
         "en": "Aetherix can't process this request right now — please reply in French or English.",
+    },
+    # Rule B (PO 14/11/2026, HOS-366): a qualitative reserve, never a number —
+    # the forecast "confidence" is an uncalibrated heuristic and is not shown.
+    "guardrail_not_verified": {
+        "fr": "Non vérifié : un contrôle de sécurité d'Aetherix n'a pas pu s'exécuter sur ce chiffre. Vérifiez-le avant de vous y fier.",
+        "en": "Not verified: one of Aetherix's safety checks could not run on this figure. Please check it before relying on it.",
     },
 }
 

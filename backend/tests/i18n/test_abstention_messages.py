@@ -31,8 +31,9 @@ def test_no_raw_enum_code_leaks(reason):
         assert code not in m.en, f"raw code {code!r} leaked into EN[{reason}]"
 
 
-def test_exactly_14_strings():
-    assert sum(len(v) for v in _MESSAGES.values()) == 14  # 7 reasons × {fr, en}
+def test_exactly_16_strings():
+    # 8 reasons × {fr, en} — `guardrail_not_verified` added by HOS-366 (rule B).
+    assert sum(len(v) for v in _MESSAGES.values()) == 16
 
 
 def test_locale_resolution_defaults_to_fr():

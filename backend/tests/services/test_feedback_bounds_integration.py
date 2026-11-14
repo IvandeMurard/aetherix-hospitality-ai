@@ -188,3 +188,120 @@ async def test_plausible_value_persists_as_before(db_session):
     assert float(rec.actual_covers) == 120.0
     assert rec.actual_covers_source == "manager_feedback"
     assert mem.tags == ["ground_truth", "covers_correction"]
+
+
+# ---------------------------------------------------------------------------
+# Rule B (PO 14/11/2026, HOS-366, audit of silences case 10): a bounds lookup
+# that fails is an "unverified" verdict, never BoundsVerdict(True, "ok").
+# ---------------------------------------------------------------------------
+
+def _failing_lookup(monkeypatch):
+    async def boom(self, tenant_id):
+        raise RuntimeError("connection reset")
+
+    monkeypatch.setattr(ReceiptsService, "_bounds_inputs", boom)
+
+
+@pytest.mark.asyncio
+async def test_lookup_failure_is_unverified_not_ok(db_session, monkeypatch):
+    _failing_lookup(monkeypatch)
+    verdict = await ReceiptsService(db_session, llm=AsyncMock())._check_feedback_bounds("hotel_g3", 120.0)
+    assert verdict.plausible is False
+    assert verdict.severity == "unverified"
+    assert verdict.reason == "guardrail_not_verified"
+
+
+@pytest.mark.asyncio
+async def test_unverified_value_is_recorded_but_never_a_measured_actual(db_session, monkeypatch):
+    await _seed_profile(db_session)
+    rec = await _seed_recommendation(db_session)
+    _failing_lookup(monkeypatch)
+    svc = ReceiptsService(db_session, llm=AsyncMock())
+
+    error = AsyncMock()
+    with (
+        patch("app.services.ops_dispatcher.dispatch_error", error),
+        patch("app.services.ops_dispatcher.dispatch_anomaly", AsyncMock()),
+    ):
+        mem = await svc.persist_actual_covers(rec, 120.0, request_id="req-unv")
+        await db_session.commit()
+
+    # Recorded with an explicit marker; no measured actual for any reader.
+    assert rec.actual_covers is None
+    assert rec.actual_covers_source == "manager_feedback_unverified"
+    assert rec.actual_covers_at is not None
+    # The figure is kept for a human to verify, tagged.
+    assert mem is not None and "not_verified" in mem.tags
+    assert "120.0" in mem.reflection and mem.reflection.startswith("unverified")
+    # The typed event (NFR2), in the caller's transaction, + an ops error (P1).
+    trips = (
+        await db_session.execute(
+            select(AgentActionLog).where(AgentActionLog.tool_name == "feedback.ingestion")
+        )
+    ).scalars().all()
+    assert len(trips) == 1
+    assert trips[0].error_code == "guardrail_not_verified"
+    assert trips[0].payload["severity"] == "unverified"
+    error.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unverified_value_feeds_neither_training_nor_the_live_error(db_session, monkeypatch):
+    from app.services import learning_store
+
+    await _seed_profile(db_session)
+    rec = await _seed_recommendation(db_session)
+    _failing_lookup(monkeypatch)
+    with (
+        patch("app.services.ops_dispatcher.dispatch_error", AsyncMock()),
+        patch("app.services.ops_dispatcher.dispatch_anomaly", AsyncMock()),
+    ):
+        await ReceiptsService(db_session, llm=AsyncMock()).persist_actual_covers(rec, 120.0)
+        await db_session.commit()
+
+    since = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    rows = await learning_store.recommendation_rows(db_session, "hotel_g3", since)
+    assert rows[0]["actual_covers"] is None           # learning loop / calibration skip it
+    assert rows[0]["actual_covers_source"] == "manager_feedback_unverified"
+    # The bounds' own historical max ignores it too.
+    monkeypatch.undo()
+    _, _, hist = await ReceiptsService(db_session, llm=AsyncMock())._bounds_inputs("hotel_g3")
+    assert hist is None
+
+
+@pytest.mark.asyncio
+async def test_lookup_failure_does_not_abort_the_callers_transaction(db_session):
+    """The lookup runs in a SAVEPOINT: a failing query must not take the
+    caller's pending writes down with it."""
+    from sqlalchemy import text
+
+    await _seed_profile(db_session)
+    rec = await _seed_recommendation(db_session)
+    svc = ReceiptsService(db_session, llm=AsyncMock())
+
+    async def broken_lookup(self, tenant_id):
+        await self.db.execute(text("SELECT * FROM table_that_does_not_exist"))
+
+    with (
+        patch.object(ReceiptsService, "_bounds_inputs", broken_lookup),
+        patch("app.services.ops_dispatcher.dispatch_error", AsyncMock()),
+        patch("app.services.ops_dispatcher.dispatch_anomaly", AsyncMock()),
+    ):
+        mem = await svc.persist_actual_covers(rec, 120.0, request_id="req-sp")
+        await db_session.commit()
+
+    assert mem is not None
+    stored = (
+        await db_session.execute(
+            select(StaffingRecommendation).where(StaffingRecommendation.id == rec.id)
+        )
+    ).scalars().one()
+    assert stored.actual_covers_source == "manager_feedback_unverified"
+
+
+def test_crash_inside_the_bounds_check_is_unverified_not_ok():
+    from app.services import feedback_guard
+
+    v = feedback_guard.evaluate(None)  # type: ignore[arg-type]
+    assert v.plausible is False and v.severity == "unverified"
+    assert v.reason == "guardrail_not_verified"

@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.integrations.apaleo_mcp_client import ApaleoMCPClient
-from app.providers.pms.base import PMSDataStatus
+from app.providers.pms.base import PMSDataStatus, PMSReadError
 from app.services.apaleo_mcp_adapter import ApaleoMCPAdapter
 
 # ---------------------------------------------------------------------------
@@ -203,14 +203,54 @@ class TestGetHistoricalData:
         )
         assert result == [{"id": "R1"}]
 
-    async def test_returns_empty_on_error(
+    # HOS-366 (audit case 3): a failed read is a typed absence, never `[]`. The
+    # old test froze `[] on error`, which training could not tell from "no
+    # reservations".
+    async def test_raises_typed_error_on_failure(
         self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
     ) -> None:
         mock_mcp_client.call_tool.side_effect = Exception("network error")
-        result = await adapter.get_historical_data(
-            "MUC", date(2026, 1, 1), date(2026, 1, 31)
-        )
-        assert result == []
+        with pytest.raises(PMSReadError) as exc_info:
+            await adapter.get_historical_data("MUC", date(2026, 1, 1), date(2026, 1, 31))
+        assert exc_info.value.status == PMSDataStatus.PMS_ERROR
+        assert "network error" in (exc_info.value.detail or "")
+
+    async def test_raises_when_not_configured(self, unconfigured_adapter: ApaleoMCPAdapter) -> None:
+        with pytest.raises(PMSReadError) as exc_info:
+            await unconfigured_adapter.get_historical_data("MUC", date(2026, 1, 1), date(2026, 1, 31))
+        assert exc_info.value.status == PMSDataStatus.NOT_CONFIGURED
+
+    async def test_raises_on_http_error_payload(
+        self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
+    ) -> None:
+        # The MCP server returns Apaleo's HTTP errors as a payload: it used to
+        # fall through to `.get("reservations", [])` and read as "no reservations".
+        mock_mcp_client.call_tool.return_value = {"status_code": 401, "message": "Unauthorized"}
+        with pytest.raises(PMSReadError) as exc_info:
+            await adapter.get_historical_data("MUC", date(2026, 1, 1), date(2026, 1, 31))
+        assert exc_info.value.status == PMSDataStatus.PMS_ERROR
+        assert "401" in (exc_info.value.detail or "")
+
+    async def test_raises_on_unreadable_payload(
+        self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
+    ) -> None:
+        mock_mcp_client.call_tool.return_value = "<html>gateway timeout</html>"
+        with pytest.raises(PMSReadError):
+            await adapter.get_historical_data("MUC", date(2026, 1, 1), date(2026, 1, 31))
+
+    async def test_fetch_reservations_propagates_the_failure(
+        self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
+    ) -> None:
+        mock_mcp_client.call_tool.side_effect = Exception("timeout")
+        with pytest.raises(PMSReadError):
+            await adapter.fetch_reservations("MUC", date(2026, 1, 1), date(2026, 1, 31))
+
+    async def test_empty_answer_is_still_no_reservations(
+        self, adapter: ApaleoMCPAdapter, mock_mcp_client: MagicMock
+    ) -> None:
+        # Apaleo answers 204 with no body when nothing matches: a real "none".
+        mock_mcp_client.call_tool.return_value = {"status_code": 204}
+        assert await adapter.get_historical_data("MUC", date(2026, 1, 1), date(2026, 1, 31)) == []
 
 
 # ---------------------------------------------------------------------------
