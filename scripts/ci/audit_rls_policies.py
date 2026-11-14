@@ -135,7 +135,9 @@ async def _introspect(database_url: str) -> dict[str, Any]:
             SELECT c.relname AS table_name, c.relrowsecurity AS rls_enabled
               FROM pg_class c
               JOIN pg_namespace n ON n.oid = c.relnamespace
-             WHERE n.nspname = 'public' AND c.relkind = 'r'
+             -- 'p' = partitioned parent (agent_action_log). Filtering on 'r' alone
+             -- reported RLS as disabled on it although it is enabled (HOS-368).
+             WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
             """,
         )
         rls_by_table: dict[str, bool] = {

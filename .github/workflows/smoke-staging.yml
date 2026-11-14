@@ -1,0 +1,106 @@
+name: Smoke E2E — staging
+
+# HOS-368 (Q2-06) — scripts/ci/smoke_test_e2e.py against the Fly.io staging app.
+#
+# NON-BLOCKING by construction: this workflow runs on a schedule and on demand,
+# never on push or pull_request, so a red run cannot hold a merge. It tests a
+# deployed environment (cold Fly machine, Supabase, third-party APIs), not the
+# diff of a PR, and a flaky staging must not teach people to bypass the gates
+# that do block. A failed run is a signal to read, not a verdict on a commit.
+#
+# Cost / side effects, checked in the script before choosing the schedule:
+#   * no Claude call. Step 3 is a Prophet forecast; step 4 calls the Mistral
+#     embedding endpoint (a few short embeddings, a fraction of a cent) and tries
+#     one feedback write with a synthesised recommendation id, which the server
+#     refuses as unknown (nothing stored); steps 1 and 5 are plain HTTP.
+#   * it wakes the Fly machine (auto-stop) — the only real recurring cost.
+# Hence: weekly, not daily, plus workflow_dispatch for after a deploy. Raise the
+# frequency only if the weekly signal proves too slow.
+#
+# Steps 2 (Apaleo MCP probe) and 6 (anomaly seed, needs a database URL) are
+# skipped, as in docs/demos/runbook-demo.md §5.
+#
+# Secrets to create (Settings -> Secrets and variables -> Actions). No value
+# lives in this repository:
+#   SMOKE_MCP_TOKEN   MCP bearer with predict + memory_write + memory_read scopes
+#                     for the staging hotel (scripts/ops/mint_mcp_token.py).
+# Optional repository variables (Variables tab, not secrets):
+#   SMOKE_APP_BASE_URL  default https://aetherix-backend.fly.dev
+#   SMOKE_HOTEL_ID      default demo_hotel
+# Without SMOKE_MCP_TOKEN steps 3 and 4 are skipped by the script; this workflow
+# then fails on purpose (a smoke test that silently skips most of itself is not
+# a smoke test).
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Backend base URL (default: repository variable SMOKE_APP_BASE_URL, else the Fly staging URL)"
+        required: false
+        default: ""
+  schedule:
+    - cron: "17 5 * * 1"   # Monday 05:17 UTC, weekly — see the cost note above
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-staging
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: smoke-e2e-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_BASE_URL: ${{ github.event.inputs.base_url || vars.SMOKE_APP_BASE_URL || 'https://aetherix-backend.fly.dev' }}
+      SMOKE_HOTEL_ID: ${{ vars.SMOKE_HOTEL_ID || 'demo_hotel' }}
+      SMOKE_MCP_TOKEN: ${{ secrets.SMOKE_MCP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install httpx
+        run: pip install "httpx>=0.27"
+
+      - name: Run smoke test (steps 2 and 6 skipped)
+        run: |
+          set +e
+          if [ -z "$SMOKE_MCP_TOKEN" ]; then
+            echo "::error title=SMOKE_MCP_TOKEN missing::steps 3 and 4 would be skipped; create the secret (see the header of smoke-staging.yml)."
+            echo "### Smoke E2E staging — not run" >> "$GITHUB_STEP_SUMMARY"
+            echo "Secret \`SMOKE_MCP_TOKEN\` is not set." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          python scripts/ci/smoke_test_e2e.py --skip 2,6 | tee smoke.jsonl
+          rc=${PIPESTATUS[0]}
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          rows, summary = [], {}
+          for line in open("smoke.jsonl"):
+              line = line.strip()
+              if not line.startswith("{"):
+                  continue
+              d = json.loads(line)
+              if "step" in d:
+                  rows.append(d)
+              else:
+                  summary = d
+          print("### Smoke E2E — staging")
+          print()
+          print(f"Target: `{os.environ['APP_BASE_URL']}` (hotel `{os.environ['SMOKE_HOTEL_ID']}`)")
+          print()
+          if summary:
+              print(f"**{summary.get('passed', 0)} passed, {summary.get('failed', 0)} failed, {summary.get('skipped', 0)} skipped**")
+              print()
+          print("| Step | Name | Status | ms | Details |")
+          print("|---|---|---|---|---|")
+          for r in rows:
+              d = str(r.get("details", "")).replace("|", "\\|")
+              print(f"| {r['step']} | {r['name']} | {r['status']} | {r['duration_ms']} | {d} |")
+          PY
+          exit "$rc"
