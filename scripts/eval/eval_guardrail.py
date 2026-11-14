@@ -98,6 +98,14 @@ def _mock_suppression(**kw) -> str | None:
     return breach[0] if breach else None
 
 
+def _constitution_gate(**kw) -> str | None:
+    """HOS-366 (audit case 11): no free-text model call without the constitution."""
+    from app.services import whatsapp_service
+
+    breach = whatsapp_service.evaluate_constitution_gate(**kw)
+    return breach[0] if breach else None
+
+
 def _pms_history(**kw) -> str | None:
     """HOS-366 (audit case 3): a failed reservation read is a typed absence
     (``PMSReadError.status``), never an empty history."""
@@ -121,6 +129,7 @@ GUARDS = {
     "heartbeat_job_error": _job_error,
     "mock_forecast": _mock_suppression,
     "pms_history": _pms_history,
+    "constitution_gate": _constitution_gate,
 }
 
 
