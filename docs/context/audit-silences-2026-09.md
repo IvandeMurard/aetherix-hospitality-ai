@@ -107,22 +107,41 @@ La règle à venir devrait **généraliser ces motifs**, pas en inventer un nouv
 - **La décision** est rédigée **après** relecture de cette criticité par le PM ; elle prend le prochain numéro libre à cette date.
 - **Détecteur d'hygiène** (règle 5) livré avec la décision, pour que la règle soit vérifiable dès le premier jour.
 
+## Suivi depuis l'audit
+
+> Ajouté après coup. Le constat et le tableau ci-dessous restent ceux du 24/09/2026 ; seuls les cas traités portent une marque **✔** dans la colonne #. Les emplacements cités sont ceux du 24/09 : l'adaptateur Apaleo MCP a depuis été déplacé dans `backend/app/providers/pms/` (HOS-280).
+
+**Règle B, signée par le PO le 14/11/2026** (tranche le point 3 de la proposition pour les garde-fous) : un garde-fou qui plante rend un verdict typé **« non vérifié »**. Le résultat n'est jamais présenté comme vérifié ; au pire, le manager reçoit le chiffre avec une **réserve qualitative** visible, jamais un silence ni un chiffre propre, et **jamais un score de confiance chiffré** (la `confidence` actuelle est une heuristique de largeur d'intervalle, non calibrée). Compatible avec G-4 (« un chiffre avec réserve vaut mieux que rien », Décision #6). Exception écrite : le *fail-open* voulu du rate-limit (cas 43). Jamais de valeur plausible inventée sur échec : absence typée, verdict « non vérifié » ou erreur. Détail : ADR-0009 §5.
+
+| # | Traité par | Ce que voit l'appelant désormais | Événement typé |
+|---|---|---|---|
+| 1, 2 | HOS-352 | occupation / revenu **absents** avec leur statut (`not_configured`, `pms_error`, `no_data`), plus jamais 80 % ni 0.0 | statut porté par la valeur absente |
+| 3 | HOS-366 | `PMSReadError` (statut `pms_error` / `not_configured`) au lieu de `[]` ; l'entraînement répond 502/503 `pms_history_unavailable` et ne s'entraîne pas ; le mode hybride ne remplace plus une lecture échouée par du synthétique | erreur typée remontée à l'appelant (log ERROR) |
+| 9 | HOS-366 | prévision livrée inchangée, `forecast_guardrail.verified = false` + réserve qualitative (réponse WhatsApp « prévision », `/predict`, outil MCP) ; une confiance absente ou un recalcul d'effectif qui plante donnent le même verdict | trip `forecast.guardrail`, raison `guardrail_not_verified` + alerte ops (erreur) |
+| 10 | HOS-366 | chiffre enregistré **non vérifié** : source `manager_feedback_unverified`, `actual_covers` vide (aucun lecteur d'entraînement, d'erreur live ou du ledger ne l'utilise) ; le manager est prévenu ; la lecture tourne dans un SAVEPOINT | trip `feedback.ingestion`, raison `guardrail_not_verified` + alerte ops (erreur) |
+| 11 | HOS-366 | aucun appel au modèle sans constitution : réponse déterministe FR/EN | trip `constitution_guardrail`, raison `constitution_unavailable` + alerte ops (erreur) |
+| 12 | HOS-366 | aucun appel au modèle sans constitution : explication déterministe (sans pourcentage), prévision marquée « non vérifiée » par le moteur | `unverified_checks` → trip `forecast.guardrail`, raison `guardrail_not_verified` |
+
+Reste ouvert dans ce lot : les gestionnaires d'enregistrement qui avalent leur propre échec (catégorie M, cas 16 à 24, dont les nouveaux enregistreurs de HOS-366 qui suivent le même motif) relèvent de HOS-367.
+
 ## Tableau complet (93 cas, triés par criticité puis catégorie)
+
+✔ = traité depuis l'audit (voir « Suivi depuis l'audit »).
 
 | # | Crit. | Cat. | Nœud | Emplacement | Log | Ce que voit l'appelant |
 |---|---|---|---|---|---|---|
-| 1 | P1 | F | Aetherix | `backend/app/services/apaleo_mcp_adapter.py:58` (`get_occupancy`) | error | occupation inventée à 80 %, enregistrée comme réelle |
-| 2 | P1 | F | Aetherix | `backend/app/services/apaleo_mcp_adapter.py:83` (`get_revenue`) | error | revenu F&B inventé à 0.0 |
-| 3 | P1 | F | Aetherix | `backend/app/services/apaleo_mcp_adapter.py:111` (`get_historical_data`) | error | historique vide au lieu de « lecture échouée » |
+| 1 ✔ | P1 | F | Aetherix | `backend/app/services/apaleo_mcp_adapter.py:58` (`get_occupancy`) | error | occupation inventée à 80 %, enregistrée comme réelle |
+| 2 ✔ | P1 | F | Aetherix | `backend/app/services/apaleo_mcp_adapter.py:83` (`get_revenue`) | error | revenu F&B inventé à 0.0 |
+| 3 ✔ | P1 | F | Aetherix | `backend/app/services/apaleo_mcp_adapter.py:111` (`get_historical_data`) | error | historique vide au lieu de « lecture échouée » |
 | 4 | P1 | F | Tacet | `app/ingest/paris_events.py:75` (`fetch_active_events`) | print | « aucun événement » au lieu de « flux injoignable » (print) |
 | 5 | P1 | F | Tacet | `app/ingest/paris_permits.py:62` (`fetch_active_permits`) | print | « aucun chantier » au lieu de « flux injoignable » (print) |
 | 6 | P1 | F | Tacet | `app/ingest/traffic.py:37` (`fetch_traffic_congestion`) | print | trafic absent = « pas de congestion » (print) |
 | 7 | P1 | F | Tacet | `app/ingest/weather.py:31` (`fetch_current_weather`) | print | météo absente (print) |
 | 8 | P1 | F | Tacet | `app/services/paris_signals.py:93` (`query_paris_events`) | none | `risk_score: 0.0` : échec présenté comme « aucun risque » |
-| 9 | P1 | G | Aetherix | `backend/app/services/aetherix_engine.py:152` (`_apply_forecast_guardrail`) | warning | prévision livrée sans garde-fou |
-| 10 | P1 | G | Aetherix | `backend/app/services/receipts.py:746` (`_check_feedback_bounds`) | warning | garde-fou G-3 ouvert : `BoundsVerdict(True, "ok")`, retour manager vers l'entraînement sans borne |
-| 11 | P1 | G | Aetherix | `backend/app/services/whatsapp_service.py:228` (`_generate_response`) | warning | LLM appelé sans la constitution de l'agent |
-| 12 | P1 | G | Aetherix | `backend/orchestrator/agent.py:111` (`get_forecast`) | warning | prévision orchestrée sans constitution ni profil |
+| 9 ✔ | P1 | G | Aetherix | `backend/app/services/aetherix_engine.py:152` (`_apply_forecast_guardrail`) | warning | prévision livrée sans garde-fou |
+| 10 ✔ | P1 | G | Aetherix | `backend/app/services/receipts.py:746` (`_check_feedback_bounds`) | warning | garde-fou G-3 ouvert : `BoundsVerdict(True, "ok")`, retour manager vers l'entraînement sans borne |
+| 11 ✔ | P1 | G | Aetherix | `backend/app/services/whatsapp_service.py:228` (`_generate_response`) | warning | LLM appelé sans la constitution de l'agent |
+| 12 ✔ | P1 | G | Aetherix | `backend/orchestrator/agent.py:111` (`get_forecast`) | warning | prévision orchestrée sans constitution ni profil |
 | 13 | P1 | R | Aetherix | `backend/app/services/alert_dispatcher.py:140` (`run_pending`) | none | envoi de recommandation échoué, aucune trace |
 | 14 | P1 | M | Aetherix | `backend/app/core/observability.py:72` (`configure_observability`) | warning | observabilité désactivée au démarrage, signalée par un WARNING |
 | 15 | P1 | M | Aetherix | `backend/app/providers/fallback_provider.py:146` (`check_fallback_health`) | warning | canari du fallback : un WARNING au démarrage, rien d'autre |
