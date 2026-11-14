@@ -12,7 +12,8 @@ Coverage:
   - test_dispatch_one_sets_dispatched_at
   - test_dispatch_one_not_configured_skips_gracefully
   - test_dispatch_one_already_dispatched_skipped  (idempotency)
-  - test_run_pending_processes_all_ready_to_push
+  - test_run_pending_processes_all_ready_to_push  (real SQLite, HOS-369)
+  - HOS-369: atomic claim, two concurrent workers, lease recovery, bounded retries
   - test_run_pending_skips_dispatched
   - test_dispatch_route_returns_202
   - test_dispatch_failure_leaves_status_ready_to_push
@@ -27,15 +28,20 @@ Coverage:
 
 from __future__ import annotations
 
+import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.db.models import RestaurantProfile, StaffingRecommendation
+from app.db.models import Base, RestaurantProfile, StaffingRecommendation
+from app.services import alert_dispatcher as ad
 from app.services.alert_dispatcher import AlertDispatcherService, _format_message
 
 # ---------------------------------------------------------------------------
@@ -242,44 +248,6 @@ async def test_dispatch_failure_leaves_status_ready_to_push():
 
 
 @pytest.mark.asyncio
-async def test_run_pending_processes_all_ready_to_push():
-    """run_pending dispatches every ready_to_push recommendation."""
-    prop_id = str(uuid.uuid4())
-    rec1 = _make_rec(property_id=prop_id)
-    rec2 = _make_rec(property_id=prop_id, rec_id=uuid.uuid4())
-    profile = _make_profile(tenant_id=prop_id)
-
-    session = AsyncMock()
-
-    call_count = 0
-
-    async def _execute(stmt):
-        nonlocal call_count
-        result = MagicMock()
-        call_count += 1
-        if call_count == 1:
-            # First call: return pending recommendations list
-            result.scalars.return_value.all.return_value = [rec1, rec2]
-            result.scalars.return_value.first.return_value = None
-        else:
-            # Subsequent calls: profile lookup
-            result.scalars.return_value.first.return_value = profile
-            result.scalars.return_value.all.return_value = []
-        return result
-
-    session.execute = AsyncMock(side_effect=_execute)
-    session.commit = AsyncMock()
-
-    with patch("app.services.alert_dispatcher.TwilioClient") as MockTwilio:
-        mock_instance = AsyncMock()
-        MockTwilio.return_value = mock_instance
-        await AlertDispatcherService().run_pending(session)
-
-    assert rec1.status == "dispatched"
-    assert rec2.status == "dispatched"
-
-
-@pytest.mark.asyncio
 async def test_run_pending_skips_dispatched():
     """run_pending with empty result set (already dispatched) must not dispatch anything."""
     session = AsyncMock()
@@ -449,3 +417,201 @@ def test_dispatch_route_returns_accepted_status(notifications_client):
     response = notifications_client.post("/api/v1/notifications/dispatch")
     data = response.json()
     assert data.get("status") == "accepted"
+
+# ---------------------------------------------------------------------------
+# HOS-369 (16.48) — atomic claim, recovery, bounded retries (real SQLite)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def factory(tmp_path):
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'd.db'}")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield async_sessionmaker(engine, expire_on_commit=False)
+    await engine.dispose()
+
+
+async def _seed(factory, n: int = 1, *, with_profile: bool = True) -> list[uuid.UUID]:
+    now = datetime.now(tz=timezone.utc)
+    ids = []
+    async with factory() as s:
+        for _ in range(n):
+            prop = uuid.uuid4()
+            if with_profile:
+                s.add(
+                    RestaurantProfile(
+                        id=prop, property_id=prop, tenant_id=f"t_{prop}",
+                        property_name="H", outlet_name="O", total_seats=40,
+                        preferred_channel="whatsapp", phone_number="+33600000000",
+                    )
+                )
+            rec = StaffingRecommendation(
+                id=uuid.uuid4(), tenant_id=f"t_{prop}", property_id=prop,
+                anomaly_id=uuid.uuid4(), message_text="Add 2 servers.",
+                window_start=now, window_end=now, status="ready_to_push",
+            )
+            s.add(rec)
+            ids.append(rec.id)
+        await s.commit()
+    return ids
+
+
+async def _row(factory, rec_id) -> StaffingRecommendation:
+    async with factory() as s:
+        return (
+            await s.execute(select(StaffingRecommendation).where(StaffingRecommendation.id == rec_id))
+        ).scalars().one()
+
+
+async def _expire_lease(factory, rec_id) -> None:
+    """Move the clock past the lease by rewinding it (no sleeping)."""
+    async with factory() as s:
+        await s.execute(
+            StaffingRecommendation.__table__.update()
+            .where(StaffingRecommendation.id == rec_id)
+            .values(dispatch_claimed_at=datetime.now(tz=timezone.utc) - ad.CLAIM_LEASE - timedelta(seconds=1))
+        )
+        await s.commit()
+
+
+def _twilio(send_error: Exception | None = None, delay: float = 0.0):
+    inst = AsyncMock()
+
+    async def _send(**kw):
+        if delay:
+            await asyncio.sleep(delay)
+        if send_error:
+            raise send_error
+
+    inst.send_whatsapp.side_effect = _send
+    return inst
+
+
+@pytest.mark.asyncio
+async def test_run_pending_processes_all_ready_to_push(factory):
+    ids = await _seed(factory, 2)
+    with patch("app.services.alert_dispatcher.TwilioClient") as MockTwilio:
+        inst = _twilio()
+        MockTwilio.return_value = inst
+        async with factory() as s:
+            summary = await AlertDispatcherService().run_pending(s)
+    assert (summary.claimed, summary.dispatched, summary.failed) == (2, 2, 0)
+    assert inst.send_whatsapp.await_count == 2
+    for i in ids:
+        r = await _row(factory, i)
+        assert r.status == "dispatched" and r.dispatched_at is not None
+
+
+@pytest.mark.asyncio
+async def test_two_concurrent_workers_send_exactly_once(factory):
+    """AC2: two workers racing on the same rows -> each recommendation sent once."""
+    ids = await _seed(factory, 3)
+    with patch("app.services.alert_dispatcher.TwilioClient") as MockTwilio:
+        inst = _twilio(delay=0.05)
+        MockTwilio.return_value = inst
+
+        async def worker():
+            async with factory() as s:
+                return await AlertDispatcherService().run_pending(s)
+
+        s1, s2 = await asyncio.gather(worker(), worker())
+    assert inst.send_whatsapp.await_count == 3
+    assert s1.dispatched + s2.dispatched == 3
+    assert s1.claimed + s2.claimed == 3
+    for i in ids:
+        assert (await _row(factory, i)).status == "dispatched"
+
+
+@pytest.mark.asyncio
+async def test_claim_is_atomic_single_winner(factory):
+    (rec_id,) = await _seed(factory)
+    now = datetime.now(tz=timezone.utc)
+    async with factory() as a, factory() as b:
+        won_a = await AlertDispatcherService._claim(a, rec_id, now)
+        won_b = await AlertDispatcherService._claim(b, rec_id, now)
+    assert (won_a, won_b) == (True, False)
+    assert (await _row(factory, rec_id)).dispatch_attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_crashed_worker_row_is_reclaimed_after_lease(factory):
+    """AC3: claim without send (worker died) -> not stuck, re-claimed after the lease."""
+    (rec_id,) = await _seed(factory)
+    async with factory() as s:
+        assert await AlertDispatcherService._claim(s, rec_id, datetime.now(tz=timezone.utc))  # dies here
+    await _expire_lease(factory, rec_id)
+    with patch("app.services.alert_dispatcher.TwilioClient") as MockTwilio:
+        inst = _twilio()
+        MockTwilio.return_value = inst
+        async with factory() as s:
+            summary = await AlertDispatcherService().run_pending(s)
+    assert summary.dispatched == 1
+    inst.send_whatsapp.assert_awaited_once()
+    assert (await _row(factory, rec_id)).status == "dispatched"
+
+
+@pytest.mark.asyncio
+async def test_live_lease_blocks_second_worker(factory):
+    (rec_id,) = await _seed(factory)
+    async with factory() as s:
+        assert await AlertDispatcherService._claim(s, rec_id, datetime.now(tz=timezone.utc))
+    with patch("app.services.alert_dispatcher.TwilioClient") as MockTwilio:
+        async with factory() as s:
+            summary = await AlertDispatcherService().run_pending(s)
+    assert summary.claimed == 0
+    MockTwilio.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_failed_send_is_logged_traced_counted_and_retried(factory, caplog):
+    """AC4: no swallow -> logger.exception + guardrail_trip + counted; row retried."""
+    (rec_id,) = await _seed(factory)
+    with patch("app.services.alert_dispatcher.TwilioClient") as MockTwilio, patch(
+        "app.services.alert_dispatcher.guardrail_trip"
+    ) as trip, caplog.at_level("ERROR"):
+        MockTwilio.return_value = _twilio(RuntimeError("boom"))
+        async with factory() as s:
+            summary = await AlertDispatcherService().run_pending(s)
+    assert (summary.claimed, summary.failed, summary.dispatched) == (1, 1, 0)
+    assert any("Dispatch failed for recommendation" in r.message for r in caplog.records)
+    assert trip.call_args.args[2] == ad.REASON_SEND_FAILED
+    r = await _row(factory, rec_id)
+    assert r.status == "ready_to_push" and r.dispatch_attempts == 1  # retried after the lease
+
+    # Right after: the lease holds, the provider is not hammered.
+    with patch("app.services.alert_dispatcher.TwilioClient"):
+        async with factory() as s:
+            assert (await AlertDispatcherService().run_pending(s)).claimed == 0
+
+
+@pytest.mark.asyncio
+async def test_retries_are_bounded_then_dispatch_failed(factory):
+    (rec_id,) = await _seed(factory)
+    with patch("app.services.alert_dispatcher.TwilioClient") as MockTwilio, patch(
+        "app.services.alert_dispatcher.guardrail_trip"
+    ) as trip, patch("app.services.ops_dispatcher.dispatch_error", new=AsyncMock()) as alert:
+        inst = _twilio(RuntimeError("boom"))
+        MockTwilio.return_value = inst
+        for _ in range(ad.MAX_DISPATCH_ATTEMPTS + 2):
+            await _expire_lease(factory, rec_id)
+            async with factory() as s:
+                await AlertDispatcherService().run_pending(s)
+    assert inst.send_whatsapp.await_count == ad.MAX_DISPATCH_ATTEMPTS  # bound respected
+    r = await _row(factory, rec_id)
+    assert r.status == "dispatch_failed" and r.dispatch_attempts == ad.MAX_DISPATCH_ATTEMPTS
+    reasons = [c.args[2] for c in trip.call_args_list]
+    assert reasons.count(ad.REASON_SEND_FAILED) == ad.MAX_DISPATCH_ATTEMPTS
+    assert reasons.count(ad.REASON_RETRIES_EXHAUSTED) == 1
+    alert.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_missing_profile_is_bounded_not_retried_forever(factory):
+    (rec_id,) = await _seed(factory, with_profile=False)
+    with patch("app.services.ops_dispatcher.dispatch_error", new=AsyncMock()):
+        for _ in range(ad.MAX_DISPATCH_ATTEMPTS):
+            await _expire_lease(factory, rec_id)
+            async with factory() as s:
+                await AlertDispatcherService().run_pending(s)
+    assert (await _row(factory, rec_id)).status == "dispatch_failed"
