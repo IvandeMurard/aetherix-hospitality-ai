@@ -804,7 +804,20 @@ class ReceiptsService:
         capacity + historical range before any write. An implausible value is
         rejected (not ingested) or flagged, per ``FEEDBACK_BOUNDS_POLICY``, and
         always raises a typed ops alert — never a silent poison of the model.
+
+        HOS-366 (rule B, audit of silences case 10): when the bounds check
+        cannot run, the value is recorded as **unverified**: source
+        ``manager_feedback_unverified``, ``actual_covers`` left empty (so no
+        training, live-error or ledger reader uses it), the figure kept in the
+        ground-truth memory row tagged ``not_verified``, a typed trip logged.
+        The caller tells the manager (``recommendation.actual_covers_source``).
         """
+        from app.services.feedback_guard import (
+            SEVERITY_UNVERIFIED,
+            SOURCE_UNVERIFIED,
+            record_feedback_trip,
+        )
+
         now = datetime.now(tz=timezone.utc)
 
         # HOS-250 — bound the value before it touches the training path.
@@ -812,9 +825,8 @@ class ReceiptsService:
             recommendation.tenant_id, float(actual_value)
         )
         flagged = False
+        unverified = False
         if not verdict.plausible:
-            from app.services.feedback_guard import record_feedback_trip
-
             await record_feedback_trip(
                 recommendation.tenant_id,
                 verdict.reason or "implausible_feedback",
@@ -828,13 +840,22 @@ class ReceiptsService:
                     actual_value, recommendation.tenant_id, verdict.detail,
                 )
                 return None
-            flagged = True  # severity == "flag" → ingest but tag
+            if verdict.severity == SEVERITY_UNVERIFIED:
+                unverified = True  # recorded, never used as a measured actual
+            else:
+                flagged = True  # severity == "flag" → ingest but tag
 
         # AC1 — ground truth onto the recommendation
-        recommendation.actual_covers = actual_value
-        recommendation.actual_covers_source = (
-            "manager_feedback_flagged" if flagged else "manager_feedback"
-        )
+        if unverified:
+            # Empty, not the figure: an earlier verified actual is superseded by
+            # this report, and the figure must not reach any measured-actual reader.
+            recommendation.actual_covers = None
+            recommendation.actual_covers_source = SOURCE_UNVERIFIED
+        else:
+            recommendation.actual_covers = actual_value
+            recommendation.actual_covers_source = (
+                "manager_feedback_flagged" if flagged else "manager_feedback"
+            )
         recommendation.actual_covers_at = now
 
         # AC2 — ground_truth memory row (no embedding: factual, not retrieved by
@@ -847,6 +868,12 @@ class ReceiptsService:
         tags = ["ground_truth", "covers_correction"]
         if flagged:
             tags.append("implausible_flag")
+        if unverified:
+            reflection = (
+                f"unverified {reflection} (plausibility check could not run; "
+                "not used for learning until verified)"
+            )
+            tags.append("not_verified")
         memory = OperationalMemory(
             hotel_id=recommendation.tenant_id,
             reflection=reflection,
@@ -877,56 +904,25 @@ class ReceiptsService:
 
         Looks up the property capacity (``total_seats × turns``) and the
         historical max ``actual_covers`` for the tenant. A missing profile →
-        capacity is not enforced (only the lower bound applies). Any lookup
-        failure degrades open (treated as plausible) so the guard never blocks
-        legitimate feedback on an infra hiccup.
-        """
-        from app.services.feedback_guard import BoundsVerdict, evaluate
+        capacity is not enforced (only the lower bound applies).
 
-        total_seats: float | None = None
-        turns_sum: float | None = None
-        historical_max: float | None = None
+        A lookup failure is an ``unverified`` verdict (rule B, HOS-366). It used
+        to degrade open (``BoundsVerdict(True, "ok")``): the value reached
+        training unbounded. The lookup runs in a SAVEPOINT so its failure does
+        not abort the caller's transaction (the decision, the trip row and the
+        unverified record still commit).
+        """
+        from app.services.feedback_guard import evaluate, not_verified
+
         try:
-            profile = (
-                await self.db.execute(
-                    select(RestaurantProfile).where(
-                        RestaurantProfile.tenant_id == tenant_id
-                    )
-                )
-            ).scalars().first()
-            if profile is not None and profile.total_seats:
-                total_seats = float(profile.total_seats)
-                turns_sum = (
-                    float(profile.turns_breakfast or 0)
-                    + float(profile.turns_lunch or 0)
-                    + float(profile.turns_dinner or 0)
-                )
-            # HOS-268: exclude flagged-but-ingested rows from the historical max.
-            # Under FEEDBACK_BOUNDS_POLICY="flag" an implausible value is persisted
-            # tagged "manager_feedback_flagged"; counting it here would let the soft
-            # historical-sanity bound self-erode (each aberrant value raises the max,
-            # admitting the next). NULL-safe: legacy rows (source unset) still count.
-            from sqlalchemy import or_
-            hist = (
-                await self.db.execute(
-                    select(func.max(StaffingRecommendation.actual_covers)).where(
-                        StaffingRecommendation.tenant_id == tenant_id,
-                        StaffingRecommendation.actual_covers.is_not(None),
-                        or_(
-                            StaffingRecommendation.actual_covers_source.is_(None),
-                            StaffingRecommendation.actual_covers_source != "manager_feedback_flagged",
-                        ),
-                    )
-                )
-            ).scalar_one_or_none()
-            if hist is not None:
-                historical_max = float(hist)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
+            async with self.db.begin_nested():
+                total_seats, turns_sum, historical_max = await self._bounds_inputs(tenant_id)
+        except Exception as exc:  # noqa: BLE001 — rule B: typed "unverified", never "ok"
+            logger.error(
                 "receipts._check_feedback_bounds: lookup failed hotel_id=%s: %s",
                 tenant_id, exc,
             )
-            return BoundsVerdict(True, "ok")
+            return not_verified(f"lookup failed: {type(exc).__name__}: {exc}")
 
         return evaluate(
             actual_value,
@@ -934,6 +930,50 @@ class ReceiptsService:
             turns_sum=turns_sum,
             historical_max=historical_max,
         )
+
+    async def _bounds_inputs(
+        self, tenant_id: str
+    ) -> tuple[float | None, float | None, float | None]:
+        """(total_seats, turns_sum, historical_max) for the HOS-250 bounds."""
+        total_seats: float | None = None
+        turns_sum: float | None = None
+        historical_max: float | None = None
+        profile = (
+            await self.db.execute(
+                select(RestaurantProfile).where(
+                    RestaurantProfile.tenant_id == tenant_id
+                )
+            )
+        ).scalars().first()
+        if profile is not None and profile.total_seats:
+            total_seats = float(profile.total_seats)
+            turns_sum = (
+                float(profile.turns_breakfast or 0)
+                + float(profile.turns_lunch or 0)
+                + float(profile.turns_dinner or 0)
+            )
+        # HOS-268: exclude flagged-but-ingested rows from the historical max.
+        # Under FEEDBACK_BOUNDS_POLICY="flag" an implausible value is persisted
+        # tagged "manager_feedback_flagged"; counting it here would let the soft
+        # historical-sanity bound self-erode (each aberrant value raises the max,
+        # admitting the next). NULL-safe: legacy rows (source unset) still count.
+        # Unverified values (HOS-366) have no actual_covers, so they never count.
+        from sqlalchemy import or_
+        hist = (
+            await self.db.execute(
+                select(func.max(StaffingRecommendation.actual_covers)).where(
+                    StaffingRecommendation.tenant_id == tenant_id,
+                    StaffingRecommendation.actual_covers.is_not(None),
+                    or_(
+                        StaffingRecommendation.actual_covers_source.is_(None),
+                        StaffingRecommendation.actual_covers_source != "manager_feedback_flagged",
+                    ),
+                )
+            )
+        ).scalar_one_or_none()
+        if hist is not None:
+            historical_max = float(hist)
+        return total_seats, turns_sum, historical_max
 
     async def weekly_digest(
         self, hotel_id: str, week_end: date

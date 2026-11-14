@@ -82,8 +82,14 @@ config-driven (`backend/app/core/config.py`) — no redeploy. Enforced via
 (reject) or `dispatch_anomaly` (flag). Never a silent ingestion. No migration
 (capacity derived from existing `restaurant_profiles.total_seats` + turns).
 
-**Degrade-open**: if the property/history lookup fails, the value is treated as
-plausible (the guard never blocks legitimate feedback on an infra hiccup).
+**Lookup failure = not verified** (rule B, PO 14/11/2026, HOS-366 — replaces the
+former *degrade-open*, under which a failed lookup treated the value as plausible
+and sent it to training unbounded): the verdict is `unverified`
+(`error_code="guardrail_not_verified"`, `dispatch_error`). The value is recorded
+with source `manager_feedback_unverified` and **no** `actual_covers` (so no
+training, live-error or ledger reader uses it); the figure stays in the
+ground-truth memory row tagged `not_verified`, and the manager is told it is
+recorded but not verified. A crash inside the bounds check gives the same verdict.
 
 ---
 
@@ -132,6 +138,7 @@ it produces a confidence *indicator*, not a switch. Enforced via
 | Nominal | `confidence ≥ WARN` and `live_mape ≤ MAPE_CATASTROPHE` | recommendation dispatched as-is | — | — |
 | **Tier 1** | `confidence < WARN` | dispatched **+ confidence caveat** (AgentAbstention flag `confidence_below_threshold`); covers unchanged | `FORECAST_CONFIDENCE_WARN` | `0.6` |
 | **Tier 2** | `confidence < CATASTROPHE` **or** `live_mape > MAPE_CATASTROPHE` | **baseline fallback** (tagged), staffing recomputed on baseline; flag `cold_start_meta_learner_drift` | `FORECAST_CONFIDENCE_CATASTROPHE` / `FORECAST_MAPE_CATASTROPHE` | `0.4` / `35` |
+| **Not verified** (HOS-366, rule B) | the guardrail cannot run: no confidence, a crash in the tiering or the staffing recompute, or an upstream check reported by the orchestrator (`agent_constitution`) | figure **delivered unchanged**, `forecast_guardrail.verified = false` + qualitative reserve (flag `guardrail_not_verified`, no numeric confidence shown); `dispatch_error` | — | — |
 
 Baseline source (Tier 2): `context["baseline_covers"]` → `context["recent_avg_covers"]`
 → `FORECAST_BASELINE_DEFAULT_COVERS` (default `0` = disabled) → degrade to the

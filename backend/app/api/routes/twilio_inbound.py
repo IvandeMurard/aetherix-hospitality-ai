@@ -361,9 +361,13 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
         # HOS-270: whether the manager's numeric correction failed the G-3
         # plausibility guard, so the reply can say so (not a silent drop).
         covers_rejected = False
+        # HOS-366 (rule B): the G-3 check could not run — the figure is recorded
+        # as unverified, and the reply says so.
+        covers_unverified = False
 
         if resolution.action == "record" and recommendation is not None:
             from app.mcp_server import tool_submit_feedback_to_memory
+            from app.services.feedback_guard import SOURCE_UNVERIFIED
 
             try:
                 # HOS-250: plausibility guard FIRST, before the number can reach
@@ -378,11 +382,23 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
                         request_id=request_id,
                     )
                     covers_rejected = persisted is None
+                    covers_unverified = (
+                        not covers_rejected
+                        and recommendation.actual_covers_source == SOURCE_UNVERIFIED
+                    )
 
-                memory_actual = None if covers_rejected else feedback.actual_value
+                # Neither a rejected nor an unverified figure becomes the
+                # structured actual of the feedback memory.
+                memory_actual = (
+                    None if (covers_rejected or covers_unverified) else feedback.actual_value
+                )
                 notes_text = feedback.notes
                 if memory_actual is not None:
                     notes_text = f"actual={memory_actual} {notes_text}".strip()
+                elif covers_unverified:
+                    notes_text = (
+                        f"actual={feedback.actual_value} (not verified) {notes_text}".strip()
+                    )
 
                 result = await tool_submit_feedback_to_memory(
                     hotel_id=hotel_id,
@@ -404,11 +420,18 @@ async def _bg_receipt_feedback(from_number: str, body: str) -> None:
                 logger.exception(
                     "_bg_receipt_feedback: memory write failed hotel_id=%s", hotel_id
                 )
+                # Nothing was committed: never tell the manager it was recorded.
+                covers_unverified = False
 
         if covers_rejected:
             # The reason prompt must not swallow the re-sent figure.
             await decisions.cancel_reason_prompt(profile, now)
             plan = ReplyPlan(text=_COVERS_REJECTED_REPLY)
+        elif covers_unverified:
+            # Rule B: the manager is told the figure is recorded but not verified
+            # (qualitative, no number about confidence), after the normal reply.
+            note = _covers_unverified_note(getattr(profile, "manager_locale", None))
+            plan.text = f"{plan.text}\n\n{note}" if plan.text else note
 
     await _send_plan(from_number, plan)
 
@@ -418,6 +441,24 @@ _COVERS_REJECTED_REPLY = (
     "range for your venue, so I didn't record the number. If it's correct, "
     "please reply with the figure again to confirm."
 )
+
+# HOS-366 (rule B): the G-3 plausibility check could not run on the figure.
+_COVERS_UNVERIFIED_NOTE = {
+    "fr": (
+        "Votre chiffre de couverts est enregistré, mais il n'a pas pu être vérifié "
+        "(le contrôle de plausibilité n'a pas pu s'exécuter). Il ne servira ni à "
+        "l'apprentissage ni au suivi de l'erreur tant qu'il n'est pas vérifié."
+    ),
+    "en": (
+        "Your covers figure is recorded, but it could not be checked (the "
+        "plausibility check could not run). It won't be used for learning or for "
+        "error tracking until it is checked."
+    ),
+}
+
+
+def _covers_unverified_note(locale: str | None) -> str:
+    return _COVERS_UNVERIFIED_NOTE["en" if (locale or "").lower().startswith("en") else "fr"]
 
 
 async def _bg_forecast(from_number: str, command: ForecastCommand, engine) -> None:

@@ -209,3 +209,47 @@ async def test_plausible_value_keeps_success_reply(db_session):
     reply_mock.assert_awaited_once()
     sent = reply_mock.await_args.args[1].lower()
     assert "didn't record the number" not in sent
+    assert "vérifié" not in sent and "could not be checked" not in sent
+
+
+@pytest.mark.asyncio
+async def test_unverified_value_is_recorded_flagged_and_the_manager_is_told(db_session):
+    """HOS-366 (rule B, audit case 10): the bounds lookup fails. The figure is
+    recorded as unverified (no measured actual, no structured memory actual) and
+    the reply says it is recorded but not verified — never a clean "noted"."""
+    _profile, rec = await _seed(db_session)
+    reply_mock = AsyncMock()
+    submit_mock = AsyncMock(return_value={"status": "ok"})
+
+    async def boom(self, tenant_id):
+        raise RuntimeError("connection reset")
+
+    with (
+        patch.object(webhook, "AsyncSessionLocal", lambda: _SessionCtx(db_session)),
+        patch.object(webhook, "ReceiptsService", lambda db: ReceiptsService(db, llm=AsyncMock())),
+        patch.object(ReceiptsService, "_bounds_inputs", boom),
+        patch.object(webhook._twilio_client, "send_whatsapp", reply_mock),
+        patch("app.mcp_server.tool_submit_feedback_to_memory", submit_mock),
+        patch("app.services.ops_dispatcher.dispatch_error", AsyncMock()),
+        patch("app.services.ops_dispatcher.dispatch_anomaly", AsyncMock()),
+    ):
+        await webhook._bg_receipt_feedback(
+            from_number=f"whatsapp:{PHONE}", body="dinner covers 120, not 140"
+        )
+
+    kwargs = submit_mock.await_args.kwargs
+    assert kwargs["actual_value"] is None
+    assert "not verified" in (kwargs["notes"] or "")
+
+    refreshed = (
+        await db_session.execute(
+            select(StaffingRecommendation).where(StaffingRecommendation.id == rec.id)
+        )
+    ).scalars().one()
+    assert refreshed.actual_covers is None
+    assert refreshed.actual_covers_source == "manager_feedback_unverified"
+
+    reply_mock.assert_awaited_once()
+    sent = reply_mock.await_args.args[1]
+    assert "pas pu être vérifié" in sent          # profile locale defaults to FR
+    assert "%" not in sent
