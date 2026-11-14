@@ -1,13 +1,15 @@
 {
   "layer": "guardrail",
   "accuracy": 1.0,
-  "n": 27,
-  "n_negative": 11,
+  "n": 38,
+  "n_negative": 14,
   "reasons_covered": [
     "cold_start_meta_learner_drift",
     "confidence_below_threshold",
+    "constitution_unavailable",
     "dead_man_timeout",
     "error_rate_spike",
+    "guardrail_not_verified",
     "implausible_feedback",
     "job_error",
     "labor_budget_exceeded",
@@ -16,9 +18,10 @@
     "output_absurd_delta",
     "output_over_capacity",
     "partial_hotel_failures",
+    "pms_error",
     "tool_failure_spike"
   ],
-  "n_reasons_covered": 13,
+  "n_reasons_covered": 16,
   "failures": [],
   "results": [
     {
@@ -232,6 +235,94 @@
     {
       "id": "gr-mock-real-forecast",
       "guard": "mock_forecast",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-pms-history-http-error",
+      "guard": "pms_history",
+      "expected": "pms_error",
+      "actual": "pms_error",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-pms-history-unreadable",
+      "guard": "pms_history",
+      "expected": "pms_error",
+      "actual": "pms_error",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-pms-history-empty-answer",
+      "guard": "pms_history",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-pms-history-nominal",
+      "guard": "pms_history",
+      "expected": null,
+      "actual": null,
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fcst-not-verified-no-confidence",
+      "guard": "forecast_guardrail",
+      "expected": "guardrail_not_verified",
+      "actual": "guardrail_not_verified",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fcst-not-verified-crash",
+      "guard": "forecast_guardrail",
+      "expected": "guardrail_not_verified",
+      "actual": "guardrail_not_verified",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fb-not-verified-crash",
+      "guard": "feedback_guard",
+      "expected": "guardrail_not_verified",
+      "actual": "guardrail_not_verified",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-fb-not-verified-no-value",
+      "guard": "feedback_guard",
+      "expected": "guardrail_not_verified",
+      "actual": "guardrail_not_verified",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-constitution-missing",
+      "guard": "constitution_gate",
+      "expected": "constitution_unavailable",
+      "actual": "constitution_unavailable",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-constitution-blank",
+      "guard": "constitution_gate",
+      "expected": "constitution_unavailable",
+      "actual": "constitution_unavailable",
+      "ok": true,
+      "error": null
+    },
+    {
+      "id": "gr-constitution-nominal",
+      "guard": "constitution_gate",
       "expected": null,
       "actual": null,
       "ok": true,
