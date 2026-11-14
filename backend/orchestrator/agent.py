@@ -60,7 +60,13 @@ class OrchestratorAgent:
         """Hybrid F&B orchestration: Prophet + RAG + Memory + Reasoning.
 
         Returns a dict with keys: tenant_id, date, service_type, prediction,
-        reasoning, reasoning_detail, staffing_recommendation, historical_patterns.
+        reasoning, reasoning_detail, staffing_recommendation, historical_patterns,
+        memory_recall — plus ``unverified_checks`` (list of check names) when a
+        check could not run. Rule B (HOS-366): if the profile / constitution
+        cannot be loaded, the explanation is the reasoner's deterministic one
+        (no model call without the constitution) and ``unverified_checks``
+        carries ``rules.CHECK_AGENT_CONSTITUTION``; the figure and the staffing
+        are unchanged (they never depended on the constitution).
         """
         # 1. Prediction (Prophet)
         forecast = await self._forecaster.predict(
@@ -81,6 +87,10 @@ class OrchestratorAgent:
 
         # 4. Agent Constitution — build system prompt if profile available
         system_prompt: Optional[str] = None
+        # Checks that could not run on this forecast (rule B, HOS-366). Plain
+        # data: the app layer turns it into a typed "not verified" verdict and
+        # records the event (no app.* import here, ADR-0004).
+        unverified_checks: list[str] = []
         try:
             profile = await self._profile_loader(tenant_id)
             if profile is not None:
@@ -108,21 +118,32 @@ class OrchestratorAgent:
                         "similar_nights": similar_text,
                     },
                 )
-        except Exception as exc:
-            logger.warning("constitution/profile failed (non-fatal): %s", exc)
+        except Exception as exc:  # noqa: BLE001 — rule B: typed "not verified", not a skip
+            # HOS-366 (audit of silences case 12). The constitution is the guard
+            # on the model's free text; it used to fail with a WARNING and the
+            # model ran without it. Now: no model call, a deterministic
+            # explanation from the data in hand, and the forecast is flagged.
+            logger.error("constitution/profile failed — deterministic explanation, not verified: %s", exc)
+            unverified_checks.append(rules.CHECK_AGENT_CONSTITUTION)
 
-        # 5. Reasoning (Claude)
-        reasoning = await self._reasoner.generate_explanation(
-            predicted_covers,
-            confidence,
-            target_date,
-            service_type,
-            context,
-            patterns,
-            memory_context,
-            is_mock=is_mock,
-            system_prompt=system_prompt,
-        )
+        # 5. Reasoning (Claude) — or, when the constitution could not be built,
+        # the deterministic explanation (no free-text generation without it).
+        if unverified_checks:
+            reasoning = self._reasoner.deterministic_explanation(
+                predicted_covers, target_date, service_type, context, patterns,
+            )
+        else:
+            reasoning = await self._reasoner.generate_explanation(
+                predicted_covers,
+                confidence,
+                target_date,
+                service_type,
+                context,
+                patterns,
+                memory_context,
+                is_mock=is_mock,
+                system_prompt=system_prompt,
+            )
 
         # 6. Staffing — on this hotel's own rules (HOS-343), per context class
         # when the hotel set one (HOS-345): the same date, service and context
@@ -132,7 +153,7 @@ class OrchestratorAgent:
             target_date=target_date, service_type=service_type, context=context,
         )
 
-        return {
+        result = {
             "tenant_id": tenant_id,
             "date": target_date.isoformat(),
             "service_type": service_type,
@@ -154,6 +175,9 @@ class OrchestratorAgent:
             # hook HOS-331 attaches the run object to.
             "memory_recall": recall_trace,
         }
+        if unverified_checks:
+            result["unverified_checks"] = unverified_checks
+        return result
 
     # ------------------------------------------------------------------
     # Agentic loop (ADR-0004 D7 · HOS-189)

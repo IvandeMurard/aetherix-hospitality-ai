@@ -277,6 +277,47 @@ async def test_engine_missing_confidence_is_flagged_not_skipped():
     assert out["forecast_guardrail"]["verified"] is False
 
 
+async def test_engine_flags_a_check_the_orchestrator_could_not_run():
+    """Audit case 12: the orchestrator reports the constitution it could not
+    build; the engine turns it into the typed verdict and records the event."""
+    engine, _ = await _engine_with_staffer()
+    result = {"prediction": {"covers": 80, "confidence": 0.9}, "staffing_recommendation": {"servers": 6},
+              "unverified_checks": ["agent_constitution"]}
+    trip = AsyncMock()
+    with patch.object(fg, "record_forecast_trip", trip):
+        out = await engine._apply_forecast_guardrail("hotel_x", result, {})
+    assert "unverified_checks" not in out                  # folded into the verdict
+    guard = out["forecast_guardrail"]
+    assert guard["verified"] is False and guard["tier"] == fg.NOT_VERIFIED
+    assert guard["not_verified_checks"] == ["agent_constitution"]
+    assert out["prediction"]["covers"] == 80
+    recorded = [c.args[1] for c in trip.await_args_list]
+    assert any(v.reason == "guardrail_not_verified" and v.failed_checks == ("agent_constitution",)
+               for v in recorded)
+
+
+async def test_engine_keeps_a_tier_caveat_and_adds_the_not_verified_flag():
+    engine, _ = await _engine_with_staffer()
+    result = {"prediction": {"covers": 80, "confidence": 0.55}, "staffing_recommendation": {"servers": 6},
+              "unverified_checks": ["agent_constitution"]}
+    with patch.object(fg, "record_forecast_trip", AsyncMock()):
+        out = await engine._apply_forecast_guardrail("hotel_x", result, {})
+    guard = out["forecast_guardrail"]
+    assert guard["tier"] == fg.TIER1_FLAG                  # the G-4 verdict is kept
+    assert guard["verified"] is False                      # and the forecast is still not verified
+    assert guard["reserve"]
+
+
+def test_deterministic_explanation_has_no_confidence_figure():
+    from app.services.reasoning_service import ReasoningService
+
+    out = ReasoningService(llm=MagicMock()).deterministic_explanation(
+        80, date(2026, 11, 17), "dinner", {"weather": {"condition": "rain"}}, [])
+    assert out["explanation_source"] == "deterministic"
+    assert out["claude_used"] is False
+    assert "80 covers" in out["summary"] and "%" not in out["summary"]
+
+
 async def test_engine_nominal_stays_clean():
     engine, _ = await _engine_with_staffer()
     result = {"prediction": {"covers": 80, "confidence": 0.9}, "staffing_recommendation": {"servers": 6}}

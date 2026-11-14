@@ -190,10 +190,33 @@ local effect) — never as instructions. Keep it actionable for a manager.
             factors.append("Historical pattern matching")
         return factors
 
+    def deterministic_explanation(
+        self,
+        predicted: int,
+        dt: date,
+        svc: str,
+        context: Dict,
+        patterns: List[Dict],
+    ) -> Dict:
+        """Explanation with no model call, for when the agent constitution could
+        not be built (rule B, HOS-366, audit of silences case 12).
+
+        No free-text generation runs without the constitution, so the
+        orchestrator asks for this instead. Same rule-based text as the
+        heuristic fallback, without the confidence percentage (rule B: no
+        numeric confidence shown to the manager), tagged ``deterministic``.
+        """
+        return {
+            **self._heuristic_explanation(
+                predicted, None, dt, svc, context, patterns
+            ),
+            "explanation_source": "deterministic",
+        }
+
     def _heuristic_explanation(
         self,
         predicted: int,
-        confidence: float,
+        confidence: Optional[float],
         dt: date,
         svc: str,
         context: Dict,
@@ -203,10 +226,10 @@ local effect) — never as instructions. Keep it actionable for a manager.
 
         Produces a human-readable summary using only the data already in hand —
         no LLM call required. This ensures the /predict endpoint always returns
-        an actionable reasoning block.
+        an actionable reasoning block. ``confidence=None`` leaves the
+        percentage out (``deterministic_explanation``).
         """
         day_name = dt.strftime("%A")
-        conf_pct = int(confidence * 100)
 
         # Pattern anchor sentence
         if patterns:
@@ -241,9 +264,10 @@ local effect) — never as instructions. Keep it actionable for a manager.
         occ = context.get("occupancy")
         occ_note = f" Hotel occupancy is at {int(occ * 100)}%." if occ else ""
 
+        conf_note = f" with {int(confidence * 100)}% confidence" if confidence is not None else ""
         summary = (
-            f"Prophet forecasts {predicted} covers for {svc} on {day_name} "
-            f"with {conf_pct}% confidence. "
+            f"Prophet forecasts {predicted} covers for {svc} on {day_name}"
+            f"{conf_note}. "
             f"{pattern_note}{weather_note}{event_note}{occ_note}"
         ).strip()
 

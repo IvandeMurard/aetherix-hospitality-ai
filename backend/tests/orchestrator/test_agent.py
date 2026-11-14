@@ -133,6 +133,8 @@ class TestOrchestratorAgentGetForecast:
             raise RuntimeError("constitution exploded")
 
         agent = _make_agent(profile=fake_profile, constitution_builder=bad_builder)
+        agent._reasoner.deterministic_explanation = MagicMock(
+            return_value={"summary": "Prophet forecasts 42 covers.", "explanation_source": "deterministic"})
         # should not raise
         result = await agent.get_forecast(
             tenant_id="hotel_abc",
@@ -141,6 +143,32 @@ class TestOrchestratorAgentGetForecast:
             context={},
         )
         assert result["prediction"]["covers"] == 42
+        # Rule B (HOS-366, audit case 12): no model call without the
+        # constitution — deterministic explanation, and the check is reported.
+        agent._reasoner.generate_explanation.assert_not_awaited()
+        assert result["reasoning"] == "Prophet forecasts 42 covers."
+        assert result["unverified_checks"] == [rules.CHECK_AGENT_CONSTITUTION]
+        assert result["staffing_recommendation"] == {"front_of_house": 4}
+
+    @pytest.mark.asyncio
+    async def test_profile_loader_failure_is_reported_not_swallowed(self):
+        agent = _make_agent(constitution_builder=MagicMock())
+        agent._profile_loader = AsyncMock(side_effect=RuntimeError("db down"))
+        agent._reasoner.deterministic_explanation = MagicMock(return_value={"summary": "s"})
+        result = await agent.get_forecast(
+            tenant_id="hotel_abc", target_date=date(2026, 6, 1), service_type="dinner", context={},
+        )
+        agent._reasoner.generate_explanation.assert_not_awaited()
+        assert result["unverified_checks"] == [rules.CHECK_AGENT_CONSTITUTION]
+
+    @pytest.mark.asyncio
+    async def test_no_unverified_checks_key_on_the_happy_path(self):
+        agent = _make_agent(profile=object(), constitution_builder=MagicMock(return_value="sys"))
+        result = await agent.get_forecast(
+            tenant_id="hotel_abc", target_date=date(2026, 6, 1), service_type="dinner", context={},
+        )
+        assert "unverified_checks" not in result
+        agent._reasoner.generate_explanation.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_no_constitution_builder_when_no_profile(self):
