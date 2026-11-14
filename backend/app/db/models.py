@@ -354,7 +354,7 @@ class StaffingRecommendation(Base):
     roi_net = Column(Numeric(10, 2))
     roi_labor_cost = Column(Numeric(10, 2))
 
-    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected | modified
+    status = Column(String, nullable=False, default="ready_to_push")  # ready_to_push | dispatched | accepted | rejected | modified | config_error | dispatch_failed
 
     # Story 4.2 (HOS-25): dispatch tracking
     dispatched_at = Column(DateTime(timezone=True), nullable=True)
@@ -420,6 +420,14 @@ class StaffingRecommendation(Base):
     reminder_status = Column(String, nullable=True)     # sent | skipped_answered | disabled | no_compliant_channel | failed | missed
     reminder_sent_at = Column(DateTime(timezone=True), nullable=True)
     reminder_channel = Column(String, nullable=True)    # whatsapp | email | sms
+
+    # HOS-369 (16.48): atomic claim for the dispatcher. dispatch_claimed_at is
+    # the lease taken by the worker that is sending (re-claimable after the
+    # lease expires); dispatch_attempts counts claims, bounded by
+    # alert_dispatcher.MAX_DISPATCH_ATTEMPTS, after which status = dispatch_failed.
+    # Mirror of migration 20261114120000 (schema drift gate — Décision #16).
+    dispatch_claimed_at = Column(DateTime(timezone=True), nullable=True)
+    dispatch_attempts = Column(Integer, nullable=False, default=0, server_default="0")
 
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
