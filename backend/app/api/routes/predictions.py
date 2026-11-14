@@ -309,8 +309,18 @@ async def train_prophet(
             )
         pms_property_id = target.pms_property_id
 
+    from app.providers.pms.base import PMSDataStatus, PMSReadError
+
     try:
         df = await _build_training_dataframe(body, pms_property_id)
+    except PMSReadError as exc:
+        # HOS-366: the PMS history could not be read. Never trained on as an
+        # empty history, never silently replaced by synthetic data (hybrid).
+        raise HTTPException(
+            status_code=503 if exc.status == PMSDataStatus.NOT_CONFIGURED else 502,
+            detail={"error": "pms_history_unavailable", "status": exc.status.value,
+                    "detail": exc.detail},
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Data loading failed: {exc}") from exc
 
@@ -430,7 +440,9 @@ async def _build_training_dataframe(body: "TrainRequest", pms_property_id: Optio
         raise ValueError("a PMS property id is required for PMS-backed training")
     if body.data_source == DataSource.mcp_sandbox:
         return await _load_mcp_dataframe(pms_id, body.start_date, body.end_date)
-    # hybrid: merge both, prefer MCP where dates overlap
+    # hybrid: merge both, prefer MCP where dates overlap. A failed PMS read
+    # raises PMSReadError (HOS-366) and is not replaced by synthetic data; only
+    # a PMS that answered with no reservation falls back below.
     df_synthetic = _load_demo_dataframe()
     df_mcp = await _load_mcp_dataframe(pms_id, body.start_date, body.end_date)
     if df_mcp.empty:

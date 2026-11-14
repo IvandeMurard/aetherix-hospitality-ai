@@ -9,7 +9,8 @@ Requires APALEO_MCP_SERVER_URL to be set (provided by Apaleo on alpha access).
 Since HOS-352 a figure is true or absent: not configured, on error, or with
 nothing usable in the report, the adapter returns an absent value with its
 status. It used to return occupancy 80 and revenue 0.0 as if the PMS had
-said so.
+said so. The reservation history follows the same rule (HOS-366): a failed
+read raises ``PMSReadError`` with its status, never an empty list.
 
 MCP tool mapping (Apaleo native PascalCase naming):
     fetch_occupancy      → ListPropertyPerformanceReport  (soldCount / houseCount − outOfOrderCount)
@@ -35,9 +36,38 @@ from app.providers.pms.base import (
     NormalizedRevenue,
     PMSDataStatus,
     PMSProviderName,
+    PMSReadError,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def reservations_from_payload(data: Any) -> list[dict[str, Any]]:
+    """``ListReservations`` answer → raw reservations, or ``PMSReadError``.
+
+    Pure (no I/O), so the ``guardrail`` eval layer can lock it (HOS-366). The
+    MCP server returns Apaleo's HTTP errors as a payload, not an exception: an
+    error payload or an unreadable one is a ``pms_error``, never ``[]``. A dict
+    without ``reservations`` is Apaleo's empty answer (204, no body): ``[]``.
+    """
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        status_code = data.get("status_code")
+        if isinstance(status_code, int) and status_code >= 400:
+            raise PMSReadError(
+                PMSDataStatus.PMS_ERROR, f"HTTP {status_code}: {str(data.get('message'))[:160]}"
+            )
+        inner = data.get("data", data)
+        if isinstance(inner, list):
+            return inner
+        if isinstance(inner, dict):
+            reservations = inner.get("reservations", [])
+            if isinstance(reservations, list):
+                return reservations
+    raise PMSReadError(
+        PMSDataStatus.PMS_ERROR, f"unreadable ListReservations payload ({type(data).__name__})"
+    )
 
 
 class ApaleoMCPAdapter:
@@ -106,10 +136,16 @@ class ApaleoMCPAdapter:
         self, property_id: str, start_date: date, end_date: date
     ) -> list[dict[str, Any]]:
         """Raw reservations; ``fetch_reservations`` maps them to the canonical
-        schema (HOS-281)."""
+        schema (HOS-281).
+
+        HOS-366: a read that fails raises ``PMSReadError`` with its status. It
+        used to return ``[]``, which a caller could not tell from "no
+        reservations" and which training then used as an empty history. ``[]``
+        now only means the PMS answered with no reservation in the range.
+        """
         if not self._client.is_configured:
-            logger.warning("ApaleoMCPAdapter: not configured — returning empty history")
-            return []
+            logger.warning("ApaleoMCPAdapter: not configured — reservation history absent")
+            raise PMSReadError(PMSDataStatus.NOT_CONFIGURED, "Apaleo MCP server not configured")
         try:
             data = await self._client.call_tool(
                 "ListReservations",
@@ -122,15 +158,14 @@ class ApaleoMCPAdapter:
                     "page_size": 200,
                 },
             )
-            if isinstance(data, list):
-                return data
-            inner = data.get("data", data) if isinstance(data, dict) else data
-            if isinstance(inner, list):
-                return inner
-            return inner.get("reservations", [])
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — any failure is a typed pms_error, never []
             logger.error("ApaleoMCPAdapter.get_historical_data failed: %s", exc)
-            return []
+            raise PMSReadError(PMSDataStatus.PMS_ERROR, str(exc)[:200]) from exc
+        try:
+            return reservations_from_payload(data)
+        except PMSReadError as exc:
+            logger.error("ApaleoMCPAdapter.get_historical_data: %s", exc)
+            raise
 
     async def update_staffing_in_pms(
         self, property_id: str, target_date: date, staffing_deltas: dict[str, int]

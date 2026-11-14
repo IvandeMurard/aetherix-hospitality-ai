@@ -219,6 +219,71 @@ class TestHybridMerge:
             _pred_mod._DEMO_DATA = original
 
 
+    # HOS-366 (audit case 3): a failed PMS read is not an empty history. Hybrid
+    # mode used to fall back to synthetic data on it, silently.
+    @pytest.mark.asyncio
+    @_skip_if_no_pred
+    async def test_hybrid_does_not_replace_a_failed_pms_read_with_synthetic(self):
+        from unittest.mock import patch
+
+        from app.api.routes.predictions import DataSource, TrainRequest, _build_training_dataframe
+        from app.providers.pms.base import PMSDataStatus, PMSReadError
+
+        failing = AsyncMock(side_effect=PMSReadError(PMSDataStatus.PMS_ERROR, "timeout"))
+        with patch("app.api.routes.predictions._load_mcp_dataframe", new=failing):
+            body = TrainRequest(property_id="DEMO", data_source=DataSource.hybrid)
+            with pytest.raises(PMSReadError):
+                await _build_training_dataframe(body, "DEMO")
+
+    @pytest.mark.asyncio
+    @_skip_if_no_pred
+    async def test_mcp_loader_propagates_the_adapter_failure(self):
+        from unittest.mock import patch
+
+        from app.providers.pms.base import PMSDataStatus, PMSReadError
+
+        adapter = MagicMock()
+        adapter.fetch_reservations = AsyncMock(
+            side_effect=PMSReadError(PMSDataStatus.PMS_ERROR, "HTTP 500"))
+        with patch("app.providers.pms.factory.get_pms_provider", return_value=adapter):
+            with pytest.raises(PMSReadError):
+                await _pred_mod._load_mcp_dataframe("DEMO", date(2026, 1, 1), date(2026, 3, 1))
+
+
+class TestTrainEndpointPmsFailure:
+    @pytest.mark.asyncio
+    @_skip_if_no_pred
+    async def test_failed_pms_read_is_a_typed_502_and_nothing_is_trained(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from fastapi import HTTPException
+
+        from app.api.routes.predictions import DataSource, TrainRequest, train_prophet
+        from app.providers.pms.base import PMSDataStatus, PMSReadError
+
+        engine = SimpleNamespace(forecaster=MagicMock())
+        engine.forecaster.train = AsyncMock()
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(engine=engine)))
+        target = SimpleNamespace(pms_type="apaleo", pms_property_id="MUC")
+        failing = AsyncMock(side_effect=PMSReadError(PMSDataStatus.PMS_ERROR, "timeout"))
+        with (
+            patch("app.services.pms_identity.resolve_by_tenant", AsyncMock(return_value=target)),
+            patch("app.api.routes.predictions._load_mcp_dataframe", new=failing),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await train_prophet(
+                    request,
+                    TrainRequest(data_source=DataSource.mcp_sandbox),
+                    db=MagicMock(),
+                    tok=SimpleNamespace(hotel_id="hotel_x"),
+                )
+        assert exc_info.value.status_code == 502
+        assert exc_info.value.detail["error"] == "pms_history_unavailable"
+        assert exc_info.value.detail["status"] == "pms_error"
+        engine.forecaster.train.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # HOS-281 — non-regression: canonical path == pre-HOS-281 raw path
 # ---------------------------------------------------------------------------
