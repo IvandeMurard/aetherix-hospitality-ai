@@ -35,7 +35,7 @@ mettre le chemin à jour. Guide : `docs/ops/public-status-sync.md`.
 
 | Niveau | Condition |
 |--------|-----------|
-| **Merge** | CI vert — schema drift (Décision #16) + eval-by-design (Décision #22) + `public-status` (Décision #42) → merge manuel SM |
+| **Merge** | CI vert — schema drift (Décision #16) + eval-by-design (Décision #22) + `public-status` (Décision #42) + `rls-audit` (Postgres jetable, HOS-368) → merge manuel SM. `id-types` tourne mais reste non bloquant (6 faux positifs probables sur main, TODO Q2-06) ; `smoke-staging` est hebdo/manuel, jamais bloquant |
 | **Fin d'Epic** | Revue d'architecture |
 | **Pré-pilote** | QA sign-off sur propriété réelle |
 

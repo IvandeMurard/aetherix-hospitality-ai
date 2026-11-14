@@ -203,6 +203,128 @@ jobs:
         run: python scripts/eval/validate_dataset.py
 
   # ---------------------------------------------------------------------------
+  # HOS-368 (Q2-06) — id-types audit (HOS-163). Static, stdlib only, no database.
+  #
+  # NON-BLOCKING for now, on purpose. On main today the script reports 6
+  # mismatches, all of the B3 pattern `tenant_id=profile.tenant_id`
+  # (inbound_decision.py x4, pms_identity.py, query_parser.py). `tenant_id` is a
+  # String slug in the ORM (models.py) and `profile.tenant_id` is that same
+  # slug, so these read as false positives of a stale pattern, not as drift —
+  # but settling that means changing either app code (`# convention-ok` marker)
+  # or the pattern, and HOS-368 is infra-only.
+  # TODO(HOS-368 follow-up, Q2-06): triage the 6 hits, then drop
+  # `continue-on-error` so a real mismatch blocks the merge. Until then the
+  # result is visible in the job summary and as a warning annotation.
+  # ---------------------------------------------------------------------------
+  id-types:
+    name: id-types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Audit tenant/property/hotel id types (non-blocking, see above)
+        continue-on-error: true
+        run: |
+          set +e
+          python scripts/ci/audit_id_types.py | tee id-types.txt
+          rc=${PIPESTATUS[0]}
+          {
+            echo "### id-types audit (HOS-163)"
+            echo
+            if [ "$rc" -eq 0 ]; then
+              echo "No mismatch."
+            else
+              echo "Exit code $rc — **non-blocking until the follow-up triage lands** (see the comment on the job in ci.yml)."
+              echo
+              echo '```'
+              cat id-types.txt
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning title=id-types audit::exit $rc, mismatches on main, non-blocking (TODO HOS-368 follow-up / Q2-06)."
+          fi
+          exit "$rc"
+
+  # ---------------------------------------------------------------------------
+  # HOS-368 (Q2-06) — RLS audit against a live Postgres. BLOCKING.
+  #
+  # Replays supabase/migrations/ on a scratch Postgres and introspects it with
+  # scripts/ci/audit_rls_policies.py: every table in REQUIRED_TABLES must exist,
+  # have RLS enabled and a service_role policy (exit 1 otherwise; exit 2 when the
+  # database cannot be reached — also a failure here).
+  #
+  # Why this is reproducible on a plain service container:
+  #   * image pgvector/pgvector:pg17 — the migrations run CREATE EXTENSION vector;
+  #   * scripts/ci/supabase_bootstrap.sql stands in for what a managed Supabase
+  #     project provides (anon/authenticated/service_role roles, auth.uid()/jwt(),
+  #     uuid-ossp, pgcrypto);
+  #   * scripts/ci/apply_migrations.sh applies the files in timestamp order, each
+  #     in its own transaction, stopping at the first error.
+  # What it does NOT prove: that Supabase itself behaves like this stand-in.
+  # ---------------------------------------------------------------------------
+  rls-audit:
+    name: rls-audit
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: aetherix_audit
+          POSTGRES_PASSWORD: audit_password
+          POSTGRES_DB: aetherix_audit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://aetherix_audit:audit_password@localhost:5432/aetherix_audit
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install asyncpg
+        run: pip install "asyncpg>=0.29"
+
+      # psql is preinstalled on ubuntu-latest runners.
+      - name: Replay Supabase migrations
+        run: scripts/ci/apply_migrations.sh
+
+      - name: Audit RLS policies
+        run: |
+          set +e
+          python scripts/ci/audit_rls_policies.py --json rls-report.json | tee rls-report.txt
+          rc=${PIPESTATUS[0]}
+          {
+            echo "### RLS audit (HOS-111 / HOS-292)"
+            echo
+            echo "Exit code $rc (0 = every required table has RLS + a service_role policy)."
+            echo
+            echo '```'
+            cat rls-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      - name: Upload RLS report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rls-report
+          path: rls-report.json
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
   # Public status file (ADR-0010) — the only source of the Aetherix status block
   # in the public meta-repo README. Schema, taxonomy, evidence on this branch,
   # leak denylist. Blocking.
